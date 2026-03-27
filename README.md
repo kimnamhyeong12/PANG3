@@ -27,7 +27,7 @@
 
 ### 1. ☁️ 클라우드 엔지니어
 - Docker 기반 개발 환경 구축
-- Oracle Cloud 서버 인프라 구성
+- Aws Cloud 서버 인프라 구성
 - CI/CD 파이프라인 구축 (GitHub Actions)
 - 서버 모니터링 및 운영 관리
 
@@ -48,3 +48,11 @@
 - 경로 최적화 알고리즘 (TSP)
 - 통계 분석 및 이상 탐지
 - 데이터 파이프라인 구축 (ETL)
+  
+
+#######################################
+
+- Server OS: Ubuntu 24.04 LTS (AWS EC2)
+- Runtime: Docker / Docker Compose
+- Database: PostgreSQL 16 + PostGIS (예정)
+- Public IP: 개발 시작하면 매일 아침마다 업데이트 예정 (탄력적 ip 사용 x)
