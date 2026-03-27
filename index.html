@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>지도기반 외근 도우미 | 문제정의서</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #1a56db;
+    --primary-dark: #1e40af;
+    --accent: #0ea5e9;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --purple: #8b5cf6;
+    --bg-dark: #0f172a;
+    --bg-card: #1e293b;
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    --border: #334155;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
+    font-size: 18px;
+    background: var(--bg-dark);
+    color: var(--text-main);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  .slides-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 44px 64px 104px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    transform: translateX(60px);
+    overflow: hidden;
+  }
+
+  .slide.active {
+    opacity: 1;
+    pointer-events: all;
+    transform: translateX(0);
+  }
+
+  .slide.exit-left {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+
+  /* ── Navigation ── */
+  .nav {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    z-index: 100;
+    background: rgba(15,23,42,0.85);
+    backdrop-filter: blur(12px);
+    padding: 10px 24px;
+    border-radius: 50px;
+    border: 1px solid var(--border);
+  }
+
+  .nav button {
+    background: transparent;
+    border: none;
+    color: var(--text-main);
+    cursor: pointer;
+    padding: 6px 14px;
+    border-radius: 24px;
+    font-size: 18px;
+    transition: background 0.2s;
+  }
+  .nav button:hover { background: var(--border); }
+  .nav button:disabled { opacity: 0.3; cursor: default; }
+
+  .slide-counter {
+    font-size: 16px;
+    color: var(--text-muted);
+    min-width: 64px;
+    text-align: center;
+  }
+
+  .dots { display: flex; gap: 6px; }
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: background 0.3s, width 0.3s;
+    cursor: pointer;
+  }
+  .dot.active {
+    background: var(--accent);
+    width: 20px;
+    border-radius: 4px;
+  }
+
+  /* ── Progress Bar ── */
+  .progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--primary));
+    transition: width 0.4s ease;
+    z-index: 200;
+  }
+
+  /* ── Slide Header ── */
+  .slide-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .slide-tag {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(14,165,233,0.12);
+    padding: 5px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(14,165,233,0.3);
+  }
+
+  .slide-num {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+
+  /* ── Typography ── */
+  .slide h1 {
+    font-size: 58px;
+    font-weight: 900;
+    line-height: 1.15;
+    margin-bottom: 14px;
+    background: linear-gradient(135deg, #f1f5f9 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .slide h2 {
+    font-size: 36px;
+    font-weight: 800;
+    margin-bottom: 16px;
+    color: var(--text-main);
+  }
+
+  .slide h3 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 6px;
+  }
+
+  .subtitle {
+    font-size: 19px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin-bottom: 20px;
+  }
+
+  /* ── Cards ── */
+  .card-grid { display: grid; gap: 14px; }
+  .card-grid-2 { grid-template-columns: 1fr 1fr; }
+  .card-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .card-grid-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px 22px;
+    transition: border-color 0.3s, transform 0.2s;
+  }
+  .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .card.accent  { border-left: 4px solid var(--accent); }
+  .card.success { border-left: 4px solid var(--success); }
+  .card.warning { border-left: 4px solid var(--warning); }
+  .card.danger  { border-left: 4px solid var(--danger); }
+  .card.purple  { border-left: 4px solid var(--purple); }
+
+  .card-icon { font-size: 28px; margin-bottom: 8px; display: block; }
+  .card p { font-size: 15px; color: var(--text-muted); line-height: 1.65; }
+
+  /* ── Badge ── */
+  .badge {
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin: 2px;
+  }
+  .badge-blue   { background: rgba(14,165,233,0.15); color: var(--accent);   border: 1px solid rgba(14,165,233,0.3); }
+  .badge-green  { background: rgba(16,185,129,0.15); color: var(--success);  border: 1px solid rgba(16,185,129,0.3); }
+  .badge-yellow { background: rgba(245,158,11,0.15); color: var(--warning);  border: 1px solid rgba(245,158,11,0.3); }
+  .badge-red    { background: rgba(239,68,68,0.15);  color: var(--danger);   border: 1px solid rgba(239,68,68,0.3); }
+  .badge-purple { background: rgba(139,92,246,0.15); color: var(--purple);   border: 1px solid rgba(139,92,246,0.3); }
+
+  /* ── Check List ── */
+  .check-list { list-style: none; }
+  .check-list li {
+    font-size: 16px;
+    color: var(--text-muted);
+    padding: 8px 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    border-bottom: 1px solid rgba(51,65,85,0.5);
+  }
+  .check-list li:last-child { border-bottom: none; }
+  .check-list li::before {
+    content: '▸';
+    color: var(--accent);
+    font-size: 13px;
+    margin-top: 3px;
+    flex-shrink: 0;
+  }
+
+  /* ── Flow ── */
+  .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .flow-step {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    text-align: center;
+    min-width: 110px;
+    flex: 1;
+  }
+  .flow-step .step-icon  { font-size: 26px; display: block; margin-bottom: 6px; }
+  .flow-step .step-title { font-size: 15px; font-weight: 700; color: var(--text-main); }
+  .flow-step .step-desc  { font-size: 12px; color: var(--text-muted); margin-top: 4px; line-height: 1.5; }
+  .flow-arrow { color: var(--accent); font-size: 18px; flex-shrink: 0; }
+
+  /* ── Big Number ── */
+  .big-number {
+    font-size: 64px;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  /* ── Highlight Box ── */
+  .highlight-box {
+    background: linear-gradient(135deg, rgba(14,165,233,0.1), rgba(139,92,246,0.1));
+    border: 1px solid rgba(14,165,233,0.3);
+    border-radius: 16px;
+    padding: 18px 22px;
+  }
+
+  /* ── Step Number ── */
+  .step-num {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* ── Title Slide ── */
+  #slide-1 {
+    justify-content: center;
+    align-items: flex-start;
+    background: radial-gradient(ellipse at 80% 20%, rgba(14,165,233,0.12) 0%, transparent 60%),
+                radial-gradient(ellipse at 20% 80%, rgba(139,92,246,0.12) 0%, transparent 60%),
+                var(--bg-dark);
+  }
+  #slide-1::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(rgba(51,65,85,0.15) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(51,65,85,0.15) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+  }
+  #slide-1 > * { position: relative; z-index: 1; }
+  #slide-1 .meta-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 28px; }
+  #slide-1 .desc {
+    font-size: 19px;
+    color: var(--text-muted);
+    line-height: 1.7;
+    max-width: 780px;
+    margin-bottom: 36px;
+  }
+  #slide-1 .bottom-info {
+    display: flex;
+    gap: 32px;
+    margin-top: auto;
+    padding-top: 28px;
+    border-top: 1px solid var(--border);
+  }
+  #slide-1 .info-item .label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  #slide-1 .info-item .value {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+
+  .orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.15;
+    animation: orb-float 8s ease-in-out infinite;
+  }
+  .orb-1 { width: 400px; height: 400px; background: var(--accent); top: -100px; right: -50px; }
+  .orb-2 { width: 300px; height: 300px; background: var(--purple); bottom: -80px; right: 200px; animation-delay: -4s; }
+  @keyframes orb-float {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(20px, -30px); }
+  }
+
+  /* ── Layout Helpers ── */
+  .two-col   { display: grid; grid-template-columns: 1fr 1fr;     gap: 20px; flex: 1; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; flex: 1; }
+
+  /* ── Problem Visual ── */
+  .problem-visual { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+  .problem-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 18px;
+  }
+  .problem-icon-wrap {
+    width: 42px; height: 42px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .problem-item .text h4 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .problem-item .text p  { font-size: 14px; color: var(--text-muted); line-height: 1.55; }
+
+  /* ── Tech Chip ── */
+  .tech-chip {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    gap: 6px;
+  }
+  .tech-chip .tech-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .tech-chip .tech-value { font-size: 14px; font-weight: 600; color: var(--text-main); line-height: 1.55; }
+
+  /* ── Compare Row ── */
+  .compare-row {
+    display: grid;
+    grid-template-columns: 1fr 64px 1fr;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 18px;
+  }
+  .compare-row .bad   { color: var(--danger);  font-size: 15px; }
+  .compare-row .good  { color: var(--success); font-size: 15px; }
+  .compare-row .arrow { text-align: center; font-size: 18px; color: var(--accent); }
+
+  /* ── Emphasis ── */
+  em.hl   { color: var(--accent);   font-style: normal; font-weight: 700; }
+  em.hl-g { color: var(--success);  font-style: normal; font-weight: 700; }
+  em.hl-y { color: var(--warning);  font-style: normal; font-weight: 700; }
+  em.hl-p { color: var(--purple);   font-style: normal; font-weight: 700; }
+
+  /* ── Keyboard Hint ── */
+  .key-hint {
+    position: fixed;
+    top: 18px; right: 22px;
+    font-size: 13px;
+    color: var(--text-muted);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    z-index: 100;
+  }
+  .key {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-family: monospace;
+  }
+
+  /* ── Divider ── */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+    margin: 10px 0 16px;
+    opacity: 0.5;
+  }
+
+  /* ── Slide Accent Line ── */
+  .slide-accent-tl {
+    position: absolute;
+    top: 0; left: 0;
+    width: 6px; height: 100%;
+    background: linear-gradient(180deg, var(--accent), transparent);
+    border-radius: 0 4px 4px 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+
+<div class="key-hint">
+  <span class="key">←</span><span class="key">→</span> 또는 <span class="key">Space</span>로 이동
+</div>
+
+<div class="slides-wrapper" id="slidesWrapper">
+
+  <!-- ══════════════════════════════════════
+       SLIDE 1 : TITLE
+  ══════════════════════════════════════ -->
+  <div class="slide active" id="slide-1">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+
+    <div class="meta-row">
+      <span class="badge badge-blue">SW중심대학사업 2026학년도</span>
+      <span class="badge badge-green">문제공동해결</span>
+      <span class="badge badge-purple">실증적 SW/AI 프로젝트</span>
+    </div>
+
+    <h1>지도기반<br>외근 도우미</h1>
+
+    <p class="desc">
+      현장 조사부터 보고서 작성까지 — 외근 업무 전 과정을 하나의 플랫폼으로 통합합니다.<br>
+      <em class="hl">스마트 경로 최적화</em>, <em class="hl-g">EXIF 자동 매칭</em>, <em class="hl-p">AI 보고서 생성</em>으로 행정력 낭비를 근본적으로 해소합니다.
+    </p>
+
+    <div class="bottom-info">
+      <div class="info-item">
+        <div class="label">발주기관</div>
+        <div class="value">사하구청</div>
+      </div>
+      <div class="info-item">
+        <div class="label">개발팀</div>
+        <div class="value">동아대 SW/AI 학생팀</div>
+      </div>
+      <div class="info-item">
+        <div class="label">참여유형</div>
+        <div class="value">문제공동해결</div>
+      </div>
+      <div class="info-item">
+        <div class="label">연도</div>
+        <div class="value">2026학년도</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 2 : 배경 & 필요성
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-2">
+    <div class="slide-accent-tl"></div>
+    <div class="slide-header">
+      <span class="slide-tag">배경 &amp; 필요성</span>
+      <span class="slide-num">02 / 10</span>
+    </div>
+    <h2>왜 이 시스템이 필요한가?</h2>
+    <div class="divider"></div>
+
+    <div class="problem-visual">
+      <div class="problem-item">
+        <div class="problem-icon-wrap" style="background: rgba(239,68,68,0.15);">🗂️</div>
+        <div class="text">
+          <h4 style="color: var(--danger);">아날로그 방식의 비효율성</h4>
+          <p>공무원·영업사원이 현장 조사 후 사무실에 복귀하여 사진·위치도를 <em class="hl-y">HWP에 수동으로 붙여넣는</em> 불필요한 행정력 낭비가 심각합니다.</p>
+        </div>
+      </div>
+      <div class="problem-item">
+        <div class="problem-icon-wrap" style="background: rgba(245,158,11,0.15);">📊</div>
+        <div class="text">
+          <h4 style="color: var(--warning);">데이터 활용의 단절</h4>
+          <p>현장 데이터가 <em class="hl-y">비정형 HWP 문서 속 이미지</em>로만 존재하여 통계 분석·시각화 등 데이터 자산으로서 활용이 불가능합니다.</p>
+        </div>
+      </div>
+      <div class="problem-item">
+        <div class="problem-icon-wrap" style="background: rgba(14,165,233,0.15);">🔗</div>
+        <div class="text">
+          <h4 style="color: var(--accent);">통합 플랫폼 부재</h4>
+          <p>경로 탐색(네이버 지도)과 보고서 작성(한글)이 <em class="hl">분리 운영</em>되어, 공무원·택배·영업 등을 아우르는 범용 통합 솔루션이 없습니다.</p>
+        </div>
+      </div>
+      <div class="problem-item">
+        <div class="problem-icon-wrap" style="background: rgba(16,185,129,0.15);">🚀</div>
+        <div class="text">
+          <h4 style="color: var(--success);">높은 시장성 및 확장 가능성</h4>
+          <p>온나라 지식 업무 프로그램 <em class="hl-g">다운로드 2위</em>가 외근업무도우미(공무원 자체 개발)로, 실수요가 검증된 분야이며 상용화 시 높은 시장성이 기대됩니다.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 3 : 핵심 업무 흐름
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-3">
+    <div class="slide-accent-tl"></div>
+    <div class="slide-header">
+      <span class="slide-tag">핵심 프로세스</span>
+      <span class="slide-num">03 / 10</span>
+    </div>
+    <h2>외근 업무 전 과정을 하나로</h2>
+    <div class="divider"></div>
+
+    <p class="subtitle" style="margin-bottom:20px;">방문 준비부터 인사이트 도출까지, 5단계 통합 워크플로우</p>
+
+    <div class="flow" style="flex: 1; align-items: stretch;">
+      <div class="flow-step">
+        <span class="step-icon">📋</span>
+        <div class="step-title">방문대상지 선정</div>
+        <div class="step-desc">엑셀/CSV 일괄 업로드<br>자동 지오코딩 매핑</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <span class="step-icon">🗺️</span>
+        <div class="step-title">경로 설정</div>
+        <div class="step-desc">TSP 알고리즘<br>최적 방문 순서 제공</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <span class="step-icon">📍</span>
+        <div class="step-title">현장 조치</div>
+        <div class="step-desc">사진·메모 기록<br>EXIF 자동 위치 매칭</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <span class="step-icon">🤖</span>
+        <div class="step-title">보고서 작성</div>
+        <div class="step-desc">AI가 메모를 정식<br>문체로 자동 변환</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <span class="step-icon">📈</span>
+        <div class="step-title">인사이트 도출</div>
+        <div class="step-desc">히트맵·코로플레스<br>데이터 시각화</div>
+      </div>
+    </div>
+
+    <div class="highlight-box" style="margin-top: 20px;">
+      <p style="font-size:15px; color:var(--text-muted);">💡 핵심 방향 — 외근업무의 <em class="hl">모든 과정</em>을 최대한 편리하게 지원하여 현장에서 사무실까지 <em class="hl-g">원스톱 처리</em></p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 4 : 기능 ① 위치 관리 & 경로 최적화
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-4">
+    <div class="slide-accent-tl"></div>
+    <div class="slide-header">
+      <span class="slide-tag">기능 ①</span>
+      <span class="slide-num">04 / 10</span>
+    </div>
+    <h2>스마트 위치 관리 &amp; 경로 최적화</h2>
+    <div class="divider"></div>
+
+    <div class="card-grid card-grid-3" style="flex: 1;">
+      <div class="card accent">
+        <span class="card-icon">📤</span>
+        <h3>일괄 등록</h3>
+        <p>엑셀/CSV 파일 업로드로 <em class="hl">대량의 주소지를 DB에 일괄 등록</em>합니다. 반복 수작업을 완전히 제거합니다.</p>
+      </div>
+      <div class="card success">
+        <span class="card-icon">📌</span>
+        <h3>자동 지오코딩</h3>
+        <p>주소 텍스트를 <em class="hl-g">위·경도 좌표로 자동 변환</em>하여 지도에 즉시 매핑합니다. 수동 좌표 입력 불필요.</p>
+      </div>
+      <div class="card purple">
+        <span class="card-icon">🔄</span>
+        <h3>경로 최적화 (TSP)</h3>
+        <p>등록된 다수 목적지를 <em class="hl-p">최단 거리·최소 시간으로 방문</em>할 수 있는 최적 순서를 자동 계산합니다.</p>
+      </div>
+    </div>
+
+    <div style="margin-top: 16px;">
+      <div class="compare-row">
+        <div class="bad">❌ 수동으로 지도 앱 + 문서 따로 확인</div>
+        <div class="arrow">→</div>
+        <div class="good">✅ 앱 하나에서 목적지 등록 → 최적 경로 즉시 제공</div>
+      </div>
+      <div class="compare-row">
+        <div class="bad">❌ 주소를 일일이 검색하여 좌표 수집</div>
+        <div class="arrow">→</div>
+        <div class="good">✅ CSV 업로드 한 번으로 전체 자동 지오코딩</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 5 : 기능 ② 현장 모바일 UX
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-5">
+    <div class="slide-accent-tl"></div>
+    <div class="slide-header">
+      <span class="slide-tag">기능 ②</span>
+      <span class="slide-num">05 / 10</span>
+    </div>
+    <h2>현장 중심 모바일 기능 <span style="font-size:22px; font-weight:500; color:var(--text-muted);">Field UX</span></h2>
+    <div class="divider"></div>
+
+    <div class="two-col" style="flex: 1;">
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div class="card accent">
+          <span class="card-icon">🔔</span>
+          <h3>도착 알림 시각화</h3>
+          <p>목적지 반경 내 진입 시 마커가 <em class="hl">깜빡임·색상 변경</em>으로 반응하여 작업 준비를 직관적으로 유도합니다.</p>
+        </div>
+        <div class="card warning">
+          <span class="card-icon">🔄</span>
+          <h3>상태 기반 워크플로우</h3>
+          <p>사진 촬영 후 <em class="hl-y">원터치 상태 변경</em> (배송전→완료 / 파손확인→보수완료)과 키워드·음성 메모 입력 지원.</p>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div class="highlight-box">
+          <p style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">⭐ 핵심 기능</p>
+          <h3 style="margin-bottom:8px; color:var(--accent);">📷 EXIF 자동 매칭</h3>
+          <p style="font-size:15px; color:var(--text-muted); line-height:1.65;">현장에서 촬영한 사진의 <em class="hl">GPS 메타데이터(EXIF)</em>를 분석하여 지도 위 가장 가까운 포인트에 <em class="hl-g">자동으로 매칭·저장</em>합니다. GPS 오차를 위한 수동 보정 기능도 포함.</p>
+        </div>
+        <div class="card success">
+          <span class="card-icon">📅</span>
+          <h3>시계열 이력 관리</h3>
+          <p>동일 지점의 <em class="hl-g">공사 전→중→후</em> 사진을 날짜별로 관리하고 주제별 지도를 저장·조회합니다.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 6 : 기능 ③ AI 보고서 자동화
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-6">
+    <div class="slide-accent-tl"></div>
+    <div class="slide-header">
+      <span class="slide-tag">기능 ③</span>
+      <span class="slide-num">06 / 10</span>
+    </div>
+    <h2>AI 기반 보고서 자동화</h2>
+    <div class="divider"></div>
+
+    <div class="two-col" style="flex: 1;">
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="highlight-box">
+          <p style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">🤖 LLM 활용</p>
+          <h3 style="margin-bottom:10px;">문안 자동 생성</h3>
+          <p style="font-size:15px; color:var(--text-muted); line-height:1.65;">현장에서 입력한 단편적인 메모를 <em class="hl">AI(LLM)가 분석</em>하여 정식 보고서 문체로 자동 변환·완성합니다.</p>
+        </div>
+        <div class="card accent">
+          <span class="card-icon">💬</span>
+          <h3>입력 예시</h3>
+          <p style="font-family: monospace; font-size:14px; background: rgba(0,0,0,0.3); padding:10px; border-radius:8px; margin-top:8px;">"가로등 파손 심각"<br>"무단투기 다발"</p>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="card success">
+          <span class="card-icon">📄</span>
+          <h3>원클릭 문서 출력</h3>
+          <p>위치도(지도 캡처) + 현장 사진 + AI 생성 텍스트를 결합하여 <em class="hl-g">즉시 다운로드</em>.</p>
+          <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+            <span class="badge badge-blue">PDF 출력</span>
+            <span class="badge badge-green">Hwpx 출력</span>
+            <span class="badge badge-red">Word 출력</span>
+          </div>
+        </div>
+        <div class="card purple">
+          <span class="card-icon">⚡</span>
+          <h3>기대 효과</h3>
+          <ul class="check-list" style="margin-top:8px;">
+            <li>복귀 후 문서 작업 시간 대폭 단축</li>
+            <li>일관된 보고서 품질 유지</li>
+            <li>현장→문서 원스톱 처리</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 7 : 기능 ④ 데이터 시각화
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-7">
+    <div class="slide-accent-tl"></div>
+    <div class="slide-header">
+      <span class="slide-tag">기능 ④</span>
+      <span class="slide-num">07 / 10</span>
+    </div>
+    <h2>데이터 시각화 대시보드</h2>
+    <div class="divider"></div>
+
+    <p class="subtitle">현장 데이터를 지도 위에서 한눈에 파악하는 인텔리전트 대시보드</p>
+
+    <div class="card-grid card-grid-3" style="flex: 1;">
+      <div class="card accent">
+        <span class="card-icon">🗺️</span>
+        <h3>지도 시각화 레이어</h3>
+        <p>행정 구역(시·도/구·군/읍·면·동) 경계 표시 및 <em class="hl">코로플레스(단계구분도)</em> 구현으로 구역별 현황 파악.</p>
+      </div>
+      <div class="card danger">
+        <span class="card-icon">🔥</span>
+        <h3>히트맵 &amp; 클러스터링</h3>
+        <p>데이터 밀집도에 따른 <em class="hl" style="color:var(--danger);">히트맵</em>과 마커 클러스터링으로 문제 지역을 직관적으로 식별.</p>
+      </div>
+      <div class="card success">
+        <span class="card-icon">🎯</span>
+        <h3>필터링 &amp; 툴팁</h3>
+        <p>업무 진행률(완료/미완료)에 따른 <em class="hl-g">색상 구분</em>과 직관적인 툴팁으로 실시간 현황 모니터링.</p>
+      </div>
+    </div>
+
+    <div class="highlight-box" style="margin-top: 16px;">
+      <p style="font-size:15px; color:var(--text-muted);">📊 비정형 문서 속에 묻혀있던 현장 데이터가 <em class="hl">통계 분석·시각화 가능한 데이터 자산</em>으로 전환됩니다.</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 8 : 모듈 구성 & 기술 스택
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-8">
+    <div class="slide-accent-tl"></div>
+    <div class="slide-header">
+      <span class="slide-tag">기술 구성</span>
+      <span class="slide-num">08 / 10</span>
+    </div>
+    <h2>모듈 구성 &amp; 기술 스택</h2>
+    <div class="divider"></div>
+
+    <div class="two-col" style="flex: 1;">
+      <div>
+        <h3 style="margin-bottom:12px; color:var(--accent);">📦 주요 모듈</h3>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div class="tech-chip">
+            <div class="tech-label">지도 · 경로 모듈</div>
+            <div class="tech-value">지오코딩, TSP 최적화, 경로 안내</div>
+          </div>
+          <div class="tech-chip">
+            <div class="tech-label">현장점검 입력 모듈</div>
+            <div class="tech-value">상태 변경, 음성/키워드 메모, 워크플로우</div>
+          </div>
+          <div class="tech-chip">
+            <div class="tech-label">사진 촬영 · 관리 모듈</div>
+            <div class="tech-value">EXIF 분석, 자동 매칭, 시계열 이력 관리</div>
+          </div>
+          <div class="tech-chip">
+            <div class="tech-label">보고서 자동 생성 모듈</div>
+            <div class="tech-value">LLM 문안 변환, PDF/Excel 원클릭 출력</div>
+          </div>
+          <div class="tech-chip">
+            <div class="tech-label">점검 데이터 관리 모듈</div>
+            <div class="tech-value">히트맵, 클러스터링, 코로플레스 대시보드</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3 style="margin-bottom:12px; color:var(--accent);">⚙️ 권장 기술 스택</h3>
+        <div class="card-grid card-grid-2" style="gap:8px;">
+          <div class="tech-chip">
+            <div class="tech-label">GIS / Map</div>
+            <div class="tech-value">Kakao/Naver Map API<br>Leaflet.js / OpenLayers</div>
+          </div>
+          <div class="tech-chip">
+            <div class="tech-label">Frontend</div>
+            <div class="tech-value">React + TypeScript<br>or Flutter (모바일)</div>
+          </div>
+          <div class="tech-chip">
+            <div class="tech-label">Backend</div>
+            <div class="tech-value">FastAPI (Python)<br>PostGIS + PostgreSQL</div>
+          </div>
+          <div class="tech-chip">
+            <div class="tech-label">AI / LLM</div>
+            <div class="tech-value">GPT-4o / Claude API<br>LangChain</div>
+          </div>
+          <div class="tech-chip">
+            <div class="tech-label">Deploy</div>
+            <div class="tech-value">Docker<br>AWS / GCP</div>
+          </div>
+          <div class="tech-chip">
+            <div class="tech-label">프로그램 형태</div>
+            <div class="tech-value">웹 프로그램<br>or 모바일 앱</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 9 : 기대효과
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-9">
+    <div class="slide-accent-tl"></div>
+    <div class="slide-header">
+      <span class="slide-tag">기대효과</span>
+      <span class="slide-num">09 / 10</span>
+    </div>
+    <h2>이 시스템이 만들어낼 변화</h2>
+    <div class="divider"></div>
+
+    <div class="card-grid card-grid-3" style="margin-bottom:16px;">
+      <div class="card accent" style="text-align:center;">
+        <div class="big-number">80%</div>
+        <h3>행정 낭비 절감</h3>
+        <p>복귀 후 수동 문서 작업 시간 대폭 단축</p>
+      </div>
+      <div class="card success" style="text-align:center;">
+        <div class="big-number">100%</div>
+        <h3>데이터 자산화</h3>
+        <p>비정형 이미지 문서에서 구조화된 데이터로 전환</p>
+      </div>
+      <div class="card purple" style="text-align:center;">
+        <div class="big-number">24/7</div>
+        <h3>현장 → 보고서</h3>
+        <p>AI 자동화로 언제 어디서나 원스톱 처리</p>
+      </div>
+    </div>
+
+    <div class="card-grid card-grid-3">
+      <div class="card warning">
+        <span class="card-icon">🏢</span>
+        <h3>공무원</h3>
+        <p>외근 현장에서 바로 처리, 사무실 복귀 후 문서 작업 제거</p>
+      </div>
+      <div class="card accent">
+        <span class="card-icon">📦</span>
+        <h3>택배 · 영업</h3>
+        <p>최적 경로로 배송 효율 향상, 완료 상태 즉시 공유</p>
+      </div>
+      <div class="card success">
+        <span class="card-icon">🏛️</span>
+        <h3>기관 관리자</h3>
+        <p>데이터 대시보드로 전체 현황을 실시간으로 파악 및 의사결정</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 10 : 확장 가능성 & 결론
+  ══════════════════════════════════════ -->
+  <div class="slide" id="slide-10">
+    <div class="slide-accent-tl"></div>
+    <div class="slide-header">
+      <span class="slide-tag">결론 &amp; 확장</span>
+      <span class="slide-num">10 / 10</span>
+    </div>
+    <h2>확장 가능성 &amp; 핵심 가치</h2>
+    <div class="divider"></div>
+
+    <div class="two-col" style="flex: 1;">
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="highlight-box">
+          <p style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">📈 시장성 근거</p>
+          <h3 style="margin-bottom:10px;">온나라 지식 다운로드 2위</h3>
+          <p style="font-size:15px; color:var(--text-muted); line-height:1.65;">기존 외근업무도우미(공무원 자체 개발)가 <em class="hl">업무용 프로그램 2위</em>를 기록 — 검증된 실수요 기반 위에서 이번 프로토타입이 출발합니다.</p>
+        </div>
+        <div class="card success">
+          <span class="card-icon">🌐</span>
+          <h3>확장 대상 직군</h3>
+          <ul class="check-list" style="margin-top:8px;">
+            <li>지자체 공무원 (현장점검, 민원처리)</li>
+            <li>택배·배달 기사 (경로 최적화)</li>
+            <li>영업사원 (방문 관리, CRM 연동)</li>
+            <li>시설 관리 업체 (정기 점검 이력)</li>
+          </ul>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="card accent">
+          <span class="card-icon">🎯</span>
+          <h3>이번 프로토타입의 목표</h3>
+          <ul class="check-list" style="margin-top:8px;">
+            <li>사하구청 외근 업무를 실제 개선하는 <em class="hl">실증 사례</em> 확보</li>
+            <li>GIS + AI 결합 플랫폼의 <em class="hl">레퍼런스 모델</em> 구축</li>
+            <li>타 지자체·민간 기업으로의 <em class="hl">확장 기반</em> 마련</li>
+          </ul>
+        </div>
+        <div class="card purple">
+          <span class="card-icon">🚀</span>
+          <h3>한 줄 요약</h3>
+          <p style="margin-top:8px; font-size:16px; line-height:1.7;">현장에서 지도를 열고, 사진을 찍고, 메모를 남기면 — <em class="hl-p">AI가 보고서까지 완성</em>하는 외근 업무의 새로운 표준.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /slides-wrapper -->
+
+<nav class="nav">
+  <button id="btnPrev" onclick="changeSlide(-1)" disabled>◀</button>
+  <div class="dots" id="dotsContainer"></div>
+  <span class="slide-counter" id="slideCounter">1 / 10</span>
+  <button id="btnNext" onclick="changeSlide(1)">▶</button>
+</nav>
+
+<script>
+  const TOTAL = 10;
+  let current = 1;
+  let isAnimating = false;
+
+  const slides = document.querySelectorAll('.slide');
+  const dotsContainer = document.getElementById('dotsContainer');
+  const progressBar = document.getElementById('progressBar');
+  const slideCounter = document.getElementById('slideCounter');
+  const btnPrev = document.getElementById('btnPrev');
+  const btnNext = document.getElementById('btnNext');
+
+  for (let i = 1; i <= TOTAL; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'dot' + (i === 1 ? ' active' : '');
+    dot.onclick = () => goTo(i);
+    dotsContainer.appendChild(dot);
+  }
+
+  function updateUI() {
+    progressBar.style.width = ((current / TOTAL) * 100) + '%';
+    slideCounter.textContent = current + ' / ' + TOTAL;
+    btnPrev.disabled = current === 1;
+    btnNext.disabled = current === TOTAL;
+    document.querySelectorAll('.dot').forEach((d, i) => {
+      d.classList.toggle('active', i + 1 === current);
+    });
+  }
+
+  function goTo(n) {
+    if (isAnimating || n === current || n < 1 || n > TOTAL) return;
+    isAnimating = true;
+    const direction = n > current ? 1 : -1;
+    const oldSlide = slides[current - 1];
+    const newSlide = slides[n - 1];
+
+    oldSlide.classList.remove('active');
+    oldSlide.classList.add('exit-left');
+    oldSlide.style.transform = direction === 1 ? 'translateX(-60px)' : 'translateX(60px)';
+    oldSlide.style.opacity = '0';
+
+    newSlide.style.transform = direction === 1 ? 'translateX(60px)' : 'translateX(-60px)';
+    newSlide.style.opacity = '0';
+    newSlide.style.transition = 'none';
+    newSlide.classList.add('active');
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        newSlide.style.transition = 'opacity 0.45s ease, transform 0.45s ease';
+        newSlide.style.transform = 'translateX(0)';
+        newSlide.style.opacity = '1';
+      });
+    });
+
+    setTimeout(() => {
+      oldSlide.classList.remove('exit-left');
+      oldSlide.style.transform = '';
+      oldSlide.style.opacity = '';
+      oldSlide.style.transition = '';
+      isAnimating = false;
+    }, 500);
+
+    current = n;
+    updateUI();
+  }
+
+  function changeSlide(dir) { goTo(current + dir); }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); changeSlide(1); }
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); changeSlide(-1); }
+    if (e.key === 'ArrowUp')    { e.preventDefault(); goTo(1); }
+    if (e.key === 'ArrowDown')  { e.preventDefault(); goTo(TOTAL); }
+  });
+
+  let touchStartX = 0;
+  document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) changeSlide(dx < 0 ? 1 : -1);
+  });
+
+  updateUI();
+</script>
+</body>
+</html>
