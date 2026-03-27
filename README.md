@@ -48,8 +48,9 @@
 - 경로 최적화 알고리즘 (TSP)
 - 통계 분석 및 이상 탐지
 - 데이터 파이프라인 구축 (ETL)
+  
 
-
+#######################################
 
 - Server OS: Ubuntu 24.04 LTS (AWS EC2)
 - Runtime: Docker / Docker Compose
