@@ -1,7 +1,6 @@
-# .gitignore
 .env
 *.pem
-postgres_data/     # DB 데이터 폴더 (각자 컴퓨터에만 저장)
-.aws/              # AWS 설정 폴더
-build/             # 자바 빌드 결과물
-.DS_Store         
+**/postgres_data/
+.aws/
+build/
+.DS_Store

@@ -17,6 +17,7 @@ services:
 
   #  2. 백엔드 서버 (자바 17)
   backend:
+    platform: linux/amd64
     image: eclipse-temurin:17-jdk-alpine
     container_name: sahagu-api
     depends_on:
