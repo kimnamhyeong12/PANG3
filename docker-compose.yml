@@ -31,4 +31,4 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/sahagu_fieldwork
       - SPRING_DATASOURCE_USERNAME=sahagu_admin
       # 금고에 저장한 '/sahagu/db/password'를 자동으로 대입
-      - SPRING_DATASOURCE_PASSWORD=${db.password}
+      - SPRING_DATASOURCE_PASSWORD=$${db.password}
