@@ -18,7 +18,7 @@ services:
   #  2. 백엔드 서버 (자바 17)
   backend:
     platform: linux/amd64
-    image: ${{ secrets.DOCKER_USERNAME }}/sahagu-api:latest
+    image: jo0202/sahagu-api:latest
     container_name: sahagu-api
     depends_on:
       - db
