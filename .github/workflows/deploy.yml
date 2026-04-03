@@ -45,7 +45,7 @@ jobs:
             --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
             --query 'Reservations[0].Instances[0].PublicIpAddress' \
             --output text)
-          echo "EC2_IP=$PUBLIC_IP" >> $GITHUB_OUTPUT
+          echo "ip=$PUBLIC_IP" >> $GITHUB_OUTPUT
 
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@master
