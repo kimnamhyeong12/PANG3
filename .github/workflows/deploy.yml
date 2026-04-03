@@ -1,8 +1,8 @@
-name: Sahagu Project CI/CD
+name: Sahagu Project CI/CD (Secure)
 
 on:
   push:
-    branches: [ "main" ] # main 브랜치에 푸시하면 작동 시작함
+    branches: [ "main" ]
 
 jobs:
   build-and-push:
@@ -23,12 +23,11 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          
           platforms: linux/amd64 
           tags: ${{ secrets.DOCKER_USERNAME }}/sahagu-api:latest
 
   deploy:
-    needs: build-and-push # 빌드가 성공해야 배포를 시작
+    needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - name: Configure AWS Credentials
@@ -38,7 +37,6 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      #  매일 바뀌는 실시간 IP를 찾아냄 (우리는 탄력적 ip 안씀)
       - name: Get EC2 Public IP
         id: get-ip
         run: |
@@ -48,18 +46,38 @@ jobs:
             --output text)
           echo "ip=$PUBLIC_IP" >> $GITHUB_OUTPUT
 
+      
+      - name: Get GitHub Actions IP
+        id: ip
+        run: echo "ipv4=$(curl -s https://checkip.amazonaws.com)" >> $GITHUB_OUTPUT
+
+      
+      - name: Add GitHub IP to Security Group
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ secrets.AWS_SG_ID }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr ${{ steps.ip.outputs.ipv4 }}/32
+
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ steps.get-ip.outputs.ip }} # 방금 찾은 따끈따끈한 IP 사용
+          host: ${{ steps.get-ip.outputs.ip }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd /home/ubuntu/PANG3
-            # 최신 설계도(docker-compose.yml) 동기화 (선택사항)
-            git pull origin main
-            # 새 이미지 내려받고 재시작
             docker-compose pull
             docker-compose up -d
-            # 안 쓰는 옛날 이미지는 삭제해서 용량 확보
             docker image prune -f
+
+      
+      - name: Remove GitHub IP from Security Group
+        if: always() 
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ secrets.AWS_SG_ID }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr ${{ steps.ip.outputs.ipv4 }}/32
