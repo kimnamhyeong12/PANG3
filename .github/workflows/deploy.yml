@@ -68,8 +68,9 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd /home/ubuntu/PANG3
-            docker-compose pull
-            docker-compose up -d
+            git pull origin main
+            docker compose pull
+            docker compose up -d
             docker image prune -f
 
       
