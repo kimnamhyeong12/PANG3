@@ -23,7 +23,7 @@ services:
     depends_on:
       - db
     ports:
-      - "8080:8080"
+      - "8080:80"
     environment:
       # AWS 금고(SSM)에서 데이터를 가져오도록 설정
       - SPRING_CONFIG_IMPORT=aws-parameterstore:/sahagu/
