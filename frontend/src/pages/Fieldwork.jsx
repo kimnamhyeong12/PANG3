@@ -1,12 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 import { BackIcon, CheckIcon } from "../components/Icons";
 
-import {
- C,
- USER,
- LOCATIONS
-} from "../data/mockData";
+import { USER } from "../data/mockData";
 
 export function MapScreen({ onBack, onLocationClick, markers, fromDirect }) {
   const [showSheet, setShowSheet] = useState(false);
@@ -276,20 +272,106 @@ export function MapScreen({ onBack, onLocationClick, markers, fromDirect }) {
   );
 }
 
+function getAiRecommendation(memo) {
+  const text = memo.toLowerCase();
+
+  if (text.includes("배수") || text.includes("토사") || text.includes("침수") || text.includes("악취")) {
+    return {
+      category: "배수시설 관리",
+      risk: "높음",
+      riskColor: "#DC2626",
+      checklist: ["배수구 막힘 여부 확인", "우천 시 침수 위험 확인", "현장 사진 추가 촬영"],
+      actions: ["정비 요청 등록", "우천 전 재점검", "환경정비팀 전달"],
+      report:
+        "배수구 내 토사 적체로 인해 배수 불량 및 침수 위험이 우려되어 정비 요청이 필요함.",
+    };
+  }
+
+  if (text.includes("파손") || text.includes("균열") || text.includes("전선") || text.includes("부식")) {
+    return {
+      category: "시설물 안전",
+      risk: "높음",
+      riskColor: "#DC2626",
+      checklist: ["파손 부위 근접 촬영", "보행자 위험 여부 확인", "임시 안전조치 필요 여부 확인"],
+      actions: ["긴급 보수 요청", "안전표지 설치", "재점검 등록"],
+      report:
+        "시설물 파손 및 안전 위험 요소가 확인되어 긴급 보수 조치가 필요함.",
+    };
+  }
+
+  if (text.includes("쓰레기") || text.includes("무단투기") || text.includes("폐기물")) {
+    return {
+      category: "환경 정비",
+      risk: "중간",
+      riskColor: "#D97706",
+      checklist: ["폐기물 종류 확인", "투기량 사진 촬영", "재발 가능성 확인"],
+      actions: ["수거 요청 등록", "재발 지역 표시", "환경정비팀 전달"],
+      report:
+        "무단투기 및 폐기물 적치가 확인되어 수거 요청 및 재발 방지 관리가 필요함.",
+    };
+  }
+
+  return {
+    category: "일반 현장 점검",
+    risk: "보통",
+    riskColor: "#12395B",
+    checklist: ["현장 상태 확인", "사진 1장 이상 첨부", "특이사항 메모 보완"],
+    actions: ["일반 점검 완료", "추가 확인 필요", "재점검 등록"],
+    report:
+      "현장 점검 결과 특이사항이 확인되어 추가 확인 및 기록 관리가 필요함.",
+  };
+}
+
 export function FieldActionScreen({ location, actionType, onBack, onSave }) {
   const [memo, setMemo] = useState("");
   const [status, setStatus] = useState("pending");
   const [photos, setPhotos] = useState([]);
   const [tab, setTab] = useState(actionType || "photo");
   const [saved, setSaved] = useState(false);
+  const [aiVisible, setAiVisible] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [selectedAction, setSelectedAction] = useState("");
+
+  useEffect(() => {
+    if (memo.trim().length < 8) {
+      setAiVisible(false);
+      setAiLoading(false);
+      setSelectedAction("");
+      return;
+    }
+
+    setAiLoading(true);
+    const t = setTimeout(() => {
+      setAiLoading(false);
+      setAiVisible(true);
+    }, 800);
+
+    return () => clearTimeout(t);
+  }, [memo]);
+
+  const ai = getAiRecommendation(memo);
 
   const save = () => {
     setSaved(true);
-    setTimeout(() => onSave({ memo, status, photos }), 700);
+    setTimeout(
+      () =>
+        onSave({
+          memo,
+          status,
+          photos,
+          aiRecommendation: aiVisible ? ai : null,
+          selectedAction,
+        }),
+      700
+    );
   };
 
   const addPhoto = (type) => {
-    const e = type === "camera" ? ["📸", "🏗️", "🌊", "⚓", "🏖️"] : ["🖼️", "🗺️", "📊", "🏭", "🌿"];
+    const e =
+      type === "camera"
+        ? ["📸", "🏗️", "🌊", "⚓", "🏖️"]
+        : ["🖼️", "🗺️", "📊", "🏭", "🌿"];
+
     setPhotos((p) => [...p, { id: Date.now(), emoji: e[p.length % 5], type }]);
   };
 
@@ -378,7 +460,10 @@ export function FieldActionScreen({ location, actionType, onBack, onSave }) {
 
                 <div className="grid grid-cols-3 gap-2">
                   {photos.map((p, i) => (
-                    <div key={p.id} className="aspect-square rounded-xl bg-white border border-[#D9E1EA] flex items-center justify-center relative shadow-sm">
+                    <div
+                      key={p.id}
+                      className="aspect-square rounded-xl bg-white border border-[#D9E1EA] flex items-center justify-center relative shadow-sm"
+                    >
                       <span className="text-3xl">{p.emoji}</span>
                       <div className="absolute bottom-1 inset-x-1 bg-[#12395B]/80 rounded text-white text-[7px] text-center py-0.5">
                         사진 {i + 1}
@@ -400,7 +485,7 @@ export function FieldActionScreen({ location, actionType, onBack, onSave }) {
             <textarea
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
-              placeholder="현장 세부사항을 입력하세요&#10;&#10;예: 시설물 상태, 특이사항, 조치 내용 등"
+              placeholder="현장 세부사항을 입력하세요&#10;&#10;예: 배수구 토사 적체 심함, 악취 발생"
               className="w-full h-44 px-4 py-3 rounded-2xl bg-white border border-[#D9E1EA] text-sm text-[#1F2D3D] resize-none focus:outline-none focus:border-[#12395B] focus:ring-4 focus:ring-[#12395B]/10 shadow-sm"
               style={{ lineHeight: "1.7" }}
             />
@@ -411,6 +496,120 @@ export function FieldActionScreen({ location, actionType, onBack, onSave }) {
               </span>
               <span className="text-[9px] text-[#718096]">{memo.length}/500</span>
             </div>
+
+            {aiLoading && (
+              <div className="mt-4 bg-white rounded-2xl border border-[#D9E1EA] shadow-sm px-4 py-4 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-[#EAF1F7] flex items-center justify-center">
+                  <div className="w-4 h-4 border-2 border-[#12395B] border-t-transparent rounded-full animate-spin" />
+                </div>
+                <div>
+                  <p className="text-xs font-black text-[#1F2D3D]">
+                    AI Assistant 분석 중...
+                  </p>
+                  <p className="text-[9px] text-[#718096] mt-0.5">
+                    입력된 현장 메모를 기반으로 추천 항목을 생성합니다.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {aiVisible && !aiLoading && (
+              <div className="mt-4 bg-white rounded-2xl border border-[#D9E1EA] shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-[#EEF3F7] flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-[#12395B] text-white flex items-center justify-center text-[10px] font-black">
+                    AI
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-[#1F2D3D]">
+                      AI Assistant 추천
+                    </p>
+                    <p className="text-[9px] text-[#718096]">
+                      입력하신 메모를 분석하여 추천드려요.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="px-4 py-3">
+                  <div className="flex items-center gap-2 text-[10px] mb-3">
+                    <span className="font-bold text-[#607086]">상황분류:</span>
+                    <span className="font-black text-[#1F2D3D]">{ai.category}</span>
+                    <span className="mx-1 text-[#CBD5E1]">|</span>
+                    <span className="font-bold text-[#607086]">위험도:</span>
+                    <span
+                      className="px-2 py-0.5 rounded-full font-black"
+                      style={{
+                        color: ai.riskColor,
+                        background: `${ai.riskColor}15`,
+                      }}
+                    >
+                      {ai.risk}
+                    </span>
+                  </div>
+
+                  <div className="mb-4">
+                    <p className="text-[11px] font-black text-[#1F2D3D] mb-2">
+                      추가 점검 항목
+                    </p>
+
+                    <div className="space-y-2">
+                      {ai.checklist.map((item) => (
+                        <label
+                          key={item}
+                          className="flex items-center gap-2 text-[10px] text-[#607086]"
+                        >
+                          <input
+                            type="checkbox"
+                            className="w-3.5 h-3.5 accent-[#12395B]"
+                          />
+                          {item}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <p className="text-[11px] font-black text-[#1F2D3D] mb-2">
+                      추천 조치
+                    </p>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      {ai.actions.map((action) => (
+                        <button
+                          key={action}
+                          onClick={() => setSelectedAction(action)}
+                          className="min-h-[58px] rounded-xl border px-2 py-2 text-[9px] font-black transition-all active:scale-95"
+                          style={{
+                            background:
+                              selectedAction === action ? "#12395B" : "#F8FAFC",
+                            color:
+                              selectedAction === action ? "white" : "#1F2D3D",
+                            borderColor:
+                              selectedAction === action ? "#12395B" : "#D9E1EA",
+                          }}
+                        >
+                          {action}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-[#F4F7FA] border border-[#D9E1EA] px-3 py-3">
+                    <p className="text-[10px] font-black text-[#12395B] mb-1">
+                      보고서 문안 예시
+                    </p>
+                    <p className="text-[10px] text-[#607086] leading-relaxed">
+                      {selectedAction
+                        ? `${ai.report} 선택 조치: ${selectedAction}.`
+                        : ai.report}
+                    </p>
+                  </div>
+
+                  <p className="text-[8px] text-[#718096] mt-3">
+                    ※ 위 추천은 참고용이며, 최종 판단은 담당자의 책임입니다.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -421,7 +620,9 @@ export function FieldActionScreen({ location, actionType, onBack, onSave }) {
                 {USER.name[0]}
               </div>
               <div>
-                <p className="font-black text-[#1F2D3D] text-xs">{USER.name}, {USER.team}</p>
+                <p className="font-black text-[#1F2D3D] text-xs">
+                  {USER.name}, {USER.team}
+                </p>
                 <p className="text-[9px] text-[#718096]">Position: {USER.position}</p>
               </div>
             </div>
@@ -453,7 +654,10 @@ export function FieldActionScreen({ location, actionType, onBack, onSave }) {
                   </div>
 
                   {status === opt.v && (
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-white" style={{ background: opt.c }}>
+                    <div
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-white"
+                      style={{ background: opt.c }}
+                    >
                       <CheckIcon />
                     </div>
                   )}
@@ -470,7 +674,9 @@ export function FieldActionScreen({ location, actionType, onBack, onSave }) {
           className="w-full py-4 rounded-xl text-white font-black text-sm tracking-wide transition-all active:scale-[0.97]"
           style={{
             background: saved ? "#1F9D55" : "#12395B",
-            boxShadow: saved ? "0 8px 18px rgba(31,157,85,.22)" : "0 8px 18px rgba(18,57,91,.22)",
+            boxShadow: saved
+              ? "0 8px 18px rgba(31,157,85,.22)"
+              : "0 8px 18px rgba(18,57,91,.22)",
           }}
         >
           {saved ? (
