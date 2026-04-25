@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 
 import { BackIcon, CheckIcon } from "../components/Icons";
 
+import KakaoMap from "../components/KakaoMap";
+
 import {
  C,
  USER,
@@ -32,14 +34,6 @@ export function MapScreen({ onBack, onLocationClick, markers, fromDirect }) {
   }, [optimizing]);
 
   const orderedMarkers = routeOrder.map((i) => markers[i]).filter(Boolean);
-
-  const pins = [
-    { id: 1, x: 140, y: 130 },
-    { id: 2, x: 82, y: 185 },
-    { id: 3, x: 208, y: 218 },
-    { id: 4, x: 165, y: 80 },
-    { id: 5, x: 228, y: 152 },
-  ];
 
   return (
     <div className="flex flex-col h-full bg-[#F4F7FA]">
@@ -146,88 +140,26 @@ export function MapScreen({ onBack, onLocationClick, markers, fromDirect }) {
       </div>
 
       <div className="flex-1 relative overflow-hidden bg-[#DDE8D5]">
-        <svg className="absolute inset-0 w-full h-full opacity-20">
-          {Array.from({ length: 20 }, (_, i) => (
-            <line key={`h${i}`} x1="0" y1={i * 20} x2="400" y2={i * 20} stroke="#607086" strokeWidth="0.5" />
-          ))}
-          {Array.from({ length: 20 }, (_, i) => (
-            <line key={`v${i}`} x1={i * 20} y1="0" x2={i * 20} y2="400" stroke="#607086" strokeWidth="0.5" />
-          ))}
-        </svg>
-
-        <svg className="absolute inset-0 w-full h-full">
-          <path d="M30,50 Q120,40 140,130 Q160,205 208,218 Q242,242 282,202" fill="none" stroke="#B6C7AD" strokeWidth="14" />
-          <path d="M30,50 Q120,40 140,130 Q160,205 208,218 Q242,242 282,202" fill="none" stroke="white" strokeWidth="9" />
-          <path d="M82,185 Q110,148 140,130 Q178,108 228,152" fill="none" stroke="#B6C7AD" strokeWidth="9" />
-          <path d="M82,185 Q110,148 140,130 Q178,108 228,152" fill="none" stroke="white" strokeWidth="6" />
-
-          {optimized && (
-            <path
-              d="M148,122 L165,80 L228,152 L82,185 L208,218"
-              fill="none"
-              stroke="#12395B"
-              strokeWidth="3"
-              strokeDasharray="8,5"
-            />
-          )}
-        </svg>
-
-        {pins.map((pin, pinIdx) => {
-          const loc = markers[pinIdx];
-          if (!loc) return null;
-
-          const done = loc.status === "complete";
-          const order = optimized ? routeOrder.indexOf(pinIdx) : pinIdx;
-          const isNext = optimized && order === 0 && !done;
-
-          return (
-            <button
-              key={pin.id}
-              onClick={() => {
-                setSel(loc);
-                setShowSheet(true);
-              }}
-              className="absolute transform -translate-x-1/2 -translate-y-full active:scale-90 transition-transform"
-              style={{ left: pin.x, top: pin.y, zIndex: isNext ? 10 : 1 }}
-            >
-              {isNext && <div className="absolute -inset-3 rounded-full animate-ping bg-[#12395B]/25" />}
-
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center shadow-lg border-2 border-white"
-                style={{
-                  background: done ? "#1F9D55" : isNext ? "#12395B" : "#607086",
-                  opacity: isNext && !blink ? 0.55 : 1,
-                }}
-              >
-                <span className="text-white text-[10px] font-black">
-                  {optimized ? order + 1 : pinIdx + 1}
-                </span>
-              </div>
-
-              <div
-                className="mx-auto w-0 h-0"
-                style={{
-                  borderLeft: "4px solid transparent",
-                  borderRight: "4px solid transparent",
-                  borderTop: `6px solid ${done ? "#1F9D55" : isNext ? "#12395B" : "#607086"}`,
-                }}
-              />
-            </button>
-          );
-        })}
-
-        <div className="absolute" style={{ left: 150, top: 118 }}>
-          <div className="w-4 h-4 rounded-full bg-blue-500 border-2 border-white shadow">
-            <div className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-50" />
-          </div>
-        </div>
+        <KakaoMap
+          markers={markers}
+          optimized={optimized}
+          routeOrder={routeOrder}
+          onMarkerClick={(loc) => {
+            setSel(loc);
+            setShowSheet(true);
+          }}
+        />
 
         {optimized && (
-          <div className="absolute top-3 left-3 right-3 bg-white rounded-xl shadow-sm border border-[#D9E1EA] px-3 py-2.5 flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-[#EAF1F7] flex items-center justify-center">📍</div>
+          <div className="absolute top-3 left-3 right-3 bg-white rounded-xl shadow-sm border border-[#D9E1EA] px-3 py-2.5 flex items-center gap-2.5 z-10">
+            <div className="w-7 h-7 rounded-lg bg-[#EAF1F7] flex items-center justify-center">
+              📍
+            </div>
             <div>
               <p className="text-[10px] font-black text-[#12395B]">다음 방문지</p>
-              <p className="text-[9px] text-[#718096]">{orderedMarkers[0]?.name} · 마커를 눌러 업무 시작</p>
+              <p className="text-[9px] text-[#718096]">
+                {orderedMarkers[0]?.name} · 마커를 눌러 업무 시작
+              </p>
             </div>
           </div>
         )}

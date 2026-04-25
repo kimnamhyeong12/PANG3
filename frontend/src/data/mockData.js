@@ -10,11 +10,46 @@ export const USER = {
 };
 
 export const LOCATIONS = [
-  { id:1, name:"낙동강 제방 점검",  address:"사하구 장림동 123", status:"pending" },
-  { id:2, name:"감천항 시설 확인",  address:"사하구 감천동 456", status:"complete" },
-  { id:3, name:"다대포 해변 점검",  address:"사하구 다대동 789", status:"pending" },
-  { id:4, name:"을숙도 생태공원",   address:"사하구 하단동 321", status:"pending" },
-  { id:5, name:"괴정천 수질 확인",  address:"사하구 괴정동 654", status:"complete" },
+  {
+    id: 1,
+    name: "낙동강 제방 점검",
+    address: "사하구 장림동 123",
+    status: "pending",
+    lat: 35.0788,
+    lng: 128.9663,
+  },
+  {
+    id: 2,
+    name: "감천항 시설 확인",
+    address: "사하구 감천동 456",
+    status: "complete",
+    lat: 35.0853,
+    lng: 129.0028,
+  },
+  {
+    id: 3,
+    name: "다대포 해변 점검",
+    address: "사하구 다대동 789",
+    status: "pending",
+    lat: 35.0467,
+    lng: 128.9633,
+  },
+  {
+    id: 4,
+    name: "을숙도 생태공원",
+    address: "사하구 하단동 321",
+    status: "pending",
+    lat: 35.1094,
+    lng: 128.9467,
+  },
+  {
+    id: 5,
+    name: "괴정천 수질 확인",
+    address: "사하구 괴정동 654",
+    status: "complete",
+    lat: 35.0994,
+    lng: 128.9924,
+  },
 ];
 
 export const REGION_DATA = [

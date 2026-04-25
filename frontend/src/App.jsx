@@ -4,9 +4,9 @@ import Phone from "./components/Phone";
 import Login from "./pages/Login";
 import Main from "./pages/Main";
 import Dashboard from "./pages/Dashboard";
+import KakaoMap from "./components/KakaoMap";
 
 import {
-  MapScreen,
   FieldActionScreen,
 } from "./pages/Fieldwork";
 
@@ -15,12 +15,11 @@ import {
   DownloadScreen,
 } from "./pages/Report";
 
-import { LOCATIONS } from "./data/mockData";
-
 export default function App() {
   const [screen, setScreen] = useState("login");
   const [selLoc, setSelLoc] = useState(null);
   const [actType, setActType] = useState(null);
+  const [routeLocations, setRouteLocations] = useState([]);
 
   const go = (s) => setScreen(s);
 
@@ -49,12 +48,13 @@ export default function App() {
       )}
 
       {screen === "mapDirect" && (
-        <MapScreen
-          onBack={() => go("main")}
-          onLocationClick={onLocClick}
-          markers={LOCATIONS}
-          fromDirect
-        />
+        <div className="h-full">
+          <KakaoMap
+            onLocationClick={onLocClick}
+            locations={routeLocations}
+            setLocations={setRouteLocations}
+          />
+        </div>
       )}
 
       {screen === "fieldAction" && (
