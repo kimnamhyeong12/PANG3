@@ -4,10 +4,8 @@ import Phone from "./components/Phone";
 import Login from "./pages/Login";
 import Main from "./pages/Main";
 import Dashboard from "./pages/Dashboard";
-import RouteSelectSheet from "./components/RouteSelectSheet";
 
 import {
-  UploadFlowScreen,
   MapScreen,
   FieldActionScreen,
 } from "./pages/Fieldwork";
@@ -21,10 +19,8 @@ import { LOCATIONS } from "./data/mockData";
 
 export default function App() {
   const [screen, setScreen] = useState("login");
-  const [showRouteSheet, setShowRouteSheet] = useState(false);
   const [selLoc, setSelLoc] = useState(null);
   const [actType, setActType] = useState(null);
-  const [markers, setMarkers] = useState([]);
 
   const go = (s) => setScreen(s);
 
@@ -34,9 +30,6 @@ export default function App() {
     go("fieldAction");
   };
 
-  const openRouteSheet = () => setShowRouteSheet(true);
-  const closeRouteSheet = () => setShowRouteSheet(false);
-
   return (
     <Phone>
       {screen === "login" && <Login onLogin={() => go("main")} />}
@@ -44,62 +37,23 @@ export default function App() {
       {screen === "main" && (
         <div className="relative h-full">
           <Main
-            onRoute={openRouteSheet}
+            onRoute={() => go("mapDirect")}
             onReport={() => go("report")}
             onDashboard={() => go("dashboard")}
           />
-
-          {showRouteSheet && (
-            <RouteSelectSheet
-              onClose={closeRouteSheet}
-              onDirect={() => {
-                closeRouteSheet();
-                go("mapDirect");
-              }}
-              onUpload={() => {
-                closeRouteSheet();
-                go("uploadFlow");
-              }}
-            />
-          )}
         </div>
       )}
 
-      {screen === "dashboard" && <Dashboard onBack={() => go("main")} />}
-
-      {screen === "uploadFlow" && (
-        <UploadFlowScreen
-          onBack={() => {
-            go("main");
-            openRouteSheet();
-          }}
-          onComplete={(mkrs) => {
-            setMarkers(mkrs);
-            go("map");
-          }}
-        />
+      {screen === "dashboard" && (
+        <Dashboard onBack={() => go("main")} />
       )}
 
       {screen === "mapDirect" && (
         <MapScreen
-          onBack={() => {
-            go("main");
-            openRouteSheet();
-          }}
+          onBack={() => go("main")}
           onLocationClick={onLocClick}
           markers={LOCATIONS}
           fromDirect
-        />
-      )}
-
-      {screen === "map" && (
-        <MapScreen
-          onBack={() => {
-            go("main");
-            openRouteSheet();
-          }}
-          onLocationClick={onLocClick}
-          markers={markers.length > 0 ? markers : LOCATIONS}
         />
       )}
 
@@ -107,7 +61,7 @@ export default function App() {
         <FieldActionScreen
           location={selLoc}
           actionType={actType}
-          onBack={() => go("map")}
+          onBack={() => go("mapDirect")}
           onSave={() => go("report")}
         />
       )}
@@ -119,7 +73,9 @@ export default function App() {
         />
       )}
 
-      {screen === "download" && <DownloadScreen onBack={() => go("main")} />}
+      {screen === "download" && (
+        <DownloadScreen onBack={() => go("main")} />
+      )}
     </Phone>
   );
 }

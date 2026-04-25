@@ -1,61 +1,165 @@
 import { useState } from "react";
-import { C } from "../data/mockData";
 
 export default function Login({ onLogin }) {
-  const [id, setId] = useState("");
-  const [pw, setPw] = useState("");
-  const [loading, setLoading] = useState(false);
-  const go = () => {
-    if (!id || !pw) return;
+  const [id,setId]=useState("");
+  const [pw,setPw]=useState("");
+  const [loading,setLoading]=useState(false);
+
+  const go=()=>{
+    if(!id||!pw) return;
+
     setLoading(true);
-    setTimeout(() => { setLoading(false); onLogin(); }, 1100);
+
+    setTimeout(()=>{
+      setLoading(false);
+      onLogin();
+    },900);
   };
+
   return (
-    <div className="flex flex-col min-h-full bg-white px-8">
-      <div className="flex flex-col items-center pt-16 pb-10">
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5"
-          style={{ background:"linear-gradient(135deg, #1B6CA8 0%, #3AAFA9 100%)" }}>
-          <svg viewBox="0 0 40 40" fill="none" className="w-9 h-9">
-            <circle cx="20" cy="20" r="18" stroke="white" strokeWidth="2" opacity="0.4"/>
-            <path d="M12 26 Q20 10 28 26" stroke="white" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-            <circle cx="20" cy="20" r="3" fill="white"/>
-          </svg>
-        </div>
-        <h1 className="text-2xl font-black tracking-tight" style={{ color:"#1a1a2e" }}>Saha-gu</h1>
-        <p className="text-xs tracking-[0.25em] font-medium mt-1" style={{ color:C.primary }}>FIELDWORK ASSISTANT</p>
-        <div className="mt-4 flex gap-1.5 items-center">
-          <div className="w-8 h-px" style={{ background:C.primary, opacity:0.3 }}/>
-          <div className="w-2 h-2 rounded-full" style={{ background:C.teal, opacity:0.6 }}/>
-          <div className="w-8 h-px" style={{ background:C.primary, opacity:0.3 }}/>
-        </div>
-      </div>
-      <div className="flex-1">
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 mb-5">직원 로그인</p>
-        <div className="space-y-4 mb-8">
-          {[
-            { label:"사원번호", val:id, set:setId, type:"text",     ph:"사원번호 입력" },
-            { label:"비밀번호", val:pw, set:setPw, type:"password", ph:"비밀번호 입력" },
-          ].map(f=>(
-            <div key={f.label}>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400 block mb-2">{f.label}</label>
-              <input type={f.type} value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph}
-                className="w-full px-4 py-3.5 rounded-xl text-sm text-gray-700 focus:outline-none transition-all"
-                style={{ background:"#F8FAFC", border:`1.5px solid ${f.val ? C.primary : "#E2E8F0"}`,
-                  boxShadow: f.val ? `0 0 0 3px ${C.primary}18` : "none" }}/>
+    <div className="flex flex-col min-h-full bg-[#F4F7FA] px-8">
+
+      {/* HEADER */}
+      <div className="pt-12 pb-5">
+
+        <div className="flex items-center gap-3">
+
+          <div className="w-12 h-12 rounded-xl bg-[#12395B]
+          flex items-center justify-center
+          text-white font-black text-lg shadow-sm">
+            SG
+          </div>
+
+          <div>
+            <p className="text-[11px] font-bold tracking-[0.22em] text-[#607086]">
+              SAHA-GU OFFICE
+            </p>
+
+            <h1 className="text-[22px] font-black text-[#1F2D3D]">
+              외근 업무 지원 시스템
+            </h1>
+
+            <p className="text-[10px] mt-1 text-[#718096]">
+              스마트 현장 순회 및 보고 자동화 시스템
+            </p>
+
+            <div className="mt-3 flex items-center gap-3">
+              <div className="w-20 h-[1px] bg-[#9FB4C7]" />
+              <div className="w-2.5 h-2.5 rounded-full bg-[#7CA6C7]" />
+              <div className="w-20 h-[1px] bg-[#9FB4C7]" />
             </div>
-          ))}
+
+            <p className="mt-3 text-[10px] tracking-[0.28em]
+            font-semibold text-[#5E7B95]">
+              FIELDWORK ASSISTANT
+            </p>
+
+          </div>
         </div>
-        <button onClick={go}
-          className="w-full py-4 rounded-xl text-white font-bold text-sm tracking-wider transition-all active:scale-[0.97]"
-          style={{ background:(!id||!pw) ? "#CBD5E1" : "linear-gradient(135deg,#1B6CA8 0%,#3AAFA9 100%)",
-            boxShadow:(!id||!pw) ? "none" : "0 8px 24px rgba(27,108,168,0.35)" }}>
-          {loading
-            ? <span className="flex items-center justify-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>로그인 중…
-              </span>
-            : "로그인 LOG IN"}
+
+      </div>
+
+
+
+      {/* LOGIN */}
+      <div className="flex-1 pt-4">
+
+        <div className="mb-5">
+          <p className="text-[11px] font-black tracking-[0.18em]
+          text-[#607086] uppercase">
+            SECURE LOGIN
+          </p>
+
+          <h2 className="text-lg font-black text-[#1F2D3D] mt-1">
+            직원 로그인
+          </h2>
+        </div>
+
+
+        <div className="space-y-4 mb-7">
+
+          <div>
+            <label className="text-[11px] font-bold text-[#607086] block mb-2">
+              직원번호 또는 업무용 이메일
+            </label>
+
+            <input
+              type="text"
+              value={id}
+              onChange={(e)=>setId(e.target.value)}
+              placeholder="예: saha2026 또는 name@saha.go.kr"
+              className="w-full px-4 py-3.5 rounded-xl
+              bg-white border border-[#D9E1EA]
+              focus:outline-none focus:border-[#1F6FAE]
+              focus:ring-4 focus:ring-[#1F6FAE]/10"
+            />
+          </div>
+
+
+          <div>
+            <label className="text-[11px] font-bold text-[#607086] block mb-2">
+              비밀번호
+            </label>
+
+            <input
+              type="password"
+              value={pw}
+              onChange={(e)=>setPw(e.target.value)}
+              placeholder="비밀번호 입력"
+              className="w-full px-4 py-3.5 rounded-xl
+              bg-white border border-[#D9E1EA]
+              focus:outline-none focus:border-[#1F6FAE]
+              focus:ring-4 focus:ring-[#1F6FAE]/10"
+            />
+          </div>
+
+        </div>
+
+
+        <button
+          onClick={go}
+          disabled={!id||!pw||loading}
+          className="w-full py-4 rounded-xl
+          text-white font-black text-sm tracking-wider"
+          style={{
+            background:
+             (!id||!pw)
+             ? "#CBD5E1"
+             : "#12395B",
+
+            boxShadow:
+             (!id||!pw)
+             ? "none"
+             :"0 8px 18px rgba(18,57,91,.22)"
+          }}
+        >
+          {loading ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="w-4 h-4 border-2 border-white
+              border-t-transparent rounded-full animate-spin"/>
+              인증 중...
+            </span>
+          ) : (
+            "로그인"
+          )}
         </button>
-        <p className="text-center text-[10px] text-gray-300 mt-8">사하구청 외근 도우미 시스템 v2.4</p>
+
+
+        <div className="mt-6 rounded-xl
+        bg-[#EAF1F7]
+        border border-[#D9E1EA]
+        px-4 py-3">
+          <p className="text-[10px] text-[#607086] leading-relaxed">
+            본 시스템은 사하구청 외근 담당자 전용 시스템입니다.
+            모든 접속 기록은 보안 정책에 따라 저장됩니다.
+          </p>
+        </div>
+
+
+        <p className="text-center text-[10px] text-[#A0AEC0] mt-8">
+          사하구청 외근 도우미 시스템 v2.4
+        </p>
+
       </div>
     </div>
   );
