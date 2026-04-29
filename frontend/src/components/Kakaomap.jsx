@@ -277,7 +277,8 @@ export default function KakaoMap({
     });
   };
 
-  const addLocation = () => {
+  const addLocation = async () => {
+
     if (!selectedPos) {
       alert("먼저 지도에서 위치를 선택하거나 주소를 검색하세요.");
       return;
@@ -298,17 +299,43 @@ export default function KakaoMap({
       status: "pending",
     };
 
-    setLocations([...locations, newLoc]);
+    try {
 
-    setPlaceName("");
-    setTask("");
-    setKeyword("");
-    setSelectedPos(null);
+      const res = await fetch(
+        "http://localhost:8081/api/locations",
+        {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json"
+          },
+          body: JSON.stringify(newLoc)
+        }
+      );
 
-    if (tempMarkerRef.current) {
-      tempMarkerRef.current.setMap(null);
-      tempMarkerRef.current = null;
+      if(!res.ok){
+        throw new Error("저장 실패");
+      }
+
+      // 기존 프론트 리스트 반영
+      setLocations([...locations,newLoc]);
+
+      setPlaceName("");
+      setTask("");
+      setKeyword("");
+      setSelectedPos(null);
+
+      if(tempMarkerRef.current){
+        tempMarkerRef.current.setMap(null);
+        tempMarkerRef.current = null;
+      }
+
+      alert("DB 저장 완료");
+
+    } catch(e){
+      console.error(e);
+      alert("DB 저장 실패");
     }
+
   };
 
   const getDistance = (a, b) => {

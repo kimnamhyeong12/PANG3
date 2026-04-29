@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: sahagu-db-local
+    environment:
+      - POSTGRES_USER=sahagu_admin
+      - POSTGRES_DB=sahagu_fieldwork
+      - POSTGRES_PASSWORD=sahagu_local_pw
+    ports:
+      - "5432:5432"
+
+  backend:
+    platform: linux/amd64
+    image: joyoungjun/sahagu-api:latest
+    container_name: sahagu-api-local
+    depends_on:
+      - db
+    ports:
+      - "8080:80"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/sahagu_fieldwork
+      - SPRING_DATASOURCE_USERNAME=sahagu_admin
+      - SPRING_DATASOURCE_PASSWORD=sahagu_local_pw

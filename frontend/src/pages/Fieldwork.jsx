@@ -7,16 +7,38 @@ import KakaoMap from "../components/KakaoMap";
 import {
  C,
  USER,
- LOCATIONS
 } from "../data/mockData";
 
-export function MapScreen({ onBack, onLocationClick, markers, fromDirect }) {
+export function MapScreen({ onBack, onLocationClick, markers = [], fromDirect }) {
+  const [apiMarkers, setApiMarkers] = useState(markers);
+
   const [showSheet, setShowSheet] = useState(false);
   const [sel, setSel] = useState(null);
   const [blink, setBlink] = useState(true);
   const [optimizing, setOptimizing] = useState(!fromDirect);
   const [optimized, setOptimized] = useState(false);
-  const [routeOrder, setRouteOrder] = useState(markers.map((_, i) => i));
+
+  const [routeOrder, setRouteOrder] = useState([]);
+
+  useEffect(() => {
+
+    fetch("http://localhost:8081/api/locations")
+      .then(res=>res.json())
+      .then(data=>{
+
+        if(data?.length){
+          setApiMarkers(data);
+          setRouteOrder(data.map((_,i)=>i));
+        }else{
+          setRouteOrder(markers.map((_,i)=>i));
+        }
+
+      })
+      .catch(err=>{
+        console.log(err);
+      });
+
+  }, []);
 
   useEffect(() => {
     const t = setInterval(() => setBlink((b) => !b), 550);
@@ -25,15 +47,22 @@ export function MapScreen({ onBack, onLocationClick, markers, fromDirect }) {
 
   useEffect(() => {
     if (!optimizing) return;
+
     const t = setTimeout(() => {
-      setRouteOrder([0, 2, 4, 1, 3]);
+
+      setRouteOrder(
+        apiMarkers.map((_,i)=>i)
+      );
+
       setOptimizing(false);
       setOptimized(true);
-    }, 1500);
-    return () => clearTimeout(t);
-  }, [optimizing]);
 
-  const orderedMarkers = routeOrder.map((i) => markers[i]).filter(Boolean);
+    },1500);
+
+    return ()=>clearTimeout(t);
+  }, [optimizing, apiMarkers]);
+
+  const orderedMarkers = routeOrder.map((i) => apiMarkers[i]).filter(Boolean);
 
   return (
     <div className="flex flex-col h-full bg-[#F4F7FA]">
@@ -60,7 +89,7 @@ export function MapScreen({ onBack, onLocationClick, markers, fromDirect }) {
         </div>
 
         <span className="text-[10px] font-bold text-[#12395B] bg-[#EAF1F7] px-3 py-1 rounded-full">
-          {markers.length}개 지점
+          {apiMarkers.length}개 지점
         </span>
       </div>
 
@@ -107,7 +136,7 @@ export function MapScreen({ onBack, onLocationClick, markers, fromDirect }) {
         </div>
 
         <div className="space-y-1 max-h-20 overflow-y-auto">
-          {(optimized ? orderedMarkers : markers).map((loc, i) => (
+          {(optimized ? orderedMarkers : apiMarkers).map((loc, i) => (
             <div key={loc.id || i} className="flex items-center gap-2">
               <div
                 className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[8px] font-black"
@@ -141,7 +170,7 @@ export function MapScreen({ onBack, onLocationClick, markers, fromDirect }) {
 
       <div className="flex-1 relative overflow-hidden bg-[#DDE8D5]">
         <KakaoMap
-          markers={markers}
+          markers={apiMarkers}
           optimized={optimized}
           routeOrder={routeOrder}
           onMarkerClick={(loc) => {
