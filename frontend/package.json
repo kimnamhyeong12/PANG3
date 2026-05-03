@@ -8,12 +8,21 @@
   "dependencies": {
     "@expo/vector-icons": "latest",
     "expo": "latest",
-    "expo-image-picker": "latest",
+    "expo-haptics": "~15.0.8",
+    "expo-image-picker": "~17.0.11",
     "expo-location": "~19.0.8",
+    "expo-router": "~6.0.23",
+    "expo-status-bar": "~3.0.9",
+    "expo-web-browser": "~15.0.11",
     "react": "latest",
     "react-native": "latest",
     "react-native-maps": "1.20.1",
-    "react-native-webview": "latest"
+    "react-native-reanimated": "~4.1.1",
+    "react-native-webview": "13.15.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/react": "~19.1.10",
+    "typescript": "~5.9.2"
+  }
 }
