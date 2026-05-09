@@ -25,6 +25,9 @@ const DEFAULT_REGION = {
 
 export default function KakaoMapWebView({
   locations = [],
+  roadPath = [],
+  panelOpen = true,
+  setPanelOpen,
   onMarkerClick,
   onLocationsChange,
 }) {
@@ -43,6 +46,20 @@ export default function KakaoMapWebView({
       (loc) => loc && loc.lat !== undefined && loc.lng !== undefined
     );
   }, [locations]);
+
+  // 백엔드에서 받은 실제 도로 경로 좌표를 react-native-maps Polyline 형식으로 변환
+  const roadCoordinates = useMemo(() => {
+    return (roadPath || [])
+      .map((p) => ({
+        latitude: Number(p.latitude ?? p.lat),
+        longitude: Number(p.longitude ?? p.lng),
+      }))
+      .filter(
+        (p) =>
+          !Number.isNaN(p.latitude) &&
+          !Number.isNaN(p.longitude)
+      );
+  }, [roadPath]);
 
   useEffect(() => {
     startCurrentLocation();
@@ -215,11 +232,24 @@ export default function KakaoMapWebView({
         body: JSON.stringify(newLoc),
       });
 
+      const text = await res.text();
+
+      console.log("방문지 저장 응답 상태:", res.status);
+      console.log("방문지 저장 응답 내용:", text);
+
       if (!res.ok) {
-        throw new Error("저장 실패");
+        throw new Error(`저장 실패: ${res.status}`);
       }
 
-      const nextLocations = [...locations, newLoc];
+      const savedLocation = JSON.parse(text);
+
+      const nextLocations = [
+        ...locations,
+        {
+          ...savedLocation,
+          task: task.trim() || "현장 확인",
+        },
+      ];
 
       onLocationsChange?.(nextLocations);
 
@@ -254,18 +284,6 @@ export default function KakaoMapWebView({
     if (selectedLocation?.id === id) {
       setSelectedLocation(null);
     }
-
-    /*
-      백엔드에 DELETE API가 있으면 아래 주석을 풀면 됨.
-
-      try {
-        await fetch(`${API_BASE_URL}/api/locations/${id}`, {
-          method: "DELETE",
-        });
-      } catch (error) {
-        console.log(error);
-      }
-    */
   };
 
   const getDistance = (a, b) => {
@@ -389,105 +407,126 @@ export default function KakaoMapWebView({
           />
         ))}
 
-        {mapLocations.length >= 2 && (
+        {/* 
+          경로 최적화 전에는 방문지끼리 직선으로 연결하고,
+          경로 최적화 후에는 백엔드에서 받은 실제 도로 경로를 그린다.
+        */}
+        {roadCoordinates.length >= 2 ? (
           <Polyline
-            coordinates={mapLocations.map((loc) => ({
-              latitude: Number(loc.lat),
-              longitude: Number(loc.lng),
-            }))}
-            strokeWidth={4}
+            coordinates={roadCoordinates}
+            strokeWidth={5}
             strokeColor="#12395B"
           />
+        ) : (
+          mapLocations.length >= 2 && (
+            <Polyline
+              coordinates={mapLocations.map((loc) => ({
+                latitude: Number(loc.lat),
+                longitude: Number(loc.lng),
+              }))}
+              strokeWidth={4}
+              strokeColor="#94A3B8"
+            />
+          )
         )}
       </MapView>
 
-      <View style={styles.panel}>
-        <View style={styles.searchRow}>
+      {panelOpen && (
+        <View style={styles.panel}>
+          <TouchableOpacity
+            style={styles.closePanelButton}
+            onPress={() => setPanelOpen?.(false)}
+          >
+            <Text style={styles.closePanelButtonText}>접기</Text>
+          </TouchableOpacity>
+
+          <View style={styles.searchRow}>
+            <TextInput
+              value={keyword}
+              onChangeText={setKeyword}
+              placeholder="주소/장소"
+              placeholderTextColor="#8A98A8"
+              style={styles.searchInput}
+              returnKeyType="search"
+              onSubmitEditing={searchPlace}
+            />
+
+            <TouchableOpacity
+              style={styles.searchButton}
+              onPress={searchPlace}
+              disabled={isSearching}
+            >
+              <Text style={styles.searchButtonText}>
+                {isSearching ? "검색중" : "검색"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <TextInput
-            value={keyword}
-            onChangeText={setKeyword}
-            placeholder="주소/장소"
+            value={placeName}
+            onChangeText={setPlaceName}
+            placeholder="방문지 이름"
             placeholderTextColor="#8A98A8"
-            style={styles.searchInput}
-            returnKeyType="search"
-            onSubmitEditing={searchPlace}
+            style={styles.input}
           />
 
-          <TouchableOpacity
-            style={styles.searchButton}
-            onPress={searchPlace}
-            disabled={isSearching}
-          >
-            <Text style={styles.searchButtonText}>
-              {isSearching ? "검색중" : "검색"}
-            </Text>
+          <TextInput
+            value={task}
+            onChangeText={setTask}
+            placeholder="꼭 해야할 일"
+            placeholderTextColor="#8A98A8"
+            style={styles.input}
+          />
+
+          <TouchableOpacity style={styles.addButton} onPress={addLocation}>
+            <Text style={styles.addButtonText}>방문 추가</Text>
           </TouchableOpacity>
-        </View>
 
-        <TextInput
-          value={placeName}
-          onChangeText={setPlaceName}
-          placeholder="방문지 이름"
-          placeholderTextColor="#8A98A8"
-          style={styles.input}
-        />
+          <View style={styles.metaRow}>
+            <Text style={styles.countText}>방문지 {locations.length}개</Text>
 
-        <TextInput
-          value={task}
-          onChangeText={setTask}
-          placeholder="꼭 해야할 일"
-          placeholderTextColor="#8A98A8"
-          style={styles.input}
-        />
+            <TouchableOpacity style={styles.sortButton} onPress={optimizeRoute}>
+              <Text style={styles.sortButtonText}>정렬</Text>
+            </TouchableOpacity>
+          </View>
 
-        <TouchableOpacity style={styles.addButton} onPress={addLocation}>
-          <Text style={styles.addButtonText}>방문 추가</Text>
-        </TouchableOpacity>
+          <ScrollView style={styles.locationList}>
+            {locations.length === 0 ? (
+              <Text style={styles.emptyText}>추가로 방문하세요.</Text>
+            ) : (
+              locations.map((loc, index) => (
+                <View key={`${loc.id}-${index}`} style={styles.locationItem}>
+                  <TouchableOpacity
+                    style={styles.locationMain}
+                    onPress={() => focusLocation(loc)}
+                  >
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>{index + 1}</Text>
+                    </View>
 
-        <View style={styles.metaRow}>
-          <Text style={styles.countText}>방문지 {locations.length}개</Text>
+                    <View style={styles.locationTextWrap}>
+                      <Text style={styles.locationName} numberOfLines={1}>
+                        {loc.name || "이름 없음"}
+                      </Text>
+                      <Text style={styles.locationTask} numberOfLines={1}>
+                        {loc.task || "현장 확인"}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
 
-          <TouchableOpacity style={styles.sortButton} onPress={optimizeRoute}>
-            <Text style={styles.sortButtonText}>정렬</Text>
-          </TouchableOpacity>
-        </View>
+                  <TouchableOpacity onPress={() => removeLocation(loc.id)}>
+                    <Text style={styles.deleteText}>삭제</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </ScrollView>
 
-        <ScrollView style={styles.locationList}>
-          {locations.length === 0 ? (
-            <Text style={styles.emptyText}>추가로 방문하세요.</Text>
-          ) : (
-            locations.map((loc, index) => (
-              <View key={`${loc.id}-${index}`} style={styles.locationItem}>
-                <TouchableOpacity
-                  style={styles.locationMain}
-                  onPress={() => focusLocation(loc)}
-                >
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{index + 1}</Text>
-                  </View>
-
-                  <View style={styles.locationTextWrap}>
-                    <Text style={styles.locationName} numberOfLines={1}>
-                      {loc.name || "이름 없음"}
-                    </Text>
-                    <Text style={styles.locationTask} numberOfLines={1}>
-                      {loc.task || "현장 확인"}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={() => removeLocation(loc.id)}>
-                  <Text style={styles.deleteText}>삭제</Text>
-                </TouchableOpacity>
-              </View>
-            ))
+          {currentPos && (
+            <Text style={styles.hintText}>현재 위치 기준 최적화 가능</Text>
           )}
-        </ScrollView>
-
-        {currentPos && (
-          <Text style={styles.hintText}>현재 위치 기준 최적화 가능</Text>
-        )}
-      </View>
+        </View>
+      )}
 
       <Modal
         visible={!!selectedLocation}
@@ -503,7 +542,7 @@ export default function KakaoMapWebView({
           <TouchableOpacity
             style={styles.bottomSheet}
             activeOpacity={1}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <View style={styles.handle} />
 
@@ -560,9 +599,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+
   map: {
     flex: 1,
   },
+
   panel: {
     position: "absolute",
     top: 14,
@@ -577,10 +618,27 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
+
+  closePanelButton: {
+    alignSelf: "flex-end",
+    marginBottom: 8,
+    backgroundColor: "#EAF1F7",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+
+  closePanelButtonText: {
+    color: "#12395B",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+
   searchRow: {
     flexDirection: "row",
     gap: 8,
   },
+
   searchInput: {
     flex: 1,
     borderWidth: 1,
@@ -592,6 +650,7 @@ const styles = StyleSheet.create({
     color: "#1F2D3D",
     backgroundColor: "#FFFFFF",
   },
+
   searchButton: {
     paddingHorizontal: 14,
     borderRadius: 10,
@@ -599,11 +658,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   searchButtonText: {
     color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "900",
   },
+
   input: {
     marginTop: 7,
     borderWidth: 1,
@@ -615,6 +676,7 @@ const styles = StyleSheet.create({
     color: "#1F2D3D",
     backgroundColor: "#FFFFFF",
   },
+
   addButton: {
     marginTop: 8,
     paddingVertical: 11,
@@ -622,48 +684,57 @@ const styles = StyleSheet.create({
     backgroundColor: "#1F9D55",
     alignItems: "center",
   },
+
   addButtonText: {
     color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "900",
   },
+
   metaRow: {
     marginTop: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
+
   countText: {
     fontSize: 10,
     fontWeight: "900",
     color: "#607086",
   },
+
   sortButton: {
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
     backgroundColor: "#12395B",
   },
+
   sortButtonText: {
     color: "#FFFFFF",
     fontSize: 10,
     fontWeight: "900",
   },
+
   locationList: {
     marginTop: 8,
     maxHeight: 105,
   },
+
   emptyText: {
     fontSize: 10,
     color: "#718096",
     marginVertical: 4,
   },
+
   locationItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingVertical: 4,
   },
+
   locationMain: {
     flex: 1,
     minWidth: 0,
@@ -671,6 +742,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+
   badge: {
     width: 22,
     height: 22,
@@ -679,40 +751,48 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   badgeText: {
     color: "#FFFFFF",
     fontSize: 9,
     fontWeight: "900",
   },
+
   locationTextWrap: {
     flex: 1,
     minWidth: 0,
   },
+
   locationName: {
     fontSize: 10,
     fontWeight: "800",
     color: "#1F2D3D",
   },
+
   locationTask: {
     fontSize: 9,
     color: "#718096",
   },
+
   deleteText: {
     fontSize: 10,
     color: "#E74C3C",
     fontWeight: "900",
     paddingHorizontal: 4,
   },
+
   hintText: {
     marginTop: 5,
     fontSize: 9,
     color: "#718096",
   },
+
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.3)",
     justifyContent: "flex-end",
   },
+
   bottomSheet: {
     width: "100%",
     backgroundColor: "#FFFFFF",
@@ -725,6 +805,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -8 },
     elevation: 12,
   },
+
   handle: {
     width: 34,
     height: 4,
@@ -733,6 +814,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     marginBottom: 16,
   },
+
   sheetHead: {
     flexDirection: "row",
     gap: 12,
@@ -742,6 +824,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#E6EDF3",
     marginBottom: 14,
   },
+
   pinBox: {
     width: 42,
     height: 42,
@@ -750,23 +833,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   pinEmoji: {
     fontSize: 20,
   },
+
   sheetTextWrap: {
     flex: 1,
     minWidth: 0,
   },
+
   sheetTitle: {
     fontSize: 15,
     fontWeight: "900",
     color: "#1F2D3D",
     marginBottom: 4,
   },
+
   sheetTask: {
     fontSize: 11,
     color: "#718096",
   },
+
   sheetLabel: {
     fontSize: 10,
     fontWeight: "900",
@@ -774,10 +862,12 @@ const styles = StyleSheet.create({
     color: "#607086",
     marginBottom: 10,
   },
+
   actionGrid: {
     flexDirection: "row",
     gap: 10,
   },
+
   actionButton: {
     flex: 1,
     borderRadius: 14,
@@ -787,15 +877,18 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: "center",
   },
+
   actionEmoji: {
     fontSize: 24,
     marginBottom: 5,
   },
+
   actionText: {
     fontSize: 12,
     fontWeight: "900",
     color: "#12395B",
   },
+
   placeholder: {
     flex: 1,
     backgroundColor: "#DDE8D5",
@@ -803,11 +896,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 24,
   },
+
   placeholderTitle: {
     fontSize: 16,
     fontWeight: "900",
     color: "#12395B",
   },
+
   placeholderDesc: {
     fontSize: 11,
     color: "#607086",
