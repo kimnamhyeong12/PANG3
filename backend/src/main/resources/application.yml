@@ -11,3 +11,6 @@ spring:
 
 server:
   port: 8081
+
+kakao:
+  rest-api-key: c347aec2a50a9fb8cd52ba8c606a0553
