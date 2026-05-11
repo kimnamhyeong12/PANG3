@@ -1,17 +1,21 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+// 현재 위치 기반 방문지 관리 + 지도 + 경로 최적화 + 현장 액션 기능
+// 외근 도우미 앱의 핵심 화면
+
+
+import * as Location from "expo-location";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
   Alert,
   Modal,
-  ScrollView,
   Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-import * as Location from "expo-location";
 
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
@@ -139,7 +143,7 @@ export default function KakaoMapWebView({
       });
 
       let data = await res.json();
-
+      
       if (!data.documents || data.documents.length === 0) {
         const addressUrl =
           "https://dapi.kakao.com/v2/local/search/address.json?query=" +
@@ -193,9 +197,7 @@ export default function KakaoMapWebView({
     }
 
     const newLoc = {
-      id: Date.now(),
       name: placeName.trim(),
-      task: task.trim() || "현장 확인",
       address: keyword.trim(),
       lat: selectedPos.lat,
       lng: selectedPos.lng,
