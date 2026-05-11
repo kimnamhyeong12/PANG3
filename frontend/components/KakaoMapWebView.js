@@ -210,9 +210,7 @@ export default function KakaoMapWebView({
     }
 
     const newLoc = {
-      id: Date.now(),
       name: placeName.trim(),
-      task: task.trim() || "현장 확인",
       address: keyword.trim(),
       lat: selectedPos.lat,
       lng: selectedPos.lng,
