@@ -11,3 +11,6 @@ spring:
 
 server:
   port: 8081
+
+kakao:
+  rest-api-key: ${EXPO_PUBLIC_KAKAO_REST_API_KEY}
