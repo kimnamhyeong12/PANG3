@@ -28,11 +28,8 @@ export default function KakaoMapWebView({
   roadPath = [],
   panelOpen = true,
   setPanelOpen,
-  roadPath = [],
   routeSegments = [],
   currentSegmentIndex = 0,
-  panelOpen = true,
-  setPanelOpen,
   onMarkerClick,
   onLocationsChange,
 }) {
@@ -375,6 +372,31 @@ export default function KakaoMapWebView({
     );
   }
 
+  const getDist = (a, b) =>
+    Math.abs(Number(a.lat ?? a.latitude ?? a.y) - Number(b.lat)) +
+    Math.abs(Number(a.lng ?? a.longitude ?? a.x) - Number(b.lng));
+
+  const startLoc = mapLocations[currentSegmentIndex];
+  const endLoc = mapLocations[currentSegmentIndex + 1];
+
+  let activePath = roadPath;
+
+  if (startLoc && endLoc && roadPath.length >= 2) {
+    const startIdx = roadPath.reduce(
+      (best, p, i) => (getDist(p, startLoc) < getDist(roadPath[best], startLoc) ? i : best),
+      0
+    );
+
+    const endIdx = roadPath.reduce(
+      (best, p, i) => (getDist(p, endLoc) < getDist(roadPath[best], endLoc) ? i : best),
+      0
+    );
+
+    activePath =
+      startIdx <= endIdx
+        ? roadPath.slice(startIdx, endIdx + 1)
+        : roadPath.slice(endIdx, startIdx + 1);
+  }
   return (
     <View style={styles.container}>
       <MapView
@@ -408,7 +430,7 @@ export default function KakaoMapWebView({
 
         {mapLocations.map((loc, index) => (
           <Marker
-            key={`${loc.id}-${index}`}
+            key={`${loc.name || 'loc'}-${loc.lat}-${loc.lng}-${index}`}
             coordinate={{
               latitude: Number(loc.lat),
               longitude: Number(loc.lng),
@@ -432,13 +454,26 @@ export default function KakaoMapWebView({
           </Marker>
         ))}
 
-        {mapLocations.length >= 2 && (
+        {/* 전체 경로 연하게 */}
+        {roadPath.length >= 2 && (
           <Polyline
-            coordinates={mapLocations.map((loc) => ({
-              latitude: Number(loc.lat),
-              longitude: Number(loc.lng),
+            coordinates={roadPath.map((p) => ({
+              latitude: Number(p.lat ?? p.latitude ?? p.y),
+              longitude: Number(p.lng ?? p.longitude ?? p.x),
             }))}
-            strokeWidth={4}
+            strokeWidth={5}
+            strokeColor="rgba(18, 57, 91, 0.25)"
+          />
+        )}
+
+        {/* 현재 구간 진하게 */}
+        {activePath.length >= 2 && (
+          <Polyline
+            coordinates={activePath.map((p) => ({
+              latitude: Number(p.lat ?? p.latitude ?? p.y),
+              longitude: Number(p.lng ?? p.longitude ?? p.x),
+            }))}
+            strokeWidth={7}
             strokeColor="#12395B"
           />
         )}
@@ -503,19 +538,19 @@ export default function KakaoMapWebView({
             </TouchableOpacity>
           </View>
 
-        <ScrollView style={styles.locationList}>
-          {locations.length === 0 ? (
-            <Text style={styles.emptyText}>추가로 방문하세요.</Text>
-          ) : (
-            locations.map((loc, index) => (
-              <View key={`${loc.id}-${index}`} style={styles.locationItem}>
-                <TouchableOpacity
-                  style={styles.locationMain}
-                  onPress={() => focusLocation(loc)}
-                >
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{index + 1}</Text>
-                  </View>
+          <ScrollView style={styles.locationList}>
+            {locations.length === 0 ? (
+              <Text style={styles.emptyText}>추가로 방문하세요.</Text>
+            ) : (
+              locations.map((loc, index) => (
+                <View key={`${loc.name || 'loc'}-${loc.lat}-${loc.lng}-${index}`} style={styles.locationItem}>
+                  <TouchableOpacity
+                    style={styles.locationMain}
+                    onPress={() => focusLocation(loc)}
+                  >
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>{index + 1}</Text>
+                    </View>
 
                     <View style={styles.locationTextWrap}>
                       <Text style={styles.locationName} numberOfLines={1}>
@@ -969,5 +1004,13 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "900",
+  },
+  badge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#12395B",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

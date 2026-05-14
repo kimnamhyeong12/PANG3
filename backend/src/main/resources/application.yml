@@ -13,4 +13,4 @@ server:
   port: 8081
 
 kakao:
-  rest-api-key: ${EXPO_PUBLIC_KAKAO_REST_API_KEY}
+  rest-api-key: c347aec2a50a9fb8cd52ba8c606a0553
