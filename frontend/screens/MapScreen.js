@@ -22,13 +22,23 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
   // 경로 최적화 후 백엔드에서 받은 실제 도로 경로 좌표를 저장
   const [roadPath, setRoadPath] = useState([]);
 
+  // 1→2, 2→3 같은 구간별 도로 경로 저장
+  const [routeSegments, setRouteSegments] = useState([]);
+
+  // 현재 강조할 구간 번호
+  const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
+
   // 지도 위 방문 추가창 열림/닫힘 상태
   const [panelOpen, setPanelOpen] = useState(true);
+  // 우선순위
+  const [priorityMode, setPriorityMode] = useState(false);
+  const [priorityCount, setPriorityCount] = useState(1);
 
   // 백엔드에서 받은 예상 이동시간 표시용
   const [totalDuration, setTotalDuration] = useState(null);
 
   const markers = locations?.length ? locations : LOCATIONS;
+
 
   useEffect(() => {
     if (!locations?.length) {
@@ -37,6 +47,38 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
   }, []);
 
   const orderedMarkers = useMemo(() => markers, [markers]);
+
+  const handleSetPriority = (targetLocation) => {
+    if (!priorityMode) {
+      setSelected(targetLocation);
+      return;
+    }
+
+    const updatedLocations = markers.map((loc) => {
+      if (loc.id === targetLocation.id) {
+        return {
+          ...loc,
+          priority: priorityCount,
+        };
+      }
+
+      return loc;
+    });
+
+    setLocations?.(updatedLocations);
+    setPriorityCount(priorityCount + 1);
+  };
+
+  const resetPriority = () => {
+    const updatedLocations = markers.map((loc) => ({
+      ...loc,
+      priority: null,
+    }));
+
+    setLocations?.(updatedLocations);
+    setPriorityCount(1);
+    setPriorityMode(false);
+  };
 
   const handleOptimizeRoute = async () => {
     if (!API_BASE_URL) {
@@ -53,10 +95,9 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
       setOptimizing(true);
       setOptimized(false);
 
-      // 이전 도로 경로 초기화
       setRoadPath([]);
-
-      // 이전 예상 시간 초기화
+      setRouteSegments([]);
+      setCurrentSegmentIndex(0);
       setTotalDuration(null);
 
       const res = await fetch(`${API_BASE_URL}/api/routes/optimize`, {
@@ -100,6 +141,11 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
         setPanelOpen(false);
       }
 
+      if (data.segments && data.segments.length > 0) {
+        setRouteSegments(data.segments);
+        setCurrentSegmentIndex(0);
+      }
+
       // 백엔드에서 예상 이동시간을 보내면 저장
       if (data.totalDuration !== undefined && data.totalDuration !== null) {
         setTotalDuration(data.totalDuration);
@@ -114,6 +160,15 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
     }
   };
 
+  const movePrevSegment = () => {
+    setCurrentSegmentIndex((prev) => Math.max(prev - 1, 0));
+  };
+
+  const moveNextSegment = () => {
+    setCurrentSegmentIndex((prev) =>
+      Math.min(prev + 1, routeSegments.length - 1)
+    );
+  };
   const formatDuration = (seconds) => {
     if (!seconds) return null;
 
@@ -159,15 +214,68 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
           </Text>
         </View>
       )}
+      {optimized && routeSegments.length > 0 && (
+        <View style={styles.segmentBar}>
+          <Text style={styles.segmentText}>
+            현재 구간 {currentSegmentIndex + 1} / {routeSegments.length}
+            {'  '}
+            {routeSegments[currentSegmentIndex]?.fromIndex}
+            →
+            {routeSegments[currentSegmentIndex]?.toIndex}
+          </Text>
+
+          <View style={styles.segmentButtonRow}>
+            <TouchableOpacity
+              style={[
+                styles.segmentButton,
+                currentSegmentIndex === 0 && styles.segmentButtonDisabled,
+              ]}
+              onPress={movePrevSegment}
+              disabled={currentSegmentIndex === 0}
+            >
+              <Text style={styles.segmentButtonText}>이전</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.segmentButton,
+                currentSegmentIndex === routeSegments.length - 1 &&
+                styles.segmentButtonDisabled,
+              ]}
+              onPress={moveNextSegment}
+              disabled={currentSegmentIndex === routeSegments.length - 1}
+            >
+              <Text style={styles.segmentButtonText}>다음</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <View style={styles.routeBox}>
         <View style={styles.routeTop}>
-          <Text style={styles.routeTitle}>
-            {optimized ? 'OPTIMIZED ROUTE' : 'FIELD LOCATION'}
-          </Text>
-
           {!optimizing && (
             <View style={styles.routeButtonRow}>
+              <TouchableOpacity
+                style={[
+                  styles.priorityButton,
+                  priorityMode && styles.priorityButtonActive,
+                ]}
+                onPress={() => setPriorityMode(!priorityMode)}
+              >
+                <Text style={styles.priorityButtonText}>
+                  {priorityMode ? '우선순위 선택중' : '우선순위'}
+                </Text>
+              </TouchableOpacity>
+
+              {priorityMode && (
+                <TouchableOpacity
+                  style={styles.resetButton}
+                  onPress={resetPriority}
+                >
+                  <Text style={styles.resetButtonText}>초기화</Text>
+                </TouchableOpacity>
+              )}
+
               {optimized && (
                 <TouchableOpacity
                   style={styles.addPanelButton}
@@ -197,7 +305,7 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
           renderItem={({ item, index }) => (
             <TouchableOpacity
               style={styles.routeChip}
-              onPress={() => setSelected(item)}
+              onPress={() => handleSetPriority(item)}
             >
               <View
                 style={[
@@ -212,7 +320,9 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
                   },
                 ]}
               >
-                <Text style={styles.noText}>{index + 1}</Text>
+                <Text style={styles.noText}>
+                  {item.priority ? `P${item.priority}` : index + 1}
+                </Text>
               </View>
 
               <Text style={styles.chipText} numberOfLines={1}>
@@ -227,6 +337,8 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
         <KakaoMapWebView
           locations={orderedMarkers}
           roadPath={roadPath}
+          routeSegments={routeSegments}
+          currentSegmentIndex={currentSegmentIndex}
           panelOpen={panelOpen}
           setPanelOpen={setPanelOpen}
           onMarkerClick={setSelected}
@@ -540,5 +652,75 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: '#12395B',
+  },
+  priorityButton: {
+    backgroundColor: '#EAF1F7',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#D9E1EA',
+  },
+
+  priorityButtonActive: {
+    backgroundColor: '#F39C12',
+    borderColor: '#F39C12',
+  },
+
+  priorityButtonText: {
+    color: '#12395B',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+
+  resetButton: {
+    backgroundColor: '#E74C3C',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+
+  resetButtonText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  segmentBar: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#D9E1EA',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  segmentText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#12395B',
+  },
+
+  segmentButtonRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  segmentButton: {
+    backgroundColor: '#12395B',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+
+  segmentButtonDisabled: {
+    backgroundColor: '#94A3B8',
+  },
+
+  segmentButtonText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '900',
   },
 });

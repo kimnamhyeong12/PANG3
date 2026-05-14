@@ -26,6 +26,8 @@ const DEFAULT_REGION = {
 export default function KakaoMapWebView({
   locations = [],
   roadPath = [],
+  routeSegments = [],
+  currentSegmentIndex = 0,
   panelOpen = true,
   setPanelOpen,
   onMarkerClick,
@@ -60,6 +62,25 @@ export default function KakaoMapWebView({
           !Number.isNaN(p.longitude)
       );
   }, [roadPath]);
+
+  const currentSegmentCoordinates = useMemo(() => {
+    const currentSegment = routeSegments[currentSegmentIndex];
+
+    if (!currentSegment || !currentSegment.path) {
+      return [];
+    }
+
+    return currentSegment.path
+      .map((p) => ({
+        latitude: Number(p.latitude ?? p.lat),
+        longitude: Number(p.longitude ?? p.lng),
+      }))
+      .filter(
+        (p) =>
+          !Number.isNaN(p.latitude) &&
+          !Number.isNaN(p.longitude)
+      );
+  }, [routeSegments, currentSegmentIndex]);
 
   useEffect(() => {
     startCurrentLocation();
@@ -402,7 +423,19 @@ export default function KakaoMapWebView({
             title={`${index + 1}. ${loc.name}`}
             description={loc.task || "현장 확인"}
             onPress={() => focusLocation(loc)}
-          />
+            zIndex={index + 1}
+          >
+            <View
+              style={[
+                styles.numberMarker,
+                loc.priority && styles.priorityNumberMarker,
+              ]}
+            >
+              <Text style={styles.numberMarkerText}>
+                {index + 1}
+              </Text>
+            </View>
+          </Marker>
         ))}
 
         {/* 
@@ -410,11 +443,23 @@ export default function KakaoMapWebView({
           경로 최적화 후에는 백엔드에서 받은 실제 도로 경로를 그린다.
         */}
         {roadCoordinates.length >= 2 ? (
-          <Polyline
-            coordinates={roadCoordinates}
-            strokeWidth={5}
-            strokeColor="#12395B"
-          />
+          <>
+            {/* 전체 경로는 연한 색으로 표시 */}
+            <Polyline
+              coordinates={roadCoordinates}
+              strokeWidth={4}
+              strokeColor="#94A3B8"
+            />
+
+            {/* 현재 이동해야 하는 구간만 진한 색으로 강조 */}
+            {currentSegmentCoordinates.length >= 2 && (
+              <Polyline
+                coordinates={currentSegmentCoordinates}
+                strokeWidth={7}
+                strokeColor="#12395B"
+              />
+            )}
+          </>
         ) : (
           mapLocations.length >= 2 && (
             <Polyline
@@ -907,5 +952,30 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 18,
     marginTop: 8,
+  },
+  numberMarker: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#12395B",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 6,
+  },
+
+  priorityNumberMarker: {
+    backgroundColor: "#F39C12",
+  },
+
+  numberMarkerText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "900",
   },
 });
