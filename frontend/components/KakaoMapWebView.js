@@ -26,6 +26,9 @@ const DEFAULT_REGION = {
 export default function KakaoMapWebView({
   locations = [],
   roadPath = [],
+  panelOpen = true,
+  setPanelOpen,
+  roadPath = [],
   routeSegments = [],
   currentSegmentIndex = 0,
   panelOpen = true,
@@ -48,39 +51,6 @@ export default function KakaoMapWebView({
       (loc) => loc && loc.lat !== undefined && loc.lng !== undefined
     );
   }, [locations]);
-
-  // 백엔드에서 받은 실제 도로 경로 좌표를 react-native-maps Polyline 형식으로 변환
-  const roadCoordinates = useMemo(() => {
-    return (roadPath || [])
-      .map((p) => ({
-        latitude: Number(p.latitude ?? p.lat),
-        longitude: Number(p.longitude ?? p.lng),
-      }))
-      .filter(
-        (p) =>
-          !Number.isNaN(p.latitude) &&
-          !Number.isNaN(p.longitude)
-      );
-  }, [roadPath]);
-
-  const currentSegmentCoordinates = useMemo(() => {
-    const currentSegment = routeSegments[currentSegmentIndex];
-
-    if (!currentSegment || !currentSegment.path) {
-      return [];
-    }
-
-    return currentSegment.path
-      .map((p) => ({
-        latitude: Number(p.latitude ?? p.lat),
-        longitude: Number(p.longitude ?? p.lng),
-      }))
-      .filter(
-        (p) =>
-          !Number.isNaN(p.latitude) &&
-          !Number.isNaN(p.longitude)
-      );
-  }, [routeSegments, currentSegmentIndex]);
 
   useEffect(() => {
     startCurrentLocation();
@@ -287,6 +257,29 @@ export default function KakaoMapWebView({
     }
   };
 
+  const getMarkerColorByStatus = (status) => {
+    const normalized = String(status || "").toLowerCase();
+
+    if (
+      normalized === "complete" ||
+      normalized === "done" ||
+      normalized === "처리완료"
+    ) {
+      return "green";
+    }
+
+    if (
+      normalized === "progress" ||
+      normalized === "in_progress" ||
+      normalized === "processing" ||
+      normalized === "처리중"
+    ) {
+      return "yellow";
+    }
+
+    return "red";
+  };
+
   const focusLocation = (loc) => {
     setSelectedLocation(loc);
 
@@ -422,6 +415,7 @@ export default function KakaoMapWebView({
             }}
             title={`${index + 1}. ${loc.name}`}
             description={loc.task || "현장 확인"}
+            pinColor={getMarkerColorByStatus(loc.status)}
             onPress={() => focusLocation(loc)}
             zIndex={index + 1}
           >
@@ -438,39 +432,15 @@ export default function KakaoMapWebView({
           </Marker>
         ))}
 
-        {/* 
-          경로 최적화 전에는 방문지끼리 직선으로 연결하고,
-          경로 최적화 후에는 백엔드에서 받은 실제 도로 경로를 그린다.
-        */}
-        {roadCoordinates.length >= 2 ? (
-          <>
-            {/* 전체 경로는 연한 색으로 표시 */}
-            <Polyline
-              coordinates={roadCoordinates}
-              strokeWidth={4}
-              strokeColor="#94A3B8"
-            />
-
-            {/* 현재 이동해야 하는 구간만 진한 색으로 강조 */}
-            {currentSegmentCoordinates.length >= 2 && (
-              <Polyline
-                coordinates={currentSegmentCoordinates}
-                strokeWidth={7}
-                strokeColor="#12395B"
-              />
-            )}
-          </>
-        ) : (
-          mapLocations.length >= 2 && (
-            <Polyline
-              coordinates={mapLocations.map((loc) => ({
-                latitude: Number(loc.lat),
-                longitude: Number(loc.lng),
-              }))}
-              strokeWidth={4}
-              strokeColor="#94A3B8"
-            />
-          )
+        {mapLocations.length >= 2 && (
+          <Polyline
+            coordinates={mapLocations.map((loc) => ({
+              latitude: Number(loc.lat),
+              longitude: Number(loc.lng),
+            }))}
+            strokeWidth={4}
+            strokeColor="#12395B"
+          />
         )}
       </MapView>
 
@@ -533,19 +503,19 @@ export default function KakaoMapWebView({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.locationList}>
-            {locations.length === 0 ? (
-              <Text style={styles.emptyText}>추가로 방문하세요.</Text>
-            ) : (
-              locations.map((loc, index) => (
-                <View key={`${loc.id}-${index}`} style={styles.locationItem}>
-                  <TouchableOpacity
-                    style={styles.locationMain}
-                    onPress={() => focusLocation(loc)}
-                  >
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>{index + 1}</Text>
-                    </View>
+        <ScrollView style={styles.locationList}>
+          {locations.length === 0 ? (
+            <Text style={styles.emptyText}>추가로 방문하세요.</Text>
+          ) : (
+            locations.map((loc, index) => (
+              <View key={`${loc.id}-${index}`} style={styles.locationItem}>
+                <TouchableOpacity
+                  style={styles.locationMain}
+                  onPress={() => focusLocation(loc)}
+                >
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{index + 1}</Text>
+                  </View>
 
                     <View style={styles.locationTextWrap}>
                       <Text style={styles.locationName} numberOfLines={1}>
@@ -637,6 +607,29 @@ export default function KakaoMapWebView({
     </View>
   );
 }
+
+const getBadgeColorByStatus = (status) => {
+  const normalized = String(status || "").toLowerCase();
+
+  if (
+    normalized === "complete" ||
+    normalized === "done" ||
+    normalized === "처리완료"
+  ) {
+    return "#1F9D55";
+  }
+
+  if (
+    normalized === "progress" ||
+    normalized === "in_progress" ||
+    normalized === "processing" ||
+    normalized === "처리중"
+  ) {
+    return "#F39C12";
+  }
+
+  return "#E74C3C";
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -790,7 +783,6 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: "#12395B",
     alignItems: "center",
     justifyContent: "center",
   },
