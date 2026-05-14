@@ -23,6 +23,12 @@ const DEFAULT_REGION = {
   longitudeDelta: 0.05,
 };
 
+const getMarkerColorByStatus = (status) => {
+  if (status === "complete") return "#1F9D55";
+  if (status === "working") return "#FACC15";
+  return "#E74C3C";
+};
+
 export default function KakaoMapWebView({
   locations = [],
   roadPath = [],
@@ -30,6 +36,8 @@ export default function KakaoMapWebView({
   setPanelOpen,
   routeSegments = [],
   currentSegmentIndex = 0,
+  isGuiding = false,
+  onCurrentLocationChange,
   onMarkerClick,
   onLocationsChange,
 }) {
@@ -43,15 +51,90 @@ export default function KakaoMapWebView({
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
 
+  const alertedTargetIds = useRef(new Set());
+
   const mapLocations = useMemo(() => {
     return (locations || []).filter(
       (loc) => loc && loc.lat !== undefined && loc.lng !== undefined
     );
   }, [locations]);
 
+  const currentTargetIndex = currentSegmentIndex;
+  const currentTarget = mapLocations[currentTargetIndex];
+
+  const activePath = routeSegments[currentSegmentIndex]?.path || [];
+
   useEffect(() => {
     startCurrentLocation();
   }, []);
+
+  useEffect(() => {
+    if (!isGuiding) return;
+    if (!currentPos) return;
+    if (!mapLocations.length) return;
+    if (!currentTarget) return;
+
+    const targetStatus = currentTarget.status || "pending";
+
+    if (targetStatus !== "pending") return;
+
+    const targetKey =
+      currentTarget.id ??
+      `${currentTarget.name}-${currentTarget.lat}-${currentTarget.lng}`;
+
+    if (alertedTargetIds.current.has(targetKey)) return;
+
+    const distance = getDistanceMeters(
+      currentPos.latitude,
+      currentPos.longitude,
+      Number(currentTarget.lat),
+      Number(currentTarget.lng)
+    );
+
+    console.log("안내중:", isGuiding);
+    console.log("현재 구간:", currentSegmentIndex + 1);
+    console.log("현재 목적지:", currentTarget.name);
+    console.log("거리:", distance);
+    console.log("상태:", targetStatus);
+
+    if (distance <= 1000) {
+      alertedTargetIds.current.add(targetKey);
+
+      Alert.alert(
+        "작업 시작",
+        `${currentTarget.name} 근처에 도착했습니다. 작업을 시작하시겠습니까?`,
+        [
+          { text: "취소", style: "cancel" },
+          {
+            text: "확인",
+            onPress: () => {
+              const updated = locations.map((loc) => {
+                const locKey = loc.id ?? `${loc.name}-${loc.lat}-${loc.lng}`;
+
+                if (locKey === targetKey) {
+                  return {
+                    ...loc,
+                    status: "working",
+                  };
+                }
+
+                return loc;
+              });
+
+              onLocationsChange?.(updated);
+            },
+          },
+        ]
+      );
+    }
+  }, [
+    isGuiding,
+    currentPos,
+    mapLocations,
+    currentSegmentIndex,
+    currentTarget,
+    locations,
+  ]);
 
   const startCurrentLocation = async () => {
     try {
@@ -72,6 +155,18 @@ export default function KakaoMapWebView({
       };
 
       setCurrentPos(pos);
+
+      onCurrentLocationChange?.({
+        lat: current.coords.latitude,
+        lng: current.coords.longitude,
+        name: "현재 위치",
+      });
+
+      console.log(
+        "현재위치 전달:",
+        current.coords.latitude,
+        current.coords.longitude
+      );
 
       mapRef.current?.animateToRegion(
         {
@@ -94,6 +189,18 @@ export default function KakaoMapWebView({
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
           });
+
+          onCurrentLocationChange?.({
+            lat: location.coords.latitude,
+            lng: location.coords.longitude,
+            name: "현재 위치",
+          });
+
+          console.log(
+            "실시간 위치 업데이트:",
+            location.coords.latitude,
+            location.coords.longitude
+          );
         }
       );
     } catch (error) {
@@ -112,6 +219,21 @@ export default function KakaoMapWebView({
       },
       500
     );
+  };
+
+  const getDistanceMeters = (lat1, lng1, lat2, lng2) => {
+    const R = 6371000;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
   const searchPlace = async () => {
@@ -220,9 +342,6 @@ export default function KakaoMapWebView({
 
       const text = await res.text();
 
-      console.log("방문지 저장 응답 상태:", res.status);
-      console.log("방문지 저장 응답 내용:", text);
-
       if (!res.ok) {
         throw new Error(`저장 실패: ${res.status}`);
       }
@@ -233,7 +352,8 @@ export default function KakaoMapWebView({
         ...locations,
         {
           ...savedLocation,
-          task: task.trim() || "현장 확인",
+          status: savedLocation.status || "pending",
+          task: task.trim() || "점검",
         },
       ];
 
@@ -254,40 +374,14 @@ export default function KakaoMapWebView({
     }
   };
 
-  const getMarkerColorByStatus = (status) => {
-    const normalized = String(status || "").toLowerCase();
-
-    if (
-      normalized === "complete" ||
-      normalized === "done" ||
-      normalized === "처리완료"
-    ) {
-      return "green";
-    }
-
-    if (
-      normalized === "progress" ||
-      normalized === "in_progress" ||
-      normalized === "processing" ||
-      normalized === "처리중"
-    ) {
-      return "yellow";
-    }
-
-    return "red";
-  };
-
   const focusLocation = (loc) => {
     setSelectedLocation(loc);
-
     moveToPosition(Number(loc.lat), Number(loc.lng));
-
     onMarkerClick?.(loc);
   };
 
   const removeLocation = async (id) => {
     const nextLocations = locations.filter((loc) => loc.id !== id);
-
     onLocationsChange?.(nextLocations);
 
     if (selectedLocation?.id === id) {
@@ -338,6 +432,8 @@ export default function KakaoMapWebView({
       current = nearest;
     }
 
+    alertedTargetIds.current.clear();
+
     onLocationsChange?.(optimized);
 
     Alert.alert("정렬 완료", "현재 위치 기준으로 가까운 순서로 정렬했습니다.");
@@ -372,31 +468,6 @@ export default function KakaoMapWebView({
     );
   }
 
-  const getDist = (a, b) =>
-    Math.abs(Number(a.lat ?? a.latitude ?? a.y) - Number(b.lat)) +
-    Math.abs(Number(a.lng ?? a.longitude ?? a.x) - Number(b.lng));
-
-  const startLoc = mapLocations[currentSegmentIndex];
-  const endLoc = mapLocations[currentSegmentIndex + 1];
-
-  let activePath = roadPath;
-
-  if (startLoc && endLoc && roadPath.length >= 2) {
-    const startIdx = roadPath.reduce(
-      (best, p, i) => (getDist(p, startLoc) < getDist(roadPath[best], startLoc) ? i : best),
-      0
-    );
-
-    const endIdx = roadPath.reduce(
-      (best, p, i) => (getDist(p, endLoc) < getDist(roadPath[best], endLoc) ? i : best),
-      0
-    );
-
-    activePath =
-      startIdx <= endIdx
-        ? roadPath.slice(startIdx, endIdx + 1)
-        : roadPath.slice(endIdx, startIdx + 1);
-  }
   return (
     <View style={styles.container}>
       <MapView
@@ -430,31 +501,34 @@ export default function KakaoMapWebView({
 
         {mapLocations.map((loc, index) => (
           <Marker
-            key={`${loc.name || 'loc'}-${loc.lat}-${loc.lng}-${index}`}
+            key={`${loc.name || "loc"}-${loc.lat}-${loc.lng}-${index}`}
             coordinate={{
               latitude: Number(loc.lat),
               longitude: Number(loc.lng),
             }}
             title={`${index + 1}. ${loc.name}`}
             description={loc.task || "현장 확인"}
-            pinColor={getMarkerColorByStatus(loc.status)}
             onPress={() => focusLocation(loc)}
             zIndex={index + 1}
           >
             <View
               style={[
                 styles.numberMarker,
-                loc.priority && styles.priorityNumberMarker,
+                {
+                  backgroundColor: getMarkerColorByStatus(
+                    loc.status || "pending"
+                  ),
+                },
+                isGuiding &&
+                  index === currentTargetIndex &&
+                  styles.currentTargetMarker,
               ]}
             >
-              <Text style={styles.numberMarkerText}>
-                {index + 1}
-              </Text>
+              <Text style={styles.numberMarkerText}>{index + 1}</Text>
             </View>
           </Marker>
         ))}
 
-        {/* 전체 경로 연하게 */}
         {roadPath.length >= 2 && (
           <Polyline
             coordinates={roadPath.map((p) => ({
@@ -466,7 +540,6 @@ export default function KakaoMapWebView({
           />
         )}
 
-        {/* 현재 구간 진하게 */}
         {activePath.length >= 2 && (
           <Polyline
             coordinates={activePath.map((p) => ({
@@ -518,13 +591,29 @@ export default function KakaoMapWebView({
             style={styles.input}
           />
 
-          <TextInput
-            value={task}
-            onChangeText={setTask}
-            placeholder="꼭 해야할 일"
-            placeholderTextColor="#8A98A8"
-            style={styles.input}
-          />
+          <Text style={styles.categoryTitle}>작업 카테고리</Text>
+
+          <View style={styles.categoryRow}>
+            {["점검", "공사", "안전", "환경", "민원"].map((item) => (
+              <TouchableOpacity
+                key={item}
+                style={[
+                  styles.categoryButton,
+                  task === item && styles.categoryButtonActive,
+                ]}
+                onPress={() => setTask(item)}
+              >
+                <Text
+                  style={[
+                    styles.categoryText,
+                    task === item && styles.categoryTextActive,
+                  ]}
+                >
+                  {item}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           <TouchableOpacity style={styles.addButton} onPress={addLocation}>
             <Text style={styles.addButtonText}>방문 추가</Text>
@@ -543,12 +632,24 @@ export default function KakaoMapWebView({
               <Text style={styles.emptyText}>추가로 방문하세요.</Text>
             ) : (
               locations.map((loc, index) => (
-                <View key={`${loc.name || 'loc'}-${loc.lat}-${loc.lng}-${index}`} style={styles.locationItem}>
+                <View
+                  key={`${loc.name || "loc"}-${loc.lat}-${loc.lng}-${index}`}
+                  style={styles.locationItem}
+                >
                   <TouchableOpacity
                     style={styles.locationMain}
                     onPress={() => focusLocation(loc)}
                   >
-                    <View style={styles.badge}>
+                    <View
+                      style={[
+                        styles.badge,
+                        {
+                          backgroundColor: getMarkerColorByStatus(
+                            loc.status || "pending"
+                          ),
+                        },
+                      ]}
+                    >
                       <Text style={styles.badgeText}>{index + 1}</Text>
                     </View>
 
@@ -571,7 +672,13 @@ export default function KakaoMapWebView({
           </ScrollView>
 
           {currentPos && (
-            <Text style={styles.hintText}>현재 위치 기준 최적화 가능</Text>
+            <Text style={styles.hintText}>
+              {isGuiding
+                ? `안내 중 · 현재 목적지: ${
+                    currentTarget?.name || "마지막 구간"
+                  }`
+                : "안내 시작 전"}
+            </Text>
           )}
         </View>
       )}
@@ -590,7 +697,7 @@ export default function KakaoMapWebView({
           <TouchableOpacity
             style={styles.bottomSheet}
             activeOpacity={1}
-            onPress={() => { }}
+            onPress={() => {}}
           >
             <View style={styles.handle} />
 
@@ -643,37 +750,9 @@ export default function KakaoMapWebView({
   );
 }
 
-const getBadgeColorByStatus = (status) => {
-  const normalized = String(status || "").toLowerCase();
-
-  if (
-    normalized === "complete" ||
-    normalized === "done" ||
-    normalized === "처리완료"
-  ) {
-    return "#1F9D55";
-  }
-
-  if (
-    normalized === "progress" ||
-    normalized === "in_progress" ||
-    normalized === "processing" ||
-    normalized === "처리중"
-  ) {
-    return "#F39C12";
-  }
-
-  return "#E74C3C";
-};
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-
-  map: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  map: { flex: 1 },
 
   panel: {
     position: "absolute",
@@ -705,10 +784,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  searchRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
+  searchRow: { flexDirection: "row", gap: 8 },
 
   searchInput: {
     flex: 1,
@@ -746,6 +822,44 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#1F2D3D",
     backgroundColor: "#FFFFFF",
+  },
+
+  categoryTitle: {
+    marginTop: 10,
+    marginBottom: 7,
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#607086",
+  },
+
+  categoryRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+
+  categoryButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D9E1EA",
+    backgroundColor: "#FFFFFF",
+  },
+
+  categoryButtonActive: {
+    backgroundColor: "#12395B",
+    borderColor: "#12395B",
+  },
+
+  categoryText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#607086",
+  },
+
+  categoryTextActive: {
+    color: "#FFFFFF",
   },
 
   addButton: {
@@ -869,11 +983,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     padding: 20,
-    shadowColor: "#000",
-    shadowOpacity: 0.22,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: -8 },
-    elevation: 12,
   },
 
   handle: {
@@ -904,9 +1013,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  pinEmoji: {
-    fontSize: 20,
-  },
+  pinEmoji: { fontSize: 20 },
 
   sheetTextWrap: {
     flex: 1,
@@ -980,11 +1087,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 8,
   },
+
   numberMarker: {
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: "#12395B",
     borderWidth: 2,
     borderColor: "#FFFFFF",
     alignItems: "center",
@@ -996,21 +1103,14 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
 
-  priorityNumberMarker: {
-    backgroundColor: "#F39C12",
+  currentTargetMarker: {
+    borderWidth: 4,
+    borderColor: "#000000",
   },
 
   numberMarkerText: {
     color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "900",
-  },
-  badge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "#12395B",
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

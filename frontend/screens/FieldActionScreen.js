@@ -63,9 +63,34 @@ export default function FieldActionScreen({ location, actionType, onBack, onSave
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>처리 상태</Text>
+
           <View style={styles.statusRow}>
-            <TouchableOpacity style={[styles.statusBtn, status === 'pending' && styles.statusActive]} onPress={() => setStatus('pending')}><Text style={[styles.statusText, status === 'pending' && styles.statusTextActive]}>미완료</Text></TouchableOpacity>
-            <TouchableOpacity style={[styles.statusBtn, status === 'complete' && styles.statusActive]} onPress={() => setStatus('complete')}><Text style={[styles.statusText, status === 'complete' && styles.statusTextActive]}>완료</Text></TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.statusBtn, status === 'pending' && styles.statusActive]}
+              onPress={() => setStatus('pending')}
+            >
+              <Text style={[styles.statusText, status === 'pending' && styles.statusTextActive]}>
+                미작업
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.statusBtn, status === 'working' && styles.statusActive]}
+              onPress={() => setStatus('working')}
+            >
+              <Text style={[styles.statusText, status === 'working' && styles.statusTextActive]}>
+                작업중
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.statusBtn, status === 'complete' && styles.statusActive]}
+              onPress={() => setStatus('complete')}
+            >
+              <Text style={[styles.statusText, status === 'complete' && styles.statusTextActive]}>
+                작업완료
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 

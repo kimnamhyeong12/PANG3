@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,41 +10,41 @@ import {
 } from 'react-native';
 import { BackButton } from '../components/ui';
 import KakaoMapWebView from '../components/KakaoMapWebView';
-import { LOCATIONS } from '../data/mockData';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
-export default function MapScreen({ onBack, onLocationClick, locations, setLocations }) {
+const getStatusColor = (status, index) => {
+  if (status === 'complete') return '#1F9D55';
+  if (status === 'working') return '#FACC15';
+  if (status === 'pending') return '#E74C3C';
+  return index === 0 ? '#12395B' : '#94A3B8';
+};
+
+export default function MapScreen({
+  onBack,
+  onLocationClick,
+  locations,
+  setLocations,
+}) {
   const [selected, setSelected] = useState(null);
   const [optimizing, setOptimizing] = useState(false);
   const [optimized, setOptimized] = useState(false);
 
-  // 경로 최적화 후 백엔드에서 받은 실제 도로 경로 좌표를 저장
+  const [isGuiding, setIsGuiding] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState(null);
+
   const [roadPath, setRoadPath] = useState([]);
-
-  // 1→2, 2→3 같은 구간별 도로 경로 저장
   const [routeSegments, setRouteSegments] = useState([]);
-
-  // 현재 강조할 구간 번호
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
 
-  // 지도 위 방문 추가창 열림/닫힘 상태
   const [panelOpen, setPanelOpen] = useState(true);
-  // 우선순위
+
   const [priorityMode, setPriorityMode] = useState(false);
   const [priorityCount, setPriorityCount] = useState(1);
 
-  // 백엔드에서 받은 예상 이동시간 표시용
   const [totalDuration, setTotalDuration] = useState(null);
 
-  const markers = locations?.length ? locations : LOCATIONS;
-
-
-  useEffect(() => {
-    if (!locations?.length) {
-      setLocations?.(LOCATIONS);
-    }
-  }, []);
+  const markers = locations?.length ? locations : [];
 
   const orderedMarkers = useMemo(() => markers, [markers]);
 
@@ -86,6 +86,11 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
       return;
     }
 
+    if (!currentLocation) {
+      Alert.alert('현재 위치 필요', '현재 위치를 먼저 불러와야 합니다.');
+      return;
+    }
+
     if (!markers || markers.length < 2) {
       Alert.alert('정렬 불가', '방문지가 2개 이상 필요합니다.');
       return;
@@ -94,6 +99,7 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
     try {
       setOptimizing(true);
       setOptimized(false);
+      setIsGuiding(false);
 
       setRoadPath([]);
       setRouteSegments([]);
@@ -106,12 +112,14 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          currentLocation,
           locations: markers,
         }),
       });
 
       const text = await res.text();
 
+      console.log('경로 최적화 요청 현재 위치:', currentLocation);
       console.log('경로 최적화 응답 상태:', res.status);
       console.log('경로 최적화 응답 내용:', text);
 
@@ -121,23 +129,19 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
 
       const data = JSON.parse(text);
 
-      // 백엔드에서 받은 TSP 최적 방문 순서를 프론트 좌표 형식에 맞게 정리
       const optimizedLocations = (data.optimizedLocations || []).map((loc) => ({
         ...loc,
         lat: loc.lat ?? loc.latitude,
         lng: loc.lng ?? loc.longitude,
+        status: loc.status || 'pending',
       }));
 
-      // TSP로 정렬된 방문지 순서 반영
       if (optimizedLocations.length > 0) {
         setLocations?.(optimizedLocations);
       }
 
-      // 실제 도로 경로 좌표 저장
       if (data.path && data.path.length > 0) {
         setRoadPath(data.path);
-
-        // 경로 최적화 후에는 지도 경로가 잘 보이도록 방문 추가창 닫기
         setPanelOpen(false);
       }
 
@@ -146,12 +150,22 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
         setCurrentSegmentIndex(0);
       }
 
-      // 백엔드에서 예상 이동시간을 보내면 저장
       if (data.totalDuration !== undefined && data.totalDuration !== null) {
         setTotalDuration(data.totalDuration);
       }
 
       setOptimized(true);
+
+      Alert.alert('안내 시작', '이 경로로 안내를 시작할까요?', [
+        {
+          text: '취소',
+          style: 'cancel',
+        },
+        {
+          text: '확인',
+          onPress: () => setIsGuiding(true),
+        },
+      ]);
     } catch (error) {
       console.log(error);
       Alert.alert('오류', '경로 최적화 중 문제가 발생했습니다.');
@@ -169,6 +183,7 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
       Math.min(prev + 1, routeSegments.length - 1)
     );
   };
+
   const formatDuration = (seconds) => {
     if (!seconds) return null;
 
@@ -195,9 +210,11 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
           <Text style={styles.desc}>
             {optimizing
               ? '최적 경로 계산 중'
-              : optimized
-                ? '최적 방문 순서 안내'
-                : '방문지를 확인하고 경로를 실행하세요'}
+              : isGuiding
+                ? '현재 경로 안내 중'
+                : optimized
+                  ? '최적 방문 순서 안내'
+                  : '방문지를 확인하고 경로를 실행하세요'}
           </Text>
         </View>
 
@@ -205,23 +222,24 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
       </View>
 
       {optimized && (
-        <View style={styles.doneBar}>
+        <View style={[styles.doneBar, isGuiding && styles.guidingBar]}>
           <Text style={styles.doneText}>
-            ✓ 최적 경로 계산 완료
+            {isGuiding ? '▶ 안내 진행 중' : '✓ 최적 경로 계산 완료'}
             {formatDuration(totalDuration)
               ? ` · 예상 이동시간 ${formatDuration(totalDuration)}`
               : ''}
           </Text>
         </View>
       )}
+
       {optimized && routeSegments.length > 0 && (
         <View style={styles.segmentBar}>
           <Text style={styles.segmentText}>
             현재 구간 {currentSegmentIndex + 1} / {routeSegments.length}
             {'  '}
-            {routeSegments[currentSegmentIndex]?.fromIndex}
+            {routeSegments[currentSegmentIndex]?.fromName || '현재 위치'}
             →
-            {routeSegments[currentSegmentIndex]?.toIndex}
+            {routeSegments[currentSegmentIndex]?.toName || '목적지'}
           </Text>
 
           <View style={styles.segmentButtonRow}>
@@ -240,7 +258,7 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
               style={[
                 styles.segmentButton,
                 currentSegmentIndex === routeSegments.length - 1 &&
-                styles.segmentButtonDisabled,
+                  styles.segmentButtonDisabled,
               ]}
               onPress={moveNextSegment}
               disabled={currentSegmentIndex === routeSegments.length - 1}
@@ -285,6 +303,24 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
                 </TouchableOpacity>
               )}
 
+              {optimized && !isGuiding && (
+                <TouchableOpacity
+                  style={styles.startGuideButton}
+                  onPress={() => setIsGuiding(true)}
+                >
+                  <Text style={styles.startGuideText}>안내 시작</Text>
+                </TouchableOpacity>
+              )}
+
+              {isGuiding && (
+                <TouchableOpacity
+                  style={styles.stopGuideButton}
+                  onPress={() => setIsGuiding(false)}
+                >
+                  <Text style={styles.stopGuideText}>안내 종료</Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity
                 style={styles.optimizeButton}
                 onPress={handleOptimizeRoute}
@@ -311,12 +347,7 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
                 style={[
                   styles.no,
                   {
-                    backgroundColor:
-                      item.status === 'complete'
-                        ? '#1F9D55'
-                        : index === 0
-                          ? '#12395B'
-                          : '#94A3B8',
+                    backgroundColor: getStatusColor(item.status, index),
                   },
                 ]}
               >
@@ -341,6 +372,8 @@ export default function MapScreen({ onBack, onLocationClick, locations, setLocat
           currentSegmentIndex={currentSegmentIndex}
           panelOpen={panelOpen}
           setPanelOpen={setPanelOpen}
+          isGuiding={isGuiding}
+          onCurrentLocationChange={setCurrentLocation}
           onMarkerClick={setSelected}
           onLocationsChange={setLocations}
         />
@@ -462,6 +495,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
 
+  guidingBar: {
+    backgroundColor: '#1F9D55',
+  },
+
   doneText: {
     color: 'white',
     fontSize: 10,
@@ -493,6 +530,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
   },
 
   addPanelButton: {
@@ -503,6 +541,32 @@ const styles = StyleSheet.create({
   },
 
   addPanelText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+
+  startGuideButton: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+
+  startGuideText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+
+  stopGuideButton: {
+    backgroundColor: '#E74C3C',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+
+  stopGuideText: {
     color: 'white',
     fontSize: 10,
     fontWeight: '800',
@@ -657,6 +721,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#12395B',
   },
+
   priorityButton: {
     backgroundColor: '#EAF1F7',
     paddingHorizontal: 12,
@@ -689,6 +754,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
   },
+
   segmentBar: {
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,

@@ -22,8 +22,12 @@ public class RouteController {
         System.out.println("=== /api/routes/optimize 호출됨 ===");
         System.out.println(body);
 
-        List<Map<String, Object>> locations = (List<Map<String, Object>>) body.get("locations");
+        List<Map<String, Object>> locations =
+                (List<Map<String, Object>>) body.get("locations");
 
-        return routeService.optimizeRoute(locations);
+        Map<String, Object> currentLocation =
+                (Map<String, Object>) body.get("currentLocation");
+
+        return routeService.optimizeRoute(currentLocation, locations);
     }
 }
