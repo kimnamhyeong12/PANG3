@@ -277,32 +277,7 @@ export default function MainScreen({
         <Text style={styles.cardEyebrow}>RECENT FIELDWORK</Text>
         <Text style={styles.cardTitle}>최근 방문 기록</Text>
 
-        {MOCK_ENTRIES.map((e, idx) => (
-          <View key={e.id} style={styles.entry}>
-            <View
-              style={[
-                styles.entryNo,
-                {
-                  backgroundColor:
-                    e.status === 'Complete' ? '#1F9D55' : '#12395B',
-                },
-              ]}
-            >
-              <Text style={styles.entryNoText}>{idx + 1}</Text>
-            </View>
-
-            <View style={{ flex: 1 }}>
-              <Text style={styles.entryName}>{e.name}</Text>
-              <Text style={styles.entryMemo} numberOfLines={1}>
-                {e.memo}
-              </Text>
-            </View>
-
-            <Text style={styles.entryStatus}>
-              {e.status === 'Complete' ? '완료' : '대기'}
-            </Text>
-          </View>
-        ))}
+        <Text style={styles.emptyText}>최근 방문 기록이 없습니다.</Text>
       </View>
     </ScrollView>
   );
