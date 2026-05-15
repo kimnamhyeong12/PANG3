@@ -75,8 +75,9 @@ export default function FieldActionScreen({
   const [locationMapImage, setLocationMapImage] = useState(null);
   const [photos, setPhotos] = useState([]);
   const [mainComment, setMainComment] = useState('');
+  const [fieldMemo, setFieldMemo] = useState('');
 
-  const rec = getAiRecommendation(mainComment);
+  const rec = getAiRecommendation(`${mainComment} ${fieldMemo}`);
 
   const pickLocationMapImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -156,6 +157,7 @@ export default function FieldActionScreen({
       locationMapImage,
       photos,
       mainComment,
+      fieldMemo,
       status,
     };
 
@@ -286,6 +288,17 @@ export default function FieldActionScreen({
             onChangeText={setMainComment}
             multiline
             placeholder="예: 23:00(현행) → 24:00(변경) 소등시간 연장"
+            style={styles.memo}
+          />
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>현장 메모</Text>
+          <TextInput
+            value={fieldMemo}
+            onChangeText={setFieldMemo}
+            multiline
+            placeholder="예: 담당자 확인 필요, 추가 점검 예정, 민원인 요청사항 등"
             style={styles.memo}
           />
         </View>

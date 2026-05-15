@@ -25,27 +25,31 @@ export default function MapScreen({
   onLocationClick,
   locations,
   setLocations,
+
+  roadPath,
+  setRoadPath,
+  routeSegments,
+  setRouteSegments,
+  currentSegmentIndex,
+  setCurrentSegmentIndex,
+  optimized,
+  setOptimized,
+  isGuiding,
+  setIsGuiding,
+  totalDuration,
+  setTotalDuration,
+
+  panelOpen,
+  setPanelOpen,
 }) {
   const [selected, setSelected] = useState(null);
   const [optimizing, setOptimizing] = useState(false);
-  const [optimized, setOptimized] = useState(false);
-
-  const [isGuiding, setIsGuiding] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
-
-  const [roadPath, setRoadPath] = useState([]);
-  const [routeSegments, setRouteSegments] = useState([]);
-  const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
-
-  const [panelOpen, setPanelOpen] = useState(true);
 
   const [priorityMode, setPriorityMode] = useState(false);
   const [priorityCount, setPriorityCount] = useState(1);
 
-  const [totalDuration, setTotalDuration] = useState(null);
-
   const markers = locations?.length ? locations : [];
-
   const orderedMarkers = useMemo(() => markers, [markers]);
 
   const handleSetPriority = (targetLocation) => {

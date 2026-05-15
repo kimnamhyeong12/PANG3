@@ -14,8 +14,15 @@ export default function App() {
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [actionType, setActionType] = useState(null);
 
-  // 오늘 외근 경로에 들어갈 방문지 목록
   const [routeLocations, setRouteLocations] = useState([]);
+
+  const [roadPath, setRoadPath] = useState([]);
+  const [routeSegments, setRouteSegments] = useState([]);
+  const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
+  const [optimized, setOptimized] = useState(false);
+  const [isGuiding, setIsGuiding] = useState(false);
+  const [totalDuration, setTotalDuration] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(true);
 
   const go = (next) => setScreen(next);
 
@@ -53,6 +60,20 @@ export default function App() {
           setLocations={setRouteLocations}
           onBack={() => go('main')}
           onLocationClick={onLocationClick}
+          roadPath={roadPath}
+          setRoadPath={setRoadPath}
+          routeSegments={routeSegments}
+          setRouteSegments={setRouteSegments}
+          currentSegmentIndex={currentSegmentIndex}
+          setCurrentSegmentIndex={setCurrentSegmentIndex}
+          optimized={optimized}
+          setOptimized={setOptimized}
+          isGuiding={isGuiding}
+          setIsGuiding={setIsGuiding}
+          totalDuration={totalDuration}
+          setTotalDuration={setTotalDuration}
+          panelOpen={panelOpen}
+          setPanelOpen={setPanelOpen}
         />
       )}
 
