@@ -1,17 +1,19 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+// 현재 위치 기반 방문지 관리 + 지도 + 경로 최적화 + 현장 액션 기능
+// 외근 도우미 앱의 핵심 화면
+import * as Task from "expo-location";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
   Alert,
   Modal,
-  ScrollView,
   Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-import * as Location from "expo-location";
 
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
@@ -24,7 +26,7 @@ const DEFAULT_REGION = {
 };
 
 export default function KakaoMapWebView({
-  locations = [],
+  tasks = [],
   onMarkerClick,
   onLocationsChange,
 }) {
@@ -36,29 +38,63 @@ export default function KakaoMapWebView({
   const [selectedPos, setSelectedPos] = useState(null);
   const [currentPos, setCurrentPos] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
+  // 페이지
   const [isSearching, setIsSearching] = useState(false);
+  const goFirst = () => searchPlace(1);
+  const goLast = () => searchPlace(totalPages);
 
+  const goPrev = () => {
+    if (page > 1) searchPlace(page - 1);
+  };
+
+  const goNext = () => {
+    if (page < totalPages) searchPlace(page + 1);
+  };
+  const getPageNumbers = () => {
+    const maxVisible = 5;
+
+    let start = Math.max(1, page - 2);
+    let end = Math.min(totalPages, start + maxVisible - 1);
+
+    if (end - start < maxVisible - 1) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+
+    const pages = [];
+
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+
+    return pages;
+  };
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchModalVisible, setSearchModalVisible] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const PAGE_SIZE = 5;
+  const [isEnd, setIsEnd] = useState(false);
   const mapLocations = useMemo(() => {
-    return (locations || []).filter(
-      (loc) => loc && loc.lat !== undefined && loc.lng !== undefined
+    return (tasks || []).filter(
+      (task) => task && task.lat !== undefined && task.lng !== undefined
     );
-  }, [locations]);
-
+  }, [tasks]);
+  
   useEffect(() => {
     startCurrentLocation();
   }, []);
 
   const startCurrentLocation = async () => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = await Task.requestForegroundPermissionsAsync();
 
       if (status !== "granted") {
         Alert.alert("위치 권한 필요", "현재 위치를 사용하려면 위치 권한이 필요합니다.");
         return;
       }
 
-      const current = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+      const current = await Task.getCurrentPositionAsync({
+        accuracy: Task.Accuracy.High,
       });
 
       const pos = {
@@ -78,9 +114,9 @@ export default function KakaoMapWebView({
         500
       );
 
-      await Location.watchPositionAsync(
+      await Task.watchPositionAsync(
         {
-          accuracy: Location.Accuracy.High,
+          accuracy: Task.Accuracy.High,
           timeInterval: 5000,
           distanceInterval: 5,
         },
@@ -108,79 +144,67 @@ export default function KakaoMapWebView({
       500
     );
   };
-
-  const searchPlace = async () => {
+  const searchPlace = async (targetPage = 1) => {
     const q = keyword.trim();
 
-    if (!q) {
-      Alert.alert("입력 필요", "주소나 장소명을 입력하세요.");
-      return;
-    }
-
-    if (!KAKAO_REST_API_KEY) {
-      Alert.alert(
-        "REST API 키 필요",
-        "mobile/.env에 EXPO_PUBLIC_KAKAO_REST_API_KEY를 넣어야 합니다."
-      );
-      return;
-    }
+    if (!q) return;
 
     try {
       setIsSearching(true);
 
-      const keywordUrl =
-        "https://dapi.kakao.com/v2/local/search/keyword.json?query=" +
-        encodeURIComponent(q);
-
-      let res = await fetch(keywordUrl, {
+      const url =
+        `https://dapi.kakao.com/v2/local/search/keyword.json` +
+        `?query=${encodeURIComponent(q)}&page=${targetPage}&size=15`;
+      
+      const res = await fetch(url, {
         headers: {
           Authorization: `KakaoAK ${KAKAO_REST_API_KEY}`,
         },
       });
 
-      let data = await res.json();
-
-      if (!data.documents || data.documents.length === 0) {
-        const addressUrl =
-          "https://dapi.kakao.com/v2/local/search/address.json?query=" +
-          encodeURIComponent(q);
-
-        res = await fetch(addressUrl, {
-          headers: {
-            Authorization: `KakaoAK ${KAKAO_REST_API_KEY}`,
-          },
-        });
-
-        data = await res.json();
-      }
-
-      if (!data.documents || data.documents.length === 0) {
-        Alert.alert("검색 실패", "검색 결과가 없습니다.");
-        return;
-      }
-
-      const first = data.documents[0];
-
-      const lat = Number(first.y);
-      const lng = Number(first.x);
-
-      if (Number.isNaN(lat) || Number.isNaN(lng)) {
-        Alert.alert("검색 오류", "좌표를 읽지 못했습니다.");
-        return;
-      }
-
-      setSelectedPos({ lat, lng });
-      setPlaceName(first.place_name || first.address_name || q);
-
-      moveToPosition(lat, lng);
+      const data = await res.json();
+      setSearchResults(data.documents);
+      setPage(targetPage);
+      const total = Math.ceil(data.meta.pageable_count / PAGE_SIZE);
+      setTotalPages(total);
+      setSearchModalVisible(true);
     } catch (error) {
       console.log(error);
-      Alert.alert("검색 오류", "카카오 REST API 검색 중 오류가 발생했습니다.");
     } finally {
       setIsSearching(false);
     }
   };
+  const selectSearchResult = (place) => {
+    const lat = Number(place.y);
+    const lng = Number(place.x);
 
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      Alert.alert("좌표 오류", "위치 좌표를 읽을 수 없습니다.");
+      return;
+    }
+
+    setSelectedPos({ lat, lng });
+
+    // 도로명 주소 이후 
+    // ex) 부산 해운대구 좌동순환로 511 이마트 해운대점
+    // 이마트 해운대점에 해당 하는 부분
+    setPlaceName(
+      place.place_name || place.address_name || "선택한 위치"
+    );
+    // 제일 처음 주소
+    // ex) 부산 해운대구 좌동순환로 511 이마트 해운대점
+    // 부산 해운대구 좌동순환로 511 에 해당하는 부분
+    // address_name : 옛날 주소
+    // road_address_name : 도로명 주소
+    setKeyword(
+      // place.address_name || place.road_address_name || ""
+      place.road_address_name || ""
+    );
+
+    moveToPosition(lat, lng);
+
+    setSearchModalVisible(false);
+  };
   const addLocation = async () => {
     if (!selectedPos) {
       Alert.alert("위치 선택 필요", "먼저 지도에서 위치를 선택하거나 주소를 검색하세요.");
@@ -192,11 +216,9 @@ export default function KakaoMapWebView({
       return;
     }
 
-    const newLoc = {
-      id: Date.now(),
-      name: placeName.trim(),
-      task: task.trim() || "현장 확인",
-      address: keyword.trim(),
+    const newTask = {
+      detailAddress: placeName.trim(),
+      roadAddress: keyword.trim(),
       lat: selectedPos.lat,
       lng: selectedPos.lng,
       status: "pending",
@@ -207,7 +229,7 @@ export default function KakaoMapWebView({
         throw new Error("API_BASE_URL 없음");
       }
 
-      const res = await fetch(`${API_BASE_URL}/api/locations`, {
+      const res = await fetch(`${API_BASE_URL}/api/tasks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -219,7 +241,7 @@ export default function KakaoMapWebView({
         throw new Error("저장 실패");
       }
 
-      const nextLocations = [...locations, newLoc];
+      const nextLocations = [...tasks, newLoc];
 
       onLocationsChange?.(nextLocations);
 
@@ -238,20 +260,20 @@ export default function KakaoMapWebView({
     }
   };
 
-  const focusLocation = (loc) => {
-    setSelectedLocation(loc);
+  const focusLocation = (task) => {
+    setSelectedLocation(task);
 
-    moveToPosition(Number(loc.lat), Number(loc.lng));
+    moveToPosition(Number(task.lat), Number(task.lng));
 
-    onMarkerClick?.(loc);
+    onMarkerClick?.(task);
   };
 
-  const removeLocation = async (id) => {
-    const nextLocations = locations.filter((loc) => loc.id !== id);
+  const removeLocation = async (taskId) => {
+    const nextLocations = tasks.filter((task) => task.taskId !== taskId);
 
     onLocationsChange?.(nextLocations);
 
-    if (selectedLocation?.id === id) {
+    if (selectedLocation?.taskId === taskId) {
       setSelectedLocation(null);
     }
 
@@ -259,7 +281,7 @@ export default function KakaoMapWebView({
       백엔드에 DELETE API가 있으면 아래 주석을 풀면 됨.
 
       try {
-        await fetch(`${API_BASE_URL}/api/locations/${id}`, {
+        await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
           method: "DELETE",
         });
       } catch (error) {
@@ -275,7 +297,7 @@ export default function KakaoMapWebView({
   };
 
   const optimizeRoute = () => {
-    if (locations.length < 2) {
+    if (tasks.length < 2) {
       Alert.alert("정렬 불가", "방문지가 2개 이상 필요합니다.");
       return;
     }
@@ -285,7 +307,7 @@ export default function KakaoMapWebView({
       return;
     }
 
-    const remaining = [...locations];
+    const remaining = [...tasks];
     const optimized = [];
 
     let current = {
@@ -376,24 +398,24 @@ export default function KakaoMapWebView({
           />
         )}
 
-        {mapLocations.map((loc, index) => (
+        {mapLocations.map((task, index) => (
           <Marker
-            key={`${loc.id}-${index}`}
+            key={`${task.taskId}-${index}`}
             coordinate={{
-              latitude: Number(loc.lat),
-              longitude: Number(loc.lng),
+              latitude: Number(task.lat),
+              longitude: Number(task.lng),
             }}
-            title={`${index + 1}. ${loc.name}`}
-            description={loc.task || "현장 확인"}
-            onPress={() => focusLocation(loc)}
+            title={`${index + 1}. ${task.detailAddress}`}
+            description={task.task || "현장 확인"}
+            onPress={() => focusLocation(task)}
           />
         ))}
 
         {mapLocations.length >= 2 && (
           <Polyline
-            coordinates={mapLocations.map((loc) => ({
-              latitude: Number(loc.lat),
-              longitude: Number(loc.lng),
+            coordinates={mapLocations.map((task) => ({
+              latitude: Number(task.lat),
+              longitude: Number(task.lng),
             }))}
             strokeWidth={4}
             strokeColor="#12395B"
@@ -406,20 +428,21 @@ export default function KakaoMapWebView({
           <TextInput
             value={keyword}
             onChangeText={setKeyword}
-            placeholder="주소/장소"
-            placeholderTextColor="#8A98A8"
+            placeholder="장소 검색"
             style={styles.searchInput}
-            returnKeyType="search"
-            onSubmitEditing={searchPlace}
           />
-
           <TouchableOpacity
             style={styles.searchButton}
-            onPress={searchPlace}
-            disabled={isSearching}
+            onPress={() => 
+              // setSearchModalVisible(true)
+              {
+                searchPlace(1);
+                setPage(1);          
+              }
+            }
           >
             <Text style={styles.searchButtonText}>
-              {isSearching ? "검색중" : "검색"}
+              검색
             </Text>
           </TouchableOpacity>
         </View>
@@ -445,7 +468,7 @@ export default function KakaoMapWebView({
         </TouchableOpacity>
 
         <View style={styles.metaRow}>
-          <Text style={styles.countText}>방문지 {locations.length}개</Text>
+          <Text style={styles.countText}>방문지 {tasks.length}개</Text>
 
           <TouchableOpacity style={styles.sortButton} onPress={optimizeRoute}>
             <Text style={styles.sortButtonText}>정렬</Text>
@@ -453,14 +476,15 @@ export default function KakaoMapWebView({
         </View>
 
         <ScrollView style={styles.locationList}>
-          {locations.length === 0 ? (
+          
+          {tasks.length === 0 ? (
             <Text style={styles.emptyText}>추가로 방문하세요.</Text>
           ) : (
-            locations.map((loc, index) => (
-              <View key={`${loc.id}-${index}`} style={styles.locationItem}>
+            tasks.map((task, index) => (
+              <View key={`${task.taskId}-${index}`} style={styles.locationItem}>
                 <TouchableOpacity
                   style={styles.locationMain}
-                  onPress={() => focusLocation(loc)}
+                  onPress={() => focusLocation(task)}
                 >
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>{index + 1}</Text>
@@ -468,21 +492,22 @@ export default function KakaoMapWebView({
 
                   <View style={styles.locationTextWrap}>
                     <Text style={styles.locationName} numberOfLines={1}>
-                      {loc.name || "이름 없음"}
+                      {task.detailAddress || "이름 없음"}
                     </Text>
                     <Text style={styles.locationTask} numberOfLines={1}>
-                      {loc.task || "현장 확인"}
+                      {task.task || "현장 확인"}
                     </Text>
                   </View>
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => removeLocation(loc.id)}>
+                <TouchableOpacity onPress={() => removeLocation(task.taskId)}>
                   <Text style={styles.deleteText}>삭제</Text>
                 </TouchableOpacity>
               </View>
             ))
           )}
         </ScrollView>
+        
 
         {currentPos && (
           <Text style={styles.hintText}>현재 위치 기준 최적화 가능</Text>
@@ -514,7 +539,7 @@ export default function KakaoMapWebView({
 
               <View style={styles.sheetTextWrap}>
                 <Text style={styles.sheetTitle} numberOfLines={1}>
-                  {selectedLocation?.name || "이름 없음"}
+                  {selectedLocation?.detailAddress || "이름 없음"}
                 </Text>
                 <Text style={styles.sheetTask} numberOfLines={1}>
                   {selectedLocation?.task || "현장 확인"}
@@ -551,6 +576,86 @@ export default function KakaoMapWebView({
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
+      </Modal>
+      <Modal
+        visible={searchModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSearchModalVisible(false)}
+      >
+        <View style={styles.searchModalBackdrop}>
+          <View style={styles.searchModal}>
+            <Text style={styles.searchModalTitle}>
+              검색 결과
+            </Text>
+
+            <ScrollView>
+              {searchResults.map((place, index) => (
+                <TouchableOpacity
+                  key={`${place.taskId || index}`}
+                  style={styles.searchResultItem}
+                  onPress={() => selectSearchResult(place)}
+                >
+                  <Text style={styles.searchResultName}>
+                    {place.place_name || place.address_name}
+                  </Text>
+
+                  <Text style={styles.searchResultAddress}>
+                    {place.road_address_name ||
+                      place.address_name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <View style={styles.pagination}>
+              {/* << */}
+              <TouchableOpacity onPress={goFirst}>
+                <Text style={styles.pageBtn}>{"<<"}</Text>
+              </TouchableOpacity>
+
+              {/* < */}
+              <TouchableOpacity onPress={goPrev}>
+                <Text style={styles.pageBtn}>{"<"}</Text>
+              </TouchableOpacity>
+
+              {/* 숫자 */}
+              {getPageNumbers().map((p) => (
+                <TouchableOpacity
+                  key={p}
+                  onPress={() => searchPlace(p)}
+                >
+                  <Text
+                    style={[
+                      styles.pageNumber,
+                      p === page && styles.pageActive,
+                    ]}
+                  >
+                    {p}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+
+              {/* > */}
+              <TouchableOpacity onPress={goNext}>
+                <Text style={styles.pageBtn}>{">"}</Text>
+              </TouchableOpacity>
+
+              {/* >> */}
+              <TouchableOpacity onPress={goLast}>
+                <Text style={styles.pageBtn}>{">>"}</Text>
+              </TouchableOpacity>
+            </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setSearchModalVisible(false)}
+            >
+              <Text style={styles.closeButtonText}>
+                닫기
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -814,5 +919,84 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 18,
     marginTop: 8,
+  },
+  searchModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  searchModal: {
+    width: "88%",
+    maxHeight: "70%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 16,
+  },
+
+  searchModalTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 14,
+    color: "#12395B",
+  },
+
+  searchResultItem: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E6EDF3",
+  },
+
+  searchResultName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1F2D3D",
+  },
+
+  searchResultAddress: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#718096",
+  },
+
+  closeButton: {
+    marginTop: 14,
+    backgroundColor: "#12395B",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+
+  closeButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+  },
+  pagination: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 10,
+    gap: 10,
+  },
+
+  pageBtn: {
+    fontSize: 14,
+    fontWeight: "900",
+    paddingHorizontal: 6,
+  },
+
+  pageNumber: {
+    fontSize: 13,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    color: "#333",
+  },
+
+  pageActive: {
+    backgroundColor: "#12395B",
+    color: "#fff",
+    borderRadius: 6,
+    overflow: "hidden",
   },
 });
