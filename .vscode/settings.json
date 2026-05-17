@@ -1,4 +1,11 @@
 {
     "java.configuration.updateBuildConfiguration": "interactive",
-    "java.compile.nullAnalysis.mode": "automatic"
+    "java.compile.nullAnalysis.mode": "disabled",
+    "python-envs.defaultEnvManager": "ms-python.python:venv",
+    "python-envs.defaultPackageManager": "ms-python.python:pip", // 👈 요기 끝에 쉼표(,)를 꼭 찍어주셔야 합니다!
+
+    "python.analysis.extraPaths": [
+        "./ai",
+        "./ai/venv/lib/python3.14/site-packages"
+    ]
 }
