@@ -14,3 +14,6 @@ server:
 
 kakao:
   rest-api-key: ${KAKAO_REST_API_KEY}
+
+ors:
+  api-key: ${ORS_API_KEY}

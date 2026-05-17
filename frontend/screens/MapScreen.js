@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,21 @@ const getStatusColor = (status, index) => {
   if (status === 'working') return '#FACC15';
   if (status === 'pending') return '#E74C3C';
   return index === 0 ? '#12395B' : '#94A3B8';
+};
+
+const cleanLocation = (loc, fallbackName = '위치') => {
+  if (!loc) return null;
+
+  return {
+    id: loc.id ?? null,
+    name: loc.name || fallbackName,
+    address: loc.address || '',
+    lat: Number(loc.lat ?? loc.latitude),
+    lng: Number(loc.lng ?? loc.longitude),
+    status: loc.status || 'pending',
+    task: loc.task || '',
+    priority: loc.priority ?? null,
+  };
 };
 
 export default function MapScreen({
@@ -45,12 +60,24 @@ export default function MapScreen({
   const [selected, setSelected] = useState(null);
   const [optimizing, setOptimizing] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [transportMode, setTransportMode] = useState('car');
+  const [segmentChanging, setSegmentChanging] = useState(false);
 
   const [priorityMode, setPriorityMode] = useState(false);
   const [priorityCount, setPriorityCount] = useState(1);
 
   const markers = locations?.length ? locations : [];
   const orderedMarkers = useMemo(() => markers, [markers]);
+
+  useEffect(() => {
+    const mode = routeSegments[currentSegmentIndex]?.mode;
+
+    if (mode === 'walk' || mode === 'car') {
+      setTransportMode(mode);
+    } else if (!optimized) {
+      setTransportMode('car');
+    }
+  }, [currentSegmentIndex, routeSegments, optimized]);
 
   const handleSetPriority = (targetLocation) => {
     if (!priorityMode) {
@@ -84,7 +111,7 @@ export default function MapScreen({
     setPriorityMode(false);
   };
 
-  const handleOptimizeRoute = async () => {
+  const handleOptimizeRoute = async (mode = transportMode) => {
     if (!API_BASE_URL) {
       Alert.alert('오류', '.env의 EXPO_PUBLIC_API_BASE_URL을 확인하세요.');
       return;
@@ -110,20 +137,25 @@ export default function MapScreen({
       setCurrentSegmentIndex(0);
       setTotalDuration(null);
 
+      const cleanCurrentLocation = cleanLocation(currentLocation, '현재 위치');
+      const cleanMarkers = markers
+        .map((loc) => cleanLocation(loc))
+        .filter((loc) => loc && !Number.isNaN(loc.lat) && !Number.isNaN(loc.lng));
+
       const res = await fetch(`${API_BASE_URL}/api/routes/optimize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          currentLocation,
-          locations: markers,
+          currentLocation: cleanCurrentLocation,
+          locations: cleanMarkers,
+          transportMode: mode,
         }),
       });
 
       const text = await res.text();
 
-      console.log('경로 최적화 요청 현재 위치:', currentLocation);
       console.log('경로 최적화 응답 상태:', res.status);
       console.log('경로 최적화 응답 내용:', text);
 
@@ -158,8 +190,8 @@ export default function MapScreen({
         setTotalDuration(data.totalDuration);
       }
 
+      setTransportMode(mode);
       setOptimized(true);
-
     } catch (error) {
       console.log(error);
       Alert.alert('오류', '경로 최적화 중 문제가 발생했습니다.');
@@ -191,6 +223,112 @@ export default function MapScreen({
     );
   };
 
+  const updateCurrentSegmentMode = async (mode) => {
+    if (!API_BASE_URL) {
+      Alert.alert('오류', '.env의 EXPO_PUBLIC_API_BASE_URL을 확인하세요.');
+      return;
+    }
+
+    if (!currentLocation) {
+      Alert.alert('현재 위치 필요', '현재 위치를 먼저 불러와야 합니다.');
+      return;
+    }
+
+    if (!routeSegments || routeSegments.length === 0) {
+      Alert.alert('구간 없음', '먼저 경로 최적화를 실행하세요.');
+      return;
+    }
+
+    try {
+      setSegmentChanging(true);
+      setTransportMode(mode);
+
+      const rawStart =
+        currentSegmentIndex === 0
+          ? currentLocation
+          : orderedMarkers[currentSegmentIndex - 1];
+
+      const rawEnd = orderedMarkers[currentSegmentIndex];
+
+      const start = cleanLocation(rawStart, '현재 위치');
+      const end = cleanLocation(rawEnd, '목적지');
+
+      if (!start || !end) {
+        Alert.alert('오류', '현재 구간 정보를 찾을 수 없습니다.');
+        return;
+      }
+
+      const res = await fetch(`${API_BASE_URL}/api/routes/segment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          start,
+          end,
+          transportMode: mode,
+        }),
+      });
+
+      const text = await res.text();
+
+      console.log('구간 경로 변경 응답 상태:', res.status);
+      console.log('구간 경로 변경 응답 내용:', text);
+
+      if (!res.ok) {
+        throw new Error(`구간 경로 변경 실패: ${res.status}`);
+      }
+
+      const data = JSON.parse(text);
+
+      if (!data.segments || data.segments.length === 0) {
+        Alert.alert('오류', '구간 경로를 받아오지 못했습니다.');
+        return;
+      }
+
+      const updatedSegment = {
+        ...data.segments[0],
+        mode,
+        totalDistance: data.totalDistance,
+        totalDuration: data.totalDuration,
+      };
+
+      const updatedSegments = [...routeSegments];
+      updatedSegments[currentSegmentIndex] = updatedSegment;
+
+      setRouteSegments(updatedSegments);
+
+      const mergedPath = updatedSegments.flatMap((segment) => segment.path || []);
+      setRoadPath(mergedPath);
+
+      const nextTotalDuration = updatedSegments.reduce((sum, segment) => {
+        return sum + Number(segment.totalDuration || 0);
+      }, 0);
+
+      if (nextTotalDuration > 0) {
+        setTotalDuration(nextTotalDuration);
+      }
+    } catch (error) {
+      console.log(error);
+      Alert.alert('오류', '현재 구간 경로 변경 중 문제가 발생했습니다.');
+    } finally {
+      setSegmentChanging(false);
+    }
+  };
+
+  const handleTransportPress = (mode) => {
+    setTransportMode(mode);
+
+    if (optimized && isGuiding) {
+      updateCurrentSegmentMode(mode);
+      return;
+    }
+
+    if (optimized && !isGuiding) {
+      handleOptimizeRoute(mode);
+    }
+  };
+
   const formatDuration = (seconds) => {
     if (!seconds) return null;
 
@@ -217,11 +355,13 @@ export default function MapScreen({
           <Text style={styles.desc}>
             {optimizing
               ? '최적 경로 계산 중'
-              : isGuiding
-                ? '현재 경로 안내 중'
-                : optimized
-                  ? '최적 방문 순서 안내'
-                  : '방문지를 확인하고 경로를 실행하세요'}
+              : segmentChanging
+                ? '현재 구간 경로 변경 중'
+                : isGuiding
+                  ? '현재 경로 안내 중'
+                  : optimized
+                    ? '최적 방문 순서 안내'
+                    : '방문지를 확인하고 경로를 실행하세요'}
           </Text>
         </View>
 
@@ -239,7 +379,7 @@ export default function MapScreen({
         </View>
       )}
 
-      {optimized && routeSegments.length > 0 && (
+      {isGuiding && routeSegments.length > 0 && (
         <View style={styles.segmentBar}>
           <Text style={styles.segmentText}>
             현재 구간 {currentSegmentIndex + 1} / {routeSegments.length}
@@ -265,7 +405,7 @@ export default function MapScreen({
               style={[
                 styles.segmentButton,
                 currentSegmentIndex === routeSegments.length - 1 &&
-                styles.segmentButtonDisabled,
+                  styles.segmentButtonDisabled,
               ]}
               onPress={moveNextSegment}
               disabled={currentSegmentIndex === routeSegments.length - 1}
@@ -310,6 +450,46 @@ export default function MapScreen({
                 </TouchableOpacity>
               )}
 
+              <View style={styles.transportRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.transportButton,
+                    transportMode === 'car' && styles.transportButtonActive,
+                  ]}
+                  onPress={() => handleTransportPress('car')}
+                  disabled={segmentChanging || optimizing}
+                >
+                  <Text
+                    style={[
+                      styles.transportButtonText,
+                      transportMode === 'car' &&
+                        styles.transportButtonTextActive,
+                    ]}
+                  >
+                    차량
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.transportButton,
+                    transportMode === 'walk' && styles.transportButtonActive,
+                  ]}
+                  onPress={() => handleTransportPress('walk')}
+                  disabled={segmentChanging || optimizing}
+                >
+                  <Text
+                    style={[
+                      styles.transportButtonText,
+                      transportMode === 'walk' &&
+                        styles.transportButtonTextActive,
+                    ]}
+                  >
+                    도보
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
               {optimized && !isGuiding && (
                 <TouchableOpacity
                   style={styles.startGuideButton}
@@ -331,7 +511,8 @@ export default function MapScreen({
 
               <TouchableOpacity
                 style={styles.optimizeButton}
-                onPress={handleOptimizeRoute}
+                onPress={() => handleOptimizeRoute(transportMode)}
+                disabled={segmentChanging || optimizing}
               >
                 <Text style={styles.optimizeText}>
                   {optimized ? '다시 최적화' : '경로 최적화'}
@@ -386,11 +567,15 @@ export default function MapScreen({
           onLocationsChange={setLocations}
         />
 
-        {optimizing && (
+        {(optimizing || segmentChanging) && (
           <View style={styles.loadingOverlay}>
-            <Text style={styles.loadingTitle}>경로 최적화 중</Text>
+            <Text style={styles.loadingTitle}>
+              {segmentChanging ? '구간 경로 변경 중' : '경로 최적화 중'}
+            </Text>
             <Text style={styles.loadingDesc}>
-              TSP 방문 순서와 실제 도로 경로를 계산합니다.
+              {segmentChanging
+                ? '현재 구간의 이동수단 기준으로 경로를 다시 계산합니다.'
+                : 'TSP 방문 순서와 실제 도로 경로를 계산합니다.'}
             </Text>
           </View>
         )}
@@ -800,5 +985,34 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 10,
     fontWeight: '900',
+  },
+
+  transportRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  transportButton: {
+    backgroundColor: '#EAF1F7',
+    borderWidth: 1,
+    borderColor: '#D9E1EA',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+
+  transportButtonActive: {
+    backgroundColor: '#12395B',
+    borderColor: '#12395B',
+  },
+
+  transportButtonText: {
+    color: '#12395B',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+
+  transportButtonTextActive: {
+    color: '#FFFFFF',
   },
 });

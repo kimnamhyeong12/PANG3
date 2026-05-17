@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import * as Location from "expo-location";
+import { Ionicons } from "@expo/vector-icons";
 
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
@@ -42,6 +43,9 @@ export default function KakaoMapWebView({
   onLocationsChange,
 }) {
   const mapRef = useRef(null);
+  const guidingRef = useRef(false);
+  const followModeRef = useRef(true);
+  const alertedTargetIds = useRef(new Set());
 
   const [keyword, setKeyword] = useState("");
   const [placeName, setPlaceName] = useState("");
@@ -50,8 +54,7 @@ export default function KakaoMapWebView({
   const [currentPos, setCurrentPos] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
-
-  const alertedTargetIds = useRef(new Set());
+  const [pulseTargetKey, setPulseTargetKey] = useState(null);
 
   const mapLocations = useMemo(() => {
     return (locations || []).filter(
@@ -67,6 +70,14 @@ export default function KakaoMapWebView({
     : roadPath;
 
   useEffect(() => {
+    guidingRef.current = isGuiding;
+
+    if (isGuiding) {
+      followModeRef.current = true;
+    }
+  }, [isGuiding]);
+
+  useEffect(() => {
     startCurrentLocation();
   }, []);
 
@@ -77,7 +88,6 @@ export default function KakaoMapWebView({
     if (!currentTarget) return;
 
     const targetStatus = currentTarget.status || "pending";
-
     if (targetStatus !== "pending") return;
 
     const targetKey =
@@ -93,20 +103,19 @@ export default function KakaoMapWebView({
       Number(currentTarget.lng)
     );
 
-    console.log("안내중:", isGuiding);
-    console.log("현재 구간:", currentSegmentIndex + 1);
-    console.log("현재 목적지:", currentTarget.name);
-    console.log("거리:", distance);
-    console.log("상태:", targetStatus);
-
     if (distance <= 1000) {
       alertedTargetIds.current.add(targetKey);
+      setPulseTargetKey(targetKey);
 
       Alert.alert(
         "작업 시작",
         `${currentTarget.name} 근처에 도착했습니다. 작업을 시작하시겠습니까?`,
         [
-          { text: "취소", style: "cancel" },
+          {
+            text: "취소",
+            style: "cancel",
+            onPress: () => setPulseTargetKey(null),
+          },
           {
             text: "확인",
             onPress: () => {
@@ -114,16 +123,14 @@ export default function KakaoMapWebView({
                 const locKey = loc.id ?? `${loc.name}-${loc.lat}-${loc.lng}`;
 
                 if (locKey === targetKey) {
-                  return {
-                    ...loc,
-                    status: "working",
-                  };
+                  return { ...loc, status: "working" };
                 }
 
                 return loc;
               });
 
               onLocationsChange?.(updated);
+              setPulseTargetKey(null);
             },
           },
         ]
@@ -142,7 +149,6 @@ export default function KakaoMapWebView({
     if (!mapRef.current) return;
 
     const targetPath = isGuiding ? activePath : roadPath;
-
     if (!targetPath || targetPath.length < 2) return;
 
     const coordinates = targetPath.map((p) => ({
@@ -159,6 +165,20 @@ export default function KakaoMapWebView({
       },
       animated: true,
     });
+
+    if (isGuiding && currentPos) {
+      setTimeout(() => {
+        mapRef.current?.animateToRegion(
+          {
+            latitude: currentPos.latitude,
+            longitude: currentPos.longitude,
+            latitudeDelta: 0.008,
+            longitudeDelta: 0.008,
+          },
+          1000
+        );
+      }, 1500);
+    }
   }, [isGuiding, currentSegmentIndex, roadPath, activePath]);
 
   const startCurrentLocation = async () => {
@@ -182,16 +202,10 @@ export default function KakaoMapWebView({
       setCurrentPos(pos);
 
       onCurrentLocationChange?.({
-        lat: current.coords.latitude,
-        lng: current.coords.longitude,
+        lat: pos.latitude,
+        lng: pos.longitude,
         name: "현재 위치",
       });
-
-      console.log(
-        "현재위치 전달:",
-        current.coords.latitude,
-        current.coords.longitude
-      );
 
       mapRef.current?.animateToRegion(
         {
@@ -210,22 +224,30 @@ export default function KakaoMapWebView({
           distanceInterval: 5,
         },
         (location) => {
-          setCurrentPos({
+          const newPos = {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
-          });
+          };
+
+          setCurrentPos(newPos);
 
           onCurrentLocationChange?.({
-            lat: location.coords.latitude,
-            lng: location.coords.longitude,
+            lat: newPos.latitude,
+            lng: newPos.longitude,
             name: "현재 위치",
           });
 
-          console.log(
-            "실시간 위치 업데이트:",
-            location.coords.latitude,
-            location.coords.longitude
-          );
+          if (guidingRef.current && followModeRef.current && mapRef.current) {
+            mapRef.current.animateToRegion(
+              {
+                latitude: newPos.latitude,
+                longitude: newPos.longitude,
+                latitudeDelta: 0.008,
+                longitudeDelta: 0.008,
+              },
+              700
+            );
+          }
         }
       );
     } catch (error) {
@@ -246,6 +268,22 @@ export default function KakaoMapWebView({
     );
   };
 
+  const moveToCurrentLocation = () => {
+    if (!currentPos || !mapRef.current) return;
+
+    followModeRef.current = true;
+
+    mapRef.current.animateToRegion(
+      {
+        latitude: currentPos.latitude,
+        longitude: currentPos.longitude,
+        latitudeDelta: 0.008,
+        longitudeDelta: 0.008,
+      },
+      700
+    );
+  };
+
   const getDistanceMeters = (lat1, lng1, lat2, lng2) => {
     const R = 6371000;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -254,9 +292,9 @@ export default function KakaoMapWebView({
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
 
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
@@ -500,18 +538,12 @@ export default function KakaoMapWebView({
         style={styles.map}
         initialRegion={DEFAULT_REGION}
         onPress={handleMapPress}
+        onPanDrag={() => {
+          followModeRef.current = false;
+        }}
         showsUserLocation={true}
-        showsMyLocationButton={true}
+        showsMyLocationButton={false}
       >
-        {currentPos && (
-          <Marker
-            coordinate={currentPos}
-            title="현재 위치"
-            description="내 현재 위치"
-            pinColor={Platform.OS === "android" ? "blue" : undefined}
-          />
-        )}
-
         {selectedPos && (
           <Marker
             coordinate={{
@@ -524,35 +556,41 @@ export default function KakaoMapWebView({
           />
         )}
 
-        {mapLocations.map((loc, index) => (
-          <Marker
-            key={`${loc.name || "loc"}-${loc.lat}-${loc.lng}-${index}`}
-            coordinate={{
-              latitude: Number(loc.lat),
-              longitude: Number(loc.lng),
-            }}
-            title={`${index + 1}. ${loc.name}`}
-            description={loc.task || "현장 확인"}
-            onPress={() => focusLocation(loc)}
-            zIndex={index + 1}
-          >
-            <View
-              style={[
-                styles.numberMarker,
-                {
-                  backgroundColor: getMarkerColorByStatus(
-                    loc.status || "pending"
-                  ),
-                },
-                isGuiding &&
-                index === currentTargetIndex &&
-                styles.currentTargetMarker,
-              ]}
+        {mapLocations.map((loc, index) => {
+          const locKey = loc.id ?? `${loc.name}-${loc.lat}-${loc.lng}`;
+          const isPulsing = pulseTargetKey === locKey;
+
+          return (
+            <Marker
+              key={`${loc.name || "loc"}-${loc.lat}-${loc.lng}-${index}`}
+              coordinate={{
+                latitude: Number(loc.lat),
+                longitude: Number(loc.lng),
+              }}
+              title={`${index + 1}. ${loc.name}`}
+              description={loc.task || "현장 확인"}
+              onPress={() => focusLocation(loc)}
+              zIndex={index + 1}
             >
-              <Text style={styles.numberMarkerText}>{index + 1}</Text>
-            </View>
-          </Marker>
-        ))}
+              <View
+                style={[
+                  styles.numberMarker,
+                  {
+                    backgroundColor: getMarkerColorByStatus(
+                      loc.status || "pending"
+                    ),
+                  },
+                  isGuiding &&
+                    index === currentTargetIndex &&
+                    styles.currentTargetMarker,
+                  isPulsing && styles.pulseMarker,
+                ]}
+              >
+                <Text style={styles.numberMarkerText}>{index + 1}</Text>
+              </View>
+            </Marker>
+          );
+        })}
 
         {roadPath.length >= 2 && (
           <Polyline
@@ -576,6 +614,15 @@ export default function KakaoMapWebView({
           />
         )}
       </MapView>
+
+      {currentPos && (
+        <TouchableOpacity
+          style={styles.myLocationButton}
+          onPress={moveToCurrentLocation}
+        >
+          <Ionicons name="locate" size={24} color="#12395B" />
+        </TouchableOpacity>
+      )}
 
       {panelOpen && (
         <View style={styles.panel}>
@@ -699,8 +746,9 @@ export default function KakaoMapWebView({
           {currentPos && (
             <Text style={styles.hintText}>
               {isGuiding
-                ? `안내 중 · 현재 목적지: ${currentTarget?.name || "마지막 구간"
-                }`
+                ? `안내 중 · 현재 목적지: ${
+                    currentTarget?.name || "마지막 구간"
+                  }`
                 : "안내 시작 전"}
             </Text>
           )}
@@ -721,7 +769,7 @@ export default function KakaoMapWebView({
           <TouchableOpacity
             style={styles.bottomSheet}
             activeOpacity={1}
-            onPress={() => { }}
+            onPress={() => {}}
           >
             <View style={styles.handle} />
 
@@ -1132,9 +1180,32 @@ const styles = StyleSheet.create({
     borderColor: "#000000",
   },
 
+  pulseMarker: {
+    borderWidth: 3,
+    borderColor: "#2563EB",
+
+  },
+
   numberMarkerText: {
     color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "900",
+  },
+
+  myLocationButton: {
+    position: "absolute",
+    right: 16,
+    top: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 6,
   },
 });
