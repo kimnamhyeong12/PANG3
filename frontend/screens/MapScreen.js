@@ -160,22 +160,25 @@ export default function MapScreen({
 
       setOptimized(true);
 
-      Alert.alert('안내 시작', '이 경로로 안내를 시작할까요?', [
-        {
-          text: '취소',
-          style: 'cancel',
-        },
-        {
-          text: '확인',
-          onPress: () => setIsGuiding(true),
-        },
-      ]);
     } catch (error) {
       console.log(error);
       Alert.alert('오류', '경로 최적화 중 문제가 발생했습니다.');
     } finally {
       setOptimizing(false);
     }
+  };
+
+  const handleStartGuide = () => {
+    Alert.alert('안내 시작', '이 경로로 안내를 시작할까요?', [
+      {
+        text: '취소',
+        style: 'cancel',
+      },
+      {
+        text: '확인',
+        onPress: () => setIsGuiding(true),
+      },
+    ]);
   };
 
   const movePrevSegment = () => {
@@ -262,7 +265,7 @@ export default function MapScreen({
               style={[
                 styles.segmentButton,
                 currentSegmentIndex === routeSegments.length - 1 &&
-                  styles.segmentButtonDisabled,
+                styles.segmentButtonDisabled,
               ]}
               onPress={moveNextSegment}
               disabled={currentSegmentIndex === routeSegments.length - 1}
@@ -310,7 +313,8 @@ export default function MapScreen({
               {optimized && !isGuiding && (
                 <TouchableOpacity
                   style={styles.startGuideButton}
-                  onPress={() => setIsGuiding(true)}
+                  onPress={handleStartGuide}
+                  activeOpacity={0.8}
                 >
                   <Text style={styles.startGuideText}>안내 시작</Text>
                 </TouchableOpacity>

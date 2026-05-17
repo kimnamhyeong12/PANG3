@@ -62,7 +62,9 @@ export default function KakaoMapWebView({
   const currentTargetIndex = currentSegmentIndex;
   const currentTarget = mapLocations[currentTargetIndex];
 
-  const activePath = routeSegments[currentSegmentIndex]?.path || [];
+  const activePath = isGuiding
+    ? routeSegments[currentSegmentIndex]?.path || []
+    : roadPath;
 
   useEffect(() => {
     startCurrentLocation();
@@ -135,6 +137,29 @@ export default function KakaoMapWebView({
     currentTarget,
     locations,
   ]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const targetPath = isGuiding ? activePath : roadPath;
+
+    if (!targetPath || targetPath.length < 2) return;
+
+    const coordinates = targetPath.map((p) => ({
+      latitude: Number(p.lat ?? p.latitude ?? p.y),
+      longitude: Number(p.lng ?? p.longitude ?? p.x),
+    }));
+
+    mapRef.current.fitToCoordinates(coordinates, {
+      edgePadding: {
+        top: 120,
+        right: 60,
+        bottom: 220,
+        left: 60,
+      },
+      animated: true,
+    });
+  }, [isGuiding, currentSegmentIndex, roadPath, activePath]);
 
   const startCurrentLocation = async () => {
     try {
@@ -229,9 +254,9 @@ export default function KakaoMapWebView({
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLng / 2) *
-        Math.sin(dLng / 2);
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
 
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
@@ -520,8 +545,8 @@ export default function KakaoMapWebView({
                   ),
                 },
                 isGuiding &&
-                  index === currentTargetIndex &&
-                  styles.currentTargetMarker,
+                index === currentTargetIndex &&
+                styles.currentTargetMarker,
               ]}
             >
               <Text style={styles.numberMarkerText}>{index + 1}</Text>
@@ -674,9 +699,8 @@ export default function KakaoMapWebView({
           {currentPos && (
             <Text style={styles.hintText}>
               {isGuiding
-                ? `안내 중 · 현재 목적지: ${
-                    currentTarget?.name || "마지막 구간"
-                  }`
+                ? `안내 중 · 현재 목적지: ${currentTarget?.name || "마지막 구간"
+                }`
                 : "안내 시작 전"}
             </Text>
           )}
@@ -697,7 +721,7 @@ export default function KakaoMapWebView({
           <TouchableOpacity
             style={styles.bottomSheet}
             activeOpacity={1}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <View style={styles.handle} />
 
