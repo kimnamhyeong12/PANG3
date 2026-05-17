@@ -41,11 +41,13 @@ export default function KakaoMapWebView({
   onCurrentLocationChange,
   onMarkerClick,
   onLocationsChange,
+  onRerouteRequest,
 }) {
   const mapRef = useRef(null);
   const guidingRef = useRef(false);
   const followModeRef = useRef(true);
   const alertedTargetIds = useRef(new Set());
+  const lastRerouteTimeRef = useRef(0);
 
   const [keyword, setKeyword] = useState("");
   const [placeName, setPlaceName] = useState("");
@@ -55,6 +57,8 @@ export default function KakaoMapWebView({
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [pulseTargetKey, setPulseTargetKey] = useState(null);
+  const [arrivalTarget, setArrivalTarget] = useState(null);
+  const [directSelectMode, setDirectSelectMode] = useState(false);
 
   const mapLocations = useMemo(() => {
     return (locations || []).filter(
@@ -68,14 +72,6 @@ export default function KakaoMapWebView({
   const activePath = isGuiding
     ? routeSegments[currentSegmentIndex]?.path || []
     : roadPath;
-
-  useEffect(() => {
-    guidingRef.current = isGuiding;
-
-    if (isGuiding) {
-      followModeRef.current = true;
-    }
-  }, [isGuiding]);
 
   useEffect(() => {
     startCurrentLocation();
@@ -107,34 +103,10 @@ export default function KakaoMapWebView({
       alertedTargetIds.current.add(targetKey);
       setPulseTargetKey(targetKey);
 
-      Alert.alert(
-        "작업 시작",
-        `${currentTarget.name} 근처에 도착했습니다. 작업을 시작하시겠습니까?`,
-        [
-          {
-            text: "취소",
-            style: "cancel",
-            onPress: () => setPulseTargetKey(null),
-          },
-          {
-            text: "확인",
-            onPress: () => {
-              const updated = locations.map((loc) => {
-                const locKey = loc.id ?? `${loc.name}-${loc.lat}-${loc.lng}`;
-
-                if (locKey === targetKey) {
-                  return { ...loc, status: "working" };
-                }
-
-                return loc;
-              });
-
-              onLocationsChange?.(updated);
-              setPulseTargetKey(null);
-            },
-          },
-        ]
-      );
+      setArrivalTarget({
+        ...currentTarget,
+        targetKey,
+      });
     }
   }, [
     isGuiding,
@@ -248,6 +220,25 @@ export default function KakaoMapWebView({
               700
             );
           }
+
+          if (guidingRef.current && activePath.length >= 2) {
+            const distanceFromPath = getMinDistanceFromPath(newPos, activePath);
+            const now = Date.now();
+
+            if (
+              distanceFromPath > 60 &&
+              now - lastRerouteTimeRef.current > 15000
+            ) {
+              console.log("경로 이탈 감지 → 재탐색");
+
+              lastRerouteTimeRef.current = now;
+
+              onRerouteRequest?.({
+                lat: newPos.latitude,
+                lng: newPos.longitude,
+              });
+            }
+          }
         }
       );
     } catch (error) {
@@ -297,6 +288,60 @@ export default function KakaoMapWebView({
         Math.sin(dLng / 2);
 
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  const remainingActivePath = useMemo(() => {
+    if (!isGuiding || !currentPos || !activePath || activePath.length < 2) {
+      return activePath;
+    }
+
+    let closestIndex = 0;
+    let closestDistance = Infinity;
+
+    activePath.forEach((p, index) => {
+      const distance = getDistanceMeters(
+        currentPos.latitude,
+        currentPos.longitude,
+        Number(p.lat ?? p.latitude ?? p.y),
+        Number(p.lng ?? p.longitude ?? p.x)
+      );
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+
+    return activePath.slice(Math.max(closestIndex + 0, 0));
+  }, [isGuiding, currentPos, activePath]);
+
+  useEffect(() => {
+    guidingRef.current = isGuiding;
+
+    if (isGuiding) {
+      followModeRef.current = true;
+    }
+  }, [isGuiding]);
+
+  const getMinDistanceFromPath = (position, path) => {
+    if (!path || path.length === 0) return 0;
+
+    let minDistance = Infinity;
+
+    for (const p of path) {
+      const distance = getDistanceMeters(
+        position.latitude,
+        position.longitude,
+        Number(p.lat ?? p.latitude ?? p.y),
+        Number(p.lng ?? p.longitude ?? p.x)
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+      }
+    }
+
+    return minDistance;
   };
 
   const searchPlace = async () => {
@@ -361,6 +406,7 @@ export default function KakaoMapWebView({
 
       setSelectedPos({ lat, lng });
       setPlaceName(first.place_name || first.address_name || q);
+      setDirectSelectMode(false);
 
       moveToPosition(lat, lng);
     } catch (error) {
@@ -384,7 +430,7 @@ export default function KakaoMapWebView({
 
     const newLoc = {
       name: placeName.trim(),
-      address: keyword.trim(),
+      address: keyword.trim() || "지도 직접 선택",
       lat: selectedPos.lat,
       lng: selectedPos.lng,
       status: "pending",
@@ -426,6 +472,7 @@ export default function KakaoMapWebView({
       setPlaceName("");
       setTask("");
       setSelectedPos(null);
+      setDirectSelectMode(false);
 
       Alert.alert("저장 완료", "방문지가 DB에 저장되었습니다.");
     } catch (error) {
@@ -510,7 +557,11 @@ export default function KakaoMapWebView({
       lng: longitude,
     });
 
+    setKeyword("");
     setPlaceName("");
+    setTask("");
+    setDirectSelectMode(true);
+    setPanelOpen?.(false);
   };
 
   const handleFieldAction = (action) => {
@@ -550,9 +601,11 @@ export default function KakaoMapWebView({
               latitude: selectedPos.lat,
               longitude: selectedPos.lng,
             }}
-            title="선택한 위치"
-            description="방문지로 추가할 수 있습니다."
             pinColor={Platform.OS === "android" ? "green" : undefined}
+            onPress={() => {
+              setDirectSelectMode(true);
+              setPanelOpen?.(true);
+            }}
           />
         )}
 
@@ -603,9 +656,9 @@ export default function KakaoMapWebView({
           />
         )}
 
-        {activePath.length >= 2 && (
+        {remainingActivePath.length >= 2 && (
           <Polyline
-            coordinates={activePath.map((p) => ({
+            coordinates={remainingActivePath.map((p) => ({
               latitude: Number(p.lat ?? p.latitude ?? p.y),
               longitude: Number(p.lng ?? p.longitude ?? p.x),
             }))}
@@ -628,32 +681,37 @@ export default function KakaoMapWebView({
         <View style={styles.panel}>
           <TouchableOpacity
             style={styles.closePanelButton}
-            onPress={() => setPanelOpen?.(false)}
+            onPress={() => {
+              setPanelOpen?.(false);
+              setDirectSelectMode(false);
+            }}
           >
             <Text style={styles.closePanelButtonText}>접기</Text>
           </TouchableOpacity>
 
-          <View style={styles.searchRow}>
-            <TextInput
-              value={keyword}
-              onChangeText={setKeyword}
-              placeholder="주소/장소"
-              placeholderTextColor="#8A98A8"
-              style={styles.searchInput}
-              returnKeyType="search"
-              onSubmitEditing={searchPlace}
-            />
+          {!directSelectMode && (
+            <View style={styles.searchRow}>
+              <TextInput
+                value={keyword}
+                onChangeText={setKeyword}
+                placeholder="주소/장소"
+                placeholderTextColor="#8A98A8"
+                style={styles.searchInput}
+                returnKeyType="search"
+                onSubmitEditing={searchPlace}
+              />
 
-            <TouchableOpacity
-              style={styles.searchButton}
-              onPress={searchPlace}
-              disabled={isSearching}
-            >
-              <Text style={styles.searchButtonText}>
-                {isSearching ? "검색중" : "검색"}
-              </Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity
+                style={styles.searchButton}
+                onPress={searchPlace}
+                disabled={isSearching}
+              >
+                <Text style={styles.searchButtonText}>
+                  {isSearching ? "검색중" : "검색"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <TextInput
             value={placeName}
@@ -754,6 +812,86 @@ export default function KakaoMapWebView({
           )}
         </View>
       )}
+
+      <Modal
+        visible={!!arrivalTarget}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setArrivalTarget(null);
+          setPulseTargetKey(null);
+        }}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => {
+            setArrivalTarget(null);
+            setPulseTargetKey(null);
+          }}
+        >
+          <TouchableOpacity
+            style={styles.bottomSheet}
+            activeOpacity={1}
+            onPress={() => {}}
+          >
+            <View style={styles.handle} />
+
+            <Text style={styles.sheetLabel}>ARRIVAL NOTICE</Text>
+            <Text style={styles.sheetTitle}>
+              작업 지점 근처에 도착했습니다
+            </Text>
+            <Text style={styles.sheetTask}>
+              {arrivalTarget?.name || "목적지"} 작업을 시작하시겠습니까?
+            </Text>
+
+            <View style={styles.actionGrid}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => {
+                  setArrivalTarget(null);
+                  setPulseTargetKey(null);
+                }}
+              >
+                <Text style={styles.actionText}>나중에</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={async () => {
+                  if (arrivalTarget?.id) {
+                    await fetch(`${API_BASE_URL}/api/locations/${arrivalTarget.id}/status`, {
+                      method: "PATCH",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        status: "working",
+                      }),
+                    });
+                  }
+
+                  const updated = locations.map((loc) => {
+                    const locKey = loc.id ?? `${loc.name}-${loc.lat}-${loc.lng}`;
+
+                    if (locKey === arrivalTarget?.targetKey) {
+                      return { ...loc, status: "working" };
+                    }
+
+                    return loc;
+                  });
+
+                  onLocationsChange?.(updated);
+                  setArrivalTarget(null);
+                  setPulseTargetKey(null);
+                }}
+              >
+                <Text style={styles.actionText}>작업 시작</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       <Modal
         visible={!!selectedLocation}
@@ -1183,7 +1321,6 @@ const styles = StyleSheet.create({
   pulseMarker: {
     borderWidth: 3,
     borderColor: "#2563EB",
-
   },
 
   numberMarkerText: {

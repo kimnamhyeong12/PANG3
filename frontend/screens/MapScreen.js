@@ -62,6 +62,7 @@ export default function MapScreen({
   const [currentLocation, setCurrentLocation] = useState(null);
   const [transportMode, setTransportMode] = useState('car');
   const [segmentChanging, setSegmentChanging] = useState(false);
+  const [guideStartOpen, setGuideStartOpen] = useState(false);
 
   const [priorityMode, setPriorityMode] = useState(false);
   const [priorityCount, setPriorityCount] = useState(1);
@@ -201,16 +202,7 @@ export default function MapScreen({
   };
 
   const handleStartGuide = () => {
-    Alert.alert('안내 시작', '이 경로로 안내를 시작할까요?', [
-      {
-        text: '취소',
-        style: 'cancel',
-      },
-      {
-        text: '확인',
-        onPress: () => setIsGuiding(true),
-      },
-    ]);
+    setGuideStartOpen(true);
   };
 
   const movePrevSegment = () => {
@@ -316,6 +308,68 @@ export default function MapScreen({
     }
   };
 
+  const handleReroute = async (newCurrentLocation) => {
+    if (!API_BASE_URL) return;
+
+    if (!routeSegments || routeSegments.length === 0) return;
+
+    try {
+      console.log("재탐색 시작");
+
+      const rawEnd = orderedMarkers[currentSegmentIndex];
+
+      const start = cleanLocation(newCurrentLocation, '현재 위치');
+      const end = cleanLocation(rawEnd, '목적지');
+
+      if (!start || !end) return;
+
+      const res = await fetch(`${API_BASE_URL}/api/routes/segment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          start,
+          end,
+          transportMode,
+        }),
+      });
+
+      const text = await res.text();
+
+      console.log("재탐색 응답:", text);
+
+      if (!res.ok) {
+        throw new Error('재탐색 실패');
+      }
+
+      const data = JSON.parse(text);
+
+      if (!data.segments || data.segments.length === 0) {
+        return;
+      }
+
+      const updatedSegments = [...routeSegments];
+
+      updatedSegments[currentSegmentIndex] = {
+        ...data.segments[0],
+        mode: transportMode,
+      };
+
+      setRouteSegments(updatedSegments);
+
+      const mergedPath = updatedSegments.flatMap(
+        (segment) => segment.path || []
+      );
+
+      setRoadPath(mergedPath);
+
+      console.log("현재 구간 재탐색 완료");
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
   const handleTransportPress = (mode) => {
     setTransportMode(mode);
 
@@ -343,6 +397,86 @@ export default function MapScreen({
 
     return `약 ${h}시간 ${m}분`;
   };
+
+  const formatDistance = (meters) => {
+    if (!meters) return null;
+
+    if (meters >= 1000) {
+      return `약 ${(meters / 1000).toFixed(1)}km`;
+    }
+
+    return `약 ${Math.round(meters)}m`;
+  };
+
+  const getPathDistance = (path = []) => {
+  if (!path || path.length < 2) return null;
+
+  let total = 0;
+
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1];
+    const b = path[i];
+
+    const lat1 = Number(a.lat ?? a.latitude ?? a.y);
+    const lng1 = Number(a.lng ?? a.longitude ?? a.x);
+    const lat2 = Number(b.lat ?? b.latitude ?? b.y);
+    const lng2 = Number(b.lng ?? b.longitude ?? b.x);
+
+    const R = 6371000;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+
+    const x =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) ** 2;
+
+    total += R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  }
+
+  return total;
+};
+
+const getGuideSummary = () => {
+  if (!isGuiding) {
+    return formatDuration(totalDuration)
+      ? ` · 예상 이동시간 ${formatDuration(totalDuration)}`
+      : '';
+  }
+
+  const currentSegment = routeSegments[currentSegmentIndex];
+
+  if (!currentSegment) return '';
+
+  const distance =
+    currentSegment.totalDistance ??
+    currentSegment.distance ??
+    getPathDistance(currentSegment.path);
+
+  const duration =
+    currentSegment.totalDuration ??
+    currentSegment.duration ??
+    currentSegment.durationSeconds ??
+    (distance ? distance / 5.5 : null);
+
+  const distanceText = formatDistance(distance);
+  const durationText = formatDuration(duration);
+
+  if (distanceText && durationText) {
+    return ` · 남은거리 ${distanceText} · 남은시간 ${durationText}`;
+  }
+
+  if (distanceText) {
+    return ` · 남은거리 ${distanceText}`;
+  }
+
+  if (durationText) {
+    return ` · 구간시간 ${durationText}`;
+  }
+
+  return '';
+};
 
   return (
     <View style={styles.container}>
@@ -372,9 +506,7 @@ export default function MapScreen({
         <View style={[styles.doneBar, isGuiding && styles.guidingBar]}>
           <Text style={styles.doneText}>
             {isGuiding ? '▶ 안내 진행 중' : '✓ 최적 경로 계산 완료'}
-            {formatDuration(totalDuration)
-              ? ` · 예상 이동시간 ${formatDuration(totalDuration)}`
-              : ''}
+            {getGuideSummary()}
           </Text>
         </View>
       )}
@@ -565,6 +697,7 @@ export default function MapScreen({
           onCurrentLocationChange={setCurrentLocation}
           onMarkerClick={setSelected}
           onLocationsChange={setLocations}
+          onRerouteRequest={handleReroute}
         />
 
         {(optimizing || segmentChanging) && (
@@ -580,6 +713,48 @@ export default function MapScreen({
           </View>
         )}
       </View>
+
+      <Modal
+        visible={guideStartOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setGuideStartOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBg}
+          activeOpacity={1}
+          onPress={() => setGuideStartOpen(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.sheet}>
+            <View style={styles.handle} />
+
+            <Text style={styles.routeTitle}>GUIDE START</Text>
+            <Text style={styles.placeName}>이 경로로 안내를 시작할까요?</Text>
+            <Text style={styles.placeAddr}>
+              안내 시작 후 현재 구간 중심으로 경로 안내가 진행됩니다.
+            </Text>
+
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={styles.sheetButton}
+                onPress={() => setGuideStartOpen(false)}
+              >
+                <Text style={styles.sheetLabel}>취소</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sheetButton}
+                onPress={() => {
+                  setGuideStartOpen(false);
+                  setIsGuiding(true);
+                }}
+              >
+                <Text style={styles.sheetLabel}>안내 시작</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       <Modal
         visible={!!selected}
