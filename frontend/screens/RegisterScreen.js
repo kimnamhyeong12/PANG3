@@ -12,40 +12,39 @@ import { PrimaryButton } from '../components/ui';
 
 const API_BASE_URL = 'http://192.168.219.104:8081';
 
-export default function LoginScreen({ onLogin, onRegister }) {
-  const [id, setId] = useState('');
+export default function RegisterScreen({ onBack }) {
+  const [loginId, setLoginId] = useState('');
+  const [name, setName] = useState('');
   const [pw, setPw] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const login = async () => {
-    if (!id || !pw || loading) return;
+  const register = async () => {
+    if (!loginId || !name || !pw || loading) return;
 
     try {
       setLoading(true);
 
-      const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          loginId: id,
+          loginId: loginId,
           password: pw,
+          name: name,
         }),
       });
 
       if (!res.ok) {
-        throw new Error('로그인 실패');
+        throw new Error('회원가입 실패');
       }
 
-      const data = await res.json();
-
-      console.log('로그인 성공:', data);
-
-      onLogin(data);
+      Alert.alert('회원가입 완료', '이제 로그인할 수 있습니다.');
+      onBack();
     } catch (error) {
       console.log(error);
-      Alert.alert('로그인 실패', '아이디 또는 비밀번호를 확인해주세요.');
+      Alert.alert('회원가입 실패', '이미 존재하는 아이디이거나 서버 오류입니다.');
     } finally {
       setLoading(false);
     }
@@ -70,15 +69,23 @@ export default function LoginScreen({ onLogin, onRegister }) {
       </View>
 
       <View style={styles.loginArea}>
-        <Text style={styles.section}>SECURE LOGIN</Text>
-        <Text style={styles.loginTitle}>직원 로그인</Text>
+        <Text style={styles.section}>CREATE ACCOUNT</Text>
+        <Text style={styles.loginTitle}>직원 회원가입</Text>
 
         <Text style={styles.label}>직원번호 또는 업무용 이메일</Text>
         <TextInput
-          value={id}
-          onChangeText={setId}
+          value={loginId}
+          onChangeText={setLoginId}
           placeholder="예: saha2026 또는 name@saha.go.kr"
           autoCapitalize="none"
+          style={styles.input}
+        />
+
+        <Text style={styles.label}>이름</Text>
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          placeholder="이름 입력"
           style={styles.input}
         />
 
@@ -92,18 +99,18 @@ export default function LoginScreen({ onLogin, onRegister }) {
         />
 
         <PrimaryButton
-          title={loading ? '인증 중...' : '로그인'}
-          onPress={login}
-          disabled={!id || !pw || loading}
+          title={loading ? '가입 중...' : '회원가입'}
+          onPress={register}
+          disabled={!loginId || !name || !pw || loading}
         />
 
-        <Text style={styles.registerText} onPress={onRegister}>
-          계정이 없으신가요? 회원가입
+        <Text style={styles.backText} onPress={onBack}>
+          이미 계정이 있으신가요? 로그인
         </Text>
 
         <View style={styles.notice}>
           <Text style={styles.noticeText}>
-            본 시스템은 사하구청 외근 담당자 전용 시스템입니다. 모든 접속 기록은 보안 정책에 따라 저장됩니다.
+            본 시스템은 사하구청 외근 담당자 전용 시스템입니다. 관리자 확인 후 사용을 권장합니다.
           </Text>
         </View>
       </View>
@@ -114,69 +121,18 @@ export default function LoginScreen({ onLogin, onRegister }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F7FA', paddingHorizontal: 28 },
   header: { flexDirection: 'row', gap: 14, paddingTop: 44, paddingBottom: 28 },
-  logo: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: '#12395B',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  logo: { width: 52, height: 52, borderRadius: 14, backgroundColor: '#12395B', alignItems: 'center', justifyContent: 'center' },
   logoText: { color: 'white', fontWeight: '900', fontSize: 18 },
-  eyebrow: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 2.2,
-    color: '#607086',
-  },
+  eyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 2.2, color: '#607086' },
   title: { fontSize: 22, fontWeight: '900', color: '#1F2D3D', marginTop: 5 },
   desc: { fontSize: 10, color: '#718096', marginTop: 4 },
-  sub: {
-    marginTop: 14,
-    fontSize: 10,
-    letterSpacing: 2.7,
-    fontWeight: '700',
-    color: '#5E7B95',
-  },
+  sub: { marginTop: 14, fontSize: 10, letterSpacing: 2.7, fontWeight: '700', color: '#5E7B95' },
   loginArea: { flex: 1 },
-  section: {
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1.6,
-    color: '#607086',
-  },
-  loginTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#1F2D3D',
-    marginTop: 4,
-    marginBottom: 20,
-  },
+  section: { fontSize: 11, fontWeight: '900', letterSpacing: 1.6, color: '#607086' },
+  loginTitle: { fontSize: 18, fontWeight: '900', color: '#1F2D3D', marginTop: 4, marginBottom: 20 },
   label: { fontSize: 11, fontWeight: '800', color: '#607086', marginBottom: 8 },
-  input: {
-    backgroundColor: 'white',
-    borderWidth: 1,
-    borderColor: '#D9E1EA',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    height: 52,
-    marginBottom: 16,
-    fontSize: 13,
-  },
-  registerText: {
-    marginTop: 18,
-    textAlign: 'center',
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#12395B',
-  },
-  notice: {
-    marginTop: 22,
-    backgroundColor: '#EAF1F7',
-    borderWidth: 1,
-    borderColor: '#D9E1EA',
-    borderRadius: 14,
-    padding: 14,
-  },
+  input: { backgroundColor: 'white', borderWidth: 1, borderColor: '#D9E1EA', borderRadius: 14, paddingHorizontal: 16, height: 52, marginBottom: 16, fontSize: 13 },
+  backText: { marginTop: 18, textAlign: 'center', fontSize: 12, fontWeight: '800', color: '#12395B' },
+  notice: { marginTop: 22, backgroundColor: '#EAF1F7', borderWidth: 1, borderColor: '#D9E1EA', borderRadius: 14, padding: 14 },
   noticeText: { fontSize: 10, lineHeight: 17, color: '#607086' },
 });

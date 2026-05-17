@@ -1,8 +1,13 @@
-C:\Users\t0102\OneDrive\바탕 화면\PANG3\backend\src\main\java\com\fieldwork\config\CorsConfig.java
-C:\Users\t0102\OneDrive\바탕 화면\PANG3\backend\src\main\java\com\fieldwork\controller\LocationController.java
-C:\Users\t0102\OneDrive\바탕 화면\PANG3\backend\src\main\java\com\fieldwork\controller\RouteController.java
-C:\Users\t0102\OneDrive\바탕 화면\PANG3\backend\src\main\java\com\fieldwork\entity\Location.java
-C:\Users\t0102\OneDrive\바탕 화면\PANG3\backend\src\main\java\com\fieldwork\FieldworkApplication.java
-C:\Users\t0102\OneDrive\바탕 화면\PANG3\backend\src\main\java\com\fieldwork\repository\LocationRepository.java
-C:\Users\t0102\OneDrive\바탕 화면\PANG3\backend\src\main\java\com\fieldwork\service\LocationService.java
-C:\Users\t0102\OneDrive\바탕 화면\PANG3\backend\src\main\java\com\fieldwork\service\RouteService.java
+C:\Users\uesr\OneDrive\Desktop\PANG3\backend\src\main\java\com\fieldwork\config\CorsConfig.java
+C:\Users\uesr\OneDrive\Desktop\PANG3\backend\src\main\java\com\fieldwork\config\SecurityConfig.java
+C:\Users\uesr\OneDrive\Desktop\PANG3\backend\src\main\java\com\fieldwork\controller\AuthController.java
+C:\Users\uesr\OneDrive\Desktop\PANG3\backend\src\main\java\com\fieldwork\controller\LocationController.java
+C:\Users\uesr\OneDrive\Desktop\PANG3\backend\src\main\java\com\fieldwork\controller\RouteController.java
+C:\Users\uesr\OneDrive\Desktop\PANG3\backend\src\main\java\com\fieldwork\entity\Location.java
+C:\Users\uesr\OneDrive\Desktop\PANG3\backend\src\main\java\com\fieldwork\entity\User.java
+C:\Users\uesr\OneDrive\Desktop\PANG3\backend\src\main\java\com\fieldwork\FieldworkApplication.java
+C:\Users\uesr\OneDrive\Desktop\PANG3\backend\src\main\java\com\fieldwork\repository\LocationRepository.java
+C:\Users\uesr\OneDrive\Desktop\PANG3\backend\src\main\java\com\fieldwork\repository\UserRepository.java
+C:\Users\uesr\OneDrive\Desktop\PANG3\backend\src\main\java\com\fieldwork\service\AuthService.java
+C:\Users\uesr\OneDrive\Desktop\PANG3\backend\src\main\java\com\fieldwork\service\LocationService.java
+C:\Users\uesr\OneDrive\Desktop\PANG3\backend\src\main\java\com\fieldwork\service\RouteService.java
