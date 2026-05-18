@@ -38,6 +38,9 @@ export default function KakaoMapWebView({
   routeSegments = [],
   currentSegmentIndex = 0,
   isGuiding = false,
+  searchedPlace,
+  clearSearchMarkerSignal,
+  onDirectPlaceSelect,
   onCurrentLocationChange,
   onMarkerClick,
   onLocationsChange,
@@ -130,7 +133,7 @@ export default function KakaoMapWebView({
 
     mapRef.current.fitToCoordinates(coordinates, {
       edgePadding: {
-        top: 120,
+        top: 260,
         right: 60,
         bottom: 220,
         left: 60,
@@ -258,6 +261,27 @@ export default function KakaoMapWebView({
       500
     );
   };
+
+  useEffect(() => {
+    setSelectedPos(null);
+  }, [clearSearchMarkerSignal]);
+
+  useEffect(() => {
+    if (!searchedPlace) return;
+    if (!searchedPlace.lat || !searchedPlace.lng) return;
+
+    const lat = Number(searchedPlace.lat);
+    const lng = Number(searchedPlace.lng);
+
+    if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+
+    setSelectedPos({ lat, lng });
+    setPlaceName(searchedPlace.name || "");
+    setKeyword(searchedPlace.address || "");
+    setDirectSelectMode(false);
+
+    moveToPosition(lat, lng);
+  }, [searchedPlace]);
 
   const moveToCurrentLocation = () => {
     if (!currentPos || !mapRef.current) return;
@@ -604,7 +628,13 @@ export default function KakaoMapWebView({
             pinColor={Platform.OS === "android" ? "green" : undefined}
             onPress={() => {
               setDirectSelectMode(true);
-              setPanelOpen?.(true);
+
+              onDirectPlaceSelect?.({
+                lat: selectedPos.lat,
+                lng: selectedPos.lng,
+                name: "선택한 위치",
+                address: "지도에서 선택",
+              });
             }}
           />
         )}
@@ -1332,7 +1362,7 @@ const styles = StyleSheet.create({
   myLocationButton: {
     position: "absolute",
     right: 16,
-    top: 10,
+    top: 380,
     width: 44,
     height: 44,
     borderRadius: 22,
