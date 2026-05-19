@@ -28,6 +28,25 @@ public class RouteController {
         Map<String, Object> currentLocation =
                 (Map<String, Object>) body.get("currentLocation");
 
-        return routeService.optimizeRoute(currentLocation, locations);
+        String transportMode = String.valueOf(
+                body.getOrDefault("transportMode", "car")
+        );
+
+        return routeService.optimizeRoute(currentLocation, locations, transportMode);
+    }
+
+    @PostMapping("/segment")
+    public Map<String, Object> getSegmentRoute(@RequestBody Map<String, Object> body) {
+        Map<String, Object> start =
+                (Map<String, Object>) body.get("start");
+
+        Map<String, Object> end =
+                (Map<String, Object>) body.get("end");
+
+        String transportMode = String.valueOf(
+                body.getOrDefault("transportMode", "car")
+        );
+
+        return routeService.getSingleSegmentPath(start, end, transportMode);
     }
 }

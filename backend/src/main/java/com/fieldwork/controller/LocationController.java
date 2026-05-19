@@ -31,4 +31,12 @@ public class LocationController {
         return service.saveLocation(location);
     }
 
+    @PatchMapping("/{id}/status")
+    public Location updateStatus(
+            @PathVariable Long id,
+            @RequestBody Location location
+    ) {
+        return service.updateStatus(id, location.getStatus());
+    }
+
 }

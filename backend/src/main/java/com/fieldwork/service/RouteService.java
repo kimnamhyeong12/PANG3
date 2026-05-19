@@ -13,31 +13,49 @@ public class RouteService {
     @Value("${kakao.rest-api-key}")
     private String kakaoRestApiKey;
 
+    @Value("${ors.api-key}")
+    private String orsApiKey;
+
     private final RestTemplate restTemplate = new RestTemplate();
 
     public Map<String, Object> optimizeRoute(
             Map<String, Object> currentLocation,
-            List<Map<String, Object>> locations
+            List<Map<String, Object>> locations,
+            String transportMode
     ) {
         if (locations == null || locations.size() < 2) {
             throw new IllegalArgumentException("방문지는 2개 이상 필요합니다.");
         }
 
+        String mode = transportMode == null ? "car" : transportMode;
+
         List<Map<String, Object>> optimizedLocations =
                 optimizeWithPriority(currentLocation, locations);
 
-        Map<String, Object> kakaoResult =
-                getKakaoRoadPath(currentLocation, optimizedLocations);
+        Map<String, Object> routeResult;
+
+        if (mode.equalsIgnoreCase("walk")) {
+            routeResult = getOrsWalkingPath(currentLocation, optimizedLocations);
+        } else {
+            routeResult = getKakaoRoadPath(currentLocation, optimizedLocations);
+        }
 
         Map<String, Object> result = new HashMap<>();
-
+        result.put("transportMode", mode);
         result.put("optimizedLocations", optimizedLocations);
-        result.put("path", kakaoResult.get("path"));
-        result.put("segments", kakaoResult.get("segments"));
-        result.put("totalDistance", kakaoResult.get("totalDistance"));
-        result.put("totalDuration", kakaoResult.get("totalDuration"));
+        result.put("path", routeResult.get("path"));
+        result.put("segments", routeResult.get("segments"));
+        result.put("totalDistance", routeResult.get("totalDistance"));
+        result.put("totalDuration", routeResult.get("totalDuration"));
 
         return result;
+    }
+
+    public Map<String, Object> optimizeRoute(
+            Map<String, Object> currentLocation,
+            List<Map<String, Object>> locations
+    ) {
+        return optimizeRoute(currentLocation, locations, "car");
     }
 
     private List<Map<String, Object>> optimizeWithPriority(
@@ -68,7 +86,6 @@ public class RouteService {
         });
 
         List<Map<String, Object>> result = new ArrayList<>();
-
         result.addAll(priorityLocations);
 
         if (!normalLocations.isEmpty()) {
@@ -159,15 +176,7 @@ public class RouteService {
             Map<String, Object> currentLocation,
             List<Map<String, Object>> locations
     ) {
-        List<Map<String, Object>> routePoints = new ArrayList<>();
-
-        if (currentLocation != null) {
-            Map<String, Object> startPoint = new HashMap<>(currentLocation);
-            startPoint.put("name", "현재 위치");
-            routePoints.add(startPoint);
-        }
-
-        routePoints.addAll(locations);
+        List<Map<String, Object>> routePoints = makeRoutePoints(currentLocation, locations);
 
         List<Map<String, Double>> fullPath = new ArrayList<>();
         List<Map<String, Object>> segments = new ArrayList<>();
@@ -198,16 +207,12 @@ public class RouteService {
 
             Map<String, Object> body = response.getBody();
 
-            if (body == null) {
-                continue;
-            }
+            if (body == null) continue;
 
             List<Map<String, Object>> routes =
                     (List<Map<String, Object>>) body.get("routes");
 
-            if (routes == null || routes.isEmpty()) {
-                continue;
-            }
+            if (routes == null || routes.isEmpty()) continue;
 
             Map<String, Object> route = routes.get(0);
 
@@ -224,25 +229,19 @@ public class RouteService {
             List<Map<String, Object>> sections =
                     (List<Map<String, Object>>) route.get("sections");
 
-            if (sections == null) {
-                continue;
-            }
+            if (sections == null) continue;
 
             for (Map<String, Object> section : sections) {
                 List<Map<String, Object>> roads =
                         (List<Map<String, Object>>) section.get("roads");
 
-                if (roads == null) {
-                    continue;
-                }
+                if (roads == null) continue;
 
                 for (Map<String, Object> road : roads) {
                     List<Number> vertexes =
                             (List<Number>) road.get("vertexes");
 
-                    if (vertexes == null) {
-                        continue;
-                    }
+                    if (vertexes == null) continue;
 
                     for (int j = 0; j < vertexes.size() - 1; j += 2) {
                         double lng = vertexes.get(j).doubleValue();
@@ -258,13 +257,7 @@ public class RouteService {
                 }
             }
 
-            Map<String, Object> segment = new HashMap<>();
-            segment.put("fromIndex", i);
-            segment.put("toIndex", i + 1);
-            segment.put("fromName", String.valueOf(start.get("name")));
-            segment.put("toName", String.valueOf(end.get("name")));
-            segment.put("path", segmentPath);
-
+            Map<String, Object> segment = makeSegment(i, start, end, segmentPath, "car");
             segments.add(segment);
         }
 
@@ -274,6 +267,163 @@ public class RouteService {
         result.put("totalDistance", totalDistance);
         result.put("totalDuration", totalDuration);
 
+        return result;
+    }
+
+    private Map<String, Object> getOrsWalkingPath(
+            Map<String, Object> currentLocation,
+            List<Map<String, Object>> locations
+    ) {
+        List<Map<String, Object>> routePoints = makeRoutePoints(currentLocation, locations);
+
+        List<Map<String, Double>> fullPath = new ArrayList<>();
+        List<Map<String, Object>> segments = new ArrayList<>();
+
+        int totalDistance = 0;
+        int totalDuration = 0;
+
+        for (int i = 0; i < routePoints.size() - 1; i++) {
+            Map<String, Object> start = routePoints.get(i);
+            Map<String, Object> end = routePoints.get(i + 1);
+
+            String url = "https://api.openrouteservice.org/v2/directions/foot-walking/geojson";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", orsApiKey);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            Map<String, Object> requestBody = new HashMap<>();
+
+            List<List<Double>> coordinates = new ArrayList<>();
+            coordinates.add(Arrays.asList(getLng(start), getLat(start)));
+            coordinates.add(Arrays.asList(getLng(end), getLat(end)));
+
+            requestBody.put("coordinates", coordinates);
+
+            HttpEntity<Map<String, Object>> entity =
+                    new HttpEntity<>(requestBody, headers);
+
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    entity,
+                    Map.class
+            );
+
+            Map<String, Object> body = response.getBody();
+
+            if (body == null) continue;
+
+            List<Map<String, Object>> features =
+                    (List<Map<String, Object>>) body.get("features");
+
+            if (features == null || features.isEmpty()) continue;
+
+            Map<String, Object> feature = features.get(0);
+
+            Map<String, Object> properties =
+                    (Map<String, Object>) feature.get("properties");
+
+            if (properties != null) {
+                Map<String, Object> summary =
+                        (Map<String, Object>) properties.get("summary");
+
+                if (summary != null) {
+                    totalDistance += ((Number) summary.getOrDefault("distance", 0)).intValue();
+                    totalDuration += ((Number) summary.getOrDefault("duration", 0)).intValue();
+                }
+            }
+
+            Map<String, Object> geometry =
+                    (Map<String, Object>) feature.get("geometry");
+
+            if (geometry == null) continue;
+
+            List<List<Number>> orsCoords =
+                    (List<List<Number>>) geometry.get("coordinates");
+
+            if (orsCoords == null) continue;
+
+            List<Map<String, Double>> segmentPath = new ArrayList<>();
+
+            for (List<Number> coord : orsCoords) {
+                if (coord.size() < 2) continue;
+
+                double lng = coord.get(0).doubleValue();
+                double lat = coord.get(1).doubleValue();
+
+                Map<String, Double> point = new HashMap<>();
+                point.put("latitude", lat);
+                point.put("longitude", lng);
+
+                fullPath.add(point);
+                segmentPath.add(point);
+            }
+
+            Map<String, Object> segment = makeSegment(i, start, end, segmentPath, "walk");
+            segments.add(segment);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("path", fullPath);
+        result.put("segments", segments);
+        result.put("totalDistance", totalDistance);
+        result.put("totalDuration", totalDuration);
+
+        return result;
+    }
+
+    private List<Map<String, Object>> makeRoutePoints(
+            Map<String, Object> currentLocation,
+            List<Map<String, Object>> locations
+    ) {
+        List<Map<String, Object>> routePoints = new ArrayList<>();
+
+        if (currentLocation != null) {
+            Map<String, Object> startPoint = new HashMap<>(currentLocation);
+            startPoint.put("name", "현재 위치");
+            routePoints.add(startPoint);
+        }
+
+        routePoints.addAll(locations);
+
+        return routePoints;
+    }
+
+    private Map<String, Object> makeSegment(
+            int index,
+            Map<String, Object> start,
+            Map<String, Object> end,
+            List<Map<String, Double>> segmentPath,
+            String mode
+    ) {
+        Map<String, Object> segment = new HashMap<>();
+        segment.put("fromIndex", index);
+        segment.put("toIndex", index + 1);
+        segment.put("fromName", String.valueOf(start.get("name")));
+        segment.put("toName", String.valueOf(end.get("name")));
+        segment.put("mode", mode);
+        segment.put("path", segmentPath);
+
+        return segment;
+    }
+
+    public Map<String, Object> getSingleSegmentPath(
+            Map<String, Object> start,
+            Map<String, Object> end,
+            String transportMode
+    ) {
+        List<Map<String, Object>> locations = new ArrayList<>();
+        locations.add(end);
+
+        if ("walk".equalsIgnoreCase(transportMode)) {
+            Map<String, Object> result = getOrsWalkingPath(start, locations);
+            result.put("mode", "walk");
+            return result;
+        }
+
+        Map<String, Object> result = getKakaoRoadPath(start, locations);
+        result.put("mode", "car");
         return result;
     }
 

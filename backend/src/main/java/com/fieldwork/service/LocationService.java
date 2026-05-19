@@ -22,4 +22,13 @@ public class LocationService {
     public Location saveLocation(Location location){
         return repo.save(location);
     }
+
+    public Location updateStatus(Long id, String status) {
+        Location location = repo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Location not found"));
+
+        location.setStatus(status);
+
+        return repo.save(location);
+    }
 }
