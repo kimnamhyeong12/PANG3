@@ -1,0 +1,42 @@
+# AI 보고서 엔진용 Docker Compose 오버레이
+# 사용: docker compose -f docker-compose.yml -f docker-compose.ai.yml up -d
+#
+# EC2에서 ai/venv 는 호스트에 설치 (03-setup-ec2-ai.sh)
+# 백엔드는 /app/ai 경로로 마운트된 폴더·업로드·output 에 접근
+
+version: '3.8'
+
+services:
+  backend:
+    volumes:
+      - ./ai:/app/ai:rw
+      - ./ai/uploads:/app/ai/uploads:rw
+      - ./ai/output:/app/ai/output:rw
+    environment:
+      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - SSM_GEMINI_PARAM=${SSM_GEMINI_PARAM:-/sahagu/gemini/api-key}
+      # 백엔드 ProcessBuilder 경로 (컨테이너 내부 기준)
+      - AI_PYTHON_PATH=/app/ai/venv/bin/python
+      - AI_APP_SCRIPT=/app/ai/app.py
+      - AI_OUTPUT_DIR=/app/ai/output
+      - AI_UPLOADS_DIR=/app/ai/uploads
+      # 호스트에서 만든 venv 를 마운트할 때 사용 (EC2 Linux amd64)
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+
+  # (선택) AI 단독 테스트용 — HTTP API 없이 CLI만
+  ai:
+    build:
+      context: ./ai
+      dockerfile: Dockerfile
+    image: sahagu-ai:local
+    container_name: sahagu-ai
+    profiles:
+      - ai-tools
+    volumes:
+      - ./ai/uploads:/app/uploads:rw
+      - ./ai/output:/app/output:rw
+      - ./ai/samples:/app/samples:ro
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    working_dir: /app

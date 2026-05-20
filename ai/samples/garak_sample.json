@@ -1,0 +1,14 @@
+{
+  "location_name": "가락타운",
+  "task_category": "보행등, 경관조명",
+  "latitude": 35.116234,
+  "longitude": 128.968123,
+  "main_comment": "23:00(현행) → 24:00(변경) 소등시간 연장",
+  "field_memo": "옹벽 경관조명 및 인도 보행등 점검. 담당자 확인 완료.",
+  "map_image": "test2.jpeg",
+  "field_photos": [
+    { "path": "test2.jpeg", "comment": "현장사진(2)|가락타운 옹벽 경관조명" },
+    { "path": "test2.jpeg", "comment": "현장사진(2)|인도 측 보행등" }
+  ],
+  "output_dir": "output"
+}
