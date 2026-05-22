@@ -40,6 +40,7 @@ export default function KakaoMapWebView({
   isGuiding = false,
   searchedPlace,
   clearSearchMarkerSignal,
+  mapSelectMode,
   onDirectPlaceSelect,
   onCurrentLocationChange,
   onMarkerClick,
@@ -509,7 +510,6 @@ export default function KakaoMapWebView({
   };
 
   const focusLocation = (loc) => {
-    setSelectedLocation(loc);
     moveToPosition(Number(loc.lat), Number(loc.lng));
     onMarkerClick?.(loc);
   };
@@ -574,6 +574,8 @@ export default function KakaoMapWebView({
   };
 
   const handleMapPress = (event) => {
+    if (!mapSelectMode) return;
+
     const { latitude, longitude } = event.nativeEvent.coordinate;
 
     setSelectedPos({
@@ -586,6 +588,13 @@ export default function KakaoMapWebView({
     setTask("");
     setDirectSelectMode(true);
     setPanelOpen?.(false);
+
+    onDirectPlaceSelect?.({
+      lat: latitude,
+      lng: longitude,
+      detailAddress: "지도 선택 위치",
+      roadAddress: "지도에서 선택",
+    });
   };
 
   const handleFieldAction = (action) => {
@@ -626,16 +635,7 @@ export default function KakaoMapWebView({
               longitude: selectedPos.lng,
             }}
             pinColor={Platform.OS === "android" ? "green" : undefined}
-            onPress={() => {
-              setDirectSelectMode(true);
-
-              onDirectPlaceSelect?.({
-                lat: selectedPos.lat,
-                lng: selectedPos.lng,
-                name: "선택한 위치",
-                address: "지도에서 선택",
-              });
-            }}
+            onPress={() => {}}
           />
         )}
 
@@ -917,70 +917,6 @@ export default function KakaoMapWebView({
                 }}
               >
                 <Text style={styles.actionText}>작업 시작</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      <Modal
-        visible={!!selectedLocation}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSelectedLocation(null)}
-      >
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={() => setSelectedLocation(null)}
-        >
-          <TouchableOpacity
-            style={styles.bottomSheet}
-            activeOpacity={1}
-            onPress={() => {}}
-          >
-            <View style={styles.handle} />
-
-            <View style={styles.sheetHead}>
-              <View style={styles.pinBox}>
-                <Text style={styles.pinEmoji}>📍</Text>
-              </View>
-
-              <View style={styles.sheetTextWrap}>
-                <Text style={styles.sheetTitle} numberOfLines={1}>
-                  {selectedLocation?.name || "이름 없음"}
-                </Text>
-                <Text style={styles.sheetTask} numberOfLines={1}>
-                  {selectedLocation?.task || "현장 확인"}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.sheetLabel}>FIELD RECORD</Text>
-
-            <View style={styles.actionGrid}>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => handleFieldAction("photo")}
-              >
-                <Text style={styles.actionEmoji}>📷</Text>
-                <Text style={styles.actionText}>사진</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => handleFieldAction("memo")}
-              >
-                <Text style={styles.actionEmoji}>📝</Text>
-                <Text style={styles.actionText}>메모</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => handleFieldAction("status")}
-              >
-                <Text style={styles.actionEmoji}>🔄</Text>
-                <Text style={styles.actionText}>상태</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
