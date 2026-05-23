@@ -81,6 +81,9 @@ export default function MainScreen({
         })
         .map((loc) => ({
           ...loc,
+          id : loc.taskId,
+          detailAddress : loc.detailAddress,
+          roadAddress : loc.roadAddress,
           lat: loc.lat ?? loc.latitude,
           lng: loc.lng ?? loc.longitude,
           task: loc.task || '현장 확인',
@@ -94,6 +97,7 @@ export default function MainScreen({
   };
 
   const toggleSelect = (id) => {
+    
     setSelectedIds((prev) => {
       if (prev.includes(id)) {
         return prev.filter((itemId) => itemId !== id);
@@ -208,14 +212,13 @@ export default function MainScreen({
             </TouchableOpacity>
           </View>
 
-          {incompleteLocations.map((item) => {
+          {incompleteLocations.map((item, index) => {
             const selected = selectedIds.includes(item.id);
             const statusInfo = getStatusInfo(item.status);
-            console.log("incompleteLocations:" ,incompleteLocations);
-            console.log('item id : ', item.id, 'item.status : ', item.status);
+            
             return (
               
-              <View key={item.id} style={styles.incompleteItem}>
+              <View key={`${item.id}-${index}`} style={styles.incompleteItem}>
                 <TouchableOpacity
                   onPress={() => toggleSelect(item.id)}
                   style={[
