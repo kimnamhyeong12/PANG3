@@ -20,6 +20,7 @@ public class RouteController {
     @PostMapping("/optimize")
     public Map<String, Object> optimizeRoute(@RequestBody Map<String, Object> body) {
         System.out.println("=== /api/routes/optimize 호출됨 ===");
+//        시작 위치는 roadAddress가 나오지 않음
         System.out.println(body);
 
         List<Map<String, Object>> locations =

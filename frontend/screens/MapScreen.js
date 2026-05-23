@@ -6,6 +6,7 @@ import {
   Animated,
   BackHandler,
   FlatList,
+  Keyboard,
   Modal,
   PanResponder,
   ScrollView,
@@ -14,7 +15,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Keyboard,
 } from 'react-native';
 import KakaoMapWebView from '../components/KakaoMapWebView';
 
@@ -458,8 +458,12 @@ export default function MapScreen({
         ...markers,
         {
           ...savedLocation,
+          id : savedLocation.taskId,
+          detailAddress : savedLocation.detailAddress,
+          roadAddress : savedLocation.roadAddress,
           status: savedLocation.status || 'pending',
-          task: savedLocation.task || newLoc.task,
+          task: savedLocation.taskCategory || newLoc.task || '',
+          prioirty : savedLocation.prioirty || '',
         },
       ]);
 
@@ -1008,6 +1012,7 @@ export default function MapScreen({
               <Text style={styles.emptyChipText}>방문지 없음</Text>
             </View>
           ) : (
+            // 1. 방문지 이름 2. 방문지 이름 3. 방문지 이름  탭
             <FlatList
               horizontal
               data={orderedMarkers}
@@ -1030,13 +1035,13 @@ export default function MapScreen({
                   </View>
 
                   <Text style={styles.chipText} numberOfLines={1}>
-                    {item.name}
+                    {item.detailAddress}
                   </Text>
                 </TouchableOpacity>
               )}
             />
           )}
-
+          {/* (v) 탭 */}
           <TouchableOpacity
             style={styles.chevronButton}
             onPress={() => setVisitListOpen(!visitListOpen)}
@@ -1048,7 +1053,7 @@ export default function MapScreen({
             />
           </TouchableOpacity>
         </View>
-
+        {/* 방문지 n개    접기 있는 탭 */}
         {visitListOpen && orderedMarkers.length > 0 && (
           <View style={styles.visitListCard}>
             <View style={styles.visitListHead}>
@@ -1357,7 +1362,7 @@ export default function MapScreen({
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-
+      {/* 마커 혹은 위치 클릭시 하단에 나오는 탭 */}
       <Modal
         visible={!!selected}
         transparent
@@ -1384,10 +1389,10 @@ export default function MapScreen({
 
               <View style={{ flex: 1 }}>
                 <Text style={styles.placeName}>
-                  {selected?.name || '이름 없음'}
+                  {selected?.detailAddress || '이름 없음'}
                 </Text>
                 <Text style={styles.placeAddr}>
-                  {selected?.address || selected?.task || '주소 없음'}
+                  {selected?.roadAddress || selected?.task || '주소 없음'}
                 </Text>
               </View>
             </View>
