@@ -1,11 +1,11 @@
 import React from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
+  Alert,
   ScrollView,
   StyleSheet,
-  Alert,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { USER } from '../data/mockData';
 
@@ -211,8 +211,10 @@ export default function MainScreen({
           {incompleteLocations.map((item) => {
             const selected = selectedIds.includes(item.id);
             const statusInfo = getStatusInfo(item.status);
-
+            console.log("incompleteLocations:" ,incompleteLocations);
+            console.log('item id : ', item.id, 'item.status : ', item.status);
             return (
+              
               <View key={item.id} style={styles.incompleteItem}>
                 <TouchableOpacity
                   onPress={() => toggleSelect(item.id)}
@@ -227,10 +229,10 @@ export default function MainScreen({
 
                 <View style={{ flex: 1 }}>
                   <Text style={styles.entryName} numberOfLines={1}>
-                    {item.name || '이름 없음'}
+                    {item.detailAddress || '이름 없음'}
                   </Text>
                   <Text style={styles.entryMemo} numberOfLines={1}>
-                    {item.address || '주소 없음'}
+                    {item.roadAddress || '주소 없음'}
                   </Text>
                 </View>
 
