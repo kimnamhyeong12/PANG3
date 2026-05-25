@@ -1,9 +1,0 @@
-com\fieldwork\FieldworkApplication.class
-com\fieldwork\service\LocationService.class
-com\fieldwork\entity\Location.class
-com\fieldwork\controller\RouteController.class
-com\fieldwork\repository\LocationRepository.class
-com\fieldwork\service\RouteService.class
-com\fieldwork\controller\LocationController.class
-com\fieldwork\config\CorsConfig$1.class
-com\fieldwork\config\CorsConfig.class

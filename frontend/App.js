@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SafeAreaView, StatusBar, StyleSheet } from 'react-native';
 
+import RegisterScreen from './screens/RegisterScreen';
 import LoginScreen from './screens/LoginScreen';
 import MainScreen from './screens/MainScreen';
 import DashboardScreen from './screens/DashboardScreen';
@@ -11,6 +12,7 @@ import DownloadScreen from './screens/DownloadScreen';
 
 export default function App() {
   const [screen, setScreen] = useState('login');
+  const [user, setUser] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [actionType, setActionType] = useState(null);
 
@@ -37,7 +39,17 @@ export default function App() {
       <StatusBar barStyle="dark-content" />
 
       {screen === 'login' && (
-        <LoginScreen onLogin={() => go('main')} />
+        <LoginScreen
+          onLogin={(loginUser) => {
+            setUser(loginUser);
+            go('main');
+          }}
+          onRegister={() => go('register')}
+        />
+      )}
+
+      {screen === 'register' && (
+        <RegisterScreen onBack={() => go('login')} />
       )}
 
       {screen === 'main' && (

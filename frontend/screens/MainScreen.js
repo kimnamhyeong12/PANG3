@@ -1,11 +1,11 @@
 import React from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
+  Alert,
   ScrollView,
   StyleSheet,
-  Alert,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { USER } from '../data/mockData';
 
@@ -81,6 +81,9 @@ export default function MainScreen({
         })
         .map((loc) => ({
           ...loc,
+          id : loc.taskId,
+          detailAddress : loc.detailAddress,
+          roadAddress : loc.roadAddress,
           lat: loc.lat ?? loc.latitude,
           lng: loc.lng ?? loc.longitude,
           task: loc.task || '현장 확인',
@@ -94,6 +97,7 @@ export default function MainScreen({
   };
 
   const toggleSelect = (id) => {
+    
     setSelectedIds((prev) => {
       if (prev.includes(id)) {
         return prev.filter((itemId) => itemId !== id);
@@ -208,12 +212,13 @@ export default function MainScreen({
             </TouchableOpacity>
           </View>
 
-          {incompleteLocations.map((item) => {
+          {incompleteLocations.map((item, index) => {
             const selected = selectedIds.includes(item.id);
             const statusInfo = getStatusInfo(item.status);
-
+            
             return (
-              <View key={item.id} style={styles.incompleteItem}>
+              
+              <View key={`${item.id}-${index}`} style={styles.incompleteItem}>
                 <TouchableOpacity
                   onPress={() => toggleSelect(item.id)}
                   style={[
@@ -227,10 +232,10 @@ export default function MainScreen({
 
                 <View style={{ flex: 1 }}>
                   <Text style={styles.entryName} numberOfLines={1}>
-                    {item.name || '이름 없음'}
+                    {item.detailAddress || '이름 없음'}
                   </Text>
                   <Text style={styles.entryMemo} numberOfLines={1}>
-                    {item.address || '주소 없음'}
+                    {item.roadAddress || '주소 없음'}
                   </Text>
                 </View>
 
