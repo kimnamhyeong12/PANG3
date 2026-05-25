@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/locations")
+@RequestMapping("/api/test")
 @CrossOrigin("*")
 public class LocationController {
 
@@ -29,6 +29,14 @@ public class LocationController {
             @RequestBody Location location
     ){
         return service.saveLocation(location);
+    }
+
+    @PatchMapping("/{id}/status")
+    public Location updateStatus(
+            @PathVariable Long id,
+            @RequestBody Location location
+    ) {
+        return service.updateStatus(id, location.getStatus());
     }
 
 }

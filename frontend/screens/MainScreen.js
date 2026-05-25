@@ -1,15 +1,31 @@
 import React from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
+  Alert,
   ScrollView,
   StyleSheet,
-  Alert,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { USER, MOCK_ENTRIES } from '../data/mockData';
+import { USER } from '../data/mockData';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+
+const getStatusInfo = (statusValue) => {
+  const status = String(statusValue || '').toLowerCase();
+
+  if (status === 'working') {
+    return {
+      label: '작업중',
+      styleName: 'progressStatus',
+    };
+  }
+
+  return {
+    label: '미작업',
+    styleName: 'pendingStatus',
+  };
+};
 
 export default function MainScreen({
   onRoute,
@@ -61,17 +77,13 @@ export default function MainScreen({
       const incomplete = data
         .filter((loc) => {
           const status = String(loc.status || '').toLowerCase();
-
-          return (
-            status === 'pending' ||
-            status === 'progress' ||
-            status === 'in_progress' ||
-            status === '처리중' ||
-            status === '미처리'
-          );
+          return status === 'pending' || status === 'working';
         })
         .map((loc) => ({
           ...loc,
+          id : loc.taskId,
+          detailAddress : loc.detailAddress,
+          roadAddress : loc.roadAddress,
           lat: loc.lat ?? loc.latitude,
           lng: loc.lng ?? loc.longitude,
           task: loc.task || '현장 확인',
@@ -85,6 +97,7 @@ export default function MainScreen({
   };
 
   const toggleSelect = (id) => {
+    
     setSelectedIds((prev) => {
       if (prev.includes(id)) {
         return prev.filter((itemId) => itemId !== id);
@@ -199,12 +212,13 @@ export default function MainScreen({
             </TouchableOpacity>
           </View>
 
-          {incompleteLocations.map((item) => {
+          {incompleteLocations.map((item, index) => {
             const selected = selectedIds.includes(item.id);
-            const status = String(item.status || '').toLowerCase();
-
+            const statusInfo = getStatusInfo(item.status);
+            
             return (
-              <View key={item.id} style={styles.incompleteItem}>
+              
+              <View key={`${item.id}-${index}`} style={styles.incompleteItem}>
                 <TouchableOpacity
                   onPress={() => toggleSelect(item.id)}
                   style={[
@@ -218,24 +232,15 @@ export default function MainScreen({
 
                 <View style={{ flex: 1 }}>
                   <Text style={styles.entryName} numberOfLines={1}>
-                    {item.name || '이름 없음'}
+                    {item.detailAddress || '이름 없음'}
                   </Text>
                   <Text style={styles.entryMemo} numberOfLines={1}>
-                    {item.address || '주소 없음'}
+                    {item.roadAddress || '주소 없음'}
                   </Text>
                 </View>
 
-                <Text
-                  style={[
-                    styles.entryStatus,
-                    status === 'progress' || status === 'in_progress'
-                      ? styles.progressStatus
-                      : styles.pendingStatus,
-                  ]}
-                >
-                  {status === 'progress' || status === 'in_progress'
-                    ? '처리중'
-                    : '미처리'}
+                <Text style={[styles.entryStatus, styles[statusInfo.styleName]]}>
+                  {statusInfo.label}
                 </Text>
               </View>
             );
@@ -570,29 +575,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
 
-  entry: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 9,
-    borderTopWidth: 1,
-    borderTopColor: '#EEF2F6',
-  },
-
-  entryNo: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  entryNoText: {
-    color: 'white',
-    fontSize: 9,
-    fontWeight: '900',
-  },
-
   entryName: {
     color: '#1F2D3D',
     fontSize: 12,
@@ -608,20 +590,23 @@ const styles = StyleSheet.create({
   entryStatus: {
     fontSize: 9,
     fontWeight: '900',
-    color: '#12395B',
-    backgroundColor: '#EAF1F7',
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
 
   pendingStatus: {
-    color: '#C05621',
-    backgroundColor: '#FFF4E5',
+    color: '#E74C3C',
+    backgroundColor: '#FDECEC',
   },
 
   progressStatus: {
-    color: '#12395B',
-    backgroundColor: '#EAF1F7',
+    color: '#B7791F',
+    backgroundColor: '#FFF4CC',
+  },
+
+  emptyText: {
+    fontSize: 11,
+    color: '#718096',
   },
 });
