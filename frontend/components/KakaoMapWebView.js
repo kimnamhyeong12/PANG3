@@ -1,15 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-<<<<<<< HEAD
   View,
-=======
   Alert,
   Animated,
   Modal,
   Platform,
   ScrollView,
   StyleSheet,
->>>>>>> f3c6499612b09ba7244fee625e99ec2072a9639f
   Text,
   StyleSheet,
   TextInput,
@@ -664,7 +661,6 @@ export default function KakaoMapWebView({
               longitude: selectedPos.lng,
             }}
             pinColor={Platform.OS === "android" ? "green" : undefined}
-<<<<<<< HEAD
             onPress={() => {
               setDirectSelectMode(true);
 
@@ -675,9 +671,7 @@ export default function KakaoMapWebView({
                 address: "지도에서 선택",
               });
             }}
-=======
             onPress={() => { }}
->>>>>>> f3c6499612b09ba7244fee625e99ec2072a9639f
           />
         )}
 
@@ -884,12 +878,11 @@ export default function KakaoMapWebView({
           {currentPos && (
             <Text style={styles.hintText}>
               {isGuiding
-                ? `안내 중 · 현재 목적지: ${
-                    currentTarget?.name || "마지막 구간"
-                  }`
-                ? `안내 중 · 현재 목적지: ${currentTarget?.detailAddress || "마지막 구간"
-                }`
-                : "안내 시작 전"}
+                  ? currentTarget?.name
+                    ? `안내 중 · 현재 목적지: ${currentTarget?.name || "마지막 구간"}`
+                    : `안내 중 · 현재 목적지: ${currentTarget?.detailAddress || "마지막 구간"}`
+                    : "안내 시작 전"
+              }
             </Text>
           )}
         </View>
