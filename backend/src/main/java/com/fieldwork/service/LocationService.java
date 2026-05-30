@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fieldwork.entity.Location;
 import com.fieldwork.repository.LocationRepository;
 
+@SuppressWarnings("unchecked")
 @Service
 public class LocationService {
 
