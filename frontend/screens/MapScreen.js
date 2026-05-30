@@ -458,12 +458,12 @@ export default function MapScreen({
         ...markers,
         {
           ...savedLocation,
-          id : savedLocation.taskId,
-          detailAddress : savedLocation.detailAddress,
-          roadAddress : savedLocation.roadAddress,
+          id: savedLocation.taskId,
+          detailAddress: savedLocation.detailAddress,
+          roadAddress: savedLocation.roadAddress,
           status: savedLocation.status || 'pending',
           task: savedLocation.taskCategory || newLoc.task || '',
-          prioirty : savedLocation.prioirty || '',
+          prioirty: savedLocation.prioirty || '',
         },
       ]);
 
@@ -505,8 +505,8 @@ export default function MapScreen({
       const x =
         Math.sin(dLat / 2) ** 2 +
         Math.cos((lat1 * Math.PI) / 180) *
-          Math.cos((lat2 * Math.PI) / 180) *
-          Math.sin(dLng / 2) ** 2;
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) ** 2;
 
       total += R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
     }
@@ -580,6 +580,14 @@ export default function MapScreen({
   };
 
   const handleOptimizeRoute = async (mode = transportMode) => {
+    // 경로 재계산 전에 기존 안내/경로 상태 초기화
+    setCurrentSegmentIndex(0);
+    setRoadPath([]);
+    setRouteSegments([]);
+    setTotalDuration(null);
+    setOptimized(false);
+    setIsGuiding(false);
+
     if (!API_BASE_URL) {
       Alert.alert('오류', '.env의 EXPO_PUBLIC_API_BASE_URL을 확인하세요.');
       return;
@@ -597,18 +605,27 @@ export default function MapScreen({
 
     try {
       setOptimizing(true);
-      setOptimized(false);
-      setIsGuiding(false);
-
-      setRoadPath([]);
-      setRouteSegments([]);
-      setCurrentSegmentIndex(0);
-      setTotalDuration(null);
 
       const cleanCurrentLocation = cleanLocation(currentLocation, '현재 위치');
-      const cleanMarkers = markers
+
+      // 우선순위가 있으면 P1, P2, P3 순서대로 먼저 정렬
+      const priorityMarkers = [...markers].sort((a, b) => {
+        const pa = a.priority ?? 9999;
+        const pb = b.priority ?? 9999;
+
+        if (pa !== pb) return pa - pb;
+
+        return 0;
+      });
+
+      const cleanMarkers = priorityMarkers
         .map((loc) => cleanLocation(loc))
-        .filter((loc) => loc && !Number.isNaN(loc.lat) && !Number.isNaN(loc.lng));
+        .filter(
+          (loc) =>
+            loc &&
+            !Number.isNaN(loc.lat) &&
+            !Number.isNaN(loc.lng)
+        );
 
       const res = await fetch(`${API_BASE_URL}/api/routes/optimize`, {
         method: 'POST',
@@ -633,10 +650,13 @@ export default function MapScreen({
         lat: loc.lat ?? loc.latitude,
         lng: loc.lng ?? loc.longitude,
         status: loc.status || 'pending',
+        priority: loc.priority ?? null,
       }));
 
       if (optimizedLocations.length > 0) {
         setLocations?.(optimizedLocations);
+      } else {
+        setLocations?.(priorityMarkers);
       }
 
       if (data.path && data.path.length > 0) {
@@ -1185,7 +1205,7 @@ export default function MapScreen({
               style={[
                 styles.segmentButton,
                 currentSegmentIndex === routeSegments.length - 1 &&
-                  styles.segmentButtonDisabled,
+                styles.segmentButtonDisabled,
               ]}
               onPress={moveNextSegment}
               disabled={currentSegmentIndex === routeSegments.length - 1}

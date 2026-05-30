@@ -3,6 +3,7 @@ import * as Location from "expo-location";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
   Modal,
   Platform,
   ScrollView,
@@ -52,6 +53,8 @@ export default function KakaoMapWebView({
   const followModeRef = useRef(true);
   const alertedTargetIds = useRef(new Set());
   const lastRerouteTimeRef = useRef(0);
+  const blinkAnim = useRef(new Animated.Value(1)).current;
+
 
   const [keyword, setKeyword] = useState("");
   const [placeName, setPlaceName] = useState("");
@@ -82,13 +85,40 @@ export default function KakaoMapWebView({
   }, []);
 
   useEffect(() => {
+    if (!pulseTargetKey) {
+      blinkAnim.setValue(1);
+      return;
+    }
+
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(blinkAnim, {
+          toValue: 0,
+          duration: 450,
+          useNativeDriver: false,
+        }),
+        Animated.timing(blinkAnim, {
+          toValue: 1,
+          duration: 450,
+          useNativeDriver: false,
+        }),
+      ])
+    );
+
+    animation.start();
+
+    return () => animation.stop();
+  }, [pulseTargetKey]);
+
+  useEffect(() => {
     if (!isGuiding) return;
     if (!currentPos) return;
     if (!mapLocations.length) return;
     if (!currentTarget) return;
 
     const targetStatus = currentTarget.status || "pending";
-    if (targetStatus !== "pending") return;
+
+    if (targetStatus === "complete") return;
 
     const targetKey =
       currentTarget.id ??
@@ -125,36 +155,36 @@ export default function KakaoMapWebView({
     if (!mapRef.current) return;
 
     const targetPath = isGuiding ? activePath : roadPath;
+
     if (!targetPath || targetPath.length < 2) return;
 
-    const coordinates = targetPath.map((p) => ({
-      latitude: Number(p.lat ?? p.latitude ?? p.y),
-      longitude: Number(p.lng ?? p.longitude ?? p.x),
-    }));
+    const coordinates = targetPath
+      .map((p) => ({
+        latitude: Number(p.lat ?? p.latitude ?? p.y),
+        longitude: Number(p.lng ?? p.longitude ?? p.x),
+      }))
+      .filter(
+        (p) =>
+          !Number.isNaN(p.latitude) &&
+          !Number.isNaN(p.longitude)
+      );
+
+    if (coordinates.length < 2) return;
 
     mapRef.current.fitToCoordinates(coordinates, {
       edgePadding: {
-        top: 260,
-        right: 60,
-        bottom: 220,
-        left: 60,
+        top: 300,
+        right: 80,
+        bottom: 260,
+        left: 80,
       },
       animated: true,
     });
 
-    if (isGuiding && currentPos) {
-      setTimeout(() => {
-        mapRef.current?.animateToRegion(
-          {
-            latitude: currentPos.latitude,
-            longitude: currentPos.longitude,
-            latitudeDelta: 0.008,
-            longitudeDelta: 0.008,
-          },
-          1000
-        );
-      }, 1500);
-    }
+    // 중요:
+    // 여기서 현재 위치로 다시 animateToRegion 하면
+    // 목적지가 화면 밖으로 나가서 현위치만 보이는 문제가 생김.
+    // 그래서 삭제함.
   }, [isGuiding, currentSegmentIndex, roadPath, activePath]);
 
   const startCurrentLocation = async () => {
@@ -212,7 +242,7 @@ export default function KakaoMapWebView({
             lng: newPos.longitude,
             name: "현재 위치",
           });
-
+          /*
           if (guidingRef.current && followModeRef.current && mapRef.current) {
             mapRef.current.animateToRegion(
               {
@@ -224,7 +254,7 @@ export default function KakaoMapWebView({
               700
             );
           }
-
+          */
           if (guidingRef.current && activePath.length >= 2) {
             const distanceFromPath = getMinDistanceFromPath(newPos, activePath);
             const now = Date.now();
@@ -308,9 +338,9 @@ export default function KakaoMapWebView({
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLng / 2) *
-        Math.sin(dLng / 2);
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
 
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
@@ -494,7 +524,7 @@ export default function KakaoMapWebView({
               longitude: selectedPos.lng,
             }}
             pinColor={Platform.OS === "android" ? "green" : undefined}
-            onPress={() => {}}
+            onPress={() => { }}
           />
         )}
 
@@ -514,7 +544,7 @@ export default function KakaoMapWebView({
               onPress={() => focusLocation(loc)}
               zIndex={index + 1}
             >
-              <View
+              <Animated.View
                 style={[
                   styles.numberMarker,
                   {
@@ -523,13 +553,19 @@ export default function KakaoMapWebView({
                     ),
                   },
                   isGuiding &&
-                    index === currentTargetIndex &&
-                    styles.currentTargetMarker,
+                  index === currentTargetIndex &&
+                  styles.currentTargetMarker,
                   isPulsing && styles.pulseMarker,
+                  isPulsing && {
+                    borderColor: blinkAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ["#000000", "#2563EB"],
+                    }),
+                  },
                 ]}
               >
                 <Text style={styles.numberMarkerText}>{index + 1}</Text>
-              </View>
+              </Animated.View>
             </Marker>
           );
         })}
@@ -542,17 +578,19 @@ export default function KakaoMapWebView({
             }))}
             strokeWidth={5}
             strokeColor="rgba(18, 57, 91, 0.25)"
+            zIndex={1}
           />
         )}
 
-        {remainingActivePath.length >= 2 && (
+        {activePath.length >= 2 && (
           <Polyline
-            coordinates={remainingActivePath.map((p) => ({
+            coordinates={activePath.map((p) => ({
               latitude: Number(p.lat ?? p.latitude ?? p.y),
               longitude: Number(p.lng ?? p.longitude ?? p.x),
             }))}
-            strokeWidth={7}
+            strokeWidth={9}
             strokeColor="#12395B"
+            zIndex={10}
           />
         )}
       </MapView>
@@ -693,9 +731,8 @@ export default function KakaoMapWebView({
           {currentPos && (
             <Text style={styles.hintText}>
               {isGuiding
-                ? `안내 중 · 현재 목적지: ${
-                    currentTarget?.detailAddress || "마지막 구간"
-                  }`
+                ? `안내 중 · 현재 목적지: ${currentTarget?.detailAddress || "마지막 구간"
+                }`
                 : "안내 시작 전"}
             </Text>
           )}
@@ -722,7 +759,7 @@ export default function KakaoMapWebView({
           <TouchableOpacity
             style={styles.bottomSheet}
             activeOpacity={1}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <View style={styles.handle} />
 
@@ -739,7 +776,6 @@ export default function KakaoMapWebView({
                 style={styles.actionButton}
                 onPress={() => {
                   setArrivalTarget(null);
-                  setPulseTargetKey(null);
                 }}
               >
                 <Text style={styles.actionText}>나중에</Text>
@@ -1169,5 +1205,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
     elevation: 6,
+  },
+  pulseMarker: {
+    borderWidth: 4,
+    elevation: 12,
   },
 });
