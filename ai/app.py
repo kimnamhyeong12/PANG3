@@ -19,6 +19,7 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt
 
+
 register_heif_opener()
 
 AI_DIR = Path(__file__).resolve().parent
@@ -28,6 +29,39 @@ API_KEY = os.environ.get("GEMINI_API_KEY")
 client = genai.Client(api_key=API_KEY) if API_KEY else None
 
 RESULT_PREFIX = "@@AI_RESULT@@"
+
+
+
+import urllib.request
+from urllib.parse import urlparse
+
+def download_if_url(source_path: str | None, download_dir: Path) -> str | None:
+    """
+    들어온 경로가 S3 웹 주소(http/https) 형태이면 파일을 다운로드하고 로컬 경로를 반환합니다.
+    원래 로컬 경로이거나 없으면 그대로 통과시킵니다.
+    """
+    if not source_path:
+        return None
+        
+    # http:// 나 https:// 로 시작하는 웹 주소인지 검사
+    parsed_url = urlparse(source_path)
+    if parsed_url.scheme in ('http', 'https'):
+        try:
+            download_dir.mkdir(parents=True, exist_ok=True)
+            # URL 주소 맨 뒤에서 실제 파일명(예: photo_0.jpg) 추출
+            file_name = os.path.basename(parsed_url.path) or "downloaded_img.jpg"
+            local_target_path = download_dir / file_name
+            
+            print(f"[S3 연동] 웹 이미지 감지됨. 다운로드 시작: {source_path}", file=sys.stderr)
+            urllib.request.urlretrieve(source_path, str(local_target_path))
+            print(f"[S3 연동] 다운로드 완료 -> {local_target_path}", file=sys.stderr)
+            
+            return str(local_target_path.resolve())
+        except Exception as e:
+            print(f"[S3 다운로드 에러] {source_path}: {e}", file=sys.stderr)
+            return None
+            
+    return source_path
 
 
 # ---------------------------------------------------------------------------
