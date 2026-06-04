@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
   Alert,
   Animated,
   Modal,
@@ -8,13 +7,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  StyleSheet,
   TextInput,
   TouchableOpacity,
-  Alert,
-  Modal,
-  ScrollView,
-  Platform,
+  View,
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import * as Location from "expo-location";

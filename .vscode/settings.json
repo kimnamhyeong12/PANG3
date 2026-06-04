@@ -7,5 +7,9 @@
     "python.analysis.extraPaths": [
         "./ai",
         "./ai/venv/lib/python3.14/site-packages"
+    ],
+    "cursorpyright.analysis.extraPaths": [
+        "./ai",
+        "./ai/venv/lib/python3.14/site-packages"
     ]
 }
