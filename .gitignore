@@ -6,6 +6,9 @@
 # application config (경로 앞에 backend/ 추가!)
 backend/src/main/resources/application.yml
 backend/src/main/resources/application-*.yml
+# application config
+src/main/resources/application.yml
+src/main/resources/application-*.yml
 
 # env
 .env
@@ -18,3 +21,16 @@ backend/target/
 # IDE
 .idea/
 .vscode/
+/build/
+/target/
+
+# backend
+backend/target/
+backend/src/main/resources/application-local-backup.yml
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store

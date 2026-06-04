@@ -49,6 +49,7 @@ const cleanLocation = (loc, fallbackName = '위치') => {
 export default function MapScreen({
   onBack,
   onLocationClick,
+  onReportPress,
   locations,
   setLocations,
   roadPath,
@@ -324,11 +325,12 @@ export default function MapScreen({
           status: savedLocation.status || 'pending',
           task: savedLocation.task || newLoc.task,
           id: savedLocation.taskId,
+          id: savedLocation.id ?? savedLocation.taskId ?? savedLocation.task_id,
           detailAddress: savedLocation.detailAddress,
           roadAddress: savedLocation.roadAddress,
           status: savedLocation.status || 'pending',
           task: savedLocation.taskCategory || newLoc.task || '',
-          prioirty: savedLocation.prioirty || '',
+          priority: savedLocation.priority || '',
         },
       ]);
 
@@ -721,6 +723,15 @@ export default function MapScreen({
         onLocationsChange={setLocations}
         onRerouteRequest={handleReroute}
       />
+
+      <TouchableOpacity
+        style={styles.reportFab}
+        activeOpacity={0.9}
+        onPress={onReportPress}
+      >
+        <Ionicons name="document-text" size={22} color="#FFFFFF" />
+        <Text style={styles.reportFabText}>보고서</Text>
+      </TouchableOpacity>
 
       <View style={styles.topOverlay}>
         <View style={styles.searchControlRow}>
@@ -1680,5 +1691,206 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: '#12395B',
+  },
+
+  searchModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  searchModal: {
+    width: '88%',
+    maxHeight: '70%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+  },
+
+  searchModalTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 14,
+    color: '#12395B',
+  },
+
+  searchResultItem: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E6EDF3',
+  },
+
+  searchResultName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1F2D3D',
+  },
+
+  searchResultAddress: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#718096',
+  },
+
+  pagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+    gap: 10,
+  },
+
+  pageBtn: {
+    fontSize: 14,
+    fontWeight: '900',
+    paddingHorizontal: 6,
+  },
+
+  pageNumber: {
+    fontSize: 13,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    color: '#333',
+  },
+
+  pageActive: {
+    backgroundColor: '#12395B',
+    color: '#fff',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+
+  closeButton: {
+    marginTop: 14,
+    backgroundColor: '#12395B',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+
+  closeButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+  },
+
+  addMenuBox: {
+    marginTop: 8,
+    width: 250,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
+  },
+
+  addMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEF2F6',
+  },
+
+  addMenuItemLast: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 11,
+  },
+
+  addMenuTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#1F2D3D',
+  },
+
+  addMenuDesc: {
+    marginTop: 2,
+    fontSize: 9,
+    color: '#8A98A8',
+  },
+
+  coordRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+
+  coordInputWrap: {
+    flex: 1,
+  },
+
+  coordLabel: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#1F2D3D',
+    marginBottom: 6,
+  },
+
+  coordInput: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#DDE5EF',
+    borderRadius: 11,
+    paddingHorizontal: 12,
+    fontSize: 13,
+    color: '#1F2D3D',
+    backgroundColor: '#FFFFFF',
+  },
+
+  coordHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+
+  mapSelectNotice: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: '#7C3AED',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+
+  mapSelectNoticeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+
+  reportFab: {
+    position: 'absolute',
+    right: 18,
+    bottom: 96,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#12395B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 25,
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 8,
+  },
+
+  reportFabText: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#FFFFFF',
   },
 });

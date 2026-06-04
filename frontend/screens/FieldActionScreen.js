@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,10 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { BackButton, PrimaryButton } from '../components/ui';
+
+
+
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 function getAiRecommendation(memo) {
   const text = memo.toLowerCase();
@@ -58,6 +62,10 @@ export default function FieldActionScreen({
   onBack,
   onSave,
 }) {
+  console.log('현재 location:', location);
+  console.log('location.id:', location?.id);
+  console.log('location.taskId:', location?.taskId);
+  console.log('location.task_id:', location?.task_id);
   const [status, setStatus] = useState(location?.status || 'pending');
 
   const [latitude, setLatitude] = useState(
@@ -76,6 +84,55 @@ export default function FieldActionScreen({
   const [photos, setPhotos] = useState([]);
   const [mainComment, setMainComment] = useState('');
   const [fieldMemo, setFieldMemo] = useState('');
+
+  const taskId = location?.id ?? location?.taskId ?? location?.task_id;
+
+  useEffect(() => {
+    const loadSavedReport = async () => {
+      if (!taskId || !API_BASE_URL) return;
+
+      try {
+        console.log('보고서 불러오기 taskId:', taskId);
+
+        const res = await fetch(
+          `${API_BASE_URL}/api/task-progress/task/${taskId}`
+        );
+
+        if (!res.ok) {
+          console.log('보고서 불러오기 실패 status:', res.status);
+          return;
+        }
+
+        const data = await res.json();
+
+        if (!data) return;
+
+        console.log('저장된 보고서 불러오기 성공:', data);
+
+        setLatitude(
+          data.latitude !== null && data.latitude !== undefined
+            ? String(data.latitude)
+            : ''
+        );
+
+        setLongitude(
+          data.longitude !== null && data.longitude !== undefined
+            ? String(data.longitude)
+            : ''
+        );
+
+        setLocationMapImage(data.locationMapImage || null);
+        setPhotos(data.fieldPhotos || []);
+        setMainComment(data.mainComment || '');
+        setFieldMemo(data.fieldMemo || '');
+        setStatus(data.progressStatus || location?.status || 'pending');
+      } catch (error) {
+        console.log('저장된 보고서 불러오기 실패:', error);
+      }
+    };
+
+    loadSavedReport();
+  }, [taskId]);
 
   const rec = getAiRecommendation(`${mainComment} ${fieldMemo}`);
 
@@ -141,27 +198,51 @@ export default function FieldActionScreen({
     setPhotos(nextPhotos);
   };
 
-  const handleSave = () => {
-    const reportData = {
-      locationId: location?.id,
-      locationName: location?.name,
-      address: location?.address,
-      actionType,
+  const handleSave = async () => {
+    try {
+      if (!taskId) {
+        alert('방문지 ID를 찾을 수 없습니다.');
+        return;
+      }
 
-      latitude: Number(latitude),
-      longitude: Number(longitude),
+      const reportData = {
+        taskId,
 
-      originalLatitude: location?.latitude ?? location?.lat,
-      originalLongitude: location?.longitude ?? location?.lng,
+        latitude: Number(latitude),
+        longitude: Number(longitude),
 
-      locationMapImage,
-      photos,
-      mainComment,
-      fieldMemo,
-      status,
-    };
+        locationMapImage,
+        fieldPhotos: photos,
 
-    onSave?.(reportData);
+        mainComment,
+        fieldMemo,
+
+        progressStatus: status,
+      };
+
+      console.log('보고서 저장 요청:', reportData);
+
+      const res = await fetch(`${API_BASE_URL}/api/task-progress`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(reportData),
+      });
+
+      if (!res.ok) {
+        throw new Error(`보고서 저장 실패: ${res.status}`);
+      }
+
+      const savedReport = await res.json();
+
+      console.log('보고서 저장 성공:', savedReport);
+
+      onSave?.(savedReport);
+    } catch (error) {
+      console.log(error);
+      alert('보고서 저장 중 문제가 발생했습니다.');
+    }
   };
 
   return (
@@ -171,8 +252,12 @@ export default function FieldActionScreen({
 
         <View style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>FIELD RECORD</Text>
-          <Text style={styles.title}>{location?.name || '방문지 기록'}</Text>
-          <Text style={styles.desc}>{location?.address}</Text>
+          <Text style={styles.title}>
+            {location?.detailAddress || location?.name || '방문지 기록'}
+          </Text>
+          <Text style={styles.desc}>
+            {location?.roadAddress || location?.address || ''}
+          </Text>
         </View>
       </View>
 
@@ -180,7 +265,9 @@ export default function FieldActionScreen({
         <View style={styles.card}>
           <Text style={styles.cardTitle}>업무 유형</Text>
           <Text style={styles.typeText}>
-            {actionType === 'photo'
+            {actionType === 'report'
+              ? '보고서 작성'
+              : actionType === 'photo'
               ? '사진 기록'
               : actionType === 'memo'
               ? '메모 작성'
@@ -369,7 +456,7 @@ export default function FieldActionScreen({
           <Text style={styles.aiReport}>{rec.report}</Text>
         </View>
 
-        <PrimaryButton title="저장 후 보고서로 이동" onPress={handleSave} />
+        <PrimaryButton title="보고서 저장" onPress={handleSave} />
       </ScrollView>
     </View>
   );

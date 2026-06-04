@@ -53,7 +53,7 @@ export default function MainScreen({
 
   React.useEffect(() => {
     loadIncompleteLocations();
-  }, []);
+  }, [locations]);
 
   const loadIncompleteLocations = async () => {
     try {
@@ -75,19 +75,30 @@ export default function MainScreen({
       const data = JSON.parse(text);
 
       const incomplete = data
+        .map((loc) => {
+          const status =
+            loc.status ||
+            loc.taskStatus ||
+            loc.task_status ||
+            loc.progressStatus ||
+            loc.progress_status ||
+            'pending';
+
+          return {
+            ...loc,
+            id: loc.id ?? loc.taskId ?? loc.task_id,
+            detailAddress: loc.detailAddress || loc.detail_address,
+            roadAddress: loc.roadAddress || loc.road_address,
+            lat: loc.lat ?? loc.latitude,
+            lng: loc.lng ?? loc.longitude,
+            status,
+            task: loc.task || loc.taskCategory || loc.task_category || '현장 확인',
+          };
+        })
         .filter((loc) => {
           const status = String(loc.status || '').toLowerCase();
           return status === 'pending' || status === 'working';
-        })
-        .map((loc) => ({
-          ...loc,
-          id : loc.taskId,
-          detailAddress : loc.detailAddress,
-          roadAddress : loc.roadAddress,
-          lat: loc.lat ?? loc.latitude,
-          lng: loc.lng ?? loc.longitude,
-          task: loc.task || '현장 확인',
-        }));
+        });
 
       setIncompleteLocations(incomplete);
     } catch (error) {
