@@ -51,6 +51,7 @@ const cleanLocation = (loc, fallbackName = '위치') => {
 export default function MapScreen({
   onBack,
   onLocationClick,
+  onReportPress,
   locations,
   setLocations,
   roadPath,
@@ -458,12 +459,12 @@ export default function MapScreen({
         ...markers,
         {
           ...savedLocation,
-          id: savedLocation.taskId,
+          id: savedLocation.id ?? savedLocation.taskId ?? savedLocation.task_id,
           detailAddress: savedLocation.detailAddress,
           roadAddress: savedLocation.roadAddress,
           status: savedLocation.status || 'pending',
           task: savedLocation.taskCategory || newLoc.task || '',
-          prioirty: savedLocation.prioirty || '',
+          priority: savedLocation.priority || '',
         },
       ]);
 
@@ -864,6 +865,15 @@ export default function MapScreen({
         onLocationsChange={setLocations}
         onRerouteRequest={handleReroute}
       />
+
+      <TouchableOpacity
+        style={styles.reportFab}
+        activeOpacity={0.9}
+        onPress={onReportPress}
+      >
+        <Ionicons name="document-text" size={22} color="#FFFFFF" />
+        <Text style={styles.reportFabText}>보고서</Text>
+      </TouchableOpacity>
 
       <View style={styles.topOverlay}>
         <View style={styles.searchControlRow}>
@@ -2232,5 +2242,30 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '900',
+  },
+
+  reportFab: {
+    position: 'absolute',
+    right: 18,
+    bottom: 96,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#12395B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 25,
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 8,
+  },
+
+  reportFabText: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#FFFFFF',
   },
 });

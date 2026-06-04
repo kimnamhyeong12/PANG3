@@ -9,6 +9,7 @@ import MapScreen from './screens/MapScreen';
 import FieldActionScreen from './screens/FieldActionScreen';
 import ReportScreen from './screens/ReportScreen';
 import DownloadScreen from './screens/DownloadScreen';
+import ReportListScreen from './screens/ReportListScreen';
 
 export default function App() {
   const [screen, setScreen] = useState('login');
@@ -17,6 +18,7 @@ export default function App() {
   const [actionType, setActionType] = useState(null);
 
   const [routeLocations, setRouteLocations] = useState([]);
+  const [reportTargets, setReportTargets] = useState([]);
 
   const [roadPath, setRoadPath] = useState([]);
   const [routeSegments, setRouteSegments] = useState([]);
@@ -55,7 +57,7 @@ export default function App() {
       {screen === 'main' && (
         <MainScreen
           onRoute={() => go('mapDirect')}
-          onReport={() => go('report')}
+          onReport={() => go('reportList')}
           onDashboard={() => go('dashboard')}
           locations={routeLocations}
           setLocations={setRouteLocations}
@@ -86,6 +88,7 @@ export default function App() {
           setTotalDuration={setTotalDuration}
           panelOpen={panelOpen}
           setPanelOpen={setPanelOpen}
+          onReportPress={() => go('reportList')}
         />
       )}
 
@@ -93,14 +96,44 @@ export default function App() {
         <FieldActionScreen
           location={selectedLocation}
           actionType={actionType}
+          onBack={() => go('reportList')}
+          onSave={(savedReport) => {
+            setRouteLocations((prev) =>
+              prev.map((loc) =>
+                loc.id === selectedLocation?.id
+                  ? {
+                      ...loc,
+                      status: savedReport.progressStatus || loc.status,
+                    }
+                  : loc
+              )
+            );
+
+            go('reportList');
+          }}
+        />
+      )}
+
+      {screen === 'reportList' && (
+        <ReportListScreen
+          locations={routeLocations}
           onBack={() => go('mapDirect')}
-          onSave={() => go('report')}
+          onSelectLocation={(loc) => {
+            setSelectedLocation(loc);
+            setActionType('report');
+            go('fieldAction');
+          }}
+          onCreateReport={(selectedLocations) => {
+            setReportTargets(selectedLocations);
+            go('report');
+          }}
         />
       )}
 
       {screen === 'report' && (
         <ReportScreen
-          onBack={() => go('main')}
+          locations={reportTargets}
+          onBack={() => go('reportList')}
           onDownload={() => go('download')}
         />
       )}

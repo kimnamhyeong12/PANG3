@@ -1,7 +1,28 @@
-.env
 *.pem
 **/postgres_data/
 .aws/
 build/
 .DS_Store
-/application.yml
+
+# application config
+src/main/resources/application.yml
+src/main/resources/application-*.yml
+
+# env
+.env
+.env.*
+
+# build
+/build/
+/target/
+
+# backend
+backend/target/
+backend/src/main/resources/application-local-backup.yml
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store

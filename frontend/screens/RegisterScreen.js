@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { PrimaryButton } from '../components/ui';
 
-const API_BASE_URL = 'http://192.168.219.104:8081';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 export default function RegisterScreen({ onBack }) {
   const [loginId, setLoginId] = useState('');
