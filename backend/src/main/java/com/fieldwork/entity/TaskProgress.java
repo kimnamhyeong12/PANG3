@@ -41,6 +41,12 @@ public class TaskProgress {
     @Column(name = "progress_status")
     private String progressStatus;
 
+    @Column(name = "ai_refined_content", columnDefinition = "TEXT")
+    private String aiRefinedContent;
+
+    @Column(name = "report_file_path", columnDefinition = "TEXT")
+    private String reportFilePath;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -70,4 +76,12 @@ public class TaskProgress {
 
     public String getProgressStatus() { return progressStatus; }
     public void setProgressStatus(String progressStatus) { this.progressStatus = progressStatus; }
+
+    public String getAiRefinedContent() { return aiRefinedContent; }
+    public void setAiRefinedContent(String aiRefinedContent) { this.aiRefinedContent = aiRefinedContent; }
+
+    public String getReportFilePath() { return reportFilePath; }
+    public void setReportFilePath(String reportFilePath) { this.reportFilePath = reportFilePath; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
 }

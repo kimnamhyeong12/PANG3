@@ -23,6 +23,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/locations/**").permitAll()
+                .requestMatchers("/api/tasks/**").permitAll()
+                .requestMatchers("/api/task-progress/**").permitAll()
+                .requestMatchers("/api/files/**").permitAll()
                 .requestMatchers("/api/routes/**").permitAll()
                 .anyRequest().permitAll()
             );

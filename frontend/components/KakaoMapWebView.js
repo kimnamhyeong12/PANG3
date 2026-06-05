@@ -483,10 +483,11 @@ export default function KakaoMapWebView({
     }
 
     const newLoc = {
-      name: placeName.trim(),
-      address: keyword.trim() || "지도 직접 선택",
+      detailAddress: placeName.trim(),
+      roadAddress: keyword.trim() || "지도 직접 선택",
       lat: selectedPos.lat,
       lng: selectedPos.lng,
+      taskCategory: task.trim() || "점검",
       status: "pending",
     };
 
@@ -495,7 +496,7 @@ export default function KakaoMapWebView({
         throw new Error("API_BASE_URL 없음");
       }
 
-      const res = await fetch(`${API_BASE_URL}/api/locations`, {
+      const res = await fetch(`${API_BASE_URL}/api/tasks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -515,8 +516,13 @@ export default function KakaoMapWebView({
         ...locations,
         {
           ...savedLocation,
+          id: savedLocation.id ?? savedLocation.taskId ?? savedLocation.task_id,
+          detailAddress: savedLocation.detailAddress || newLoc.detailAddress,
+          roadAddress: savedLocation.roadAddress || newLoc.roadAddress,
+          lat: savedLocation.lat ?? newLoc.lat,
+          lng: savedLocation.lng ?? newLoc.lng,
           status: savedLocation.status || "pending",
-          task: task.trim() || "점검",
+          task: savedLocation.taskCategory || newLoc.taskCategory || "점검",
         },
       ];
 

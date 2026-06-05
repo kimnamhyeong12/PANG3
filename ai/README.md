@@ -1,28 +1,37 @@
 # AI 현장 보고서 엔진 (`ai/`)
 
-사하구 외근 앱의 **자동 HWP 보고서 + Gemini 현장 분석** 모듈입니다.
+사하구 외근 앱의 **HWP 보고서 자동 생성 + Gemini 현장 분석** 모듈입니다.  
+**최종 DB:** `task` + `task_progress`
+
+---
+
+## 이 폴더가 하는 일
+
+1. **위치도** 1장 (맨 위, 크게)
+2. **현장사진** N장 — 코멘트로 섹션/캡션 (`현장사진(2)|설명`, `전`/`중`/`후`)
+3. **메인 코멘트** — 가운데 굵게 (`23:00(현행) → 24:00(변경)...`)
+4. **AI 분석 의견** — Gemini 공문체 (`ai_refined_content`)
 
 ---
 
 ## 폴더 구조
 
-```
+```text
 ai/
-├── app.py                 # 메인 엔진 (JSON in → HWP + AI out)
-├── requirements.txt       # Python 패키지 목록
-├── .env.example           # API 키 템플릿 (실제 키는 .env에만, git 제외)
-├── run.sh                 # 로컬 테스트 실행 스크립트
-├── INTEGRATION.md         # 백엔드 팀 연동 가이드 
-├── samples/               # 테스트용 JSON
-│   ├── garak_sample.json
-│   └── manhole_sample.json
-├── output/                # 생성된 보고서 (.hwp) — git 제외
-└── test2.jpeg             # 로컬 테스트용 샘플 이미지
+├── app.py              ← 메인 (JSON in → HWP + AI out)
+├── requirements.txt
+├── .env.example        ← 키 템플릿 (실제 키는 .env, git 제외)
+├── run.sh              ← 로컬 테스트
+├── samples/            ← 테스트용 예시 JSON (가락타운 = mock)
+├── output/             ← 생성 HWP
+├── uploads/            ← 백엔드가 저장하는 사진 (런타임)
+├── INTEGRATION.md      ← 팀원용 상세 연동 문서 ⭐
+└── README.md           ← 이 파일
 ```
 
 ---
 
-## 빠른 시작 (본인 PC)
+## 5분 만에 테스트
 
 ```bash
 cd ai
@@ -30,40 +39,46 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# .env 에 GEMINI_API_KEY 직접 입력 (키는 절대 git push 금지)
-chmod +x run.sh
-./run.sh
+# .env 에 GEMINI_API_KEY 입력 (본인만, git 금지)
+
+./run.sh samples/garak_sample.json
 ```
 
-`output/` 폴더에 `.hwp` 파일이 생기면 성공입니다.
+→ `output/위치도_및_현장사진_*.hwp` 생성되면 성공
 
 ---
 
-## 팀원에게 줄 문서
+## 운영에서 누가 뭘 하나?
 
-| 파일 | 대상 | 내용 |
-|------|------|------|
-| **INTEGRATION.md** | 백엔드 | JSON 스키마, Java 연동, `@@AI_RESULT@@` 파싱 |
-| **README.md** | 전체 | 이 폴더가 뭔지, 어떻게 테스트하는지 |
+| 역할 | 할 일 |
+|------|--------|
+| **앱** | `POST /api/task-progress` (multipart) |
+| **백엔드** | DB 저장 → `app.py` 호출 → DB에 AI/HWP 경로 저장 |
+| **AI (`app.py`)** | JSON 받아서 파일 생성만 |
 
-한 줄 요약 for 백엔드:
-
-> 현장 사진 저장 후 `ai/app.py`에 JSON 넘기면 `report_file`이랑 `ai_refined_content`가 `@@AI_RESULT@@` 한 줄로 돌아옵니다.
+**직접 `app.py`를 앱에서 부르지 않습니다.** 항상 백엔드가 호출합니다.
 
 ---
 
-## 보고서 양식
+## mock vs 실제 데이터
 
-1. 제목: `위치도 및 현장사진(방문지, 업무유형)`
-2. **위치도** 1장 (전체 너비)
-3. **현장사진** — 코멘트로 섹션 묶음 (`현장사진(2)` 등), 줄당 최대 2장 + 캡션
-4. **메인 코멘트** (가운데, 굵게) — 예: `23:00(현행) → 24:00(변경) 소등시간 연장`
-5. **AI 분석 의견** (Gemini, 공문체)
+| | mock (테스트) | 실제 (운영) |
+|--|----------------|-------------|
+| 방문지명 | `samples/garak_sample.json` 의 "가락타운" | `task.detail_address` |
+| 업무유형 | "보행등, 경관조명" | `task.task_category` |
+| 사진 | `test2.jpeg` | `ai/uploads/{taskId}/` 에 저장된 파일 |
+
+---
+
+## 팀 문서
+
+- **연동 전체:** [INTEGRATION.md](./INTEGRATION.md)
+- **AWS:** [../infra/README.md](../infra/README.md)
+- **DB DDL:** [../backend/sql/schema.sql](../backend/sql/schema.sql)
 
 ---
 
 ## 키 / 보안
 
-- `GEMINI_API_KEY`는 **본인만** `ai/.env`에 설정
-- `.env`는 `.gitignore`에 포함됨
-- 저장소에 키를 올리지 마세요
+- `GEMINI_API_KEY` → `ai/.env` 또는 AWS SSM
+- **절대 git에 올리지 마세요**

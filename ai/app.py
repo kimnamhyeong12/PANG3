@@ -13,11 +13,15 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from google import genai
-from PIL import Image
+from PIL import Image, ImageOps
 from pillow_heif import register_heif_opener
 from docx import Document
+from docx.enum.section import WD_SECTION_START
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Inches, Pt
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Cm, Inches, Pt, RGBColor
 
 
 register_heif_opener()
@@ -95,7 +99,12 @@ def load_payload() -> dict:
 # 이미지 전처리
 # ---------------------------------------------------------------------------
 
-def sanitize_image(source_path: str | None, target_path: str) -> str | None:
+def sanitize_image(
+    source_path: str | None,
+    target_path: str,
+    canvas_size: tuple[int, int] = (1800, 1200),
+    fit_mode: str = "cover",
+) -> str | None:
     resolved = resolve_path(source_path) if source_path and not os.path.isabs(source_path) else source_path
     if resolved and not os.path.isabs(resolved):
         resolved = resolve_path(resolved)
@@ -103,7 +112,21 @@ def sanitize_image(source_path: str | None, target_path: str) -> str | None:
         return None
     try:
         with Image.open(resolved) as img:
-            img.convert("RGB").save(target_path, "JPEG", quality=90)
+            img = ImageOps.exif_transpose(img).convert("RGB")
+            if fit_mode == "contain":
+                canvas = Image.new("RGB", canvas_size, (255, 255, 255))
+                img.thumbnail(canvas_size, Image.Resampling.LANCZOS)
+                left = (canvas_size[0] - img.width) // 2
+                top = (canvas_size[1] - img.height) // 2
+                canvas.paste(img, (left, top))
+            else:
+                canvas = ImageOps.fit(
+                    img,
+                    canvas_size,
+                    method=Image.Resampling.LANCZOS,
+                    centering=(0.5, 0.5),
+                )
+            canvas.save(target_path, "JPEG", quality=92)
         return target_path
     except Exception as e:
         print(f"[Image Sanitizer Error] {source_path}: {e}", file=sys.stderr)
@@ -185,6 +208,8 @@ def clean_markdown_for_hwp(text: str) -> str:
     cleaned = []
     for line in text.split("\n"):
         line = line.strip().replace("**", "")
+        line = re.sub(r"^#{1,6}\s*", "", line)
+        line = re.sub(r"^\*\s+", "- ", line)
         if line.startswith("## "):
             line = line.replace("## ", "■ ")
         elif line.startswith("### "):
@@ -195,23 +220,126 @@ def clean_markdown_for_hwp(text: str) -> str:
     return "\n".join(cleaned)
 
 
+def set_korean_font(run, size: int | None = None, bold: bool | None = None, color: str | None = None) -> None:
+    run.font.name = "Malgun Gothic"
+    run._element.rPr.rFonts.set(qn("w:eastAsia"), "Malgun Gothic")
+    if size is not None:
+        run.font.size = Pt(size)
+    if bold is not None:
+        run.bold = bold
+    if color:
+        run.font.color.rgb = RGBColor.from_string(color)
+
+
+def set_paragraph_spacing(paragraph, before: int = 0, after: int = 0, line: float = 1.15) -> None:
+    paragraph.paragraph_format.space_before = Pt(before)
+    paragraph.paragraph_format.space_after = Pt(after)
+    paragraph.paragraph_format.line_spacing = line
+
+
+def set_cell_shading(cell, fill: str) -> None:
+    tc_pr = cell._tc.get_or_add_tcPr()
+    shd = tc_pr.find(qn("w:shd"))
+    if shd is None:
+        shd = OxmlElement("w:shd")
+        tc_pr.append(shd)
+    shd.set(qn("w:fill"), fill)
+
+
+def set_cell_margins(cell, top: int = 100, start: int = 120, bottom: int = 100, end: int = 120) -> None:
+    tc_pr = cell._tc.get_or_add_tcPr()
+    tc_mar = tc_pr.first_child_found_in("w:tcMar")
+    if tc_mar is None:
+        tc_mar = OxmlElement("w:tcMar")
+        tc_pr.append(tc_mar)
+    for name, value in (("top", top), ("start", start), ("bottom", bottom), ("end", end)):
+        node = tc_mar.find(qn(f"w:{name}"))
+        if node is None:
+            node = OxmlElement(f"w:{name}")
+            tc_mar.append(node)
+        node.set(qn("w:w"), str(value))
+        node.set(qn("w:type"), "dxa")
+
+
+def set_table_geometry(table, widths_cm: list[float]) -> None:
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.autofit = False
+    tbl_pr = table._tbl.tblPr
+    tbl_w = tbl_pr.find(qn("w:tblW"))
+    if tbl_w is None:
+        tbl_w = OxmlElement("w:tblW")
+        tbl_pr.append(tbl_w)
+    tbl_w.set(qn("w:type"), "dxa")
+    tbl_w.set(qn("w:w"), str(sum(int(Cm(width).emu / 635) for width in widths_cm)))
+
+    grid = table._tbl.tblGrid
+    if grid is None:
+        grid = OxmlElement("w:tblGrid")
+        table._tbl.insert(0, grid)
+    for child in list(grid):
+        grid.remove(child)
+    for width in widths_cm:
+        grid_col = OxmlElement("w:gridCol")
+        grid_col.set(qn("w:w"), str(int(Cm(width).emu / 635)))
+        grid.append(grid_col)
+
+    for row in table.rows:
+        for idx, width in enumerate(widths_cm):
+            cell = row.cells[idx]
+            cell.width = Cm(width)
+            tc_w = cell._tc.get_or_add_tcPr().find(qn("w:tcW"))
+            if tc_w is None:
+                tc_w = OxmlElement("w:tcW")
+                cell._tc.get_or_add_tcPr().append(tc_w)
+            tc_w.set(qn("w:type"), "dxa")
+            tc_w.set(qn("w:w"), str(int(Cm(width).emu / 635)))
+
+
 def _add_caption_cell(cell, caption: str) -> None:
-    if caption:
-        cap_p = cell.add_paragraph(caption)
-        cap_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        if cap_p.runs:
-            cap_p.runs[0].font.size = Pt(9)
+    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    set_cell_margins(cell, top=90, bottom=90)
+    p = cell.paragraphs[0]
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    set_paragraph_spacing(p, after=0, line=1.05)
+    run = p.add_run(caption or " ")
+    set_korean_font(run, size=9, color="3F4F63")
 
 
-def _add_photo_to_cell(cell, img_path: str | None, width_in: float = 2.8) -> None:
+def _add_photo_to_cell(cell, img_path: str | None, width_cm: float) -> None:
+    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    set_cell_margins(cell, top=110, bottom=110, start=110, end=110)
     if img_path and os.path.exists(img_path):
         p = cell.paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        set_paragraph_spacing(p, after=0)
         run = p.add_run()
-        run.add_picture(img_path, width=Inches(width_in))
+        run.add_picture(img_path, width=Cm(width_cm))
     else:
-        cell.text = "\n[사진 없음]\n"
-        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p = cell.paragraphs[0]
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.add_run("[사진 없음]")
+        set_korean_font(run, size=10, color="6B7280")
+
+
+def add_section_heading(doc: Document, text: str) -> None:
+    p = doc.add_paragraph()
+    set_paragraph_spacing(p, before=8, after=5)
+    run = p.add_run(text)
+    set_korean_font(run, size=12, bold=True, color="153B5C")
+
+
+def add_body_text(doc: Document, text: str) -> None:
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        p = doc.add_paragraph()
+        set_paragraph_spacing(p, after=3, line=1.25)
+        if re.match(r"^\d+\.", line):
+            p.paragraph_format.left_indent = Cm(0.35)
+            p.paragraph_format.first_line_indent = Cm(-0.35)
+        run = p.add_run(line)
+        set_korean_font(run, size=10, color="27384A")
 
 
 def create_fieldwork_report(report_data: dict, output_filename: str) -> str:
@@ -223,73 +351,88 @@ def create_fieldwork_report(report_data: dict, output_filename: str) -> str:
     ai_refined = report_data.get("ai_refined_content") or ""
 
     doc = Document()
+    section = doc.sections[0]
+    section.start_type = WD_SECTION_START.NEW_PAGE
+    section.page_width = Cm(21)
+    section.page_height = Cm(29.7)
+    section.top_margin = Cm(1.6)
+    section.bottom_margin = Cm(1.5)
+    section.left_margin = Cm(1.7)
+    section.right_margin = Cm(1.7)
+
     style = doc.styles["Normal"]
     style.font.name = "Malgun Gothic"
-    style.font.size = Pt(11)
+    style._element.rPr.rFonts.set(qn("w:eastAsia"), "Malgun Gothic")
+    style.font.size = Pt(10)
 
     title_p = doc.add_paragraph()
     title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    set_paragraph_spacing(title_p, after=4)
     title_run = title_p.add_run(
         f"위치도 및 현장사진({location_name}, {task_category})"
     )
-    title_run.font.size = Pt(16)
-    title_run.bold = True
-    doc.add_paragraph()
+    set_korean_font(title_run, size=15, bold=True, color="111827")
+
+    meta_p = doc.add_paragraph()
+    meta_p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    set_paragraph_spacing(meta_p, after=8)
+    meta_run = meta_p.add_run(f"작성일자: {date.today().strftime('%Y-%m-%d')}")
+    set_korean_font(meta_run, size=9, color="6B7280")
 
     if map_image and os.path.exists(map_image):
+        add_section_heading(doc, "위치도")
         map_p = doc.add_paragraph()
         map_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        map_p.add_run().add_picture(map_image, width=Inches(6.0))
-        doc.add_paragraph()
+        set_paragraph_spacing(map_p, after=8)
+        map_p.add_run().add_picture(map_image, width=Cm(16.2))
 
     for group in photo_groups:
         section_title = group["section"]
         items = group["items"]
 
-        header_p = doc.add_paragraph()
-        header_run = header_p.add_run(section_title)
-        header_run.bold = True
-        header_run.font.size = Pt(12)
+        add_section_heading(doc, section_title)
 
         for i in range(0, len(items), 2):
             chunk = items[i : i + 2]
             cols = len(chunk)
             table = doc.add_table(rows=2, cols=cols)
             table.style = "Table Grid"
+            widths = [8.0, 8.0] if cols == 2 else [16.0]
+            set_table_geometry(table, widths)
 
             for col_idx, item in enumerate(chunk):
                 img_cell = table.cell(0, col_idx)
+                set_cell_shading(img_cell, "F8FAFC")
                 _add_photo_to_cell(
                     img_cell,
                     item.get("sanitized_path") or item.get("path"),
-                    width_in=2.6 if cols == 2 else 5.0,
+                    width_cm=7.35 if cols == 2 else 15.25,
                 )
                 cap_cell = table.cell(1, col_idx)
                 cap_cell.text = ""
+                set_cell_shading(cap_cell, "F3F6FA")
                 _add_caption_cell(cap_cell, item.get("caption") or "")
 
-            doc.add_paragraph()
+            spacer = doc.add_paragraph()
+            set_paragraph_spacing(spacer, after=4)
 
     if main_comment:
+        add_section_heading(doc, "주요 의견")
         mc_p = doc.add_paragraph()
         mc_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        set_paragraph_spacing(mc_p, after=8, line=1.2)
         mc_run = mc_p.add_run(main_comment)
-        mc_run.bold = True
-        mc_run.font.size = Pt(12)
-        doc.add_paragraph()
+        set_korean_font(mc_run, size=11, bold=True, color="111827")
 
     if ai_refined:
-        ai_p = doc.add_paragraph()
-        ai_run = ai_p.add_run("■ AI 현장 분석 의견")
-        ai_run.bold = True
-        doc.add_paragraph(clean_markdown_for_hwp(ai_refined))
+        add_section_heading(doc, "AI 현장 분석 의견")
+        add_body_text(doc, clean_markdown_for_hwp(ai_refined))
 
-    doc.add_paragraph(
-        f"작성일자: {date.today().strftime('%Y-%m-%d')}"
-    ).alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    doc.add_paragraph(
-        "위와 같이 사하구 시설물 현장 점검 결과를 보고합니다."
-    ).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    closing_p = doc.add_paragraph()
+    closing_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    set_paragraph_spacing(closing_p, before=10)
+    closing_run = closing_p.add_run("위와 같이 사하구 시설물 현장 점검 결과를 보고합니다.")
+    set_korean_font(closing_run, size=10, color="27384A")
 
     out_path = Path(output_filename)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -369,6 +512,8 @@ def run_pipeline(payload: dict) -> dict:
     map_sanitized = sanitize_image(
         payload.get("map_image"),
         str(work_dir / "map.jpg"),
+        canvas_size=(1920, 1080),
+        fit_mode="cover",
     )
 
     sanitized_photos = []
@@ -376,7 +521,7 @@ def run_pipeline(payload: dict) -> dict:
     for idx, raw in enumerate(payload.get("field_photos") or []):
         src = raw.get("path") or raw.get("file")
         temp = str(work_dir / f"field_{idx}.jpg")
-        sanitized = sanitize_image(src, temp)
+        sanitized = sanitize_image(src, temp, canvas_size=(1600, 1100), fit_mode="cover")
         _, caption = parse_photo_comment(raw.get("comment", ""), idx + 1)
         captions.append(caption)
         sanitized_photos.append(

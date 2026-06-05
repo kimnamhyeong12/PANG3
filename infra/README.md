@@ -59,10 +59,10 @@ source infra/scripts/load-gemini-key.sh
 
 | 환경변수 | 값 |
 |----------|-----|
-| `AI_PYTHON_PATH` | `/app/ai/venv/bin/python` |
-| `AI_APP_SCRIPT` | `/app/ai/app.py` |
-| `AI_UPLOADS_DIR` | `/app/ai/uploads` |
-| `AI_OUTPUT_DIR` | `/app/ai/output` |
+| `FIELDWORK_AI_PYTHON_PATH` | `/app/ai/venv/bin/python` |
+| `FIELDWORK_AI_SCRIPT_PATH` | `/app/ai/app.py` |
+| `FIELDWORK_UPLOAD_BASE_DIR` | `/app/ai/uploads` |
+| `FIELDWORK_AI_OUTPUT_DIR` | `/app/ai/output` |
 
 상세 JSON 스키마: `ai/INTEGRATION.md`
 

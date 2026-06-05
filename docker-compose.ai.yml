@@ -17,10 +17,10 @@ services:
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
       - SSM_GEMINI_PARAM=${SSM_GEMINI_PARAM:-/sahagu/gemini/api-key}
       # 백엔드 ProcessBuilder 경로 (컨테이너 내부 기준)
-      - AI_PYTHON_PATH=/app/ai/venv/bin/python
-      - AI_APP_SCRIPT=/app/ai/app.py
-      - AI_OUTPUT_DIR=/app/ai/output
-      - AI_UPLOADS_DIR=/app/ai/uploads
+      - FIELDWORK_AI_PYTHON_PATH=/app/ai/venv/bin/python
+      - FIELDWORK_AI_SCRIPT_PATH=/app/ai/app.py
+      - FIELDWORK_AI_OUTPUT_DIR=/app/ai/output
+      - FIELDWORK_UPLOAD_BASE_DIR=/app/ai/uploads
       # 호스트에서 만든 venv 를 마운트할 때 사용 (EC2 Linux amd64)
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
 

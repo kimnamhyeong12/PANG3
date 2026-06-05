@@ -1,19 +1,21 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Modal,
-  StyleSheet,
-  FlatList,
-  Alert,
-  TextInput,
-  ScrollView,
-  Animated,
-  PanResponder,
-  BackHandler,
-} from 'react-native';
+// 키보드 자판 내 엔터가 안먹힘
 import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  Animated,
+  BackHandler,
+  FlatList,
+  Keyboard,
+  Modal,
+  PanResponder,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import KakaoMapWebView from '../components/KakaoMapWebView';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
@@ -36,8 +38,8 @@ const cleanLocation = (loc, fallbackName = '위치') => {
 
   return {
     id: loc.id ?? null,
-    name: loc.name || fallbackName,
-    address: loc.address || '',
+    detailAddress: loc.detailAddress || fallbackName,
+    roadAddress: loc.roadAddress || '',
     lat: Number(loc.lat ?? loc.latitude),
     lng: Number(loc.lng ?? loc.longitude),
     status: loc.status || 'pending',
@@ -81,14 +83,60 @@ export default function MapScreen({
   const [isSearching, setIsSearching] = useState(false);
   const [clearSearchMarkerSignal, setClearSearchMarkerSignal] = useState(0);
 
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [addressSearchMode, setAddressSearchMode] = useState(false);
+  const [mapSelectMode, setMapSelectMode] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  const [coordSheetOpen, setCoordSheetOpen] = useState(false);
+  const [coordLat, setCoordLat] = useState('');
+  const [coordLng, setCoordLng] = useState('');
+
   const [priorityMode, setPriorityMode] = useState(false);
   const [priorityCount, setPriorityCount] = useState(1);
   const [visitListOpen, setVisitListOpen] = useState(false);
 
   const sheetY = useRef(new Animated.Value(0)).current;
+  const searchInputRef = useRef(null);
 
   const markers = locations?.length ? locations : [];
   const orderedMarkers = useMemo(() => markers, [markers]);
+
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchModalVisible, setSearchModalVisible] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const PAGE_SIZE = 7;
+
+  const goFirst = () => searchPlace(1);
+  const goLast = () => searchPlace(totalPages);
+
+  const goPrev = () => {
+    if (page > 1) searchPlace(page - 1);
+  };
+
+  const goNext = () => {
+    if (page < totalPages) searchPlace(page + 1);
+  };
+
+  const getPageNumbers = () => {
+    const maxVisible = 5;
+
+    let start = Math.max(1, page - 2);
+    let end = Math.min(totalPages, start + maxVisible - 1);
+
+    if (end - start < maxVisible - 1) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+
+    const pages = [];
+
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+
+    return pages;
+  };
 
   useEffect(() => {
     setPanelOpen?.(false);
@@ -103,6 +151,21 @@ export default function MapScreen({
       setTransportMode('car');
     }
   }, [currentSegmentIndex, routeSegments, optimized]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const closeAddSheet = () => {
     Animated.timing(sheetY, {
@@ -120,6 +183,24 @@ export default function MapScreen({
 
   useEffect(() => {
     const backAction = () => {
+      if (coordSheetOpen) {
+        setCoordSheetOpen(false);
+        setCoordLat('');
+        setCoordLng('');
+        onBack?.();
+        return true;
+      }
+
+      if (mapSelectMode) {
+        setMapSelectMode(false);
+        return true;
+      }
+
+      if (addMenuOpen) {
+        setAddMenuOpen(false);
+        return true;
+      }
+
       if (searchedPlace) {
         closeAddSheet();
         return true;
@@ -149,7 +230,15 @@ export default function MapScreen({
     );
 
     return () => subscription.remove();
-  }, [searchedPlace, guideStartOpen, visitListOpen, selected]);
+  }, [
+    coordSheetOpen,
+    mapSelectMode,
+    addMenuOpen,
+    searchedPlace,
+    guideStartOpen,
+    visitListOpen,
+    selected,
+  ]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -204,7 +293,7 @@ export default function MapScreen({
     setPriorityMode(false);
   };
 
-  const searchPlace = async () => {
+  const searchPlace = async (targetPage = 1) => {
     const q = keyword.trim();
 
     if (!q) {
@@ -213,7 +302,10 @@ export default function MapScreen({
     }
 
     if (!KAKAO_REST_API_KEY) {
-      Alert.alert('REST API 키 필요', '.env의 EXPO_PUBLIC_KAKAO_REST_API_KEY를 확인하세요.');
+      Alert.alert(
+        'REST API 키 필요',
+        '.env의 EXPO_PUBLIC_KAKAO_REST_API_KEY를 확인하세요.'
+      );
       return;
     }
 
@@ -221,56 +313,28 @@ export default function MapScreen({
       setIsSearching(true);
 
       const keywordUrl =
-        'https://dapi.kakao.com/v2/local/search/keyword.json?query=' +
-        encodeURIComponent(q);
+        `https://dapi.kakao.com/v2/local/search/keyword.json` +
+        `?query=${encodeURIComponent(q)}&page=${targetPage}&size=7`;
 
-      let res = await fetch(keywordUrl, {
+      const res = await fetch(keywordUrl, {
         headers: {
           Authorization: `KakaoAK ${KAKAO_REST_API_KEY}`,
         },
       });
 
-      let data = await res.json();
-
-      if (!data.documents || data.documents.length === 0) {
-        const addressUrl =
-          'https://dapi.kakao.com/v2/local/search/address.json?query=' +
-          encodeURIComponent(q);
-
-        res = await fetch(addressUrl, {
-          headers: {
-            Authorization: `KakaoAK ${KAKAO_REST_API_KEY}`,
-          },
-        });
-
-        data = await res.json();
-      }
+      const data = await res.json();
 
       if (!data.documents || data.documents.length === 0) {
         Alert.alert('검색 실패', '검색 결과가 없습니다.');
         return;
       }
 
-      const first = data.documents[0];
-      const lat = Number(first.y);
-      const lng = Number(first.x);
+      setSearchResults(data.documents);
+      setPage(targetPage);
 
-      if (Number.isNaN(lat) || Number.isNaN(lng)) {
-        Alert.alert('검색 오류', '좌표를 읽지 못했습니다.');
-        return;
-      }
-
-      const nextPlace = {
-        name: first.place_name || first.address_name || q,
-        address: first.address_name || first.road_address_name || q,
-        lat,
-        lng,
-      };
-
-      sheetY.setValue(0);
-      setSearchedPlace(nextPlace);
-      setPlaceName(nextPlace.name);
-      setTask('');
+      const total = Math.ceil(data.meta.pageable_count / PAGE_SIZE);
+      setTotalPages(total);
+      setSearchModalVisible(true);
     } catch (error) {
       console.log(error);
       Alert.alert('검색 오류', '주소 검색 중 문제가 발생했습니다.');
@@ -279,9 +343,82 @@ export default function MapScreen({
     }
   };
 
+  const setNextPlace = async (loc) => {
+    const first = loc;
+    const lat = Number(first.y);
+    const lng = Number(first.x);
+
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      Alert.alert('검색 오류', '좌표를 읽지 못했습니다.');
+      return;
+    }
+
+    const nextLoc = {
+      detailAddress: first.place_name,
+      roadAddress: first.road_address_name || first.address_name,
+      lat,
+      lng,
+      task: '',
+      priority: null,
+    };
+
+    sheetY.setValue(0);
+    setSearchedPlace(nextLoc);
+    setPlaceName(nextLoc.detailAddress);
+    setTask('');
+    setSearchModalVisible(false);
+    setAddressSearchMode(false);
+  };
+
+  const resetAddModes = () => {
+    setCoordSheetOpen(false);
+    setSearchedPlace(null);
+    setPlaceName('');
+    setTask('');
+    setCoordLat('');
+    setCoordLng('');
+    setMapSelectMode(false);
+    setAddressSearchMode(false);
+    sheetY.setValue(0);
+    setClearSearchMarkerSignal((prev) => prev + 1);
+  };
+
+  const handleCoordinateNext = () => {
+    const lat = Number(coordLat);
+    const lng = Number(coordLng);
+
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      Alert.alert('입력 오류', '위도와 경도를 숫자로 입력하세요.');
+      return;
+    }
+
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      Alert.alert('입력 오류', '올바른 위도·경도 범위를 입력하세요.');
+      return;
+    }
+
+    const nextLoc = {
+      detailAddress: `좌표 위치 (${lat}, ${lng})`,
+      roadAddress: `위도 ${lat}, 경도 ${lng}`,
+      lat,
+      lng,
+      task: '',
+      priority: null,
+    };
+
+    sheetY.setValue(0);
+    setSearchedPlace(nextLoc);
+    setPlaceName(nextLoc.detailAddress);
+    setTask('');
+    setCoordSheetOpen(false);
+    setCoordLat('');
+    setCoordLng('');
+    setAddressSearchMode(false);
+  };
+
   const addLocation = async () => {
     if (!searchedPlace) {
-      Alert.alert('위치 필요', '먼저 주소를 검색하세요.');
+      Alert.alert('위치 필요', '먼저 위치를 선택하세요.');
       return;
     }
 
@@ -291,8 +428,8 @@ export default function MapScreen({
     }
 
     const newLoc = {
-      name: placeName.trim(),
-      address: searchedPlace.address || keyword.trim(),
+      detailAddress: searchedPlace.detailAddress,
+      roadAddress: searchedPlace.roadAddress || keyword.trim(),
       lat: searchedPlace.lat,
       lng: searchedPlace.lng,
       status: 'pending',
@@ -322,9 +459,6 @@ export default function MapScreen({
         ...markers,
         {
           ...savedLocation,
-          status: savedLocation.status || 'pending',
-          task: savedLocation.task || newLoc.task,
-          id: savedLocation.taskId,
           id: savedLocation.id ?? savedLocation.taskId ?? savedLocation.task_id,
           detailAddress: savedLocation.detailAddress,
           roadAddress: savedLocation.roadAddress,
@@ -335,10 +469,14 @@ export default function MapScreen({
       ]);
 
       setKeyword('');
+      setAddressSearchMode(false);
       closeAddSheet();
     } catch (error) {
       console.log(error);
-      Alert.alert('DB 저장 실패', '백엔드 실행 상태와 EXPO_PUBLIC_API_BASE_URL을 확인하세요.');
+      Alert.alert(
+        'DB 저장 실패',
+        '백엔드 실행 상태와 EXPO_PUBLIC_API_BASE_URL을 확인하세요.'
+      );
     }
   };
 
@@ -712,11 +850,15 @@ export default function MapScreen({
         isGuiding={isGuiding}
         searchedPlace={searchedPlace}
         clearSearchMarkerSignal={clearSearchMarkerSignal}
+        mapSelectMode={mapSelectMode}
         onDirectPlaceSelect={(place) => {
+          if (!mapSelectMode) return;
+
           sheetY.setValue(0);
           setSearchedPlace(place);
-          setPlaceName(place.name || '');
+          setPlaceName(place.detailAddress || '지도 선택 위치');
           setTask('');
+          setMapSelectMode(false);
         }}
         onCurrentLocationChange={setCurrentLocation}
         onMarkerClick={setSelected}
@@ -735,17 +877,44 @@ export default function MapScreen({
 
       <View style={styles.topOverlay}>
         <View style={styles.searchControlRow}>
-          <View style={styles.searchBox}>
-            <Ionicons name="menu" size={18} color="#1F2D3D" />
+          <TouchableOpacity
+            style={styles.searchBox}
+            activeOpacity={0.9}
+            onPress={() => {
+              if (!addressSearchMode) setAddMenuOpen(true);
+            }}
+          >
+            <TouchableOpacity onPress={onBack}>
+              <Ionicons name="chevron-back" size={20} color="#12395B" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                resetAddModes();
+                setAddressSearchMode(false);
+                setAddMenuOpen(true);
+                searchInputRef.current?.blur();
+              }}
+            >
+              <Ionicons name="menu" size={18} color="#1F2D3D" />
+            </TouchableOpacity>
 
             <TextInput
+              ref={searchInputRef}
               value={keyword}
               onChangeText={setKeyword}
-              placeholder="주소를 검색해주세요"
+              placeholder="방문지를 추가해주세요"
               placeholderTextColor="#9AA6B2"
               style={styles.searchInput}
               returnKeyType="search"
-              onSubmitEditing={searchPlace}
+              editable={addressSearchMode}
+              onFocus={() => {
+                if (!addressSearchMode) setAddMenuOpen(true);
+              }}
+              onSubmitEditing={() => {
+                searchPlace(1);
+                setPage(1);
+              }}
             />
 
             {keyword.length > 0 && (
@@ -754,10 +923,16 @@ export default function MapScreen({
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity onPress={searchPlace} disabled={isSearching}>
+            <TouchableOpacity
+              onPress={() => {
+                searchPlace(1);
+                setPage(1);
+              }}
+              disabled={isSearching}
+            >
               <Ionicons name="search" size={18} color="#111827" />
             </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={[
@@ -784,6 +959,76 @@ export default function MapScreen({
           </TouchableOpacity>
         </View>
 
+        {addMenuOpen && (
+          <View style={styles.addMenuBox}>
+            <TouchableOpacity
+              style={styles.addMenuItem}
+              onPress={() => {
+                resetAddModes();
+                setAddMenuOpen(false);
+                setAddressSearchMode(true);
+                setTimeout(() => {
+                  searchInputRef.current?.focus();
+                }, 100);
+              }}
+            >
+              <Ionicons name="location" size={18} color="#2563EB" />
+              <View>
+                <Text style={styles.addMenuTitle}>주소/장소로 검색</Text>
+                <Text style={styles.addMenuDesc}>도로명, 지번, 상호명으로 검색</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.addMenuItem}
+              onPress={() => {
+                resetAddModes();
+                setAddMenuOpen(false);
+                setAddressSearchMode(false);
+                setMapSelectMode(false);
+                setCoordSheetOpen(true);
+                searchInputRef.current?.blur();
+              }}
+            >
+              <Ionicons name="locate" size={18} color="#22C55E" />
+              <View>
+                <Text style={styles.addMenuTitle}>위도·경도로 입력</Text>
+                <Text style={styles.addMenuDesc}>위도와 경도를 직접 입력</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.addMenuItemLast}
+              onPress={() => {
+                resetAddModes();
+                setAddMenuOpen(false);
+                setAddressSearchMode(false);
+                setCoordSheetOpen(false);
+                setMapSelectMode(true);
+                searchInputRef.current?.blur();
+              }}
+            >
+              <Ionicons name="map" size={18} color="#7C3AED" />
+              <View>
+                <Text style={styles.addMenuTitle}>지도에서 직접 선택</Text>
+                <Text style={styles.addMenuDesc}>지도를 눌러 위치 선택</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {mapSelectMode && (
+          <TouchableOpacity
+            style={styles.mapSelectNotice}
+            onPress={() => setMapSelectMode(false)}
+          >
+            <Ionicons name="map" size={14} color="#FFFFFF" />
+            <Text style={styles.mapSelectNoticeText}>
+              지도에서 위치를 눌러주세요 · 취소하려면 터치
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {priorityMode && (
           <TouchableOpacity style={styles.priorityResetBox} onPress={resetPriority}>
             <Text style={styles.priorityResetText}>우선순위 초기화</Text>
@@ -797,6 +1042,7 @@ export default function MapScreen({
               <Text style={styles.emptyChipText}>방문지 없음</Text>
             </View>
           ) : (
+            // 1. 방문지 이름 2. 방문지 이름 3. 방문지 이름  탭
             <FlatList
               horizontal
               data={orderedMarkers}
@@ -819,13 +1065,13 @@ export default function MapScreen({
                   </View>
 
                   <Text style={styles.chipText} numberOfLines={1}>
-                    {item.name}
+                    {item.detailAddress}
                   </Text>
                 </TouchableOpacity>
               )}
             />
           )}
-
+          {/* (v) 탭 */}
           <TouchableOpacity
             style={styles.chevronButton}
             onPress={() => setVisitListOpen(!visitListOpen)}
@@ -837,7 +1083,7 @@ export default function MapScreen({
             />
           </TouchableOpacity>
         </View>
-
+        {/* 방문지 n개    접기 있는 탭 */}
         {visitListOpen && orderedMarkers.length > 0 && (
           <View style={styles.visitListCard}>
             <View style={styles.visitListHead}>
@@ -850,7 +1096,7 @@ export default function MapScreen({
 
             {orderedMarkers.map((loc, index) => (
               <View
-                key={`${loc.name || 'loc'}-${loc.lat}-${loc.lng}-${index}`}
+                key={`${loc.detailAddress || 'loc'}-${loc.lat}-${loc.lng}-${index}`}
                 style={styles.visitItem}
               >
                 <TouchableOpacity
@@ -868,7 +1114,7 @@ export default function MapScreen({
 
                   <View style={styles.visitTextWrap}>
                     <Text style={styles.visitName} numberOfLines={1}>
-                      {loc.name || '이름 없음'}
+                      {loc.detailAddress || '이름 없음'}
                     </Text>
                     <Text style={styles.visitTask} numberOfLines={1}>
                       {loc.task || getStatusLabel(loc.status)}
@@ -980,10 +1226,66 @@ export default function MapScreen({
         )}
       </View>
 
+      {coordSheetOpen && (
+        <Animated.View
+          style={[
+            styles.addSheet,
+            keyboardVisible && styles.addSheetKeyboardUp,
+          ]}
+        >
+          <View style={styles.sheetHandle} />
+
+          <View style={styles.coordHeader}>
+            <Text style={styles.addTitle}>위도·경도 입력</Text>
+
+            <TouchableOpacity
+              onPress={() => {
+                setCoordSheetOpen(false);
+                setCoordLat('');
+                setCoordLng('');
+              }}
+            >
+              <Ionicons name="close" size={22} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.coordRow}>
+            <View style={styles.coordInputWrap}>
+              <Text style={styles.coordLabel}>위도</Text>
+              <TextInput
+                value={coordLat}
+                onChangeText={setCoordLat}
+                placeholder="예) 35.233123"
+                placeholderTextColor="#9AA6B2"
+                keyboardType="decimal-pad"
+                style={styles.coordInput}
+              />
+            </View>
+
+            <View style={styles.coordInputWrap}>
+              <Text style={styles.coordLabel}>경도</Text>
+              <TextInput
+                value={coordLng}
+                onChangeText={setCoordLng}
+                placeholder="예) 129.084321"
+                placeholderTextColor="#9AA6B2"
+                keyboardType="decimal-pad"
+                style={styles.coordInput}
+              />
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.addButton} onPress={handleCoordinateNext}>
+            <Text style={styles.addButtonText}>다음</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
       {searchedPlace && (
         <Animated.View
           style={[
             styles.addSheet,
+            keyboardVisible && styles.addSheetKeyboardUp,
             {
               transform: [{ translateY: sheetY }],
             },
@@ -1090,7 +1392,7 @@ export default function MapScreen({
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-
+      {/* 마커 혹은 위치 클릭시 하단에 나오는 탭 */}
       <Modal
         visible={!!selected}
         transparent
@@ -1117,10 +1419,10 @@ export default function MapScreen({
 
               <View style={{ flex: 1 }}>
                 <Text style={styles.placeName}>
-                  {selected?.name || '이름 없음'}
+                  {selected?.detailAddress || '이름 없음'}
                 </Text>
                 <Text style={styles.placeAddr}>
-                  {selected?.address || selected?.task || '주소 없음'}
+                  {selected?.roadAddress || selected?.task || '주소 없음'}
                 </Text>
               </View>
             </View>
@@ -1149,6 +1451,75 @@ export default function MapScreen({
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={searchModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSearchModalVisible(false)}
+      >
+        <View style={styles.searchModalBackdrop}>
+          <View style={styles.searchModal}>
+            <Text style={styles.searchModalTitle}>검색 결과</Text>
+
+            <ScrollView>
+              {searchResults.map((place, index) => (
+                <TouchableOpacity
+                  key={`${place.id || place.place_name || index}`}
+                  style={styles.searchResultItem}
+                  onPress={() => setNextPlace(place)}
+                >
+                  <Text style={styles.searchResultName}>
+                    {place.place_name || place.address_name}
+                  </Text>
+
+                  <Text style={styles.searchResultAddress}>
+                    {place.road_address_name || place.address_name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+
+              <View style={styles.pagination}>
+                <TouchableOpacity onPress={goFirst}>
+                  <Text style={styles.pageBtn}>{'<<'}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={goPrev}>
+                  <Text style={styles.pageBtn}>{'<'}</Text>
+                </TouchableOpacity>
+
+                {getPageNumbers().map((p) => (
+                  <TouchableOpacity key={p} onPress={() => searchPlace(p)}>
+                    <Text
+                      style={[
+                        styles.pageNumber,
+                        p === page && styles.pageActive,
+                      ]}
+                    >
+                      {p}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
+                <TouchableOpacity onPress={goNext}>
+                  <Text style={styles.pageBtn}>{'>'}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={goLast}>
+                  <Text style={styles.pageBtn}>{'>>'}</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setSearchModalVisible(false)}
+            >
+              <Text style={styles.closeButtonText}>닫기</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1505,6 +1876,10 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
     elevation: 9,
+  },
+
+  addSheetKeyboardUp: {
+    bottom: 350,
   },
 
   sheetHandle: {
