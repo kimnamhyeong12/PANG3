@@ -15,13 +15,7 @@ from dotenv import load_dotenv
 from google import genai
 from PIL import Image, ImageOps
 from pillow_heif import register_heif_opener
-from docx import Document
-from docx.enum.section import WD_SECTION_START
-from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from docx.shared import Cm, Inches, Pt, RGBColor
+from hwpx import HwpxDocument
 
 
 register_heif_opener()
@@ -220,128 +214,6 @@ def clean_markdown_for_hwp(text: str) -> str:
     return "\n".join(cleaned)
 
 
-def set_korean_font(run, size: int | None = None, bold: bool | None = None, color: str | None = None) -> None:
-    run.font.name = "Malgun Gothic"
-    run._element.rPr.rFonts.set(qn("w:eastAsia"), "Malgun Gothic")
-    if size is not None:
-        run.font.size = Pt(size)
-    if bold is not None:
-        run.bold = bold
-    if color:
-        run.font.color.rgb = RGBColor.from_string(color)
-
-
-def set_paragraph_spacing(paragraph, before: int = 0, after: int = 0, line: float = 1.15) -> None:
-    paragraph.paragraph_format.space_before = Pt(before)
-    paragraph.paragraph_format.space_after = Pt(after)
-    paragraph.paragraph_format.line_spacing = line
-
-
-def set_cell_shading(cell, fill: str) -> None:
-    tc_pr = cell._tc.get_or_add_tcPr()
-    shd = tc_pr.find(qn("w:shd"))
-    if shd is None:
-        shd = OxmlElement("w:shd")
-        tc_pr.append(shd)
-    shd.set(qn("w:fill"), fill)
-
-
-def set_cell_margins(cell, top: int = 100, start: int = 120, bottom: int = 100, end: int = 120) -> None:
-    tc_pr = cell._tc.get_or_add_tcPr()
-    tc_mar = tc_pr.first_child_found_in("w:tcMar")
-    if tc_mar is None:
-        tc_mar = OxmlElement("w:tcMar")
-        tc_pr.append(tc_mar)
-    for name, value in (("top", top), ("start", start), ("bottom", bottom), ("end", end)):
-        node = tc_mar.find(qn(f"w:{name}"))
-        if node is None:
-            node = OxmlElement(f"w:{name}")
-            tc_mar.append(node)
-        node.set(qn("w:w"), str(value))
-        node.set(qn("w:type"), "dxa")
-
-
-def set_table_geometry(table, widths_cm: list[float]) -> None:
-    table.alignment = WD_TABLE_ALIGNMENT.CENTER
-    table.autofit = False
-    tbl_pr = table._tbl.tblPr
-    tbl_w = tbl_pr.find(qn("w:tblW"))
-    if tbl_w is None:
-        tbl_w = OxmlElement("w:tblW")
-        tbl_pr.append(tbl_w)
-    tbl_w.set(qn("w:type"), "dxa")
-    tbl_w.set(qn("w:w"), str(sum(int(Cm(width).emu / 635) for width in widths_cm)))
-
-    grid = table._tbl.tblGrid
-    if grid is None:
-        grid = OxmlElement("w:tblGrid")
-        table._tbl.insert(0, grid)
-    for child in list(grid):
-        grid.remove(child)
-    for width in widths_cm:
-        grid_col = OxmlElement("w:gridCol")
-        grid_col.set(qn("w:w"), str(int(Cm(width).emu / 635)))
-        grid.append(grid_col)
-
-    for row in table.rows:
-        for idx, width in enumerate(widths_cm):
-            cell = row.cells[idx]
-            cell.width = Cm(width)
-            tc_w = cell._tc.get_or_add_tcPr().find(qn("w:tcW"))
-            if tc_w is None:
-                tc_w = OxmlElement("w:tcW")
-                cell._tc.get_or_add_tcPr().append(tc_w)
-            tc_w.set(qn("w:type"), "dxa")
-            tc_w.set(qn("w:w"), str(int(Cm(width).emu / 635)))
-
-
-def _add_caption_cell(cell, caption: str) -> None:
-    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-    set_cell_margins(cell, top=90, bottom=90)
-    p = cell.paragraphs[0]
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    set_paragraph_spacing(p, after=0, line=1.05)
-    run = p.add_run(caption or " ")
-    set_korean_font(run, size=9, color="3F4F63")
-
-
-def _add_photo_to_cell(cell, img_path: str | None, width_cm: float) -> None:
-    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-    set_cell_margins(cell, top=110, bottom=110, start=110, end=110)
-    if img_path and os.path.exists(img_path):
-        p = cell.paragraphs[0]
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        set_paragraph_spacing(p, after=0)
-        run = p.add_run()
-        run.add_picture(img_path, width=Cm(width_cm))
-    else:
-        p = cell.paragraphs[0]
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run("[사진 없음]")
-        set_korean_font(run, size=10, color="6B7280")
-
-
-def add_section_heading(doc: Document, text: str) -> None:
-    p = doc.add_paragraph()
-    set_paragraph_spacing(p, before=8, after=5)
-    run = p.add_run(text)
-    set_korean_font(run, size=12, bold=True, color="153B5C")
-
-
-def add_body_text(doc: Document, text: str) -> None:
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        p = doc.add_paragraph()
-        set_paragraph_spacing(p, after=3, line=1.25)
-        if re.match(r"^\d+\.", line):
-            p.paragraph_format.left_indent = Cm(0.35)
-            p.paragraph_format.first_line_indent = Cm(-0.35)
-        run = p.add_run(line)
-        set_korean_font(run, size=10, color="27384A")
-
-
 def create_fieldwork_report(report_data: dict, output_filename: str) -> str:
     location_name = str(report_data.get("location_name") or "사하구 관내")
     task_category = str(report_data.get("task_category") or "현장 점검")
@@ -350,93 +222,145 @@ def create_fieldwork_report(report_data: dict, output_filename: str) -> str:
     photo_groups = report_data.get("photo_groups") or []
     ai_refined = report_data.get("ai_refined_content") or ""
 
-    doc = Document()
-    section = doc.sections[0]
-    section.start_type = WD_SECTION_START.NEW_PAGE
-    section.page_width = Cm(21)
-    section.page_height = Cm(29.7)
-    section.top_margin = Cm(1.6)
-    section.bottom_margin = Cm(1.5)
-    section.left_margin = Cm(1.7)
-    section.right_margin = Cm(1.7)
+    # 1. 템플릿 로드
+    template_path = Path(__file__).resolve().parent / "templates" / "template.hwpx"
+    if template_path.exists():
+        doc = HwpxDocument.open(str(template_path))
+    else:
+        doc = HwpxDocument.new()
+        # 기본 여백 지정
+        doc.set_page_margins(left=4819, right=4819, top=4535, bottom=4252)
 
-    style = doc.styles["Normal"]
-    style.font.name = "Malgun Gothic"
-    style._element.rPr.rFonts.set(qn("w:eastAsia"), "Malgun Gothic")
-    style.font.size = Pt(10)
-
+    # 2. 제목 추가
     title_p = doc.add_paragraph()
-    title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    set_paragraph_spacing(title_p, after=4)
-    title_run = title_p.add_run(
-        f"위치도 및 현장사진({location_name}, {task_category})"
-    )
-    set_korean_font(title_run, size=15, bold=True, color="111827")
-
+    title_text = f"위치도 및 현장사진({location_name}, {task_category})"
+    title_p.add_run(title_text, bold=True, size=15, color="#111827", font="Malgun Gothic")
+    
+    # 3. 작성일자 추가
     meta_p = doc.add_paragraph()
-    meta_p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    set_paragraph_spacing(meta_p, after=8)
-    meta_run = meta_p.add_run(f"작성일자: {date.today().strftime('%Y-%m-%d')}")
-    set_korean_font(meta_run, size=9, color="6B7280")
+    meta_p.add_run(f"작성일자: {date.today().strftime('%Y-%m-%d')}", size=9, color="#6B7280", font="Malgun Gothic")
+    
+    # 공백 문단 추가
+    doc.add_paragraph()
 
+    # 4. 위치도 추가
     if map_image and os.path.exists(map_image):
-        add_section_heading(doc, "위치도")
-        map_p = doc.add_paragraph()
-        map_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        set_paragraph_spacing(map_p, after=8)
-        map_p.add_run().add_picture(map_image, width=Cm(16.2))
+        heading_p = doc.add_paragraph()
+        heading_p.add_run("■ 위치도", bold=True, size=12, color="#153B5C", font="Malgun Gothic")
+        
+        with open(map_image, 'rb') as f:
+            img_data = f.read()
+        img_format = 'png' if map_image.lower().endswith('.png') else 'jpg'
+        
+        map_img_p = doc.add_paragraph()
+        binary_item_id_ref = doc.add_image(img_data, img_format)
+        map_img_p.add_picture(binary_item_id_ref, width=45921, height=25831)
+        
+        doc.add_paragraph()
 
+    # 5. 사진 그룹 추가
     for group in photo_groups:
         section_title = group["section"]
         items = group["items"]
-
-        add_section_heading(doc, section_title)
-
+        
+        heading_p = doc.add_paragraph()
+        heading_p.add_run(f"■ {section_title}", bold=True, size=12, color="#153B5C", font="Malgun Gothic")
+        
         for i in range(0, len(items), 2):
             chunk = items[i : i + 2]
             cols = len(chunk)
-            table = doc.add_table(rows=2, cols=cols)
-            table.style = "Table Grid"
-            widths = [8.0, 8.0] if cols == 2 else [16.0]
-            set_table_geometry(table, widths)
-
+            
+            # 테이블 너비를 전체 가용 가로폭인 45354로 고정 지정하여 찌그러짐 방지
+            table = doc.add_table(rows=3, cols=cols, width=45354)
+            
+            # 열 가중치 및 개별 폭 지정
+            if cols == 2:
+                table.set_column_widths([22677, 22677])
+            else:
+                table.set_column_widths([45354])
+            
+            # 셀별 높이 지정 (사진 행은 크게, 텍스트 행은 작게 조정하여 찌그러짐 방지)
+            h_photo = 14324 if cols == 2 else 29720
+            h_text = 1200
+            
             for col_idx, item in enumerate(chunk):
-                img_cell = table.cell(0, col_idx)
-                set_cell_shading(img_cell, "F8FAFC")
-                _add_photo_to_cell(
-                    img_cell,
-                    item.get("sanitized_path") or item.get("path"),
-                    width_cm=7.35 if cols == 2 else 15.25,
-                )
-                cap_cell = table.cell(1, col_idx)
-                cap_cell.text = ""
-                set_cell_shading(cap_cell, "F3F6FA")
-                _add_caption_cell(cap_cell, item.get("caption") or "")
+                # 1행: 사진 셀 설정
+                table.set_cell_shading(0, col_idx, '#F8FAFC')
+                table.rows[0].cells[col_idx].set_size(height=h_photo)
+                cell_img_p = table.rows[0].cells[col_idx].paragraphs[0]
+                
+                img_path = item.get("sanitized_path") or item.get("path")
+                if img_path and os.path.exists(img_path):
+                    with open(img_path, 'rb') as f:
+                        cell_img_data = f.read()
+                    cell_img_format = 'png' if img_path.lower().endswith('.png') else 'jpg'
+                    cell_bin_ref = doc.add_image(cell_img_data, cell_img_format)
+                    
+                    w_units = 20835 if cols == 2 else 43228
+                    h_units = 14324 if cols == 2 else 29720
+                    cell_img_p.add_picture(cell_bin_ref, width=w_units, height=h_units)
+                else:
+                    cell_img_p.add_run("[사진 없음]", size=10, color="#6B7280", font="Malgun Gothic")
+                
+                # 2행: 캡션 셀 설정
+                table.set_cell_shading(1, col_idx, '#F3F6FA')
+                table.rows[1].cells[col_idx].set_size(height=h_text)
+                caption_text = item.get("caption") or ""
+                table.set_cell_text(1, col_idx, caption_text)
+                
+            if cols == 2:
+                table.merge_cells(2, 0, 2, 1)
+            
+            # 3행: 주요 의견 셀 설정
+            table.set_cell_shading(2, 0, '#FFFFFF')
+            table.rows[2].cells[0].set_size(height=h_text)
+            comment_label = f"주요 의견: {main_comment}" if main_comment else "주요 의견: 없음"
+            table.set_cell_text(2, 0, comment_label)
+            
+            doc.add_paragraph()
 
-            spacer = doc.add_paragraph()
-            set_paragraph_spacing(spacer, after=4)
-
+    # 6. 주요 의견 (단독 섹션)
     if main_comment:
-        add_section_heading(doc, "주요 의견")
+        heading_p = doc.add_paragraph()
+        heading_p.add_run("■ 주요 의견", bold=True, size=12, color="#153B5C", font="Malgun Gothic")
+        
         mc_p = doc.add_paragraph()
-        mc_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        set_paragraph_spacing(mc_p, after=8, line=1.2)
-        mc_run = mc_p.add_run(main_comment)
-        set_korean_font(mc_run, size=11, bold=True, color="111827")
+        mc_p.add_run(main_comment, bold=True, size=11, color="#111827", font="Malgun Gothic")
+        doc.add_paragraph()
 
+    # 7. AI 현장 분석 의견 추가
     if ai_refined:
-        add_section_heading(doc, "AI 현장 분석 의견")
-        add_body_text(doc, clean_markdown_for_hwp(ai_refined))
+        heading_p = doc.add_paragraph()
+        heading_p.add_run("■ AI 현장 분석 의견", bold=True, size=12, color="#153B5C", font="Malgun Gothic")
+        
+        cleaned_ai_refined = clean_markdown_for_hwp(ai_refined)
+        for line in cleaned_ai_refined.splitlines():
+            line_str = line.strip()
+            if not line_str:
+                continue
+            body_p = doc.add_paragraph()
+            body_p.add_run(line_str, size=10, color="#27384A", font="Malgun Gothic")
+        
+        doc.add_paragraph()
 
+    # 8. 마침말 추가
     closing_p = doc.add_paragraph()
-    closing_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    set_paragraph_spacing(closing_p, before=10)
-    closing_run = closing_p.add_run("위와 같이 사하구 시설물 현장 점검 결과를 보고합니다.")
-    set_korean_font(closing_run, size=10, color="27384A")
+    closing_p.add_run("위와 같이 사하구 시설물 현장 점검 결과를 보고합니다.", size=10, color="#27384A", font="Malgun Gothic")
+
+    # 9. 파일 저장 및 바이너리 매핑 오류 보정
+    # Hancom Office에서 이미지가 정상적으로 표시되도록 binItem id와 binaryItemIDRef를 매칭시킴 (라이브러리 버그 보완)
+    header = doc._root.headers[0] if doc._root.headers else None
+    if header is not None:
+        for elem in header.element.iter():
+            if elem.tag.endswith("binItem"):
+                bin_data_val = elem.get("BinData")
+                if bin_data_val:
+                    name_without_ext = bin_data_val.split(".")[0]
+                    elem.set("id", name_without_ext)
 
     out_path = Path(output_filename)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    doc.save(str(out_path))
+    doc.save_to_path(str(out_path))
     return str(out_path.resolve())
 
 
@@ -566,7 +490,7 @@ def run_pipeline(payload: dict) -> dict:
     )
 
     report_name = (
-        f"위치도_및_현장사진_{safe_filename(location_name)}_{date.today():%Y%m%d}.hwp"
+        f"위치도_및_현장사진_{safe_filename(location_name)}_{date.today():%Y%m%d}.hwpx"
     )
     report_path = create_fieldwork_report(
         {

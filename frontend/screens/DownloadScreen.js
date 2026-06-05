@@ -28,7 +28,7 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
         <Text style={styles.icon}>✅</Text>
         <Text style={styles.main}>보고서가 생성되었습니다</Text>
         <Text style={styles.desc}>
-          HWP 파일을 열어 확인하세요.{'\n'}
+          HWPX 파일을 열어 확인하세요.{'\n'}
           (브라우저 또는 한컴오피스)
         </Text>
         <PrimaryButton title="보고서 파일 열기" onPress={openReport} />
