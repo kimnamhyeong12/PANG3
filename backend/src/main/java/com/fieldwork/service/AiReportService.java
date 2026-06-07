@@ -110,6 +110,16 @@ public class AiReportService {
                 processBuilder.redirectErrorStream(true);
                 Process process = processBuilder.start();
 
+                List<String> outputLines = new ArrayList<>();
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        System.out.println("[Python] " + line);
+                        outputLines.add(line);
+                    }
+                }
+
                 boolean finished = process.waitFor(120, TimeUnit.SECONDS);
                 if (!finished) {
                     process.destroyForcibly();
@@ -121,15 +131,10 @@ public class AiReportService {
                     continue;
                 }
 
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        System.out.println("[Python] " + line);
-                        if (line.contains("@@AI_RESULT@@")) {
-                            String rawJson = line.substring(line.indexOf("@@AI_RESULT@@") + "@@AI_RESULT@@".length()).trim();
-                            return objectMapper.readValue(rawJson, new TypeReference<Map<String, Object>>() {});
-                        }
+                for (String line : outputLines) {
+                    if (line.contains("@@AI_RESULT@@")) {
+                        String rawJson = line.substring(line.indexOf("@@AI_RESULT@@") + "@@AI_RESULT@@".length()).trim();
+                        return objectMapper.readValue(rawJson, new TypeReference<Map<String, Object>>() {});
                     }
                 }
             } catch (Exception e) {
