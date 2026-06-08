@@ -348,7 +348,18 @@ def create_fieldwork_report(report_data: dict, output_filename: str) -> str:
     closing_p.add_run("위와 같이 사하구 시설물 현장 점검 결과를 보고합니다.", size=10, color="#27384A", font="Malgun Gothic")
 
     # 9. 파일 저장 및 바이너리 매핑 오류 보정
-    # Hancom Office에서 이미지가 정상적으로 표시되도록 binItem id와 binaryItemIDRef를 매칭시킴 (라이브러리 버그 보완)
+    # Hancom Office에서 이미지가 정상적으로 표시되도록 binItem id 매칭 및 manifest(content.hpf) isEmbeded="1" 속성 추가 (라이브러리 버그 보완)
+    # 9-1. manifest (content.hpf) 보정
+    manifest_tree = doc._package.manifest_tree()
+    if manifest_tree is not None:
+        for elem in manifest_tree.iter():
+            if elem.tag.endswith("item"):
+                href = elem.get("href", "")
+                if href.startswith("BinData/"):
+                    elem.set("isEmbeded", "1")
+        doc._package._persist_manifest()
+
+    # 9-2. header.xml binItem id 매칭
     header = doc._root.headers[0] if doc._root.headers else None
     if header is not None:
         for elem in header.element.iter():
