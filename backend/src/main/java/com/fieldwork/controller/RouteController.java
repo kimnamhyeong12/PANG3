@@ -1,11 +1,17 @@
 package com.fieldwork.controller;
 
-import com.fieldwork.service.RouteService;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.fieldwork.service.RouteService;
+
+@SuppressWarnings("unchecked")
 @RestController
 @RequestMapping("/api/routes")
 @CrossOrigin("*")
@@ -20,7 +26,6 @@ public class RouteController {
     @PostMapping("/optimize")
     public Map<String, Object> optimizeRoute(@RequestBody Map<String, Object> body) {
         System.out.println("=== /api/routes/optimize 호출됨 ===");
-//        시작 위치는 roadAddress가 나오지 않음
         System.out.println(body);
 
         List<Map<String, Object>> locations =

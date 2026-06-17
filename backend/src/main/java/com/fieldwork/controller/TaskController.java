@@ -1,43 +1,40 @@
 package com.fieldwork.controller;
 
-import com.fieldwork.entity.Location;
-import com.fieldwork.entity.Task;
 import com.fieldwork.service.TaskService;
-
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
-@RequestMapping("/api/locations")
-@CrossOrigin("*")
+@RequestMapping("/api/tasks")
+@CrossOrigin(origins = "*")
 public class TaskController {
 
-    private final TaskService service;
+    private final TaskService taskService;
 
-    public TaskController(TaskService service){
-        this.service = service;
+    public TaskController(TaskService taskService) {
+        this.taskService = taskService;
     }
 
     @GetMapping
-    public List<Task> getAllTasks(){
-        return service.getAllTasks();
+    public List<Map<String, Object>> getTasks() {
+        return taskService.getAllForFrontend();
     }
-
-    @GetMapping("/status/{status}")
-    public List<Task> getStatusTasks(@PathVariable String status) { return service.getStatusTasks(status); }
 
     @PostMapping
-    public Task createTask(
-            @RequestBody Task task
-    ){
-        return service.saveTask(task);
+    public Map<String, Object> createTask(@RequestBody Map<String, Object> body) {
+        return taskService.createFromFrontendBody(body);
     }
-    @PatchMapping("/{id}/status")
-    public Task updateStatus(
-            @PathVariable Long id,
-            @RequestBody Task task
+
+    @PatchMapping("/{taskId}/status")
+    public Map<String, Object> updateStatus(
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body
     ) {
-        return service.updateStatus(id, task.getStatus());
+        String status = body.get("status") != null
+                ? body.get("status").toString()
+                : body.get("taskStatus").toString();
+        return taskService.updateStatus(taskId, status);
     }
 }

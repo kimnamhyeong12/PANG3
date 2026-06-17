@@ -1,12 +1,17 @@
 package com.fieldwork.controller;
 
-import com.fieldwork.entity.Task;
 import com.fieldwork.entity.TaskProgress;
-import com.fieldwork.repository.TaskProgressRepository;
-import com.fieldwork.repository.TaskRepository;
+import com.fieldwork.service.TaskProgressService;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartHttpServletRequest;
 
-import java.util.List;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Map;
 
 @RestController
@@ -14,69 +19,47 @@ import java.util.Map;
 @CrossOrigin(origins = "*")
 public class TaskProgressController {
 
-    private final TaskProgressRepository taskProgressRepository;
-    private final TaskRepository taskRepository;
+    private final TaskProgressService taskProgressService;
 
-    public TaskProgressController(
-            TaskProgressRepository taskProgressRepository,
-            TaskRepository taskRepository
-    ) {
-        this.taskProgressRepository = taskProgressRepository;
-        this.taskRepository = taskRepository;
+    public TaskProgressController(TaskProgressService taskProgressService) {
+        this.taskProgressService = taskProgressService;
     }
 
-    @PostMapping
-    public TaskProgress saveProgress(@RequestBody Map<String, Object> body) {
-        Long taskId = Long.valueOf(body.get("taskId").toString());
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> saveProgressMultipart(MultipartHttpServletRequest request) throws Exception {
+        return taskProgressService.saveFromMultipart(request);
+    }
 
-        Task task = taskRepository.findById(taskId)
-                .orElseThrow(() -> new RuntimeException("Task not found"));
-
-        TaskProgress progress = new TaskProgress();
-        progress.setTask(task);
-
-        progress.setLatitude(toDouble(body.get("latitude")));
-        progress.setLongitude(toDouble(body.get("longitude")));
-        progress.setLocationMapImage((String) body.get("locationMapImage"));
-        progress.setFieldPhotos((List<Map<String, Object>>) body.get("fieldPhotos"));
-        progress.setMainComment((String) body.get("mainComment"));
-        progress.setFieldMemo((String) body.get("fieldMemo"));
-
-        String progressStatus = (String) body.get("progressStatus");
-        progress.setProgressStatus(progressStatus);
-
-        if (progressStatus != null) {
-            task.setStatus(progressStatus);
-            taskRepository.save(task);
-        }
-
-        return taskProgressRepository.save(progress);
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> saveProgressJson(@RequestBody Map<String, Object> body) throws Exception {
+        return taskProgressService.saveFromJson(body);
     }
 
     @GetMapping("/task/{taskId}")
     public Map<String, Object> getProgressByTaskId(@PathVariable Long taskId) {
-        return taskProgressRepository
-                .findTopByTask_TaskIdOrderByCreatedAtDesc(taskId)
-                .map(progress -> {
-                    Map<String, Object> result = new java.util.HashMap<>();
-
-                    result.put("progressId", progress.getProgressId());
-                    result.put("taskId", progress.getTask().getTaskId());
-                    result.put("latitude", progress.getLatitude());
-                    result.put("longitude", progress.getLongitude());
-                    result.put("locationMapImage", progress.getLocationMapImage());
-                    result.put("fieldPhotos", progress.getFieldPhotos());
-                    result.put("mainComment", progress.getMainComment());
-                    result.put("fieldMemo", progress.getFieldMemo());
-                    result.put("progressStatus", progress.getProgressStatus());
-
-                    return result;
-                })
-                .orElse(null);
+        return taskProgressService.getLatestByTaskId(taskId);
     }
 
-    private Double toDouble(Object value) {
-        if (value == null) return null;
-        return Double.valueOf(value.toString());
+    @GetMapping("/{progressId}/report/download")
+    public ResponseEntity<Resource> downloadReport(@PathVariable Long progressId) {
+        TaskProgress progress = taskProgressService.getById(progressId);
+        String reportPath = progress.getReportFilePath();
+
+        if (reportPath == null || reportPath.isBlank()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Path file = Paths.get(reportPath);
+        if (!file.toFile().exists()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        String filename = file.getFileName().toString();
+        FileSystemResource resource = new FileSystemResource(file);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(resource);
     }
 }

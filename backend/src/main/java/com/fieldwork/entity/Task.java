@@ -1,52 +1,89 @@
 package com.fieldwork.entity;
 
-import jakarta.persistence.*;
-import org.hibernate.annotations.CreationTimestamp;
-
-import java.time.LocalDateTime;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 @Entity
-@Table(name="task")
+@Table(name = "task")
 public class Task {
 
     @Id
-    @Column(name="task_id")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "task_id")
     private Long taskId;
-    @Column(name="road_address")
+
+    @Column(name = "road_address")
     private String roadAddress;
-    @Column(name="detail_address")
+
+    @Column(name = "detail_address")
     private String detailAddress;
-    @Column(name="task_category")
-    private String taskCategory;
-    private String status;
-    @CreationTimestamp
-    @Column(name="created_at", updatable = false)
-    private LocalDateTime createdAt;
 
     private Double lat;
     private Double lng;
 
-    public Task(){}
+    @Column(name = "task_category")
+    private String taskCategory;
 
-    public Long getTaskId(){ return taskId; }
-    public void setTaskId(Long taskId){ this.taskId=taskId; }
+    @Column(name = "task_status")
+    private String taskStatus;
 
-    public String getDetailAddress(){ return detailAddress; }
-    public void setDetailAddress(String detailAddress){ this.detailAddress=detailAddress; }
+    public Long getTaskId() {
+        return taskId;
+    }
 
-    public String getRoadAddress(){ return roadAddress; }
-    public void setRoadAddress(String roadAddress){ this.roadAddress=roadAddress; }
+    public void setTaskId(Long taskId) {
+        this.taskId = taskId;
+    }
 
-    public String getTaskCategory() {return taskCategory; }
-    public void setTaskCategory(String taskCategory){ this.taskCategory=taskCategory; }
+    public String getRoadAddress() {
+        return roadAddress;
+    }
 
-    public String getStatus(){ return status; }
-    public void setStatus(String status){ this.status=status; }
+    public void setRoadAddress(String roadAddress) {
+        this.roadAddress = roadAddress;
+    }
 
-    public Double getLat(){ return lat; }
-    public void setLat(Double lat){ this.lat=lat; }
+    public String getDetailAddress() {
+        return detailAddress;
+    }
 
-    public Double getLng(){ return lng; }
-    public void setLng(Double lng){ this.lng=lng; }
+    public void setDetailAddress(String detailAddress) {
+        this.detailAddress = detailAddress;
+    }
+
+    public Double getLat() {
+        return lat;
+    }
+
+    public void setLat(Double lat) {
+        this.lat = lat;
+    }
+
+    public Double getLng() {
+        return lng;
+    }
+
+    public void setLng(Double lng) {
+        this.lng = lng;
+    }
+
+    public String getTaskCategory() {
+        return taskCategory;
+    }
+
+    public void setTaskCategory(String taskCategory) {
+        this.taskCategory = taskCategory;
+    }
+
+    public String getTaskStatus() {
+        return taskStatus;
+    }
+
+    public void setTaskStatus(String taskStatus) {
+        this.taskStatus = taskStatus;
+    }
 }

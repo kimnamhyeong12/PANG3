@@ -19,6 +19,7 @@ export default function App() {
 
   const [routeLocations, setRouteLocations] = useState([]);
   const [reportTargets, setReportTargets] = useState([]);
+  const [downloadInfo, setDownloadInfo] = useState(null);
 
   const [roadPath, setRoadPath] = useState([]);
   const [routeSegments, setRouteSegments] = useState([]);
@@ -134,12 +135,18 @@ export default function App() {
         <ReportScreen
           locations={reportTargets}
           onBack={() => go('reportList')}
-          onDownload={() => go('download')}
+          onDownload={(info) => {
+            setDownloadInfo(info);
+            go('download');
+          }}
         />
       )}
 
       {screen === 'download' && (
-        <DownloadScreen onBack={() => go('main')} />
+        <DownloadScreen
+          onBack={() => go('main')}
+          downloadInfo={downloadInfo}
+        />
       )}
     </SafeAreaView>
   );

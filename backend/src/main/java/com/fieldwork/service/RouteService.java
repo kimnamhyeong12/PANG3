@@ -1,21 +1,30 @@
-// 특정 위치 a 부터 특정 위치 b까지를 segment로 지칭하는 것 같음
 package com.fieldwork.service;
 
-import org.springframework.core.env.Environment;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.*;
-
+@SuppressWarnings("unchecked")
 @Service
 public class RouteService {
 
     @Value("${kakao.rest-api-key}")
-    public String kakaoRestApiKey;
+    private String kakaoRestApiKey;
+
     @Value("${ors.api-key}")
-    public String orsApiKey;
+    private String orsApiKey;
+
     private final RestTemplate restTemplate = new RestTemplate();
 
     public Map<String, Object> optimizeRoute(
@@ -26,7 +35,7 @@ public class RouteService {
         if (locations == null || locations.size() < 2) {
             throw new IllegalArgumentException("방문지는 2개 이상 필요합니다.");
         }
-        // 디폴트는 자동차
+
         String mode = transportMode == null ? "car" : transportMode;
 
         List<Map<String, Object>> optimizedLocations =
@@ -57,36 +66,28 @@ public class RouteService {
     ) {
         return optimizeRoute(currentLocation, locations, "car");
     }
-    // 우선순위에 따른 방문지 최적
-    // 현재 위치와, 방문지들을 파라미터로 받음
+
     private List<Map<String, Object>> optimizeWithPriority(
             Map<String, Object> currentLocation,
             List<Map<String, Object>> locations
-    )
-    {
-        // 우선순위 방문지
+    ) {
         List<Map<String, Object>> priorityLocations = new ArrayList<>();
-        // 일반 방문지
         List<Map<String, Object>> normalLocations = new ArrayList<>();
 
-        // 방문지들을 돌려서
         for (Map<String, Object> loc : locations) {
             Object priority = loc.get("priority");
-            // 방문지 중에 우선순위 필드에 null과 공백이 아니라면 -> 우선순위라면
+
             if (
                     priority != null &&
                     !String.valueOf(priority).equals("null") &&
                     !String.valueOf(priority).isBlank()
             ) {
-                // 우선순위 방문지에 추가
                 priorityLocations.add(loc);
             } else {
-                // 우선순위가 아닌 곳 추가
                 normalLocations.add(loc);
             }
         }
 
-        // 우선순위 방문지 정렬
         priorityLocations.sort((a, b) -> {
             int p1 = Integer.parseInt(String.valueOf(a.get("priority")));
             int p2 = Integer.parseInt(String.valueOf(b.get("priority")));
@@ -94,7 +95,6 @@ public class RouteService {
         });
 
         List<Map<String, Object>> result = new ArrayList<>();
-        // 우선순위 방문지부터 추가
         result.addAll(priorityLocations);
 
         if (!normalLocations.isEmpty()) {
@@ -279,8 +279,6 @@ public class RouteService {
         return result;
     }
 
-    // 걷기는 왜 kakao map api를 사용하지 않고 ors를 사용한 이유를 알아보기
-
     private Map<String, Object> getOrsWalkingPath(
             Map<String, Object> currentLocation,
             List<Map<String, Object>> locations
@@ -301,7 +299,6 @@ public class RouteService {
 
             HttpHeaders headers = new HttpHeaders();
             headers.set("Authorization", orsApiKey);
-
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             Map<String, Object> requestBody = new HashMap<>();
@@ -412,8 +409,8 @@ public class RouteService {
         Map<String, Object> segment = new HashMap<>();
         segment.put("fromIndex", index);
         segment.put("toIndex", index + 1);
-        segment.put("fromName", String.valueOf(start.get("detailAddress")));
-        segment.put("toName", String.valueOf(end.get("detailAddress")));
+        segment.put("fromName", String.valueOf(start.get("name")));
+        segment.put("toName", String.valueOf(end.get("name")));
         segment.put("mode", mode);
         segment.put("path", segmentPath);
 
@@ -424,8 +421,7 @@ public class RouteService {
             Map<String, Object> start,
             Map<String, Object> end,
             String transportMode
-    )
-    {
+    ) {
         List<Map<String, Object>> locations = new ArrayList<>();
         locations.add(end);
 

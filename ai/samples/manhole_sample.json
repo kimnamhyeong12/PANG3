@@ -1,0 +1,15 @@
+{
+  "location_name": "장림동 배수구역",
+  "task_category": "맨홀·배수 점검",
+  "latitude": 35.0788,
+  "longitude": 128.9663,
+  "main_comment": "배수 불량 우려 구간 긴급 점검 및 정비 요청",
+  "field_memo": "맨홀 내부 토사 적체, 배수로 상태 확인 필요",
+  "map_image": "test2.jpeg",
+  "field_photos": [
+    { "path": "test2.jpeg", "comment": "현장사진(2)|도로 맨홀 주변" },
+    { "path": "test2.jpeg", "comment": "현장사진(2)|맨홀 개방 상태" },
+    { "path": "test2.jpeg", "comment": "현장사진(3)|맨홀 내부 배수로" }
+  ],
+  "output_dir": "output"
+}

@@ -10,10 +10,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { BackButton, PrimaryButton } from '../components/ui';
-
-
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+import { API_BASE_URL, resolveApiUrl } from '../utils/api';
 
 function getAiRecommendation(memo) {
   const text = memo.toLowerCase();
@@ -84,6 +81,9 @@ export default function FieldActionScreen({
   const [photos, setPhotos] = useState([]);
   const [mainComment, setMainComment] = useState('');
   const [fieldMemo, setFieldMemo] = useState('');
+  const [aiRefinedContent, setAiRefinedContent] = useState('');
+  const [reportDownloadUrl, setReportDownloadUrl] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const taskId = location?.id ?? location?.taskId ?? location?.task_id;
 
@@ -121,10 +121,21 @@ export default function FieldActionScreen({
             : ''
         );
 
-        setLocationMapImage(data.locationMapImage || null);
-        setPhotos(data.fieldPhotos || []);
+        setLocationMapImage(resolveApiUrl(data.locationMapImage) || null);
+        setPhotos(
+          (data.fieldPhotos || []).map((p) => ({
+            uri: resolveApiUrl(p.uri || p.path) || p.uri || p.path,
+            comment: p.comment || '',
+          }))
+        );
         setMainComment(data.mainComment || '');
         setFieldMemo(data.fieldMemo || '');
+        setAiRefinedContent(data.aiRefinedContent || '');
+        setReportDownloadUrl(
+          data.reportDownloadUrl
+            ? resolveApiUrl(data.reportDownloadUrl)
+            : null
+        );
         setStatus(data.progressStatus || location?.status || 'pending');
       } catch (error) {
         console.log('저장된 보고서 불러오기 실패:', error);
@@ -205,29 +216,46 @@ export default function FieldActionScreen({
         return;
       }
 
-      const reportData = {
-        taskId,
+      if (!API_BASE_URL) {
+        alert('EXPO_PUBLIC_API_BASE_URL을 설정하세요.');
+        return;
+      }
 
-        latitude: Number(latitude),
-        longitude: Number(longitude),
+      setSaving(true);
 
-        locationMapImage,
-        fieldPhotos: photos,
+      const form = new FormData();
+      form.append('taskId', String(taskId));
+      form.append('latitude', String(latitude || ''));
+      form.append('longitude', String(longitude || ''));
+      form.append('mainComment', mainComment || '');
+      form.append('fieldMemo', fieldMemo || '');
+      form.append('progressStatus', status || 'pending');
+      form.append('photoComments', JSON.stringify(photos.map((p) => p.comment || '')));
 
-        mainComment,
-        fieldMemo,
+      const isLocalUri = (uri) =>
+        uri && (uri.startsWith('file://') || uri.startsWith('content://'));
 
-        progressStatus: status,
-      };
+      if (locationMapImage && isLocalUri(locationMapImage)) {
+        form.append('mapImage', {
+          uri: locationMapImage,
+          name: 'map.jpg',
+          type: 'image/jpeg',
+        });
+      }
 
-      console.log('보고서 저장 요청:', reportData);
+      photos.forEach((photo, index) => {
+        if (photo.uri && isLocalUri(photo.uri)) {
+          form.append('fieldPhotos', {
+            uri: photo.uri,
+            name: `photo_${index}.jpg`,
+            type: 'image/jpeg',
+          });
+        }
+      });
 
       const res = await fetch(`${API_BASE_URL}/api/task-progress`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(reportData),
+        body: form,
       });
 
       if (!res.ok) {
@@ -236,12 +264,32 @@ export default function FieldActionScreen({
 
       const savedReport = await res.json();
 
-      console.log('보고서 저장 성공:', savedReport);
+      setAiRefinedContent(savedReport.aiRefinedContent || '');
+      setReportDownloadUrl(
+        savedReport.reportDownloadUrl
+          ? resolveApiUrl(savedReport.reportDownloadUrl)
+          : null
+      );
+
+      if (savedReport.locationMapImage) {
+        setLocationMapImage(resolveApiUrl(savedReport.locationMapImage));
+      }
+      if (savedReport.fieldPhotos) {
+        setPhotos(
+          savedReport.fieldPhotos.map((p) => ({
+            uri: resolveApiUrl(p.uri || p.path),
+            comment: p.comment || '',
+          }))
+        );
+      }
 
       onSave?.(savedReport);
+      alert('보고서가 저장되었고 AI 분석이 완료되었습니다.');
     } catch (error) {
       console.log(error);
       alert('보고서 저장 중 문제가 발생했습니다.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -354,7 +402,7 @@ export default function FieldActionScreen({
                 <TextInput
                   value={item.comment}
                   onChangeText={(text) => updatePhotoComment(index, text)}
-                  placeholder={`현장 사진 ${index + 1} 설명 입력`}
+                  placeholder="현장사진(2)|캡션 또는 전/중/후"
                   style={styles.photoMemo}
                   multiline
                 />
@@ -448,15 +496,27 @@ export default function FieldActionScreen({
         </View>
 
         <View style={styles.aiCard}>
-          <Text style={styles.aiEyebrow}>AI RECOMMENDATION</Text>
-          <Text style={styles.aiTitle}>{rec.category}</Text>
-          <Text style={[styles.risk, { color: rec.riskColor }]}>
-            위험도: {rec.risk}
-          </Text>
-          <Text style={styles.aiReport}>{rec.report}</Text>
+          <Text style={styles.aiEyebrow}>AI 분석 결과</Text>
+          {aiRefinedContent ? (
+            <Text style={styles.aiReport}>{aiRefinedContent}</Text>
+          ) : (
+            <>
+              <Text style={styles.aiTitle}>{rec.category} (미리보기)</Text>
+              <Text style={[styles.risk, { color: rec.riskColor }]}>
+                위험도: {rec.risk}
+              </Text>
+              <Text style={styles.aiReport}>{rec.report}</Text>
+              <Text style={styles.guideText}>
+                저장 후 Gemini 분석 결과가 여기에 표시됩니다.
+              </Text>
+            </>
+          )}
         </View>
 
-        <PrimaryButton title="보고서 저장" onPress={handleSave} />
+        <PrimaryButton
+          title={saving ? '저장 중...' : '보고서 저장 및 AI 생성'}
+          onPress={handleSave}
+        />
       </ScrollView>
     </View>
   );
