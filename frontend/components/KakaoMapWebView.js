@@ -53,8 +53,13 @@ export default function KakaoMapWebView({
   const followModeRef = useRef(true);
   const alertedTargetIds = useRef(new Set());
   const lastRerouteTimeRef = useRef(0);
-  const blinkAnim = useRef(new Animated.Value(1)).current;
 
+  const segmentFocusTimerRef = useRef(null);
+  const segmentFocusKeyRef = useRef(null);
+  const currentPosRef = useRef(null);
+  const activePathRef = useRef([]);
+
+  const blinkAnim = useRef(new Animated.Value(1)).current;
 
   const [keyword, setKeyword] = useState("");
   const [placeName, setPlaceName] = useState("");
@@ -79,6 +84,23 @@ export default function KakaoMapWebView({
   const activePath = isGuiding
     ? routeSegments[currentSegmentIndex]?.path || []
     : roadPath;
+
+  useEffect(() => {
+    currentPosRef.current = currentPos;
+  }, [currentPos]);
+
+  useEffect(() => {
+    activePathRef.current = activePath || [];
+  }, [activePath]);
+
+  useEffect(() => {
+    return () => {
+      if (segmentFocusTimerRef.current) {
+        clearTimeout(segmentFocusTimerRef.current);
+        segmentFocusTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     startCurrentLocation();
@@ -154,7 +176,14 @@ export default function KakaoMapWebView({
   useEffect(() => {
     if (!mapRef.current) return;
 
-    const targetPath = isGuiding ? activePath : roadPath;
+    if (segmentFocusTimerRef.current) {
+      clearTimeout(segmentFocusTimerRef.current);
+      segmentFocusTimerRef.current = null;
+    }
+
+    const targetPath = isGuiding
+      ? routeSegments[currentSegmentIndex]?.path || []
+      : roadPath;
 
     if (!targetPath || targetPath.length < 2) return;
 
@@ -171,6 +200,21 @@ export default function KakaoMapWebView({
 
     if (coordinates.length < 2) return;
 
+    const first = coordinates[0];
+    const last = coordinates[coordinates.length - 1];
+
+    const focusKey = [
+      isGuiding ? "guiding" : "preview",
+      currentSegmentIndex,
+      coordinates.length,
+      first.latitude,
+      first.longitude,
+      last.latitude,
+      last.longitude,
+    ].join("-");
+
+    segmentFocusKeyRef.current = focusKey;
+
     mapRef.current.fitToCoordinates(coordinates, {
       edgePadding: {
         top: 300,
@@ -181,11 +225,33 @@ export default function KakaoMapWebView({
       animated: true,
     });
 
-    // 중요:
-    // 여기서 현재 위치로 다시 animateToRegion 하면
-    // 목적지가 화면 밖으로 나가서 현위치만 보이는 문제가 생김.
-    // 그래서 삭제함.
-  }, [isGuiding, currentSegmentIndex, roadPath, activePath]);
+    if (!isGuiding) return;
+
+    segmentFocusTimerRef.current = setTimeout(() => {
+      if (segmentFocusKeyRef.current !== focusKey) return;
+
+      const latestCurrentPos = currentPosRef.current;
+
+      if (!latestCurrentPos || !mapRef.current) return;
+
+      mapRef.current.animateToRegion(
+        {
+          latitude: latestCurrentPos.latitude,
+          longitude: latestCurrentPos.longitude,
+          latitudeDelta: 0.008,
+          longitudeDelta: 0.008,
+        },
+        700
+      );
+    }, 2000);
+
+    return () => {
+      if (segmentFocusTimerRef.current) {
+        clearTimeout(segmentFocusTimerRef.current);
+        segmentFocusTimerRef.current = null;
+      }
+    };
+  }, [isGuiding, currentSegmentIndex, routeSegments, roadPath]);
 
   const startCurrentLocation = async () => {
     try {
@@ -242,6 +308,7 @@ export default function KakaoMapWebView({
             lng: newPos.longitude,
             name: "현재 위치",
           });
+
           /*
           if (guidingRef.current && followModeRef.current && mapRef.current) {
             mapRef.current.animateToRegion(
@@ -255,8 +322,11 @@ export default function KakaoMapWebView({
             );
           }
           */
-          if (guidingRef.current && activePath.length >= 2) {
-            const distanceFromPath = getMinDistanceFromPath(newPos, activePath);
+
+          const latestActivePath = activePathRef.current || [];
+
+          if (guidingRef.current && latestActivePath.length >= 2) {
+            const distanceFromPath = getMinDistanceFromPath(newPos, latestActivePath);
             const now = Date.now();
 
             if (
@@ -398,6 +468,7 @@ export default function KakaoMapWebView({
 
     return minDistance;
   };
+
   const focusLocation = (loc) => {
     moveToPosition(Number(loc.lat), Number(loc.lng));
     onMarkerClick?.(loc);
@@ -625,12 +696,10 @@ export default function KakaoMapWebView({
                 placeholderTextColor="#8A98A8"
                 style={styles.searchInput}
                 returnKeyType="search"
-                onSubmitEditing={searchPlace}
               />
 
               <TouchableOpacity
                 style={styles.searchButton}
-                onPress={searchPlace}
                 disabled={isSearching}
               >
                 <Text style={styles.searchButtonText}>
@@ -671,10 +740,6 @@ export default function KakaoMapWebView({
               </TouchableOpacity>
             ))}
           </View>
-
-          <TouchableOpacity style={styles.addButton} onPress={addLocation}>
-            <Text style={styles.addButtonText}>방문 추가</Text>
-          </TouchableOpacity>
 
           <View style={styles.metaRow}>
             <Text style={styles.countText}>방문지 {locations.length}개</Text>
@@ -731,8 +796,9 @@ export default function KakaoMapWebView({
           {currentPos && (
             <Text style={styles.hintText}>
               {isGuiding
-                ? `안내 중 · 현재 목적지: ${currentTarget?.detailAddress || "마지막 구간"
-                }`
+                ? `안내 중 · 현재 목적지: ${
+                    currentTarget?.detailAddress || "마지막 구간"
+                  }`
                 : "안내 시작 전"}
             </Text>
           )}
@@ -797,7 +863,8 @@ export default function KakaoMapWebView({
                   }
 
                   const updated = locations.map((loc) => {
-                    const locKey = loc.id ?? `${loc.detailAddress}-${loc.lat}-${loc.lng}`;
+                    const locKey =
+                      loc.id ?? `${loc.detailAddress}-${loc.lat}-${loc.lng}`;
 
                     if (locKey === arrivalTarget?.targetKey) {
                       return { ...loc, status: "working" };
@@ -1205,9 +1272,5 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
     elevation: 6,
-  },
-  pulseMarker: {
-    borderWidth: 4,
-    elevation: 12,
   },
 });
