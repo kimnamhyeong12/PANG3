@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { BackButton, PrimaryButton } from '../components/ui';
+import VoiceTextInput from '../components/VoiceTextInput';
+import PhotoMarkupEditor from '../components/PhotoMarkupEditor';
 import { API_BASE_URL, resolveApiUrl } from '../utils/api';
 
 function getAiRecommendation(memo) {
@@ -84,6 +86,7 @@ export default function FieldActionScreen({
   const [aiRefinedContent, setAiRefinedContent] = useState('');
   const [reportDownloadUrl, setReportDownloadUrl] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [photoEditor, setPhotoEditor] = useState({ visible: false, uri: null, index: null, isNew: false });
 
   const taskId = location?.id ?? location?.taskId ?? location?.task_id;
 
@@ -169,12 +172,12 @@ export default function FieldActionScreen({
     });
 
     if (!result.canceled) {
-      const newPhoto = {
+      setPhotoEditor({
+        visible: true,
         uri: result.assets[0].uri,
-        comment: '',
-      };
-
-      setPhotos([...photos, newPhoto]);
+        index: null,
+        isNew: true,
+      });
     }
   };
 
@@ -187,14 +190,12 @@ export default function FieldActionScreen({
     });
 
     if (!result.canceled) {
-      const nextPhotos = [...photos];
-
-      nextPhotos[index] = {
-        ...nextPhotos[index],
+      setPhotoEditor({
+        visible: true,
         uri: result.assets[0].uri,
-      };
-
-      setPhotos(nextPhotos);
+        index,
+        isNew: false,
+      });
     }
   };
 
@@ -207,6 +208,38 @@ export default function FieldActionScreen({
     const nextPhotos = [...photos];
     nextPhotos[index].comment = text;
     setPhotos(nextPhotos);
+  };
+
+  const editExistingPhoto = (index) => {
+    setPhotoEditor({
+      visible: true,
+      uri: photos[index]?.uri,
+      index,
+      isNew: false,
+    });
+  };
+
+  const closePhotoEditor = () => {
+    setPhotoEditor({ visible: false, uri: null, index: null, isNew: false });
+  };
+
+  const completePhotoEdit = (editedUri) => {
+    if (!editedUri) {
+      closePhotoEditor();
+      return;
+    }
+
+    if (photoEditor.isNew) {
+      setPhotos((prev) => [...prev, { uri: editedUri, comment: '' }]);
+    } else if (photoEditor.index !== null) {
+      setPhotos((prev) =>
+        prev.map((photo, index) =>
+          index === photoEditor.index ? { ...photo, uri: editedUri } : photo
+        )
+      );
+    }
+
+    closePhotoEditor();
   };
 
   const handleSave = async () => {
@@ -386,6 +419,13 @@ export default function FieldActionScreen({
                 <View style={styles.photoButtonRow}>
                   <TouchableOpacity
                     style={styles.photoSmallButton}
+                    onPress={() => editExistingPhoto(index)}
+                  >
+                    <Text style={styles.photoSmallButtonText}>사진 편집</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.photoSmallButton}
                     onPress={() => retakePhoto(index)}
                   >
                     <Text style={styles.photoSmallButtonText}>다시찍기</Text>
@@ -399,12 +439,11 @@ export default function FieldActionScreen({
                   </TouchableOpacity>
                 </View>
 
-                <TextInput
+                <VoiceTextInput
                   value={item.comment}
                   onChangeText={(text) => updatePhotoComment(index, text)}
                   placeholder="현장사진(2)|캡션 또는 전/중/후"
-                  style={styles.photoMemo}
-                  multiline
+                  inputStyle={styles.photoMemo}
                 />
               </View>
             ))
@@ -418,23 +457,21 @@ export default function FieldActionScreen({
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>종합 의견</Text>
-          <TextInput
+          <VoiceTextInput
             value={mainComment}
             onChangeText={setMainComment}
-            multiline
             placeholder="예: 23:00(현행) → 24:00(변경) 소등시간 연장"
-            style={styles.memo}
+            inputStyle={styles.memo}
           />
         </View>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>현장 메모</Text>
-          <TextInput
+          <VoiceTextInput
             value={fieldMemo}
             onChangeText={setFieldMemo}
-            multiline
             placeholder="예: 담당자 확인 필요, 추가 점검 예정, 민원인 요청사항 등"
-            style={styles.memo}
+            inputStyle={styles.memo}
           />
         </View>
 
@@ -518,6 +555,13 @@ export default function FieldActionScreen({
           onPress={handleSave}
         />
       </ScrollView>
+
+      <PhotoMarkupEditor
+        visible={photoEditor.visible}
+        uri={photoEditor.uri}
+        onCancel={closePhotoEditor}
+        onComplete={completePhotoEdit}
+      />
     </View>
   );
 }

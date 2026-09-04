@@ -1,0 +1,24 @@
+PANG3 Expo Go 음성/사진편집 패치 v2
+
+수정사항
+1) 사진 자르기 모서리 드래그 개선
+   - 실제 보이는 원은 기존 크기 유지
+   - 터치 영역을 58x58로 확대
+   - PanResponder를 드래그 도중 재생성하지 않도록 수정
+   - 길게 드래그해도 이동량이 끊기지 않도록 수정
+2) 사진 편집 문구 수정
+   - '빨간펜' -> '펜'
+   - 자유 자르기 안내 문구 제거
+3) 음성 입력
+   - 마이크 입력 레벨 감지
+   - 마지막 음성 이후 5초간 조용하면 자동 녹음 종료 후 STT 요청
+   - 404 응답은 '백엔드 미배포'로 명확히 표시
+
+중요
+현재 앱의 EXPO_PUBLIC_API_BASE_URL이 AWS 서버를 가리키는 경우,
+프론트만 실행해서는 /api/speech/transcribe가 생기지 않습니다.
+이 패치의 backend + ai 파일까지 main에 반영한 뒤 Git commit/push해서
+AWS 배포가 끝나야 음성 인식 endpoint가 실제 서버에 생깁니다.
+
+Expo Go에서 필요한 프론트 의존성:
+npx expo install expo-audio expo-image-manipulator react-native-svg react-native-view-shot
