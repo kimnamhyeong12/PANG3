@@ -17,7 +17,7 @@ const SCREEN = Dimensions.get('window');
 const MAX_W = Math.min(SCREEN.width - 24, 520);
 const MAX_H = Math.min(SCREEN.height * 0.56, 520);
 const HANDLE_VISUAL_SIZE = 26;
-const HANDLE_TOUCH_SIZE = 58;
+const HANDLE_HIT_RADIUS = 54;
 const MIN_CROP = 56;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
@@ -39,6 +39,7 @@ export default function PhotoMarkupEditor({ visible, uri, onCancel, onComplete }
   const cropRef = useRef({ left: 0, top: 0, right: 0, bottom: 0 });
   const displaySizeRef = useRef({ width: 0, height: 0 });
   const penModeRef = useRef(false);
+  const dragRef = useRef(null);
 
   const [currentUri, setCurrentUri] = useState(uri);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
@@ -97,71 +98,101 @@ export default function PhotoMarkupEditor({ visible, uri, onCancel, onComplete }
     resetCrop(displaySize.width, displaySize.height);
   }, [displaySize.width, displaySize.height, visible]);
 
-  const createHandleResponder = (corner) => {
-    let startCrop = null;
+  const getNearestCorner = (x, y) => {
+    const c = cropRef.current;
+    const corners = [
+      { key: 'left-top', x: c.left, y: c.top },
+      { key: 'right-top', x: c.right, y: c.top },
+      { key: 'left-bottom', x: c.left, y: c.bottom },
+      { key: 'right-bottom', x: c.right, y: c.bottom },
+    ];
 
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => !penModeRef.current,
-      onStartShouldSetPanResponderCapture: () => !penModeRef.current,
-      onMoveShouldSetPanResponder: () => !penModeRef.current,
-      onMoveShouldSetPanResponderCapture: () => !penModeRef.current,
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: () => {
-        startCrop = { ...cropRef.current };
-      },
-      onPanResponderMove: (_, gesture) => {
-        if (!startCrop) return;
+    let best = null;
+    let bestDistance = Infinity;
 
-        const size = displaySizeRef.current;
-        const next = { ...startCrop };
+    for (const corner of corners) {
+      const dx = x - corner.x;
+      const dy = y - corner.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance < bestDistance) {
+        best = corner;
+        bestDistance = distance;
+      }
+    }
 
-        if (corner.includes('left')) {
-          next.left = clamp(
-            startCrop.left + gesture.dx,
-            0,
-            startCrop.right - MIN_CROP
-          );
-        }
-        if (corner.includes('right')) {
-          next.right = clamp(
-            startCrop.right + gesture.dx,
-            startCrop.left + MIN_CROP,
-            size.width
-          );
-        }
-        if (corner.includes('top')) {
-          next.top = clamp(
-            startCrop.top + gesture.dy,
-            0,
-            startCrop.bottom - MIN_CROP
-          );
-        }
-        if (corner.includes('bottom')) {
-          next.bottom = clamp(
-            startCrop.bottom + gesture.dy,
-            startCrop.top + MIN_CROP,
-            size.height
-          );
-        }
-
-        cropRef.current = next;
-        setCrop(next);
-      },
-      onPanResponderRelease: () => {
-        startCrop = null;
-      },
-      onPanResponderTerminate: () => {
-        startCrop = null;
-      },
-    });
+    return bestDistance <= HANDLE_HIT_RADIUS ? best?.key : null;
   };
 
-  // 리렌더링 때 PanResponder가 새로 만들어지지 않게 고정한다.
-  // 기존 구현은 드래그 도중 responder가 재생성되어 이동량이 끊기는 문제가 있었다.
-  const topLeftResponder = useMemo(() => createHandleResponder('left-top'), []);
-  const topRightResponder = useMemo(() => createHandleResponder('right-top'), []);
-  const bottomLeftResponder = useMemo(() => createHandleResponder('left-bottom'), []);
-  const bottomRightResponder = useMemo(() => createHandleResponder('right-bottom'), []);
+  const cropResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: (event) => {
+          if (penModeRef.current) return false;
+          const { locationX, locationY } = event.nativeEvent;
+          return Boolean(getNearestCorner(locationX, locationY));
+        },
+        onMoveShouldSetPanResponder: () => Boolean(dragRef.current),
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: (event) => {
+          if (penModeRef.current) return;
+          const { locationX, locationY } = event.nativeEvent;
+          const corner = getNearestCorner(locationX, locationY);
+          if (!corner) return;
+
+          dragRef.current = {
+            corner,
+            startCrop: { ...cropRef.current },
+          };
+        },
+        onPanResponderMove: (_, gesture) => {
+          const drag = dragRef.current;
+          if (!drag) return;
+
+          const { corner, startCrop } = drag;
+          const size = displaySizeRef.current;
+          const next = { ...startCrop };
+
+          if (corner.includes('left')) {
+            next.left = clamp(
+              startCrop.left + gesture.dx,
+              0,
+              startCrop.right - MIN_CROP
+            );
+          }
+          if (corner.includes('right')) {
+            next.right = clamp(
+              startCrop.right + gesture.dx,
+              startCrop.left + MIN_CROP,
+              size.width
+            );
+          }
+          if (corner.includes('top')) {
+            next.top = clamp(
+              startCrop.top + gesture.dy,
+              0,
+              startCrop.bottom - MIN_CROP
+            );
+          }
+          if (corner.includes('bottom')) {
+            next.bottom = clamp(
+              startCrop.bottom + gesture.dy,
+              startCrop.top + MIN_CROP,
+              size.height
+            );
+          }
+
+          cropRef.current = next;
+          setCrop(next);
+        },
+        onPanResponderRelease: () => {
+          dragRef.current = null;
+        },
+        onPanResponderTerminate: () => {
+          dragRef.current = null;
+        },
+      }),
+    []
+  );
 
   const drawResponder = useMemo(
     () =>
@@ -269,16 +300,18 @@ export default function PhotoMarkupEditor({ visible, uri, onCancel, onComplete }
   const cropWidth = crop.right - crop.left;
   const cropHeight = crop.bottom - crop.top;
 
-  const Handle = ({ style, responder }) => (
+  const Corner = ({ left, top }) => (
     <View
-      style={[styles.handleTouchArea, style]}
-      {...responder.panHandlers}
-    >
-      <View style={styles.handleVisual} />
-    </View>
+      pointerEvents="none"
+      style={[
+        styles.handleVisual,
+        {
+          left: left - HANDLE_VISUAL_SIZE / 2,
+          top: top - HANDLE_VISUAL_SIZE / 2,
+        },
+      ]}
+    />
   );
-
-  const handleOffset = HANDLE_TOUCH_SIZE / 2;
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onCancel}>
@@ -338,16 +371,16 @@ export default function PhotoMarkupEditor({ visible, uri, onCancel, onComplete }
 
             {!penMode && (
               <View
-                pointerEvents="box-none"
                 style={[
                   styles.cropLayer,
                   { width: displaySize.width, height: displaySize.height },
                 ]}
+                {...cropResponder.panHandlers}
               >
-                <View style={[styles.mask, { left: 0, top: 0, right: 0, height: crop.top }]} />
-                <View style={[styles.mask, { left: 0, top: crop.top, width: crop.left, height: cropHeight }]} />
-                <View style={[styles.mask, { left: crop.right, top: crop.top, right: 0, height: cropHeight }]} />
-                <View style={[styles.mask, { left: 0, top: crop.bottom, right: 0, bottom: 0 }]} />
+                <View pointerEvents="none" style={[styles.mask, { left: 0, top: 0, right: 0, height: crop.top }]} />
+                <View pointerEvents="none" style={[styles.mask, { left: 0, top: crop.top, width: crop.left, height: cropHeight }]} />
+                <View pointerEvents="none" style={[styles.mask, { left: crop.right, top: crop.top, right: 0, height: cropHeight }]} />
+                <View pointerEvents="none" style={[styles.mask, { left: 0, top: crop.bottom, right: 0, bottom: 0 }]} />
 
                 <View
                   pointerEvents="none"
@@ -362,22 +395,10 @@ export default function PhotoMarkupEditor({ visible, uri, onCancel, onComplete }
                   ]}
                 />
 
-                <Handle
-                  responder={topLeftResponder}
-                  style={{ left: crop.left - handleOffset, top: crop.top - handleOffset }}
-                />
-                <Handle
-                  responder={topRightResponder}
-                  style={{ left: crop.right - handleOffset, top: crop.top - handleOffset }}
-                />
-                <Handle
-                  responder={bottomLeftResponder}
-                  style={{ left: crop.left - handleOffset, top: crop.bottom - handleOffset }}
-                />
-                <Handle
-                  responder={bottomRightResponder}
-                  style={{ left: crop.right - handleOffset, top: crop.bottom - handleOffset }}
-                />
+                <Corner left={crop.left} top={crop.top} />
+                <Corner left={crop.right} top={crop.top} />
+                <Corner left={crop.left} top={crop.bottom} />
+                <Corner left={crop.right} top={crop.bottom} />
               </View>
             )}
           </View>
@@ -431,24 +452,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 12,
   },
-  cropLayer: { position: 'absolute' },
+  cropLayer: { position: 'absolute', left: 0, top: 0 },
   mask: { position: 'absolute', backgroundColor: 'rgba(0,0,0,0.52)' },
   cropBorder: { position: 'absolute', borderWidth: 2, borderColor: 'white' },
-  handleTouchArea: {
-    position: 'absolute',
-    width: HANDLE_TOUCH_SIZE,
-    height: HANDLE_TOUCH_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 20,
-  },
   handleVisual: {
+    position: 'absolute',
     width: HANDLE_VISUAL_SIZE,
     height: HANDLE_VISUAL_SIZE,
     borderRadius: HANDLE_VISUAL_SIZE / 2,
     backgroundColor: 'white',
     borderWidth: 4,
     borderColor: '#12395B',
+    zIndex: 20,
   },
   toolbar: {
     flexDirection: 'row',
@@ -458,22 +473,25 @@ const styles = StyleSheet.create({
   },
   toolButton: {
     flex: 1,
+    minHeight: 44,
     borderRadius: 12,
+    backgroundColor: 'white',
     borderWidth: 1,
     borderColor: '#D9E1EA',
-    backgroundColor: 'white',
-    paddingVertical: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  toolButtonActive: { backgroundColor: '#12395B', borderColor: '#12395B' },
-  toolText: { color: '#12395B', fontSize: 11, fontWeight: '900' },
+  toolButtonActive: {
+    backgroundColor: '#12395B',
+    borderColor: '#12395B',
+  },
+  toolText: { color: '#12395B', fontSize: 12, fontWeight: '900' },
   toolTextActive: { color: 'white' },
   guide: {
     textAlign: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
     color: '#607086',
     fontSize: 11,
-    fontWeight: '700',
+    paddingTop: 8,
+    paddingBottom: 10,
   },
 });

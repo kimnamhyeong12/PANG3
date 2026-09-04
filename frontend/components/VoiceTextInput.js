@@ -17,7 +17,7 @@ import {
 import { API_BASE_URL } from '../utils/api';
 
 const SILENCE_TIMEOUT_MS = 5000;
-const METERING_THRESHOLD_DB = -45;
+const METERING_THRESHOLD_DB = -55;
 
 const RECORDING_OPTIONS = {
   ...RecordingPresets.HIGH_QUALITY,
@@ -41,6 +41,7 @@ export default function VoiceTextInput({
   const transcribingRef = useRef(false);
   const lastVoiceAtRef = useRef(0);
   const autoStopStartedRef = useRef(false);
+  const recordingStartedAtRef = useRef(0);
 
   const setRecordingState = (next) => {
     recordingRef.current = next;
@@ -73,7 +74,9 @@ export default function VoiceTextInput({
       await recorder.prepareToRecordAsync();
       recorder.record();
 
-      lastVoiceAtRef.current = Date.now();
+      const now = Date.now();
+      recordingStartedAtRef.current = now;
+      lastVoiceAtRef.current = now;
       autoStopStartedRef.current = false;
       setRecordingState(true);
     } catch (error) {
@@ -160,9 +163,12 @@ export default function VoiceTextInput({
       return;
     }
 
+    const now = Date.now();
     if (
+      recordingStartedAtRef.current > 0 &&
+      now - recordingStartedAtRef.current >= SILENCE_TIMEOUT_MS &&
       lastVoiceAtRef.current > 0 &&
-      Date.now() - lastVoiceAtRef.current >= SILENCE_TIMEOUT_MS
+      now - lastVoiceAtRef.current >= SILENCE_TIMEOUT_MS
     ) {
       stopAndTranscribe({ automatic: true });
     }
@@ -207,7 +213,7 @@ export default function VoiceTextInput({
       </TouchableOpacity>
 
       {recording && (
-        <Text style={styles.recordingGuide}>말이 끝난 뒤 5초간 조용하면 자동으로 종료됩니다.</Text>
+        <Text style={styles.recordingGuide}>5초 동안 음성이 없으면 자동으로 종료됩니다.</Text>
       )}
     </View>
   );

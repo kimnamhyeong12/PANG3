@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fieldwork.config.FieldworkProperties;
 import com.fieldwork.util.ProjectPaths;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -23,6 +24,9 @@ public class SpeechService {
 
     private final FieldworkProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Value("${gemini.api-key:}")
+    private String geminiApiKey;
 
     public SpeechService(FieldworkProperties properties) {
         this.properties = properties;
@@ -61,6 +65,9 @@ public class SpeechService {
 
             ProcessBuilder processBuilder = new ProcessBuilder(command);
             processBuilder.directory(ProjectPaths.projectRoot().toFile());
+            if (geminiApiKey != null && !geminiApiKey.isBlank()) {
+                processBuilder.environment().put("GEMINI_API_KEY", geminiApiKey);
+            }
             processBuilder.redirectErrorStream(true);
             Process process = processBuilder.start();
 
