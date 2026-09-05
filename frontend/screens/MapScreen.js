@@ -428,7 +428,7 @@ export default function MapScreen({
     }
 
     const newLoc = {
-      detailAddress: searchedPlace.detailAddress,
+      detailAddress: placeName.trim(),
       roadAddress: searchedPlace.roadAddress || keyword.trim(),
       lat: searchedPlace.lat,
       lng: searchedPlace.lng,
@@ -460,8 +460,8 @@ export default function MapScreen({
         {
           ...savedLocation,
           id: savedLocation.id ?? savedLocation.taskId ?? savedLocation.task_id,
-          detailAddress: savedLocation.detailAddress,
-          roadAddress: savedLocation.roadAddress,
+          detailAddress: savedLocation.detailAddress || newLoc.detailAddress,
+          roadAddress: savedLocation.roadAddress || newLoc.roadAddress,
           status: savedLocation.status || 'pending',
           task: savedLocation.taskCategory || newLoc.task || '',
           priority: savedLocation.priority || '',
@@ -506,8 +506,8 @@ export default function MapScreen({
       const x =
         Math.sin(dLat / 2) ** 2 +
         Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLng / 2) ** 2;
+          Math.cos((lat2 * Math.PI) / 180) *
+          Math.sin(dLng / 2) ** 2;
 
       total += R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
     }
@@ -540,7 +540,7 @@ export default function MapScreen({
     return `약 ${Math.round(meters)}m`;
   };
 
-  const getGuideSummary = () => {
+    const getGuideSummary = () => {
     if (!isGuiding) {
       return formatDuration(totalDuration)
         ? ` · 예상 이동시간 ${formatDuration(totalDuration)}`
@@ -581,7 +581,7 @@ export default function MapScreen({
   };
 
   const handleOptimizeRoute = async (mode = transportMode) => {
-    // 경로 재계산 전에 기존 안내/경로 상태 초기화
+    setGuideStartOpen(false);
     setCurrentSegmentIndex(0);
     setRoadPath([]);
     setRouteSegments([]);
@@ -609,7 +609,6 @@ export default function MapScreen({
 
       const cleanCurrentLocation = cleanLocation(currentLocation, '현재 위치');
 
-      // 우선순위가 있으면 P1, P2, P3 순서대로 먼저 정렬
       const priorityMarkers = [...markers].sort((a, b) => {
         const pa = a.priority ?? 9999;
         const pb = b.priority ?? 9999;
@@ -683,7 +682,7 @@ export default function MapScreen({
     }
   };
 
-  const updateCurrentSegmentMode = async (mode) => {
+  const updateGuideTargetSegment = async (targetIndex, mode = transportMode) => {
     if (!API_BASE_URL) {
       Alert.alert('오류', '.env의 EXPO_PUBLIC_API_BASE_URL을 확인하세요.');
       return;
@@ -694,8 +693,10 @@ export default function MapScreen({
       return;
     }
 
-    if (!routeSegments || routeSegments.length === 0) {
-      Alert.alert('구간 없음', '먼저 경로 최적화를 실행하세요.');
+    const target = orderedMarkers[targetIndex];
+
+    if (!target) {
+      Alert.alert('목적지 없음', '해당 목적지를 찾을 수 없습니다.');
       return;
     }
 
@@ -703,18 +704,11 @@ export default function MapScreen({
       setSegmentChanging(true);
       setTransportMode(mode);
 
-      const rawStart =
-        currentSegmentIndex === 0
-          ? currentLocation
-          : orderedMarkers[currentSegmentIndex - 1];
-
-      const rawEnd = orderedMarkers[currentSegmentIndex];
-
-      const start = cleanLocation(rawStart, '현재 위치');
-      const end = cleanLocation(rawEnd, '목적지');
+      const start = cleanLocation(currentLocation, '현재 위치');
+      const end = cleanLocation(target, '목적지');
 
       if (!start || !end) {
-        Alert.alert('오류', '현재 구간 정보를 찾을 수 없습니다.');
+        Alert.alert('오류', '현재 위치 또는 목적지 정보를 찾을 수 없습니다.');
         return;
       }
 
@@ -731,44 +725,44 @@ export default function MapScreen({
       const text = await res.text();
 
       if (!res.ok) {
-        throw new Error(`구간 경로 변경 실패: ${res.status}`);
+        throw new Error(`안내 경로 재계산 실패: ${res.status}`);
       }
 
       const data = JSON.parse(text);
 
       if (!data.segments || data.segments.length === 0) {
-        Alert.alert('오류', '구간 경로를 받아오지 못했습니다.');
+        Alert.alert('오류', '안내 경로를 받아오지 못했습니다.');
         return;
       }
 
       const updatedSegment = {
         ...data.segments[0],
         mode,
+        fromName: '현재 위치',
+        toName: end.detailAddress || '목적지',
         totalDistance: data.totalDistance,
         totalDuration: data.totalDuration,
       };
 
       const updatedSegments = [...routeSegments];
-      updatedSegments[currentSegmentIndex] = updatedSegment;
+      updatedSegments[targetIndex] = updatedSegment;
 
       setRouteSegments(updatedSegments);
+      setCurrentSegmentIndex(targetIndex);
 
-      const mergedPath = updatedSegments.flatMap((segment) => segment.path || []);
-      setRoadPath(mergedPath);
-
-      const nextTotalDuration = updatedSegments.reduce((sum, segment) => {
-        return sum + Number(segment.totalDuration || 0);
-      }, 0);
-
-      if (nextTotalDuration > 0) {
-        setTotalDuration(nextTotalDuration);
+      if (data.totalDuration !== undefined && data.totalDuration !== null) {
+        setTotalDuration(data.totalDuration);
       }
     } catch (error) {
       console.log(error);
-      Alert.alert('오류', '현재 구간 경로 변경 중 문제가 발생했습니다.');
+      Alert.alert('오류', '현재 위치 기준 안내 경로를 다시 계산하지 못했습니다.');
     } finally {
       setSegmentChanging(false);
     }
+  };
+
+  const updateCurrentSegmentMode = async (mode) => {
+    await updateGuideTargetSegment(currentSegmentIndex, mode);
   };
 
   const handleTransportPress = (mode) => {
@@ -817,25 +811,42 @@ export default function MapScreen({
       updatedSegments[currentSegmentIndex] = {
         ...data.segments[0],
         mode: transportMode,
+        fromName: '현재 위치',
+        toName: end.detailAddress || '목적지',
+        totalDistance: data.totalDistance,
+        totalDuration: data.totalDuration,
       };
 
       setRouteSegments(updatedSegments);
 
-      const mergedPath = updatedSegments.flatMap((segment) => segment.path || []);
-      setRoadPath(mergedPath);
+      if (data.totalDuration !== undefined && data.totalDuration !== null) {
+        setTotalDuration(data.totalDuration);
+      }
     } catch (error) {
       console.log(error);
     }
   };
 
   const movePrevSegment = () => {
-    setCurrentSegmentIndex((prev) => Math.max(prev - 1, 0));
+    const prevIndex = Math.max(currentSegmentIndex - 1, 0);
+    updateGuideTargetSegment(prevIndex);
   };
 
   const moveNextSegment = () => {
-    setCurrentSegmentIndex((prev) =>
-      Math.min(prev + 1, routeSegments.length - 1)
+    const nextIndex = Math.min(
+      currentSegmentIndex + 1,
+      orderedMarkers.length - 1
     );
+
+    updateGuideTargetSegment(nextIndex);
+  };
+
+  const handleReportButtonPress = () => {
+    setGuideStartOpen(false);
+    setSelected(null);
+    setVisitListOpen(false);
+    setAddMenuOpen(false);
+    onReportPress?.();
   };
 
   return (
@@ -869,7 +880,7 @@ export default function MapScreen({
       <TouchableOpacity
         style={styles.reportFab}
         activeOpacity={0.9}
-        onPress={onReportPress}
+        onPress={handleReportButtonPress}
       >
         <Ionicons name="document-text" size={22} color="#FFFFFF" />
         <Text style={styles.reportFabText}>보고서</Text>
@@ -1035,14 +1046,13 @@ export default function MapScreen({
           </TouchableOpacity>
         )}
 
-        <View style={styles.chipRowWrap}>
+                <View style={styles.chipRowWrap}>
           {orderedMarkers.length === 0 ? (
             <View style={styles.emptyChip}>
               <Ionicons name="location-outline" size={14} color="#8A98A8" />
               <Text style={styles.emptyChipText}>방문지 없음</Text>
             </View>
           ) : (
-            // 1. 방문지 이름 2. 방문지 이름 3. 방문지 이름  탭
             <FlatList
               horizontal
               data={orderedMarkers}
@@ -1071,7 +1081,7 @@ export default function MapScreen({
               )}
             />
           )}
-          {/* (v) 탭 */}
+
           <TouchableOpacity
             style={styles.chevronButton}
             onPress={() => setVisitListOpen(!visitListOpen)}
@@ -1083,7 +1093,7 @@ export default function MapScreen({
             />
           </TouchableOpacity>
         </View>
-        {/* 방문지 n개    접기 있는 탭 */}
+
         {visitListOpen && orderedMarkers.length > 0 && (
           <View style={styles.visitListCard}>
             <View style={styles.visitListHead}>
@@ -1135,7 +1145,7 @@ export default function MapScreen({
             <View style={[styles.doneBar, isGuiding && styles.guidingBar]}>
               <Text style={styles.doneText}>
                 {isGuiding
-                  ? `안내 중 · ${currentSegmentIndex + 1}/${routeSegments.length}구간`
+                  ? `안내 중 · ${currentSegmentIndex + 1}/${orderedMarkers.length}목적지`
                   : '경로 계산 완료'}
                 {getGuideSummary()}
               </Text>
@@ -1193,7 +1203,7 @@ export default function MapScreen({
           </View>
         )}
 
-        {isGuiding && routeSegments.length > 0 && (
+        {isGuiding && orderedMarkers.length > 0 && (
           <View style={styles.segmentControlBar}>
             <TouchableOpacity
               style={[
@@ -1207,18 +1217,20 @@ export default function MapScreen({
             </TouchableOpacity>
 
             <Text style={styles.segmentText} numberOfLines={1}>
-              {routeSegments[currentSegmentIndex]?.fromName || '현재 위치'} →{' '}
-              {routeSegments[currentSegmentIndex]?.toName || '목적지'}
+              현재 위치 →{' '}
+              {orderedMarkers[currentSegmentIndex]?.detailAddress ||
+                routeSegments[currentSegmentIndex]?.toName ||
+                '목적지'}
             </Text>
 
             <TouchableOpacity
               style={[
                 styles.segmentButton,
-                currentSegmentIndex === routeSegments.length - 1 &&
-                styles.segmentButtonDisabled,
+                currentSegmentIndex === orderedMarkers.length - 1 &&
+                  styles.segmentButtonDisabled,
               ]}
               onPress={moveNextSegment}
-              disabled={currentSegmentIndex === routeSegments.length - 1}
+              disabled={currentSegmentIndex === orderedMarkers.length - 1}
             >
               <Ionicons name="chevron-forward" size={16} color="#FFFFFF" />
             </TouchableOpacity>
@@ -1344,7 +1356,7 @@ export default function MapScreen({
           </Text>
           <Text style={styles.loadingDesc}>
             {segmentChanging
-              ? '현재 구간의 이동수단 기준으로 경로를 다시 계산합니다.'
+              ? '현재 위치에서 선택한 목적지까지 경로를 다시 계산합니다.'
               : '방문 순서와 실제 도로 경로를 계산합니다.'}
           </Text>
         </View>
@@ -1367,7 +1379,7 @@ export default function MapScreen({
             <Text style={styles.routeTitle}>GUIDE START</Text>
             <Text style={styles.placeName}>이 경로로 안내를 시작할까요?</Text>
             <Text style={styles.placeAddr}>
-              안내 시작 후 현재 구간 중심으로 경로 안내가 진행됩니다.
+              안내 시작 후 현재 위치에서 첫 번째 목적지까지 경로 안내가 진행됩니다.
             </Text>
 
             <View style={styles.actionRow}>
@@ -1380,10 +1392,10 @@ export default function MapScreen({
 
               <TouchableOpacity
                 style={styles.sheetButton}
-                onPress={() => {
+                onPress={async () => {
                   setGuideStartOpen(false);
-                  setCurrentSegmentIndex(0);
                   setIsGuiding(true);
+                  await updateGuideTargetSegment(0);
                 }}
               >
                 <Text style={styles.sheetLabel}>안내 시작</Text>
@@ -1392,7 +1404,7 @@ export default function MapScreen({
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-      {/* 마커 혹은 위치 클릭시 하단에 나오는 탭 */}
+
       <Modal
         visible={!!selected}
         transparent

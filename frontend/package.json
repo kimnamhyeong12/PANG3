@@ -8,7 +8,9 @@
   "dependencies": {
     "@expo/vector-icons": "15.1.1",
     "expo": "^57.0.0",
+    "expo-audio": "~1.1.1",
     "expo-haptics": "~57.0.2",
+    "expo-image-manipulator": "~14.0.8",
     "expo-image-picker": "~57.0.16",
     "expo-location": "~57.0.16",
     "expo-router": "~57.0.19",
@@ -19,6 +21,8 @@
     "react-native": "0.86.3",
     "react-native-maps": "1.27.2",
     "react-native-reanimated": "4.5.1",
+    "react-native-svg": "15.12.1",
+    "react-native-view-shot": "4.0.3",
     "react-native-webview": "13.16.1"
   },
   "devDependencies": {

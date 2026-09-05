@@ -522,6 +522,32 @@ def run_pipeline(payload: dict) -> dict:
     }
 
 
+
+def transcribe_audio(audio_path: str) -> dict:
+    """Gemini를 이용해 짧은 현장 음성을 한국어 텍스트로 변환한다."""
+    try:
+        if not client:
+            return {"ok": False, "text": None, "error": "GEMINI_API_KEY가 설정되지 않았습니다."}
+
+        path = Path(audio_path)
+        if not path.is_file():
+            return {"ok": False, "text": None, "error": "음성 파일을 찾을 수 없습니다."}
+
+        uploaded = client.files.upload(file=str(path))
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                uploaded,
+                "이 음성을 한국어로 정확하게 받아쓰기 해주세요. 설명이나 따옴표 없이 말한 내용만 텍스트로 출력하세요.",
+            ],
+        )
+        text = (response.text or "").strip()
+        if not text:
+            return {"ok": False, "text": None, "error": "인식된 음성이 없습니다."}
+        return {"ok": True, "text": text, "error": None}
+    except Exception as e:
+        return {"ok": False, "text": None, "error": str(e)}
+
 def emit_result(result: dict) -> None:
     line = RESULT_PREFIX + json.dumps(result, ensure_ascii=False)
     print(line)
@@ -544,6 +570,11 @@ def run_pipeline_safe(payload: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    if len(sys.argv) >= 3 and sys.argv[1] == "--stt":
+        result = transcribe_audio(sys.argv[2])
+        emit_result(result)
+        sys.exit(0 if result.get("ok") else 1)
+
     print("=" * 57, file=sys.stderr)
     print(" Saha-gu AI Report Engine", file=sys.stderr)
     print("=" * 57, file=sys.stderr)

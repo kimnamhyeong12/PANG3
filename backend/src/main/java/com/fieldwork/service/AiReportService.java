@@ -6,6 +6,7 @@ import com.fieldwork.config.FieldworkProperties;
 import com.fieldwork.entity.Task;
 import com.fieldwork.entity.TaskProgress;
 import com.fieldwork.util.ProjectPaths;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -23,6 +24,9 @@ public class AiReportService {
 
     private final FieldworkProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Value("${gemini.api-key:}")
+    private String geminiApiKey;
 
     public AiReportService(FieldworkProperties properties) {
         this.properties = properties;
@@ -107,6 +111,9 @@ public class AiReportService {
 
                 ProcessBuilder processBuilder = new ProcessBuilder(command);
                 processBuilder.directory(ProjectPaths.projectRoot().toFile());
+                if (geminiApiKey != null && !geminiApiKey.isBlank()) {
+                    processBuilder.environment().put("GEMINI_API_KEY", geminiApiKey);
+                }
                 processBuilder.redirectErrorStream(true);
                 Process process = processBuilder.start();
 

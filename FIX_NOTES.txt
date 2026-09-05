@@ -1,0 +1,24 @@
+PANG3 수정본 (현재 업로드한 main 기준)
+
+수정 내용
+1) 사진 자르기
+- 네 모서리 각각에 작은 PanResponder를 붙이던 방식을 제거했습니다.
+- 자르기 영역 전체가 하나의 responder가 되고, 손가락을 댄 위치에서 가장 가까운 모서리를 잡습니다.
+- 모서리 인식 반경을 크게 잡고, gesture.dx/dy를 그대로 사용해 손가락 이동거리와 모서리 이동거리가 1:1이 되도록 변경했습니다.
+- 화면 문구는 "펜"으로 유지했습니다.
+
+2) 음성 인식 서버
+- 기존 실패 원인: 배포된 backend 컨테이너 안에는 /app/ai/venv/bin/python이 없는데 SpeechService가 그 경로를 실행했습니다.
+- backend Docker 이미지 안에 Python + ai/app.py + Python 패키지를 같이 포함하도록 변경했습니다.
+- 따라서 EC2 호스트의 ai/venv 경로에 의존하지 않습니다.
+- GitHub Actions의 Docker build context도 repository root로 변경했습니다.
+- AWS Parameter Store의 gemini.api-key 값을 Python subprocess의 GEMINI_API_KEY 환경변수로 넘기도록 수정했습니다.
+- 기존 AI 보고서 생성도 동일한 Python 실행환경을 사용합니다.
+
+3) 음성 자동 종료
+- metering 감도 기준을 완화했습니다.
+- 녹음 시작 후 음성이 5초 동안 없거나, 마지막 음성 이후 5초가 지나면 자동 종료 후 STT 요청합니다.
+
+적용
+- 이 ZIP은 프로젝트 전체 수정본입니다. 기존 PANG3에 필요한 파일만 덮어써도 됩니다.
+- push 시 .github/workflows/deploy.yml이 main push를 감지해 backend Docker 이미지를 다시 빌드하고 EC2에 배포합니다.

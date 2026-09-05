@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -12,8 +14,6 @@ import {
   View,
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-import * as Location from "expo-location";
-import { Ionicons } from "@expo/vector-icons";
 
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
@@ -41,6 +41,7 @@ export default function KakaoMapWebView({
   isGuiding = false,
   searchedPlace,
   clearSearchMarkerSignal,
+  mapSelectMode,
   onDirectPlaceSelect,
   onCurrentLocationChange,
   onMarkerClick,
@@ -52,8 +53,13 @@ export default function KakaoMapWebView({
   const followModeRef = useRef(true);
   const alertedTargetIds = useRef(new Set());
   const lastRerouteTimeRef = useRef(0);
-  const blinkAnim = useRef(new Animated.Value(1)).current;
 
+  const segmentFocusTimerRef = useRef(null);
+  const segmentFocusKeyRef = useRef(null);
+  const currentPosRef = useRef(null);
+  const activePathRef = useRef([]);
+
+  const blinkAnim = useRef(new Animated.Value(1)).current;
 
   const [keyword, setKeyword] = useState("");
   const [placeName, setPlaceName] = useState("");
@@ -78,6 +84,23 @@ export default function KakaoMapWebView({
   const activePath = isGuiding
     ? routeSegments[currentSegmentIndex]?.path || []
     : roadPath;
+
+  useEffect(() => {
+    currentPosRef.current = currentPos;
+  }, [currentPos]);
+
+  useEffect(() => {
+    activePathRef.current = activePath || [];
+  }, [activePath]);
+
+  useEffect(() => {
+    return () => {
+      if (segmentFocusTimerRef.current) {
+        clearTimeout(segmentFocusTimerRef.current);
+        segmentFocusTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     startCurrentLocation();
@@ -121,7 +144,7 @@ export default function KakaoMapWebView({
 
     const targetKey =
       currentTarget.id ??
-      `${currentTarget.name}-${currentTarget.lat}-${currentTarget.lng}`;
+      `${currentTarget.detailAddress}-${currentTarget.lat}-${currentTarget.lng}`;
 
     if (alertedTargetIds.current.has(targetKey)) return;
 
@@ -153,7 +176,14 @@ export default function KakaoMapWebView({
   useEffect(() => {
     if (!mapRef.current) return;
 
-    const targetPath = isGuiding ? activePath : roadPath;
+    if (segmentFocusTimerRef.current) {
+      clearTimeout(segmentFocusTimerRef.current);
+      segmentFocusTimerRef.current = null;
+    }
+
+    const targetPath = isGuiding
+      ? routeSegments[currentSegmentIndex]?.path || []
+      : roadPath;
 
     if (!targetPath || targetPath.length < 2) return;
 
@@ -170,6 +200,21 @@ export default function KakaoMapWebView({
 
     if (coordinates.length < 2) return;
 
+    const first = coordinates[0];
+    const last = coordinates[coordinates.length - 1];
+
+    const focusKey = [
+      isGuiding ? "guiding" : "preview",
+      currentSegmentIndex,
+      coordinates.length,
+      first.latitude,
+      first.longitude,
+      last.latitude,
+      last.longitude,
+    ].join("-");
+
+    segmentFocusKeyRef.current = focusKey;
+
     mapRef.current.fitToCoordinates(coordinates, {
       edgePadding: {
         top: 300,
@@ -180,11 +225,33 @@ export default function KakaoMapWebView({
       animated: true,
     });
 
-    // 중요:
-    // 여기서 현재 위치로 다시 animateToRegion 하면
-    // 목적지가 화면 밖으로 나가서 현위치만 보이는 문제가 생김.
-    // 그래서 삭제함.
-  }, [isGuiding, currentSegmentIndex, roadPath, activePath]);
+    if (!isGuiding) return;
+
+    segmentFocusTimerRef.current = setTimeout(() => {
+      if (segmentFocusKeyRef.current !== focusKey) return;
+
+      const latestCurrentPos = currentPosRef.current;
+
+      if (!latestCurrentPos || !mapRef.current) return;
+
+      mapRef.current.animateToRegion(
+        {
+          latitude: latestCurrentPos.latitude,
+          longitude: latestCurrentPos.longitude,
+          latitudeDelta: 0.008,
+          longitudeDelta: 0.008,
+        },
+        700
+      );
+    }, 2000);
+
+    return () => {
+      if (segmentFocusTimerRef.current) {
+        clearTimeout(segmentFocusTimerRef.current);
+        segmentFocusTimerRef.current = null;
+      }
+    };
+  }, [isGuiding, currentSegmentIndex, routeSegments, roadPath]);
 
   const startCurrentLocation = async () => {
     try {
@@ -241,6 +308,7 @@ export default function KakaoMapWebView({
             lng: newPos.longitude,
             name: "현재 위치",
           });
+
           /*
           if (guidingRef.current && followModeRef.current && mapRef.current) {
             mapRef.current.animateToRegion(
@@ -254,8 +322,11 @@ export default function KakaoMapWebView({
             );
           }
           */
-          if (guidingRef.current && activePath.length >= 2) {
-            const distanceFromPath = getMinDistanceFromPath(newPos, activePath);
+
+          const latestActivePath = activePathRef.current || [];
+
+          if (guidingRef.current && latestActivePath.length >= 2) {
+            const distanceFromPath = getMinDistanceFromPath(newPos, latestActivePath);
             const now = Date.now();
 
             if (
@@ -306,8 +377,8 @@ export default function KakaoMapWebView({
     if (Number.isNaN(lat) || Number.isNaN(lng)) return;
 
     setSelectedPos({ lat, lng });
-    setPlaceName(searchedPlace.name || "");
-    setKeyword(searchedPlace.address || "");
+    setPlaceName(searchedPlace.detailAddress || "");
+    setKeyword(searchedPlace.roadAddress || "");
     setDirectSelectMode(false);
 
     moveToPosition(lat, lng);
@@ -398,154 +469,7 @@ export default function KakaoMapWebView({
     return minDistance;
   };
 
-  const searchPlace = async () => {
-    const q = keyword.trim();
-
-    if (!q) {
-      Alert.alert("입력 필요", "주소나 장소명을 입력하세요.");
-      return;
-    }
-
-    if (!KAKAO_REST_API_KEY) {
-      Alert.alert(
-        "REST API 키 필요",
-        "mobile/.env에 EXPO_PUBLIC_KAKAO_REST_API_KEY를 넣어야 합니다."
-      );
-      return;
-    }
-
-    try {
-      setIsSearching(true);
-
-      const keywordUrl =
-        "https://dapi.kakao.com/v2/local/search/keyword.json?query=" +
-        encodeURIComponent(q);
-
-      let res = await fetch(keywordUrl, {
-        headers: {
-          Authorization: `KakaoAK ${KAKAO_REST_API_KEY}`,
-        },
-      });
-
-      let data = await res.json();
-
-      if (!data.documents || data.documents.length === 0) {
-        const addressUrl =
-          "https://dapi.kakao.com/v2/local/search/address.json?query=" +
-          encodeURIComponent(q);
-
-        res = await fetch(addressUrl, {
-          headers: {
-            Authorization: `KakaoAK ${KAKAO_REST_API_KEY}`,
-          },
-        });
-
-        data = await res.json();
-      }
-
-      if (!data.documents || data.documents.length === 0) {
-        Alert.alert("검색 실패", "검색 결과가 없습니다.");
-        return;
-      }
-
-      const first = data.documents[0];
-
-      const lat = Number(first.y);
-      const lng = Number(first.x);
-
-      if (Number.isNaN(lat) || Number.isNaN(lng)) {
-        Alert.alert("검색 오류", "좌표를 읽지 못했습니다.");
-        return;
-      }
-
-      setSelectedPos({ lat, lng });
-      setPlaceName(first.place_name || first.address_name || q);
-      setDirectSelectMode(false);
-
-      moveToPosition(lat, lng);
-    } catch (error) {
-      console.log(error);
-      Alert.alert("검색 오류", "카카오 REST API 검색 중 오류가 발생했습니다.");
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  const addLocation = async () => {
-    if (!selectedPos) {
-      Alert.alert("위치 선택 필요", "먼저 지도에서 위치를 선택하거나 주소를 검색하세요.");
-      return;
-    }
-
-    if (!placeName.trim()) {
-      Alert.alert("방문지 이름 필요", "방문지 이름을 입력하세요.");
-      return;
-    }
-
-    const newLoc = {
-      detailAddress: placeName.trim(),
-      roadAddress: keyword.trim() || "지도 직접 선택",
-      lat: selectedPos.lat,
-      lng: selectedPos.lng,
-      taskCategory: task.trim() || "점검",
-      status: "pending",
-    };
-
-    try {
-      if (!API_BASE_URL) {
-        throw new Error("API_BASE_URL 없음");
-      }
-
-      const res = await fetch(`${API_BASE_URL}/api/tasks`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(newLoc),
-      });
-
-      const text = await res.text();
-
-      if (!res.ok) {
-        throw new Error(`저장 실패: ${res.status}`);
-      }
-
-      const savedLocation = JSON.parse(text);
-
-      const nextLocations = [
-        ...locations,
-        {
-          ...savedLocation,
-          id: savedLocation.id ?? savedLocation.taskId ?? savedLocation.task_id,
-          detailAddress: savedLocation.detailAddress || newLoc.detailAddress,
-          roadAddress: savedLocation.roadAddress || newLoc.roadAddress,
-          lat: savedLocation.lat ?? newLoc.lat,
-          lng: savedLocation.lng ?? newLoc.lng,
-          status: savedLocation.status || "pending",
-          task: savedLocation.taskCategory || newLoc.taskCategory || "점검",
-        },
-      ];
-
-      onLocationsChange?.(nextLocations);
-
-      setKeyword("");
-      setPlaceName("");
-      setTask("");
-      setSelectedPos(null);
-      setDirectSelectMode(false);
-
-      Alert.alert("저장 완료", "방문지가 DB에 저장되었습니다.");
-    } catch (error) {
-      console.log(error);
-      Alert.alert(
-        "DB 저장 실패",
-        "백엔드 실행 상태와 EXPO_PUBLIC_API_BASE_URL을 확인하세요."
-      );
-    }
-  };
-
   const focusLocation = (loc) => {
-    setSelectedLocation(loc);
     moveToPosition(Number(loc.lat), Number(loc.lng));
     onMarkerClick?.(loc);
   };
@@ -610,6 +534,8 @@ export default function KakaoMapWebView({
   };
 
   const handleMapPress = (event) => {
+    if (!mapSelectMode) return;
+
     const { latitude, longitude } = event.nativeEvent.coordinate;
 
     setSelectedPos({
@@ -622,6 +548,13 @@ export default function KakaoMapWebView({
     setTask("");
     setDirectSelectMode(true);
     setPanelOpen?.(false);
+
+    onDirectPlaceSelect?.({
+      lat: latitude,
+      lng: longitude,
+      detailAddress: "지도 선택 위치",
+      roadAddress: "지도에서 선택",
+    });
   };
 
   const handleFieldAction = (action) => {
@@ -662,32 +595,22 @@ export default function KakaoMapWebView({
               longitude: selectedPos.lng,
             }}
             pinColor={Platform.OS === "android" ? "green" : undefined}
-            onPress={() => {
-              setDirectSelectMode(true);
-
-              onDirectPlaceSelect?.({
-                lat: selectedPos.lat,
-                lng: selectedPos.lng,
-                name: "선택한 위치",
-                address: "지도에서 선택",
-              });
-            }}
             onPress={() => { }}
           />
         )}
 
         {mapLocations.map((loc, index) => {
-          const locKey = loc.id ?? `${loc.name}-${loc.lat}-${loc.lng}`;
+          const locKey = loc.id ?? `${loc.detailAddress}-${loc.lat}-${loc.lng}`;
           const isPulsing = pulseTargetKey === locKey;
 
           return (
             <Marker
-              key={`${loc.name || "loc"}-${loc.lat}-${loc.lng}-${index}`}
+              key={`${loc.detailAddress || "loc"}-${loc.lat}-${loc.lng}-${index}`}
               coordinate={{
                 latitude: Number(loc.lat),
                 longitude: Number(loc.lng),
               }}
-              title={`${index + 1}. ${loc.name}`}
+              title={`${index + 1}. ${loc.detailAddress}`}
               description={loc.task || "현장 확인"}
               onPress={() => focusLocation(loc)}
               zIndex={index + 1}
@@ -773,12 +696,10 @@ export default function KakaoMapWebView({
                 placeholderTextColor="#8A98A8"
                 style={styles.searchInput}
                 returnKeyType="search"
-                onSubmitEditing={searchPlace}
               />
 
               <TouchableOpacity
                 style={styles.searchButton}
-                onPress={searchPlace}
                 disabled={isSearching}
               >
                 <Text style={styles.searchButtonText}>
@@ -820,10 +741,6 @@ export default function KakaoMapWebView({
             ))}
           </View>
 
-          <TouchableOpacity style={styles.addButton} onPress={addLocation}>
-            <Text style={styles.addButtonText}>방문 추가</Text>
-          </TouchableOpacity>
-
           <View style={styles.metaRow}>
             <Text style={styles.countText}>방문지 {locations.length}개</Text>
 
@@ -838,7 +755,7 @@ export default function KakaoMapWebView({
             ) : (
               locations.map((loc, index) => (
                 <View
-                  key={`${loc.name || "loc"}-${loc.lat}-${loc.lng}-${index}`}
+                  key={`${loc.detailAddress || "loc"}-${loc.lat}-${loc.lng}-${index}`}
                   style={styles.locationItem}
                 >
                   <TouchableOpacity
@@ -860,7 +777,7 @@ export default function KakaoMapWebView({
 
                     <View style={styles.locationTextWrap}>
                       <Text style={styles.locationName} numberOfLines={1}>
-                        {loc.name || "이름 없음"}
+                        {loc.detailAddress || "이름 없음"}
                       </Text>
                       <Text style={styles.locationTask} numberOfLines={1}>
                         {loc.task || "현장 확인"}
@@ -879,11 +796,10 @@ export default function KakaoMapWebView({
           {currentPos && (
             <Text style={styles.hintText}>
               {isGuiding
-                  ? currentTarget?.name
-                    ? `안내 중 · 현재 목적지: ${currentTarget?.name || "마지막 구간"}`
-                    : `안내 중 · 현재 목적지: ${currentTarget?.detailAddress || "마지막 구간"}`
-                    : "안내 시작 전"
-              }
+                ? `안내 중 · 현재 목적지: ${
+                    currentTarget?.detailAddress || "마지막 구간"
+                  }`
+                : "안내 시작 전"}
             </Text>
           )}
         </View>
@@ -918,7 +834,7 @@ export default function KakaoMapWebView({
               작업 지점 근처에 도착했습니다
             </Text>
             <Text style={styles.sheetTask}>
-              {arrivalTarget?.name || "목적지"} 작업을 시작하시겠습니까?
+              {arrivalTarget?.detailAddress || "목적지"} 작업을 시작하시겠습니까?
             </Text>
 
             <View style={styles.actionGrid}>
@@ -947,7 +863,8 @@ export default function KakaoMapWebView({
                   }
 
                   const updated = locations.map((loc) => {
-                    const locKey = loc.id ?? `${loc.name}-${loc.lat}-${loc.lng}`;
+                    const locKey =
+                      loc.id ?? `${loc.detailAddress}-${loc.lat}-${loc.lng}`;
 
                     if (locKey === arrivalTarget?.targetKey) {
                       return { ...loc, status: "working" };
@@ -962,70 +879,6 @@ export default function KakaoMapWebView({
                 }}
               >
                 <Text style={styles.actionText}>작업 시작</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      <Modal
-        visible={!!selectedLocation}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSelectedLocation(null)}
-      >
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={() => setSelectedLocation(null)}
-        >
-          <TouchableOpacity
-            style={styles.bottomSheet}
-            activeOpacity={1}
-            onPress={() => {}}
-          >
-            <View style={styles.handle} />
-
-            <View style={styles.sheetHead}>
-              <View style={styles.pinBox}>
-                <Text style={styles.pinEmoji}>📍</Text>
-              </View>
-
-              <View style={styles.sheetTextWrap}>
-                <Text style={styles.sheetTitle} numberOfLines={1}>
-                  {selectedLocation?.name || "이름 없음"}
-                </Text>
-                <Text style={styles.sheetTask} numberOfLines={1}>
-                  {selectedLocation?.task || "현장 확인"}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.sheetLabel}>FIELD RECORD</Text>
-
-            <View style={styles.actionGrid}>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => handleFieldAction("photo")}
-              >
-                <Text style={styles.actionEmoji}>📷</Text>
-                <Text style={styles.actionText}>사진</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => handleFieldAction("memo")}
-              >
-                <Text style={styles.actionEmoji}>📝</Text>
-                <Text style={styles.actionText}>메모</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => handleFieldAction("status")}
-              >
-                <Text style={styles.actionEmoji}>🔄</Text>
-                <Text style={styles.actionText}>상태</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
@@ -1419,9 +1272,5 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
     elevation: 6,
-  },
-  pulseMarker: {
-    borderWidth: 4,
-    elevation: 12,
   },
 });
