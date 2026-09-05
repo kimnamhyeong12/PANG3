@@ -13,7 +13,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from google import genai
-from google.genai import types
 from PIL import Image, ImageOps
 from pillow_heif import register_heif_opener
 from hwpx import HwpxDocument
@@ -524,26 +523,6 @@ def run_pipeline(payload: dict) -> dict:
 
 
 
-def _detect_audio_mime_type(path: Path) -> str:
-    """Gemini Files API 업로드용 오디오 MIME 타입을 확장자 기준으로 지정한다."""
-    ext = path.suffix.lower()
-    mime_map = {
-        ".wav": "audio/wav",
-        ".mp3": "audio/mp3",
-        ".aiff": "audio/aiff",
-        ".aif": "audio/aiff",
-        ".aac": "audio/aac",
-        ".ogg": "audio/ogg",
-        ".flac": "audio/flac",
-        ".mpeg": "audio/mpeg",
-        ".mpg": "audio/mpeg",
-        ".m4a": "audio/m4a",
-        ".opus": "audio/opus",
-        ".webm": "audio/webm",
-    }
-    return mime_map.get(ext, "audio/m4a")
-
-
 def transcribe_audio(audio_path: str) -> dict:
     """Gemini를 이용해 짧은 현장 음성을 한국어 텍스트로 변환한다."""
     try:
@@ -554,15 +533,7 @@ def transcribe_audio(audio_path: str) -> dict:
         if not path.is_file():
             return {"ok": False, "text": None, "error": "음성 파일을 찾을 수 없습니다."}
 
-        mime_type = _detect_audio_mime_type(path)
-        uploaded = client.files.upload(
-            file=str(path),
-            config=types.UploadFileConfig(
-                mime_type=mime_type,
-                display_name=path.name,
-            ),
-        )
-
+        uploaded = client.files.upload(file=str(path))
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=[
@@ -570,13 +541,10 @@ def transcribe_audio(audio_path: str) -> dict:
                 "이 음성을 한국어로 정확하게 받아쓰기 해주세요. 설명이나 따옴표 없이 말한 내용만 텍스트로 출력하세요.",
             ],
         )
-
         text = (response.text or "").strip()
         if not text:
             return {"ok": False, "text": None, "error": "인식된 음성이 없습니다."}
-
         return {"ok": True, "text": text, "error": None}
-
     except Exception as e:
         return {"ok": False, "text": None, "error": str(e)}
 
