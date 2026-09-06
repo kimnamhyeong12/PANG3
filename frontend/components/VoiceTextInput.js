@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Alert,
   Text,
@@ -8,21 +8,9 @@ import {
   StyleSheet,
 } from 'react-native';
 import {
-  RecordingPresets,
-  requestRecordingPermissionsAsync,
-  setAudioModeAsync,
-  useAudioRecorder,
-  useAudioRecorderState,
-} from 'expo-audio';
-import { API_BASE_URL } from '../utils/api';
-
-const SILENCE_TIMEOUT_MS = 5000;
-const METERING_THRESHOLD_DB = -55;
-
-const RECORDING_OPTIONS = {
-  ...RecordingPresets.HIGH_QUALITY,
-  isMeteringEnabled: true,
-};
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from 'expo-speech-recognition';
 
 export default function VoiceTextInput({
   value,
@@ -31,156 +19,120 @@ export default function VoiceTextInput({
   multiline = true,
   placeholder,
 }) {
-  const recorder = useAudioRecorder(RECORDING_OPTIONS);
-  const recorderState = useAudioRecorderState(recorder, 200);
-
   const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
+  const activeRef = useRef(false);
+  const latestTranscriptRef = useRef('');
+  const committedRef = useRef(false);
+  const valueRef = useRef(value || '');
+  valueRef.current = value || '';
 
-  const recordingRef = useRef(false);
-  const transcribingRef = useRef(false);
-  const lastVoiceAtRef = useRef(0);
-  const autoStopStartedRef = useRef(false);
-  const recordingStartedAtRef = useRef(0);
+  const appendTranscript = (text) => {
+    const transcript = String(text || '').trim();
+    if (!transcript || committedRef.current) return;
 
-  const setRecordingState = (next) => {
-    recordingRef.current = next;
-    setRecording(next);
+    committedRef.current = true;
+    const current = String(valueRef.current || '').trimEnd();
+    const next = current ? `${current} ${transcript}` : transcript;
+    valueRef.current = next;
+    onChangeText(next);
   };
 
-  const setTranscribingState = (next) => {
-    transcribingRef.current = next;
-    setTranscribing(next);
-  };
+  useSpeechRecognitionEvent('start', () => {
+    if (!activeRef.current) return;
+    setRecording(true);
+  });
 
-  const startRecording = async () => {
+  useSpeechRecognitionEvent('result', (event) => {
+    if (!activeRef.current) return;
+
+    const transcript = event?.results?.[0]?.transcript || '';
+    if (transcript.trim()) {
+      latestTranscriptRef.current = transcript;
+    }
+
+    if (event?.isFinal && transcript.trim()) {
+      appendTranscript(transcript);
+    }
+  });
+
+  useSpeechRecognitionEvent('end', () => {
+    if (!activeRef.current) return;
+
+    // 일부 Android 기기는 사용자가 종료 버튼을 누른 직후 final 결과를 놓칠 수 있어
+    // 마지막 interim 결과가 있으면 그것을 사용한다.
+    appendTranscript(latestTranscriptRef.current);
+    activeRef.current = false;
+    setRecording(false);
+  });
+
+  useSpeechRecognitionEvent('error', (event) => {
+    if (!activeRef.current) return;
+
+    const errorCode = event?.error || 'unknown';
+    const message = event?.message || '';
+
+    // 사용자가 직접 중단했을 때 발생할 수 있는 aborted/client는 마지막 인식 결과를 살린다.
+    if (errorCode === 'aborted' || errorCode === 'client') {
+      appendTranscript(latestTranscriptRef.current);
+    } else if (errorCode !== 'no-speech' && errorCode !== 'speech-timeout') {
+      Alert.alert('음성 입력', message || `음성 인식 오류: ${errorCode}`);
+    }
+
+    activeRef.current = false;
+    setRecording(false);
+  });
+
+  const startRecognition = async () => {
     try {
-      if (!API_BASE_URL) {
-        Alert.alert('음성 입력', '서버 주소가 설정되어 있지 않습니다.');
+      if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
+        Alert.alert(
+          '음성 입력',
+          '이 기기에서 음성 인식 서비스를 사용할 수 없습니다. Google 음성 인식 서비스가 활성화되어 있는지 확인해 주세요.'
+        );
         return;
       }
 
-      const permission = await requestRecordingPermissionsAsync();
+      const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!permission.granted) {
         Alert.alert('마이크 권한 필요', '음성 입력을 사용하려면 마이크 권한을 허용해 주세요.');
         return;
       }
 
-      await setAudioModeAsync({
-        allowsRecording: true,
-        playsInSilentMode: true,
+      latestTranscriptRef.current = '';
+      committedRef.current = false;
+      activeRef.current = true;
+      setRecording(true);
+
+      ExpoSpeechRecognitionModule.start({
+        lang: 'ko-KR',
+        interimResults: true,
+        continuous: false,
+        maxAlternatives: 1,
       });
-
-      await recorder.prepareToRecordAsync();
-      recorder.record();
-
-      const now = Date.now();
-      recordingStartedAtRef.current = now;
-      lastVoiceAtRef.current = now;
-      autoStopStartedRef.current = false;
-      setRecordingState(true);
     } catch (error) {
-      console.log('음성 녹음 시작 실패:', error);
-      Alert.alert('음성 입력', '녹음을 시작하지 못했습니다.');
+      activeRef.current = false;
+      setRecording(false);
+      console.log('음성 인식 시작 실패:', error);
+      Alert.alert('음성 입력', error?.message || '음성 인식을 시작하지 못했습니다.');
     }
   };
 
-  const stopAndTranscribe = async ({ automatic = false } = {}) => {
-    if (!recordingRef.current || transcribingRef.current || autoStopStartedRef.current) {
-      return;
-    }
-
-    autoStopStartedRef.current = true;
-    setRecordingState(false);
-    setTranscribingState(true);
-
+  const stopRecognition = () => {
+    if (!activeRef.current) return;
     try {
-      await recorder.stop();
-
-      const uri = recorder.uri;
-      if (!uri) {
-        throw new Error('녹음 파일을 찾을 수 없습니다.');
-      }
-
-      const form = new FormData();
-      form.append('audio', {
-        uri,
-        name: 'voice.m4a',
-        type: 'audio/mp4',
-      });
-
-      const response = await fetch(`${API_BASE_URL}/api/speech/transcribe`, {
-        method: 'POST',
-        body: form,
-      });
-
-      const rawText = await response.text();
-      let data = {};
-      try {
-        data = rawText ? JSON.parse(rawText) : {};
-      } catch (_) {
-        data = {};
-      }
-
-      if (response.status === 404) {
-        throw new Error('음성 인식 서버가 아직 반영되지 않았습니다. 백엔드 배포 후 다시 시도해 주세요.');
-      }
-
-      if (!response.ok || !data?.text) {
-        throw new Error(data?.error || rawText || `음성 변환 실패: ${response.status}`);
-      }
-
-      const transcript = String(data.text).trim();
-      if (!transcript) {
-        if (!automatic) {
-          Alert.alert('음성 입력', '인식된 음성이 없습니다.');
-        }
-        return;
-      }
-
-      const current = String(value || '').trimEnd();
-      onChangeText(current ? `${current} ${transcript}` : transcript);
+      ExpoSpeechRecognitionModule.stop();
     } catch (error) {
-      console.log('음성 변환 실패:', error);
-      Alert.alert('음성 입력', error?.message || '음성을 텍스트로 변환하지 못했습니다.');
-    } finally {
-      setTranscribingState(false);
-      autoStopStartedRef.current = false;
-      try {
-        await setAudioModeAsync({ allowsRecording: false });
-      } catch (_) {}
+      appendTranscript(latestTranscriptRef.current);
+      activeRef.current = false;
+      setRecording(false);
     }
   };
-
-  // 소리가 들어오면 마지막 음성 감지 시점을 갱신하고,
-  // 마지막 음성 이후 5초 동안 조용하면 자동으로 녹음을 끝낸다.
-  useEffect(() => {
-    if (!recordingRef.current || transcribingRef.current) return;
-
-    const metering = recorderState?.metering;
-    if (typeof metering === 'number' && metering > METERING_THRESHOLD_DB) {
-      lastVoiceAtRef.current = Date.now();
-      return;
-    }
-
-    const now = Date.now();
-    if (
-      recordingStartedAtRef.current > 0 &&
-      now - recordingStartedAtRef.current >= SILENCE_TIMEOUT_MS &&
-      lastVoiceAtRef.current > 0 &&
-      now - lastVoiceAtRef.current >= SILENCE_TIMEOUT_MS
-    ) {
-      stopAndTranscribe({ automatic: true });
-    }
-  }, [recorderState?.metering, recorderState?.durationMillis]);
 
   const handleVoicePress = () => {
-    if (transcribingRef.current) return;
-
-    if (recordingRef.current) {
-      stopAndTranscribe({ automatic: false });
+    if (recording) {
+      stopRecognition();
     } else {
-      startRecording();
+      startRecognition();
     }
   };
 
@@ -195,25 +147,18 @@ export default function VoiceTextInput({
       />
 
       <TouchableOpacity
-        style={[
-          styles.voiceButton,
-          recording && styles.voiceButtonRecording,
-          transcribing && styles.voiceButtonDisabled,
-        ]}
+        style={[styles.voiceButton, recording && styles.voiceButtonRecording]}
         onPress={handleVoicePress}
-        disabled={transcribing}
       >
         <Text style={styles.voiceButtonText}>
-          {transcribing
-            ? '음성 변환 중...'
-            : recording
-              ? '■ 녹음 종료'
-              : '🎙 음성으로 입력'}
+          {recording ? '■ 음성 입력 종료' : '🎙 음성으로 입력'}
         </Text>
       </TouchableOpacity>
 
       {recording && (
-        <Text style={styles.recordingGuide}>5초 동안 음성이 없으면 자동으로 종료됩니다.</Text>
+        <Text style={styles.recordingGuide}>
+          말씀을 마치면 자동으로 인식이 종료됩니다. 버튼을 눌러 직접 종료할 수도 있습니다.
+        </Text>
       )}
     </View>
   );
@@ -230,9 +175,6 @@ const styles = StyleSheet.create({
   },
   voiceButtonRecording: {
     backgroundColor: '#E74C3C',
-  },
-  voiceButtonDisabled: {
-    opacity: 0.6,
   },
   voiceButtonText: {
     color: 'white',

@@ -5,27 +5,48 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "platforms": [
-      "ios",
       "android",
+      "ios",
       "web"
     ],
     "android": {
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "CAMERA"
-      ]
+        "CAMERA",
+        "RECORD_AUDIO"
+      ],
+      "package": "com.pang3.fieldworkhelper"
     },
     "ios": {
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "현재 위치 기반 경로 안내를 위해 위치 권한이 필요합니다.",
-        "NSCameraUsageDescription": "현장 사진 촬영을 위해 카메라 권한이 필요합니다."
+        "NSCameraUsageDescription": "현장 사진 촬영을 위해 카메라 권한이 필요합니다.",
+        "NSMicrophoneUsageDescription": "현장 메모를 음성으로 입력하기 위해 마이크 권한이 필요합니다.",
+        "NSSpeechRecognitionUsageDescription": "현장 메모를 텍스트로 변환하기 위해 음성 인식 권한이 필요합니다."
       }
     },
     "plugins": [
       "expo-router",
       "expo-web-browser",
-      "expo-audio"
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "현장 메모를 음성으로 입력하기 위해 마이크 권한이 필요합니다.",
+          "speechRecognitionPermission": "현장 메모를 텍스트로 변환하기 위해 음성 인식 권한이 필요합니다.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ]
   }
 }
