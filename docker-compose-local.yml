@@ -15,6 +15,7 @@ services:
     platform: linux/amd64
     image: joyoungjun/sahagu-api:latest
     container_name: sahagu-api-local
+    restart: unless-stopped
     depends_on:
       - db
     ports:
