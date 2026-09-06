@@ -71,7 +71,7 @@ export default function ReportScreen({
           <Text style={styles.reportTitle}>사하구 외근 업무 결과 보고서</Text>
           <Text style={styles.line}>보고 대상 방문지: {locations.length}개</Text>
           <Text style={styles.line}>
-            작업완료: {complete}개 / 작업중: {working}개
+            작업 후: {complete}개 / 작업 중: {working}개
           </Text>
 
           <View style={styles.divider} />

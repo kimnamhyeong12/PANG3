@@ -28,9 +28,9 @@ const getStatusColor = (status) => {
 };
 
 const getStatusLabel = (status) => {
-  if (status === 'complete') return '작업완료';
-  if (status === 'working') return '작업중';
-  return '미작업';
+  if (status === 'complete') return '작업 후';
+  if (status === 'working') return '작업 중';
+  return '작업 전';
 };
 
 const cleanLocation = (loc, fallbackName = '위치') => {
@@ -540,7 +540,7 @@ export default function MapScreen({
     return `약 ${Math.round(meters)}m`;
   };
 
-    const getGuideSummary = () => {
+  const getGuideSummary = () => {
     if (!isGuiding) {
       return formatDuration(totalDuration)
         ? ` · 예상 이동시간 ${formatDuration(totalDuration)}`
@@ -639,8 +639,11 @@ export default function MapScreen({
 
       const text = await res.text();
 
+      console.log('OPTIMIZE STATUS:', res.status);
+      console.log('OPTIMIZE BODY:', text);
+
       if (!res.ok) {
-        throw new Error(`경로 최적화 요청 실패: ${res.status}`);
+        throw new Error(`경로 최적화 실패: ${res.status} / ${text}`);
       }
 
       const data = JSON.parse(text);
@@ -1046,7 +1049,7 @@ export default function MapScreen({
           </TouchableOpacity>
         )}
 
-                <View style={styles.chipRowWrap}>
+        <View style={styles.chipRowWrap}>
           {orderedMarkers.length === 0 ? (
             <View style={styles.emptyChip}>
               <Ionicons name="location-outline" size={14} color="#8A98A8" />

@@ -11,9 +11,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { BackButton, PrimaryButton } from '../components/ui';
 
 const getStatusLabel = (status) => {
-  if (status === 'complete') return '작업완료';
-  if (status === 'working') return '작업중';
-  return '미작업';
+  if (status === 'complete') return '작업 후';
+  if (status === 'working') return '작업 중';
+  return '작업 전';
 };
 
 const getStatusColor = (status) => {
@@ -35,7 +35,7 @@ export default function ReportListScreen({
 
   const toggleSelect = (loc) => {
     if (!isReportable(loc)) {
-      Alert.alert('선택 불가', '미작업 방문지는 보고서에 포함할 수 없습니다.');
+      Alert.alert('선택 불가', '작업 전 방문지는 보고서에 포함할 수 없습니다.');
       return;
     }
 
@@ -66,7 +66,7 @@ export default function ReportListScreen({
           <Text style={styles.eyebrow}>FIELD REPORT</Text>
           <Text style={styles.title}>보고서 작성</Text>
           <Text style={styles.desc}>
-            작업중 또는 작업완료 방문지만 보고서에 포함할 수 있습니다
+            작업 중 또는 작업 후 방문지만 보고서에 포함할 수 있습니다
           </Text>
         </View>
       </View>

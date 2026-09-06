@@ -16,13 +16,13 @@ const getStatusInfo = (statusValue) => {
 
   if (status === 'working') {
     return {
-      label: '작업중',
+      label: '작업 중',
       styleName: 'progressStatus',
     };
   }
 
   return {
-    label: '미작업',
+    label: '작업 전',
     styleName: 'pendingStatus',
   };
 };
