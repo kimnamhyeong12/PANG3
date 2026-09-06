@@ -22,3 +22,10 @@ PANG3 Android Development Build 전환본
 - 이 버전의 음성 입력은 Gemini API Key/MIME 문제와 무관하게 휴대폰의 네이티브 음성 인식 서비스를 사용함.
 - 기존 AI 보고서 생성 기능은 백엔드/Gemini 구조를 그대로 유지함.
 - package-lock.json은 의존성 전환 때문에 제거되어 있음. npm install 시 새로 생성됨.
+
+[Kakao Map standalone APK]
+- The map renderer now uses Kakao Maps JavaScript SDK inside react-native-webview.
+- react-native-maps was removed, so the standalone APK no longer requires a Google Maps Android API key.
+- Keep EXPO_PUBLIC_KAKAO_REST_API_KEY for Kakao REST address/place search.
+- Add EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY to frontend/.env using the JavaScript key from the SAME Kakao Developers application.
+- Kakao Maps JavaScript SDK Web platform domain: https://localhost

@@ -4,9 +4,9 @@ import { BackButton, PrimaryButton } from '../components/ui';
 import { API_BASE_URL } from '../utils/api';
 
 const getStatusLabel = (status) => {
-  if (status === 'complete') return '작업완료';
-  if (status === 'working') return '작업중';
-  return '미작업';
+  if (status === 'complete') return '작업 후';
+  if (status === 'working') return '작업 중';
+  return '작업 전';
 };
 
 export default function ReportScreen({
