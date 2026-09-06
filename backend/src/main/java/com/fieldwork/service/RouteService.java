@@ -295,7 +295,7 @@ public class RouteService {
             Map<String, Object> start = routePoints.get(i);
             Map<String, Object> end = routePoints.get(i + 1);
 
-            String url = "https://api.openrouteservice.org/v2/directions/foot-walking/geojson";
+            String url = "https://api.heigit.org/openrouteservice/v2/directions/foot-walking/geojson";
 
             HttpHeaders headers = new HttpHeaders();
             headers.set("Authorization", orsApiKey);
