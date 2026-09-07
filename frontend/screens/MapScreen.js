@@ -1,8 +1,8 @@
+import { showAlert } from '../components/CustomAlert';
 // 키보드 자판 내 엔터가 안먹힘
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
   BackHandler,
   FlatList,
@@ -297,12 +297,12 @@ export default function MapScreen({
     const q = keyword.trim();
 
     if (!q) {
-      Alert.alert('입력 필요', '주소나 장소명을 입력하세요.');
+      showAlert('입력 필요', '주소나 장소명을 입력하세요.');
       return;
     }
 
     if (!KAKAO_REST_API_KEY) {
-      Alert.alert(
+      showAlert(
         'REST API 키 필요',
         '.env의 EXPO_PUBLIC_KAKAO_REST_API_KEY를 확인하세요.'
       );
@@ -325,7 +325,7 @@ export default function MapScreen({
       const data = await res.json();
 
       if (!data.documents || data.documents.length === 0) {
-        Alert.alert('검색 실패', '검색 결과가 없습니다.');
+        showAlert('검색 실패', '검색 결과가 없습니다.');
         return;
       }
 
@@ -337,7 +337,7 @@ export default function MapScreen({
       setSearchModalVisible(true);
     } catch (error) {
       console.log(error);
-      Alert.alert('검색 오류', '주소 검색 중 문제가 발생했습니다.');
+      showAlert('검색 오류', '주소 검색 중 문제가 발생했습니다.');
     } finally {
       setIsSearching(false);
     }
@@ -349,7 +349,7 @@ export default function MapScreen({
     const lng = Number(first.x);
 
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      Alert.alert('검색 오류', '좌표를 읽지 못했습니다.');
+      showAlert('검색 오류', '좌표를 읽지 못했습니다.');
       return;
     }
 
@@ -388,12 +388,12 @@ export default function MapScreen({
     const lng = Number(coordLng);
 
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      Alert.alert('입력 오류', '위도와 경도를 숫자로 입력하세요.');
+      showAlert('입력 오류', '위도와 경도를 숫자로 입력하세요.');
       return;
     }
 
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      Alert.alert('입력 오류', '올바른 위도·경도 범위를 입력하세요.');
+      showAlert('입력 오류', '올바른 위도·경도 범위를 입력하세요.');
       return;
     }
 
@@ -418,12 +418,12 @@ export default function MapScreen({
 
   const addLocation = async () => {
     if (!searchedPlace) {
-      Alert.alert('위치 필요', '먼저 위치를 선택하세요.');
+      showAlert('위치 필요', '먼저 위치를 선택하세요.');
       return;
     }
 
     if (!placeName.trim()) {
-      Alert.alert('방문지 이름 필요', '방문지 이름을 입력하세요.');
+      showAlert('방문지 이름 필요', '방문지 이름을 입력하세요.');
       return;
     }
 
@@ -473,7 +473,7 @@ export default function MapScreen({
       closeAddSheet();
     } catch (error) {
       console.log(error);
-      Alert.alert(
+      showAlert(
         'DB 저장 실패',
         '백엔드 실행 상태와 EXPO_PUBLIC_API_BASE_URL을 확인하세요.'
       );
@@ -590,17 +590,17 @@ export default function MapScreen({
     setIsGuiding(false);
 
     if (!API_BASE_URL) {
-      Alert.alert('오류', '.env의 EXPO_PUBLIC_API_BASE_URL을 확인하세요.');
+      showAlert('오류', '.env의 EXPO_PUBLIC_API_BASE_URL을 확인하세요.');
       return;
     }
 
     if (!currentLocation) {
-      Alert.alert('현재 위치 필요', '현재 위치를 먼저 불러와야 합니다.');
+      showAlert('현재 위치 필요', '현재 위치를 먼저 불러와야 합니다.');
       return;
     }
 
     if (!markers || markers.length < 2) {
-      Alert.alert('정렬 불가', '방문지가 2개 이상 필요합니다.');
+      showAlert('정렬 불가', '방문지가 2개 이상 필요합니다.');
       return;
     }
 
@@ -679,7 +679,7 @@ export default function MapScreen({
       setOptimized(true);
     } catch (error) {
       console.log(error);
-      Alert.alert('오류', '경로 최적화 중 문제가 발생했습니다.');
+      showAlert('오류', '경로 최적화 중 문제가 발생했습니다.');
     } finally {
       setOptimizing(false);
     }
@@ -687,19 +687,19 @@ export default function MapScreen({
 
   const updateGuideTargetSegment = async (targetIndex, mode = transportMode) => {
     if (!API_BASE_URL) {
-      Alert.alert('오류', '.env의 EXPO_PUBLIC_API_BASE_URL을 확인하세요.');
+      showAlert('오류', '.env의 EXPO_PUBLIC_API_BASE_URL을 확인하세요.');
       return;
     }
 
     if (!currentLocation) {
-      Alert.alert('현재 위치 필요', '현재 위치를 먼저 불러와야 합니다.');
+      showAlert('현재 위치 필요', '현재 위치를 먼저 불러와야 합니다.');
       return;
     }
 
     const target = orderedMarkers[targetIndex];
 
     if (!target) {
-      Alert.alert('목적지 없음', '해당 목적지를 찾을 수 없습니다.');
+      showAlert('목적지 없음', '해당 목적지를 찾을 수 없습니다.');
       return;
     }
 
@@ -711,7 +711,7 @@ export default function MapScreen({
       const end = cleanLocation(target, '목적지');
 
       if (!start || !end) {
-        Alert.alert('오류', '현재 위치 또는 목적지 정보를 찾을 수 없습니다.');
+        showAlert('오류', '현재 위치 또는 목적지 정보를 찾을 수 없습니다.');
         return;
       }
 
@@ -734,7 +734,7 @@ export default function MapScreen({
       const data = JSON.parse(text);
 
       if (!data.segments || data.segments.length === 0) {
-        Alert.alert('오류', '안내 경로를 받아오지 못했습니다.');
+        showAlert('오류', '안내 경로를 받아오지 못했습니다.');
         return;
       }
 
@@ -758,7 +758,7 @@ export default function MapScreen({
       }
     } catch (error) {
       console.log(error);
-      Alert.alert('오류', '현재 위치 기준 안내 경로를 다시 계산하지 못했습니다.');
+      showAlert('오류', '현재 위치 기준 안내 경로를 다시 계산하지 못했습니다.');
     } finally {
       setSegmentChanging(false);
     }

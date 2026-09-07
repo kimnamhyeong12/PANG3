@@ -10,6 +10,7 @@ import FieldActionScreen from './screens/FieldActionScreen';
 import ReportScreen from './screens/ReportScreen';
 import DownloadScreen from './screens/DownloadScreen';
 import ReportListScreen from './screens/ReportListScreen';
+import { CustomAlertHost } from './components/CustomAlert';
 
 export default function App() {
   const [screen, setScreen] = useState('login');
@@ -148,6 +149,8 @@ export default function App() {
           downloadInfo={downloadInfo}
         />
       )}
+
+      <CustomAlertHost />
     </SafeAreaView>
   );
 }

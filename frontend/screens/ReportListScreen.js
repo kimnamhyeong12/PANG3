@@ -1,3 +1,4 @@
+import { showAlert } from '../components/CustomAlert';
 import React, { useState } from 'react';
 import {
   View,
@@ -5,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BackButton, PrimaryButton } from '../components/ui';
@@ -35,7 +35,7 @@ export default function ReportListScreen({
 
   const toggleSelect = (loc) => {
     if (!isReportable(loc)) {
-      Alert.alert('선택 불가', '작업 전 방문지는 보고서에 포함할 수 없습니다.');
+      showAlert('선택 불가', '작업 전 방문지는 보고서에 포함할 수 없습니다.');
       return;
     }
 
@@ -51,7 +51,7 @@ export default function ReportListScreen({
 
   const handleCreateReport = () => {
     if (selectedLocations.length === 0) {
-      Alert.alert('선택 필요', '보고서에 포함할 방문지를 선택하세요.');
+      showAlert('선택 필요', '보고서에 포함할 방문지를 선택하세요.');
       return;
     }
 
@@ -189,7 +189,11 @@ const styles = StyleSheet.create({
     gap: 12,
     alignItems: 'center',
     backgroundColor: 'white',
-    padding: 14,
+    
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    paddingTop: 34,
+
     borderBottomWidth: 1,
     borderBottomColor: '#D9E1EA',
   },
@@ -334,7 +338,11 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: '#FFFFFF',
-    padding: 14,
+    
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 60,
+
     borderTopWidth: 1,
     borderTopColor: '#D9E1EA',
   },

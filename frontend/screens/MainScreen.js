@@ -1,6 +1,6 @@
+import { showAlert } from '../components/CustomAlert';
 import React from 'react';
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -103,7 +103,7 @@ export default function MainScreen({
       setIncompleteLocations(incomplete);
     } catch (error) {
       console.log(error);
-      Alert.alert('오류', '미처리 작업을 불러오지 못했습니다.');
+      showAlert('오류', '미처리 작업을 불러오지 못했습니다.');
     }
   };
 
@@ -133,7 +133,7 @@ export default function MainScreen({
     );
 
     if (selectedItems.length === 0) {
-      Alert.alert('선택 필요', '오늘 외근에 추가할 작업을 선택하세요.');
+      showAlert('선택 필요', '오늘 외근에 추가할 작업을 선택하세요.');
       return;
     }
 
@@ -150,7 +150,7 @@ export default function MainScreen({
 
     setSelectedIds([]);
 
-    Alert.alert(
+    showAlert(
       '추가 완료',
       `${selectedItems.length}개의 미처리 작업을 오늘 외근에 추가했습니다.`
     );

@@ -1,6 +1,6 @@
+import { showAlert } from './CustomAlert';
 import React, { useRef, useState } from 'react';
 import {
-  Alert,
   Text,
   TextInput,
   TouchableOpacity,
@@ -107,7 +107,7 @@ export default function VoiceTextInput({
       errorCode !== 'no-speech' &&
       errorCode !== 'speech-timeout'
     ) {
-      Alert.alert(
+      showAlert(
         '음성 입력',
         message || `음성 인식 오류: ${errorCode}`
       );
@@ -122,7 +122,7 @@ export default function VoiceTextInput({
       if (
         !ExpoSpeechRecognitionModule.isRecognitionAvailable()
       ) {
-        Alert.alert(
+        showAlert(
           '음성 입력',
           '이 기기에서 음성 인식 서비스를 사용할 수 없습니다. Google 음성 인식 서비스가 활성화되어 있는지 확인해 주세요.'
         );
@@ -133,7 +133,7 @@ export default function VoiceTextInput({
         await ExpoSpeechRecognitionModule.requestPermissionsAsync();
 
       if (!permission.granted) {
-        Alert.alert(
+        showAlert(
           '마이크 권한 필요',
           '음성 입력을 사용하려면 마이크 권한을 허용해 주세요.'
         );
@@ -158,7 +158,7 @@ export default function VoiceTextInput({
 
       console.log('음성 인식 시작 실패:', error);
 
-      Alert.alert(
+      showAlert(
         '음성 입력',
         error?.message || '음성 인식을 시작하지 못했습니다.'
       );

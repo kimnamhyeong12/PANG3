@@ -1,9 +1,9 @@
+import { showAlert } from './CustomAlert';
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -1667,7 +1667,7 @@ export default function KakaoMapWebView({
             true
           );
 
-          Alert.alert(
+          showAlert(
             "위치 권한 필요",
             "현재 위치를 사용하려면 위치 권한이 필요합니다."
           );
@@ -1899,7 +1899,7 @@ export default function KakaoMapWebView({
           true
         );
 
-        Alert.alert(
+        showAlert(
           "위치 오류",
           "현재 위치를 불러오지 못했습니다."
         );
@@ -2227,7 +2227,7 @@ export default function KakaoMapWebView({
         locations.length <
         2
       ) {
-        Alert.alert(
+        showAlert(
           "정렬 불가",
           "방문지가 2개 이상 필요합니다."
         );
@@ -2239,7 +2239,7 @@ export default function KakaoMapWebView({
         currentPosRef.current;
 
       if (!pos) {
-        Alert.alert(
+        showAlert(
           "현재 위치 필요",
           "현재 위치를 먼저 불러와야 합니다."
         );
@@ -2326,7 +2326,7 @@ export default function KakaoMapWebView({
         optimized
       );
 
-      Alert.alert(
+      showAlert(
         "정렬 완료",
         "현재 위치 기준으로 가까운 순서로 정렬했습니다."
       );
@@ -3288,7 +3288,7 @@ export default function KakaoMapWebView({
                         error
                       );
 
-                      Alert.alert(
+                      showAlert(
                         "오류",
                         "작업 상태를 변경하지 못했습니다."
                       );

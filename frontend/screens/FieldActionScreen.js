@@ -1,8 +1,5 @@
-import React, {
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { showAlert } from '../components/CustomAlert';
+import React, { useEffect, useRef, useState } from 'react';
 
 import {
   View,
@@ -112,15 +109,6 @@ function isValidCoordinate(latitude, longitude) {
   );
 }
 
-/*
- * 작업 위치에 표시되는 카카오 지도.
- *
- * - 한 손가락 드래그: 지도 이동
- * - 두 손가락: 확대 / 축소
- * - 지도 한 번 터치: 작업 위치 마커 변경
- * - 선택 위치를 React Native로 전송
- * - 위도/경도를 직접 입력했을 때 외부에서 위치 갱신 가능
- */
 function getInteractiveMapHtml(latitude, longitude) {
   const valid = isValidCoordinate(
     latitude,
@@ -195,10 +183,6 @@ function getInteractiveMapHtml(latitude, longitude) {
             );
           }
 
-          /*
-           * React Native에서 위도/경도를
-           * 직접 수정했을 때 실행된다.
-           */
           window.setExternalPosition = function(
             latitude,
             longitude
@@ -266,10 +250,6 @@ function getInteractiveMapHtml(latitude, longitude) {
 
               ready = true;
 
-              /*
-               * WebView 레이아웃이 완전히 잡힌 후
-               * 한 번 더 중앙 위치를 보정한다.
-               */
               setTimeout(function() {
                 map.relayout();
                 map.setCenter(
@@ -277,10 +257,6 @@ function getInteractiveMapHtml(latitude, longitude) {
                 );
               }, 300);
 
-              /*
-               * 지도를 터치하면
-               * 해당 지점을 실제 작업 위치로 선택.
-               */
               window.kakao.maps.event.addListener(
                 map,
                 'click',
@@ -295,14 +271,9 @@ function getInteractiveMapHtml(latitude, longitude) {
                   map.panTo(position);
 
                   postMessage({
-                    type:
-                      'LOCATION_SELECTED',
-
-                    latitude:
-                      position.getLat(),
-
-                    longitude:
-                      position.getLng()
+                    type: 'LOCATION_SELECTED',
+                    latitude: position.getLat(),
+                    longitude: position.getLng()
                   });
                 }
               );
@@ -324,10 +295,6 @@ export default function FieldActionScreen({
 }) {
   const mapRef = useRef(null);
 
-  /*
-   * 지도 영역을 사용하고 있는 동안에는
-   * 바깥 보고서 ScrollView를 막는다.
-   */
   const [
     mapInteracting,
     setMapInteracting,
@@ -427,8 +394,32 @@ export default function FieldActionScreen({
             return;
           }
 
-          const data =
-            await res.json();
+          /*
+           * 응답이 비어있는 경우
+           * JSON parse 오류 방지
+           */
+          const responseText =
+            await res.text();
+
+          if (
+            !responseText ||
+            !responseText.trim()
+          ) {
+            return;
+          }
+
+          let data;
+
+          try {
+            data =
+              JSON.parse(responseText);
+          } catch (error) {
+            console.log(
+              '보고서 응답 JSON 변환 실패:',
+              error
+            );
+            return;
+          }
 
           if (!data) {
             return;
@@ -440,28 +431,20 @@ export default function FieldActionScreen({
           );
 
           if (
-            data.latitude !==
-              null &&
-            data.latitude !==
-              undefined
+            data.latitude !== null &&
+            data.latitude !== undefined
           ) {
             setLatitude(
-              String(
-                data.latitude
-              )
+              String(data.latitude)
             );
           }
 
           if (
-            data.longitude !==
-              null &&
-            data.longitude !==
-              undefined
+            data.longitude !== null &&
+            data.longitude !== undefined
           ) {
             setLongitude(
-              String(
-                data.longitude
-              )
+              String(data.longitude)
             );
           }
 
@@ -476,8 +459,7 @@ export default function FieldActionScreen({
 
                 return {
                   type: type.key,
-                  label:
-                    type.label,
+                  label: type.label,
 
                   uri: savedPhoto
                     ? resolveApiUrl(
@@ -489,8 +471,7 @@ export default function FieldActionScreen({
                     : null,
 
                   comment:
-                    savedPhoto
-                      ?.comment ||
+                    savedPhoto?.comment ||
                     '',
                 };
               }
@@ -502,8 +483,7 @@ export default function FieldActionScreen({
           );
 
           setAiRefinedContent(
-            data.aiRefinedContent ||
-              ''
+            data.aiRefinedContent || ''
           );
 
           setReportDownloadUrl(
@@ -536,30 +516,27 @@ export default function FieldActionScreen({
     );
 
   /*
-   * 지도에서 위치 선택 메시지 수신
+   * 지도에서 위치 선택
    */
   const handleMapMessage = (
     event
   ) => {
     try {
-      const data = JSON.parse(
-        event.nativeEvent.data
-      );
+      const data =
+        JSON.parse(
+          event.nativeEvent.data
+        );
 
       if (
         data.type ===
         'LOCATION_SELECTED'
       ) {
         setLatitude(
-          String(
-            data.latitude
-          )
+          String(data.latitude)
         );
 
         setLongitude(
-          String(
-            data.longitude
-          )
+          String(data.longitude)
         );
       }
     } catch (error) {
@@ -571,8 +548,7 @@ export default function FieldActionScreen({
   };
 
   /*
-   * 위도/경도를 직접 입력한 뒤
-   * 입력창을 벗어나면 지도 위치도 변경한다.
+   * 위도/경도 직접 수정
    */
   const applyCoordinateToMap =
     () => {
@@ -609,20 +585,17 @@ export default function FieldActionScreen({
       `);
     };
 
-  /*
-   * 지도 터치 시작
-   *
-   * 이 순간 바깥 ScrollView를 정지한다.
-   */
+  useEffect(() => {
+    if (!isValidCoordinate(latitude, longitude)) return;
+    const timer = setTimeout(() => { applyCoordinateToMap(); }, 150);
+    return () => clearTimeout(timer);
+  }, [latitude, longitude]);
+
   const handleMapTouchStart =
     () => {
       setMapInteracting(true);
     };
 
-  /*
-   * 지도 터치가 끝나면 다시
-   * 보고서 스크롤을 허용한다.
-   */
   const handleMapTouchEnd =
     () => {
       setTimeout(() => {
@@ -631,27 +604,27 @@ export default function FieldActionScreen({
     };
 
   /*
-   * 사진 촬영
+   * 카메라 촬영
    */
   const takePhoto = async (
     index
   ) => {
     const permission =
-      await ImagePicker.requestCameraPermissionsAsync();
+      await ImagePicker
+        .requestCameraPermissionsAsync();
 
     if (!permission.granted) {
-      alert(
+      showAlert(
         '카메라 권한이 필요합니다.'
       );
       return;
     }
 
     const result =
-      await ImagePicker.launchCameraAsync(
-        {
+      await ImagePicker
+        .launchCameraAsync({
           quality: 0.7,
-        }
-      );
+        });
 
     if (!result.canceled) {
       setPhotoEditor({
@@ -663,10 +636,80 @@ export default function FieldActionScreen({
     }
   };
 
-  const retakePhoto = async (
+  /*
+   * 앨범에서 사진 선택
+   */
+  const pickPhotoFromLibrary =
+    async (index) => {
+      const permission =
+        await ImagePicker
+          .requestMediaLibraryPermissionsAsync();
+
+      if (!permission.granted) {
+        showAlert(
+          '사진 접근 권한이 필요합니다.'
+        );
+        return;
+      }
+
+      const result =
+        await ImagePicker
+          .launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsMultipleSelection:
+              false,
+            quality: 0.7,
+          });
+
+      if (!result.canceled) {
+        setPhotoEditor({
+          visible: true,
+          uri:
+            result.assets[0].uri,
+          index,
+        });
+      }
+    };
+
+  /*
+   * 사진 선택 버튼
+   *
+   * 촬영 또는 앨범 선택
+   */
+  const selectPhoto = (
     index
   ) => {
-    await takePhoto(index);
+    showAlert(
+      '사진 선택',
+      '사진을 가져올 방법을 선택해주세요.',
+      [
+        {
+          text: '사진 촬영',
+          onPress: () =>
+            takePhoto(index),
+        },
+        {
+          text: '앨범 선택',
+          onPress: () =>
+            pickPhotoFromLibrary(
+              index
+            ),
+        },
+        {
+          text: '취소',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  /*
+   * 기존 사진 변경
+   */
+  const retakePhoto = (
+    index
+  ) => {
+    selectPhoto(index);
   };
 
   const deletePhoto = (
@@ -701,8 +744,7 @@ export default function FieldActionScreen({
           photoIndex === index
             ? {
                 ...photo,
-                comment:
-                  text,
+                comment: text,
               }
             : photo
       )
@@ -754,8 +796,7 @@ export default function FieldActionScreen({
           photoEditor.index
             ? {
                 ...photo,
-                uri:
-                  editedUri,
+                uri: editedUri,
               }
             : photo
       )
@@ -770,14 +811,14 @@ export default function FieldActionScreen({
   const handleSave = async () => {
     try {
       if (!taskId) {
-        alert(
+        showAlert(
           '방문지 ID를 찾을 수 없습니다.'
         );
         return;
       }
 
       if (!API_BASE_URL) {
-        alert(
+        showAlert(
           'EXPO_PUBLIC_API_BASE_URL을 설정하세요.'
         );
         return;
@@ -789,13 +830,15 @@ export default function FieldActionScreen({
           longitude
         )
       ) {
-        alert(
+        showAlert(
           '위도와 경도를 확인해주세요.'
         );
         return;
       }
 
       setSaving(true);
+
+      console.log('보고서 저장 좌표:', latitude, longitude);
 
       const form =
         new FormData();
@@ -812,15 +855,9 @@ export default function FieldActionScreen({
 
       form.append(
         'longitude',
-        String(
-          longitude || ''
-        )
+        String(longitude || '')
       );
 
-      /*
-       * 기존 백엔드와의 호환을 위해
-       * mainComment 자체는 빈 값으로 전달.
-       */
       form.append(
         'mainComment',
         ''
@@ -841,8 +878,7 @@ export default function FieldActionScreen({
         JSON.stringify(
           photos.map(
             (photo) =>
-              photo.comment ||
-              ''
+              photo.comment || ''
           )
         )
       );
@@ -860,36 +896,14 @@ export default function FieldActionScreen({
           )
         );
 
-      photos.forEach(
-        (photo) => {
-          if (
-            photo.uri &&
-            isLocalUri(
-              photo.uri
-            )
-          ) {
-            form.append(
-              'fieldPhotos',
-              {
-                uri:
-                  photo.uri,
-
-                name:
-                  photo.type ===
-                  'before'
-                    ? 'before.jpg'
-                    : photo.type ===
-                      'during'
-                    ? 'during.jpg'
-                    : 'after.jpg',
-
-                type:
-                  'image/jpeg',
-              }
-            );
-          }
+      for (const photo of photos) {
+        if (photo.uri && isLocalUri(photo.uri)) {
+          const photoResponse = await fetch(photo.uri);
+          const photoBlob = await photoResponse.blob();
+          const fileName = photo.type === 'before' ? 'before.jpg' : photo.type === 'during' ? 'during.jpg' : 'after.jpg';
+          form.append('fieldPhotos', photoBlob, fileName);
         }
-      );
+      }
 
       const res =
         await fetch(
@@ -935,9 +949,7 @@ export default function FieldActionScreen({
           PHOTO_TYPES.map(
             (type, index) => {
               const savedPhoto =
-                savedPhotos[
-                  index
-                ];
+                savedPhotos[index];
 
               return {
                 type:
@@ -971,13 +983,13 @@ export default function FieldActionScreen({
         savedReport
       );
 
-      alert(
+      showAlert(
         '보고서가 저장되었고 AI 분석이 완료되었습니다.'
       );
     } catch (error) {
       console.log(error);
 
-      alert(
+      showAlert(
         '보고서 저장 중 문제가 발생했습니다.'
       );
     } finally {
@@ -985,13 +997,6 @@ export default function FieldActionScreen({
     }
   };
 
-  /*
-   * WebView HTML은 최초 위치로 만들어진다.
-   * 이후 위도/경도 변경은 injectJavaScript로 처리한다.
-   *
-   * 그래서 지도 드래그 중 latitude 변경 때문에
-   * WebView가 재생성되지 않는다.
-   */
   const [
     initialMapHtml,
   ] = useState(() =>
@@ -1050,12 +1055,6 @@ export default function FieldActionScreen({
           styles.body
         }
         keyboardShouldPersistTaps="handled"
-
-        /*
-         * 핵심:
-         * 지도 만지는 동안에는
-         * 보고서 전체 스크롤 중지.
-         */
         scrollEnabled={
           !mapInteracting
         }
@@ -1123,22 +1122,10 @@ export default function FieldActionScreen({
               }
 
               javaScriptEnabled
-
               domStorageEnabled
-
-              /*
-               * Android WebView 안에서
-               * 제스처를 최대한 WebView가
-               * 처리하도록 설정.
-               */
               nestedScrollEnabled
-
               scrollEnabled
 
-              /*
-               * WebView 터치 시
-               * 바깥 ScrollView 정지.
-               */
               onTouchStart={
                 handleMapTouchStart
               }
@@ -1159,13 +1146,14 @@ export default function FieldActionScreen({
                 handleMapMessage
               }
 
+              onLoadEnd={() => {
+                setTimeout(() => {
+                  applyCoordinateToMap();
+                }, 500);
+              }}
+
               overScrollMode="never"
 
-              /*
-               * 안드로이드에서
-               * 두 손가락 확대축소가
-               * 막히지 않도록 한다.
-               */
               setBuiltInZoomControls={
                 false
               }
@@ -1326,7 +1314,7 @@ export default function FieldActionScreen({
                             styles.photoSmallButtonText
                           }
                         >
-                          다시찍기
+                          사진 변경
                         </Text>
                       </TouchableOpacity>
 
@@ -1359,7 +1347,7 @@ export default function FieldActionScreen({
                     }
 
                     onPress={() =>
-                      takePhoto(
+                      selectPhoto(
                         index
                       )
                     }
@@ -1378,7 +1366,7 @@ export default function FieldActionScreen({
                       }
                     >
                       {item.label}{' '}
-                      사진 촬영
+                      사진 선택
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -1602,7 +1590,7 @@ export default function FieldActionScreen({
           title={
             saving
               ? '저장 중...'
-              : '보고서 저장 및 AI 생성'
+              : '보고서 저장'
           }
 
           onPress={
@@ -1646,7 +1634,11 @@ const styles =
       alignItems: 'center',
       backgroundColor:
         'white',
-      padding: 14,
+
+      paddingHorizontal: 14,
+      paddingBottom: 14,
+      paddingTop: 34,
+
 
       borderBottomWidth: 1,
       borderBottomColor:
@@ -1674,7 +1666,7 @@ const styles =
     body: {
       padding: 16,
       gap: 14,
-      paddingBottom: 30,
+      paddingBottom: 70,
     },
 
     card: {
@@ -1709,9 +1701,6 @@ const styles =
       fontWeight: '900',
     },
 
-    /*
-     * 작업 위치 지도
-     */
     mapWrapper: {
       height: 260,
 
@@ -1777,9 +1766,6 @@ const styles =
         '#FFFFFF',
     },
 
-    /*
-     * 사진
-     */
     photoSlot: {
       paddingTop: 4,
 
