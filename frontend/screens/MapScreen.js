@@ -263,7 +263,7 @@ export default function MapScreen({
 
   const handleSetPriority = (targetLocation) => {
     if (!priorityMode) {
-      setSelected(targetLocation);
+      onLocationClick?.(targetLocation, 'report');
       return;
     }
 
@@ -875,7 +875,9 @@ export default function MapScreen({
           setMapSelectMode(false);
         }}
         onCurrentLocationChange={setCurrentLocation}
-        onMarkerClick={setSelected}
+        onMarkerClick={(loc) => {
+          onLocationClick?.(loc, 'report');
+        }}
         onLocationsChange={setLocations}
         onRerouteRequest={handleReroute}
       />
@@ -1114,7 +1116,7 @@ export default function MapScreen({
               >
                 <TouchableOpacity
                   style={styles.visitMain}
-                  onPress={() => setSelected(loc)}
+                  onPress={() => onLocationClick?.(loc, 'report')}
                 >
                   <View
                     style={[
@@ -1403,66 +1405,6 @@ export default function MapScreen({
               >
                 <Text style={styles.sheetLabel}>안내 시작</Text>
               </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      <Modal
-        visible={!!selected}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSelected(null)}
-      >
-        <TouchableOpacity
-          style={styles.modalBg}
-          activeOpacity={1}
-          onPress={() => setSelected(null)}
-        >
-          <TouchableOpacity activeOpacity={1} style={styles.sheet}>
-            <View style={styles.handle} />
-
-            <View style={styles.placeRow}>
-              <View
-                style={[
-                  styles.placeIcon,
-                  { backgroundColor: getStatusColor(selected?.status) },
-                ]}
-              >
-                <Text style={styles.placeIconText}>📍</Text>
-              </View>
-
-              <View style={{ flex: 1 }}>
-                <Text style={styles.placeName}>
-                  {selected?.detailAddress || '이름 없음'}
-                </Text>
-                <Text style={styles.placeAddr}>
-                  {selected?.roadAddress || selected?.task || '주소 없음'}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.routeTitle}>FIELD RECORD</Text>
-
-            <View style={styles.actionRow}>
-              {[
-                { label: '사진', icon: '📷', type: 'photo' },
-                { label: '메모', icon: '📝', type: 'memo' },
-                { label: '상태', icon: '🔄', type: 'status' },
-              ].map((b) => (
-                <TouchableOpacity
-                  key={b.type}
-                  style={styles.sheetButton}
-                  onPress={() => {
-                    const loc = selected;
-                    setSelected(null);
-                    onLocationClick?.(loc, b.type);
-                  }}
-                >
-                  <Text style={styles.sheetIcon}>{b.icon}</Text>
-                  <Text style={styles.sheetLabel}>{b.label}</Text>
-                </TouchableOpacity>
-              ))}
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -2003,7 +1945,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 60,
   },
 
   handle: {

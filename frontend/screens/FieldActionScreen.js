@@ -494,10 +494,11 @@ export default function FieldActionScreen({
               : null
           );
 
+          const currentLocationStatus = location?.status;
           setStatus(
-            data.progressStatus ||
-              location?.status ||
-              'pending'
+            currentLocationStatus === 'working' || currentLocationStatus === 'complete'
+              ? currentLocationStatus
+              : data.progressStatus || currentLocationStatus || 'pending'
           );
         } catch (error) {
           console.log(

@@ -1372,13 +1372,11 @@ export default function KakaoMapWebView({
      * 파동 표시 안 함.
      */
     if (
-      targetStatus ===
-      "complete"
+      targetStatus === "working" ||
+      targetStatus === "complete"
     ) {
-      setPulseTargetKey(
-        null
-      );
-
+      setPulseTargetKey(null);
+      setArrivalTarget(null);
       return;
     }
 
@@ -3815,7 +3813,9 @@ const styles =
       borderTopRightRadius:
         26,
 
-      padding: 20,
+      paddingHorizontal: 20,
+      paddingTop: 14,
+      paddingBottom: 60,
     },
 
     handle: {
