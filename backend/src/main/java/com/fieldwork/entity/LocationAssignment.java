@@ -4,13 +4,19 @@ import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
 
+/**
+ * 방문지 담당자 배정.
+ *
+ * 현재 프론트의 /api/locations 는 실제로 task 테이블을 사용하므로,
+ * 방문지 식별자는 Task(task_id)를 기준으로 연결한다.
+ */
 @Entity
 @Table(
-        name = "location_assignments",
+        name = "task_assignments",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "uk_group_location",
-                        columnNames = {"group_id", "location_id"}
+                        name = "uk_group_task",
+                        columnNames = {"group_id", "task_id"}
                 )
         }
 )
@@ -25,17 +31,14 @@ public class LocationAssignment {
     @JoinColumn(name = "group_id", nullable = false)
     private WorkGroup group;
 
-    // 방문지
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "location_id", nullable = false)
-    private Location location;
+    @JoinColumn(name = "task_id", nullable = false)
+    private Task task;
 
-    // 담당자
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assignee_id", nullable = false)
     private User assignee;
 
-    // 담당자를 배정한 사람
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assigned_by", nullable = false)
     private User assignedBy;
@@ -47,7 +50,8 @@ public class LocationAssignment {
     }
 
     @PrePersist
-    public void prePersist() {
+    @PreUpdate
+    public void updateAssignedAt() {
         this.assignedAt = LocalDateTime.now();
     }
 
@@ -67,12 +71,12 @@ public class LocationAssignment {
         this.group = group;
     }
 
-    public Location getLocation() {
-        return location;
+    public Task getTask() {
+        return task;
     }
 
-    public void setLocation(Location location) {
-        this.location = location;
+    public void setTask(Task task) {
+        this.task = task;
     }
 
     public User getAssignee() {

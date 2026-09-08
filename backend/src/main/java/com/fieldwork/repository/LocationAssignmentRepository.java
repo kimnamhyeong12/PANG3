@@ -1,7 +1,7 @@
 package com.fieldwork.repository;
 
-import com.fieldwork.entity.Location;
 import com.fieldwork.entity.LocationAssignment;
+import com.fieldwork.entity.Task;
 import com.fieldwork.entity.User;
 import com.fieldwork.entity.WorkGroup;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,16 +14,15 @@ import java.util.Optional;
 public interface LocationAssignmentRepository
         extends JpaRepository<LocationAssignment, Long> {
 
-    List<LocationAssignment> findByGroup(
-            WorkGroup group
-    );
+    List<LocationAssignment> findByGroupOrderByAssignedAtDesc(WorkGroup group);
 
-    List<LocationAssignment> findByAssignee(
+    List<LocationAssignment> findByGroupAndAssigneeOrderByAssignedAtDesc(
+            WorkGroup group,
             User assignee
     );
 
-    Optional<LocationAssignment> findByGroupAndLocation(
+    Optional<LocationAssignment> findByGroupAndTask(
             WorkGroup group,
-            Location location
+            Task task
     );
 }

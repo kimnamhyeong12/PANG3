@@ -12,7 +12,7 @@ import java.util.List;
 public interface GroupInvitationRepository
         extends JpaRepository<GroupInvitation, Long> {
 
-    List<GroupInvitation> findByInviteeAndStatus(
+    List<GroupInvitation> findByInviteeAndStatusOrderByCreatedAtDesc(
             User invitee,
             String status
     );

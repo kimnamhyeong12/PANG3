@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { SafeAreaView, StatusBar, StyleSheet } from 'react-native';
 
 import RegisterScreen from './screens/RegisterScreen';
@@ -10,6 +10,12 @@ import FieldActionScreen from './screens/FieldActionScreen';
 import ReportScreen from './screens/ReportScreen';
 import DownloadScreen from './screens/DownloadScreen';
 import ReportListScreen from './screens/ReportListScreen';
+import GroupScreen from './screens/GroupScreen';
+import GroupCreateScreen from './screens/GroupCreateScreen';
+import GroupInvitationsScreen from './screens/GroupInvitationsScreen';
+import GroupDetailScreen from './screens/GroupDetailScreen';
+import AssignmentScreen from './screens/AssignmentScreen';
+import { groupApi } from './utils/groupApi';
 
 export default function App() {
   const [screen, setScreen] = useState('login');
@@ -29,7 +35,31 @@ export default function App() {
   const [totalDuration, setTotalDuration] = useState(null);
   const [panelOpen, setPanelOpen] = useState(true);
 
+  const [activeGroup, setActiveGroup] = useState(null);
+  const [groupAssignments, setGroupAssignments] = useState([]);
+
   const go = (next) => setScreen(next);
+
+  const refreshGroupAssignments = useCallback(async () => {
+    if (!activeGroup?.groupId || !user?.userId) {
+      setGroupAssignments([]);
+      return;
+    }
+
+    try {
+      const data = await groupApi(
+        `/api/groups/${activeGroup.groupId}/assignments?userId=${user.userId}`
+      );
+      setGroupAssignments(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.log('그룹 담당자 조회 실패:', error.message);
+      setGroupAssignments([]);
+    }
+  }, [activeGroup?.groupId, user?.userId]);
+
+  useEffect(() => {
+    refreshGroupAssignments();
+  }, [refreshGroupAssignments]);
 
   const onLocationClick = (loc, type) => {
     setSelectedLocation(loc);
@@ -45,6 +75,8 @@ export default function App() {
         <LoginScreen
           onLogin={(loginUser) => {
             setUser(loginUser);
+            setActiveGroup(null);
+            setGroupAssignments([]);
             go('main');
           }}
           onRegister={() => go('register')}
@@ -57,11 +89,75 @@ export default function App() {
 
       {screen === 'main' && (
         <MainScreen
+          user={user}
+          activeGroup={activeGroup}
           onRoute={() => go('mapDirect')}
           onReport={() => go('reportList')}
+          onGroup={() => go('groupHome')}
           onDashboard={() => go('dashboard')}
           locations={routeLocations}
           setLocations={setRouteLocations}
+        />
+      )}
+
+      {screen === 'groupHome' && (
+        <GroupScreen
+          user={user}
+          activeGroup={activeGroup}
+          onBack={() => go('main')}
+          onCreate={() => go('groupCreate')}
+          onInvitations={() => go('groupInvitations')}
+          onOpenGroup={(group) => {
+            setActiveGroup(group);
+            go('groupDetail');
+          }}
+        />
+      )}
+
+      {screen === 'groupCreate' && (
+        <GroupCreateScreen
+          user={user}
+          onBack={() => go('groupHome')}
+          onCreated={(group) => {
+            setActiveGroup(group);
+            go('groupDetail');
+          }}
+        />
+      )}
+
+      {screen === 'groupInvitations' && (
+        <GroupInvitationsScreen
+          user={user}
+          onBack={() => go('groupHome')}
+          onAccepted={(group) => {
+            setActiveGroup(group);
+            go('groupDetail');
+          }}
+        />
+      )}
+
+      {screen === 'groupDetail' && activeGroup && (
+        <GroupDetailScreen
+          user={user}
+          group={activeGroup}
+          onBack={() => go('groupHome')}
+          onUpdatedGroup={(group) => setActiveGroup(group)}
+          onAssign={(group) => {
+            setActiveGroup(group);
+            go('assignment');
+          }}
+        />
+      )}
+
+      {screen === 'assignment' && activeGroup && (
+        <AssignmentScreen
+          user={user}
+          group={activeGroup}
+          onBack={() => {
+            refreshGroupAssignments();
+            go('groupDetail');
+          }}
+          onChanged={refreshGroupAssignments}
         />
       )}
 
@@ -73,6 +169,8 @@ export default function App() {
         <MapScreen
           locations={routeLocations}
           setLocations={setRouteLocations}
+          activeGroup={activeGroup}
+          groupAssignments={groupAssignments}
           onBack={() => go('main')}
           onLocationClick={onLocationClick}
           roadPath={roadPath}
@@ -118,6 +216,8 @@ export default function App() {
       {screen === 'reportList' && (
         <ReportListScreen
           locations={routeLocations}
+          activeGroup={activeGroup}
+          groupAssignments={groupAssignments}
           onBack={() => go('mapDirect')}
           onSelectLocation={(loc) => {
             setSelectedLocation(loc);

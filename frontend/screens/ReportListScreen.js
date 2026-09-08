@@ -24,11 +24,17 @@ const getStatusColor = (status) => {
 
 export default function ReportListScreen({
   locations = [],
+  activeGroup,
+  groupAssignments = [],
   onBack,
   onSelectLocation,
   onCreateReport,
 }) {
   const [selectedIds, setSelectedIds] = useState([]);
+
+  const assignmentMap = new Map(
+    groupAssignments.map((item) => [Number(item.taskId), item])
+  );
 
   const isReportable = (loc) =>
     loc.status === 'working' || loc.status === 'complete';
@@ -84,6 +90,7 @@ export default function ReportListScreen({
           locations.map((loc, index) => {
             const reportable = isReportable(loc);
             const checked = selectedIds.includes(loc.id);
+            const assignment = assignmentMap.get(Number(loc.id));
 
             return (
               <View
@@ -132,6 +139,17 @@ export default function ReportListScreen({
                     <Text style={styles.itemAddr} numberOfLines={1}>
                       {loc.roadAddress || '주소 없음'}
                     </Text>
+
+                    {activeGroup && (
+                      <View style={styles.assigneeRow}>
+                        <Ionicons name="person-outline" size={12} color="#12395B" />
+                        <Text style={[styles.assigneeText, !assignment && styles.assigneeEmpty]}>
+                          {assignment
+                            ? `담당자: ${assignment.assigneeName || assignment.assigneeLoginId}`
+                            : '담당자 미지정'}
+                        </Text>
+                      </View>
+                    )}
 
                     <View style={styles.statusRow}>
                       <Text
@@ -308,6 +326,24 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 11,
     color: '#607086',
+  },
+
+
+  assigneeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 5,
+  },
+
+  assigneeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#12395B',
+  },
+
+  assigneeEmpty: {
+    color: '#E67E22',
   },
 
   statusRow: {

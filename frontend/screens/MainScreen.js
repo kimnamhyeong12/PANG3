@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { USER } from '../data/mockData';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
@@ -28,8 +27,11 @@ const getStatusInfo = (statusValue) => {
 };
 
 export default function MainScreen({
+  user,
+  activeGroup,
   onRoute,
   onReport,
+  onGroup,
   onDashboard,
   locations = [],
   setLocations,
@@ -179,8 +181,8 @@ export default function MainScreen({
             </View>
 
             <View>
-              <Text style={styles.profileName}>{USER.name}</Text>
-              <Text style={styles.profileTeam}>{USER.team}</Text>
+              <Text style={styles.profileName}>{user?.name || user?.loginId || '사용자'}</Text>
+              <Text style={styles.profileTeam}>{activeGroup?.groupName || '개인 외근'}</Text>
             </View>
           </TouchableOpacity>
         </View>
@@ -286,6 +288,12 @@ export default function MainScreen({
           desc="현장 기록 기반 자동 보고서"
           icon="📄"
           onPress={onReport}
+        />
+        <Action
+          title="그룹 설정"
+          desc={activeGroup ? `${activeGroup.groupName} · 방문지 분담` : '그룹 생성, 초대 및 방문지 분담'}
+          icon="👥"
+          onPress={onGroup}
         />
       </View>
 
@@ -459,12 +467,14 @@ const styles = StyleSheet.create({
 
   actions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     padding: 16,
   },
 
   action: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '46%',
     backgroundColor: 'white',
     borderRadius: 18,
     padding: 16,

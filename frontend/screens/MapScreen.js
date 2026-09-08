@@ -54,6 +54,8 @@ export default function MapScreen({
   onReportPress,
   locations,
   setLocations,
+  activeGroup,
+  groupAssignments = [],
   roadPath,
   setRoadPath,
   routeSegments,
@@ -101,6 +103,11 @@ export default function MapScreen({
 
   const markers = locations?.length ? locations : [];
   const orderedMarkers = useMemo(() => markers, [markers]);
+  const assignmentMap = useMemo(() => {
+    const map = new Map();
+    groupAssignments.forEach((item) => map.set(Number(item.taskId), item));
+    return map;
+  }, [groupAssignments]);
 
   const [searchResults, setSearchResults] = useState([]);
   const [searchModalVisible, setSearchModalVisible] = useState(false);
@@ -1436,6 +1443,13 @@ export default function MapScreen({
                 <Text style={styles.placeAddr}>
                   {selected?.roadAddress || selected?.task || '주소 없음'}
                 </Text>
+                {activeGroup && (
+                  <Text style={styles.assigneeInfo}>
+                    {assignmentMap.get(Number(selected?.id))
+                      ? `담당자: ${assignmentMap.get(Number(selected?.id)).assigneeName || assignmentMap.get(Number(selected?.id)).assigneeLoginId}`
+                      : '담당자 미지정'}
+                  </Text>
+                )}
               </View>
             </View>
 
@@ -2038,6 +2052,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
     color: '#1F2D3D',
+  },
+
+  assigneeInfo: {
+    marginTop: 5,
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#12395B',
   },
 
   placeAddr: {

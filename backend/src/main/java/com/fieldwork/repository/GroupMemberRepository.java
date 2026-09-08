@@ -12,9 +12,9 @@ import java.util.Optional;
 @Repository
 public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> {
 
-    List<GroupMember> findByGroup(WorkGroup group);
+    List<GroupMember> findByGroupOrderByJoinedAtAsc(WorkGroup group);
 
-    List<GroupMember> findByUser(User user);
+    List<GroupMember> findByUserOrderByJoinedAtDesc(User user);
 
     Optional<GroupMember> findByGroupAndUser(
             WorkGroup group,
@@ -25,4 +25,6 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
             WorkGroup group,
             User user
     );
+
+    long countByGroup(WorkGroup group);
 }
