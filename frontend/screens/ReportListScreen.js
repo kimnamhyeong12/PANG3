@@ -6,9 +6,11 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BackButton, PrimaryButton } from '../components/ui';
+import { API_BASE_URL } from '../utils/api';
 
 const getStatusLabel = (status) => {
   if (status === 'complete') return '작업 후';
@@ -29,8 +31,10 @@ export default function ReportListScreen({
   onBack,
   onSelectLocation,
   onCreateReport,
+  onDeleteLocation,
 }) {
   const [selectedIds, setSelectedIds] = useState([]);
+  const [deletingId, setDeletingId] = useState(null);
 
   const assignmentMap = new Map(
     groupAssignments.map((item) => [Number(item.taskId), item])
@@ -41,13 +45,19 @@ export default function ReportListScreen({
 
   const toggleSelect = (loc) => {
     if (!isReportable(loc)) {
-      showAlert('선택 불가', '작업 전 방문지는 보고서에 포함할 수 없습니다.');
+      showAlert(
+        '선택 불가',
+        '작업 전 방문지는 보고서에 포함할 수 없습니다.'
+      );
       return;
     }
 
     const id = loc.id;
+
     setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]
+      prev.includes(id)
+        ? prev.filter((v) => v !== id)
+        : [...prev, id]
     );
   };
 
@@ -57,62 +67,186 @@ export default function ReportListScreen({
 
   const handleCreateReport = () => {
     if (selectedLocations.length === 0) {
-      showAlert('선택 필요', '보고서에 포함할 방문지를 선택하세요.');
+      showAlert(
+        '선택 필요',
+        '보고서에 포함할 방문지를 선택하세요.'
+      );
       return;
     }
 
     onCreateReport?.(selectedLocations);
   };
 
+  const handleDeleteLocation = (loc) => {
+    if (isReportable(loc)) {
+      showAlert(
+        '삭제 불가',
+        '미처리 방문지만 삭제할 수 있습니다.'
+      );
+      return;
+    }
+
+    const taskId =
+      loc.id ??
+      loc.taskId ??
+      loc.task_id;
+
+    if (!taskId) {
+      showAlert(
+        '삭제 실패',
+        '방문지 ID를 찾을 수 없습니다.'
+      );
+      return;
+    }
+
+    Alert.alert(
+      '방문지 삭제',
+      `${loc.detailAddress || loc.roadAddress || '방문지'}를 삭제하시겠습니까?`,
+      [
+        {
+          text: '취소',
+          style: 'cancel',
+        },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            if (deletingId != null) return;
+
+            try {
+              setDeletingId(taskId);
+
+              const response = await fetch(
+                `${API_BASE_URL}/api/locations/${taskId}`,
+                {
+                  method: 'DELETE',
+                }
+              );
+
+              const text = await response.text();
+
+              if (!response.ok) {
+                throw new Error(
+                  text || `삭제 실패: ${response.status}`
+                );
+              }
+
+              setSelectedIds((prev) =>
+                prev.filter(
+                  (id) =>
+                    Number(id) !== Number(taskId)
+                )
+              );
+
+              onDeleteLocation?.(taskId);
+            } catch (error) {
+              console.log(
+                '방문지 삭제 오류:',
+                error
+              );
+
+              showAlert(
+                '삭제 실패',
+                error.message ||
+                  '방문지를 삭제하지 못했습니다.'
+              );
+            } finally {
+              setDeletingId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <BackButton onPress={onBack} />
+
         <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>FIELD REPORT</Text>
-          <Text style={styles.title}>보고서 작성</Text>
+          <Text style={styles.eyebrow}>
+            FIELD REPORT
+          </Text>
+
+          <Text style={styles.title}>
+            보고서 작성
+          </Text>
+
           <Text style={styles.desc}>
             작업 중 또는 작업 후 방문지만 보고서에 포함할 수 있습니다
           </Text>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView
+        contentContainerStyle={styles.body}
+      >
         {locations.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Ionicons name="document-text-outline" size={36} color="#8A98A8" />
-            <Text style={styles.emptyTitle}>등록된 방문지가 없습니다</Text>
+            <Ionicons
+              name="document-text-outline"
+              size={36}
+              color="#8A98A8"
+            />
+
+            <Text style={styles.emptyTitle}>
+              등록된 방문지가 없습니다
+            </Text>
+
             <Text style={styles.emptyDesc}>
               지도에서 방문지를 먼저 추가해주세요.
             </Text>
           </View>
         ) : (
           locations.map((loc, index) => {
-            const reportable = isReportable(loc);
-            const checked = selectedIds.includes(loc.id);
-            const assignment = assignmentMap.get(Number(loc.id));
+            const reportable =
+              isReportable(loc);
+
+            const checked =
+              selectedIds.includes(loc.id);
+
+            const assignment =
+              assignmentMap.get(
+                Number(loc.id)
+              );
+
+            const taskId =
+              loc.id ??
+              loc.taskId ??
+              loc.task_id;
+
+            const deleting =
+              Number(deletingId) ===
+              Number(taskId);
 
             return (
               <View
-                key={loc.id ?? index}
-                style={[
-                  styles.item,
-                ]}
+                key={taskId ?? index}
+                style={styles.item}
               >
                 <TouchableOpacity
                   style={styles.checkArea}
-                  onPress={() => toggleSelect(loc)}
+                  onPress={() =>
+                    toggleSelect(loc)
+                  }
                   activeOpacity={0.8}
                 >
                   <View
                     style={[
                       styles.checkBox,
-                      checked && styles.checkBoxActive,
-                      !reportable && styles.checkBoxDisabled,
+                      checked &&
+                        styles.checkBoxActive,
+                      !reportable &&
+                        styles.checkBoxDisabled,
                     ]}
                   >
                     {checked && (
-                      <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                      <Ionicons
+                        name="checkmark"
+                        size={16}
+                        color="#FFFFFF"
+                      />
                     )}
                   </View>
                 </TouchableOpacity>
@@ -120,32 +254,66 @@ export default function ReportListScreen({
                 <TouchableOpacity
                   style={styles.itemMain}
                   activeOpacity={0.85}
-                  onPress={() => onSelectLocation?.(loc)}
+                  onPress={() =>
+                    onSelectLocation?.(loc)
+                  }
                 >
                   <View
                     style={[
                       styles.noBox,
-                      { backgroundColor: getStatusColor(loc.status) },
+                      {
+                        backgroundColor:
+                          getStatusColor(
+                            loc.status
+                          ),
+                      },
                     ]}
                   >
-                    <Text style={styles.noText}>{index + 1}</Text>
+                    <Text style={styles.noText}>
+                      {index + 1}
+                    </Text>
                   </View>
 
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.itemTitle} numberOfLines={1}>
-                      {loc.detailAddress || loc.roadAddress || '이름 없음'}
+                    <Text
+                      style={styles.itemTitle}
+                      numberOfLines={1}
+                    >
+                      {loc.detailAddress ||
+                        loc.roadAddress ||
+                        '이름 없음'}
                     </Text>
 
-                    <Text style={styles.itemAddr} numberOfLines={1}>
-                      {loc.roadAddress || '주소 없음'}
+                    <Text
+                      style={styles.itemAddr}
+                      numberOfLines={1}
+                    >
+                      {loc.roadAddress ||
+                        '주소 없음'}
                     </Text>
 
                     {activeGroup && (
-                      <View style={styles.assigneeRow}>
-                        <Ionicons name="person-outline" size={12} color="#12395B" />
-                        <Text style={[styles.assigneeText, !assignment && styles.assigneeEmpty]}>
+                      <View
+                        style={styles.assigneeRow}
+                      >
+                        <Ionicons
+                          name="person-outline"
+                          size={12}
+                          color="#12395B"
+                        />
+
+                        <Text
+                          style={[
+                            styles.assigneeText,
+                            !assignment &&
+                              styles.assigneeEmpty,
+                          ]}
+                        >
                           {assignment
-                            ? `담당자: ${assignment.assigneeName || assignment.assigneeLoginId}`
+                            ? `담당자: ${
+                                assignment.assigneeName ||
+                                assignment.assigneeLoginId
+                              }`
                             : '담당자 미지정'}
                         </Text>
                       </View>
@@ -155,14 +323,25 @@ export default function ReportListScreen({
                       <Text
                         style={[
                           styles.statusBadge,
-                          { color: getStatusColor(loc.status) },
+                          {
+                            color:
+                              getStatusColor(
+                                loc.status
+                              ),
+                          },
                         ]}
                       >
-                        {getStatusLabel(loc.status)}
+                        {getStatusLabel(
+                          loc.status
+                        )}
                       </Text>
 
                       {!reportable && (
-                        <Text style={styles.disabledText}>
+                        <Text
+                          style={
+                            styles.disabledText
+                          }
+                        >
                           보고서 포함 불가
                         </Text>
                       )}
@@ -175,6 +354,43 @@ export default function ReportListScreen({
                     color="#607086"
                   />
                 </TouchableOpacity>
+
+                {!reportable && (
+                  <TouchableOpacity
+                    style={[
+                      styles.deleteButton,
+                      deleting &&
+                        styles.deleteButtonDisabled,
+                    ]}
+                    disabled={deleting}
+                    onPress={() =>
+                      handleDeleteLocation(loc)
+                    }
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name="trash-outline"
+                      size={18}
+                      color={
+                        deleting
+                          ? '#A0AEC0'
+                          : '#E74C3C'
+                      }
+                    />
+
+                    <Text
+                      style={[
+                        styles.deleteButtonText,
+                        deleting &&
+                          styles.deleteButtonTextDisabled,
+                      ]}
+                    >
+                      {deleting
+                        ? '삭제중'
+                        : '삭제'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             );
           })
@@ -189,7 +405,9 @@ export default function ReportListScreen({
         <PrimaryButton
           title="선택한 방문지로 보고서 만들기"
           onPress={handleCreateReport}
-          disabled={selectedLocations.length === 0}
+          disabled={
+            selectedLocations.length === 0
+          }
         />
       </View>
     </View>
@@ -207,7 +425,7 @@ const styles = StyleSheet.create({
     gap: 12,
     alignItems: 'center',
     backgroundColor: 'white',
-    
+
     paddingHorizontal: 14,
     paddingBottom: 14,
     paddingTop: 34,
@@ -332,7 +550,6 @@ const styles = StyleSheet.create({
     color: '#607086',
   },
 
-
   assigneeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -368,13 +585,37 @@ const styles = StyleSheet.create({
     color: '#E74C3C',
   },
 
+  deleteButton: {
+    minWidth: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    marginLeft: 2,
+  },
+
+  deleteButtonDisabled: {
+    opacity: 0.6,
+  },
+
+  deleteButtonText: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#E74C3C',
+  },
+
+  deleteButtonTextDisabled: {
+    color: '#A0AEC0',
+  },
+
   bottomBar: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
     backgroundColor: '#FFFFFF',
-    
+
     paddingHorizontal: 14,
     paddingTop: 14,
     paddingBottom: 60,

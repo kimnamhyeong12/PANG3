@@ -423,6 +423,44 @@ export default function MapScreen({
     setAddressSearchMode(false);
   };
 
+  const getAdministrativeRegion = async (lat, lng) => {
+    if (!KAKAO_REST_API_KEY) {
+      throw new Error('카카오 REST API 키가 없습니다.');
+    }
+
+    const url =
+      'https://dapi.kakao.com/v2/local/geo/coord2regioncode.json' +
+      `?x=${encodeURIComponent(lng)}` +
+      `&y=${encodeURIComponent(lat)}`;
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `KakaoAK ${KAKAO_REST_API_KEY}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`행정구역 조회 실패: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // H = 행정동
+    const region = data.documents?.find(
+      (item) => item.region_type === 'H'
+    );
+
+    if (!region) {
+      return null;
+    }
+
+    return {
+      sido: region.region_1depth_name,
+      sigungu: region.region_2depth_name,
+      adminDong: region.region_3depth_name,
+    };
+  };
+
   const addLocation = async () => {
     if (!searchedPlace) {
       showAlert('위치 필요', '먼저 위치를 선택하세요.');
@@ -434,6 +472,13 @@ export default function MapScreen({
       return;
     }
 
+    const region = await getAdministrativeRegion(
+      searchedPlace.lat,
+      searchedPlace.lng
+    );
+
+    console.log('행정구역 확인:', region);
+
     const newLoc = {
       detailAddress: placeName.trim(),
       roadAddress: searchedPlace.roadAddress || keyword.trim(),
@@ -441,6 +486,10 @@ export default function MapScreen({
       lng: searchedPlace.lng,
       status: 'pending',
       task: task || '점검',
+
+      sido: region?.sido || null,
+      sigungu: region?.sigungu || null,
+      adminDong: region?.adminDong || null,
     };
 
     try {
@@ -513,8 +562,8 @@ export default function MapScreen({
       const x =
         Math.sin(dLat / 2) ** 2 +
         Math.cos((lat1 * Math.PI) / 180) *
-          Math.cos((lat2 * Math.PI) / 180) *
-          Math.sin(dLng / 2) ** 2;
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) ** 2;
 
       total += R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
     }
@@ -1239,7 +1288,7 @@ export default function MapScreen({
               style={[
                 styles.segmentButton,
                 currentSegmentIndex === orderedMarkers.length - 1 &&
-                  styles.segmentButtonDisabled,
+                styles.segmentButtonDisabled,
               ]}
               onPress={moveNextSegment}
               disabled={currentSegmentIndex === orderedMarkers.length - 1}

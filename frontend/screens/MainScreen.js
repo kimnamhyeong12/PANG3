@@ -1,6 +1,7 @@
 import { showAlert } from '../components/CustomAlert';
 import React from 'react';
 import {
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -43,15 +44,31 @@ export default function MainScreen({
     weekday: 'short',
   });
 
-  const [incompleteLocations, setIncompleteLocations] = React.useState([]);
-  const [selectedIds, setSelectedIds] = React.useState([]);
+  const [incompleteLocations, setIncompleteLocations] =
+    React.useState([]);
+
+  const [selectedIds, setSelectedIds] =
+    React.useState([]);
+
+  const [deletingId, setDeletingId] =
+    React.useState(null);
 
   const total = locations.length;
+
   const complete = locations.filter(
-    (loc) => loc.status === 'complete' || loc.status === 'done'
+    (loc) =>
+      loc.status === 'complete' ||
+      loc.status === 'done'
   ).length;
+
   const pending = total - complete;
-  const progress = total === 0 ? 0 : Math.round((complete / total) * 100);
+
+  const progress =
+    total === 0
+      ? 0
+      : Math.round(
+          (complete / total) * 100
+        );
 
   React.useEffect(() => {
     loadIncompleteLocations();
@@ -64,14 +81,26 @@ export default function MainScreen({
         return;
       }
 
-      const res = await fetch(`${API_BASE_URL}/api/locations`);
+      const res = await fetch(
+        `${API_BASE_URL}/api/locations`
+      );
+
       const text = await res.text();
 
-      console.log('미처리 작업 조회 상태:', res.status);
-      console.log('미처리 작업 조회 내용:', text);
+      console.log(
+        '미처리 작업 조회 상태:',
+        res.status
+      );
+
+      console.log(
+        '미처리 작업 조회 내용:',
+        text
+      );
 
       if (!res.ok) {
-        throw new Error(`미처리 작업 조회 실패: ${res.status}`);
+        throw new Error(
+          `미처리 작업 조회 실패: ${res.status}`
+        );
       }
 
       const data = JSON.parse(text);
@@ -88,66 +117,134 @@ export default function MainScreen({
 
           return {
             ...loc,
-            id: loc.id ?? loc.taskId ?? loc.task_id,
-            detailAddress: loc.detailAddress || loc.detail_address,
-            roadAddress: loc.roadAddress || loc.road_address,
-            lat: loc.lat ?? loc.latitude,
-            lng: loc.lng ?? loc.longitude,
+
+            id:
+              loc.id ??
+              loc.taskId ??
+              loc.task_id,
+
+            detailAddress:
+              loc.detailAddress ||
+              loc.detail_address,
+
+            roadAddress:
+              loc.roadAddress ||
+              loc.road_address,
+
+            lat:
+              loc.lat ??
+              loc.latitude,
+
+            lng:
+              loc.lng ??
+              loc.longitude,
+
             status,
-            task: loc.task || loc.taskCategory || loc.task_category || '현장 확인',
+
+            task:
+              loc.task ||
+              loc.taskCategory ||
+              loc.task_category ||
+              '현장 확인',
           };
         })
         .filter((loc) => {
-          const status = String(loc.status || '').toLowerCase();
-          return status === 'pending' || status === 'working';
+          const status = String(
+            loc.status || ''
+          ).toLowerCase();
+
+          return (
+            status === 'pending' ||
+            status === 'working'
+          );
         });
 
       setIncompleteLocations(incomplete);
     } catch (error) {
       console.log(error);
-      showAlert('오류', '미처리 작업을 불러오지 못했습니다.');
+
+      showAlert(
+        '오류',
+        '미처리 작업을 불러오지 못했습니다.'
+      );
     }
   };
 
   const toggleSelect = (id) => {
-    
     setSelectedIds((prev) => {
       if (prev.includes(id)) {
-        return prev.filter((itemId) => itemId !== id);
+        return prev.filter(
+          (itemId) =>
+            itemId !== id
+        );
       }
 
-      return [...prev, id];
+      return [
+        ...prev,
+        id,
+      ];
     });
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === incompleteLocations.length) {
+    if (
+      selectedIds.length ===
+      incompleteLocations.length
+    ) {
       setSelectedIds([]);
       return;
     }
 
-    setSelectedIds(incompleteLocations.map((loc) => loc.id));
+    setSelectedIds(
+      incompleteLocations.map(
+        (loc) => loc.id
+      )
+    );
   };
 
   const addSelectedToToday = () => {
-    const selectedItems = incompleteLocations.filter((loc) =>
-      selectedIds.includes(loc.id)
-    );
+    const selectedItems =
+      incompleteLocations.filter(
+        (loc) =>
+          selectedIds.includes(
+            loc.id
+          )
+      );
 
-    if (selectedItems.length === 0) {
-      showAlert('선택 필요', '오늘 외근에 추가할 작업을 선택하세요.');
+    if (
+      selectedItems.length === 0
+    ) {
+      showAlert(
+        '선택 필요',
+        '오늘 외근에 추가할 작업을 선택하세요.'
+      );
+
       return;
     }
 
     setLocations?.((prev) => {
-      const current = prev || [];
-      const currentIds = new Set(current.map((loc) => loc.id));
+      const current =
+        prev || [];
 
-      const onlyNewItems = selectedItems.filter(
-        (loc) => !currentIds.has(loc.id)
-      );
+      const currentIds =
+        new Set(
+          current.map(
+            (loc) => loc.id
+          )
+        );
 
-      return [...current, ...onlyNewItems];
+      const onlyNewItems =
+        selectedItems.filter(
+          (loc) =>
+            !currentIds.has(
+              loc.id
+            )
+        );
+
+      return [
+        ...current,
+        ...onlyNewItems,
+      ];
     });
 
     setSelectedIds([]);
@@ -158,170 +255,674 @@ export default function MainScreen({
     );
   };
 
+  /*
+   * ===============================
+   * 미처리 방문지 삭제
+   * ===============================
+   *
+   * 백엔드 정책상
+   * pending(작업 전)만 삭제 가능.
+   *
+   * 삭제 성공 시:
+   * 1. 서버 DB 삭제
+   * 2. 미처리 목록에서 제거
+   * 3. 선택 목록에서 제거
+   * 4. 오늘 외근 목록에서도 제거
+   *
+   * App.js의 routeLocations가 변경되므로
+   * AsyncStorage도 자동 갱신된다.
+   */
+  const deleteIncompleteLocation = (
+    item
+  ) => {
+    const status = String(
+      item.status || ''
+    ).toLowerCase();
+
+    if (status !== 'pending') {
+      showAlert(
+        '삭제 불가',
+        '작업 전 방문지만 삭제할 수 있습니다.'
+      );
+
+      return;
+    }
+
+    const taskId =
+      item.id ??
+      item.taskId ??
+      item.task_id;
+
+    if (!taskId) {
+      showAlert(
+        '삭제 실패',
+        '방문지 ID를 찾을 수 없습니다.'
+      );
+
+      return;
+    }
+
+    const name =
+      item.detailAddress ||
+      item.roadAddress ||
+      '방문지';
+
+    Alert.alert(
+      '미처리 작업 삭제',
+      `${name}을(를) 삭제하시겠습니까?`,
+      [
+        {
+          text: '취소',
+          style: 'cancel',
+        },
+        {
+          text: '삭제',
+          style: 'destructive',
+
+          onPress: async () => {
+            if (
+              deletingId !== null
+            ) {
+              return;
+            }
+
+            try {
+              setDeletingId(taskId);
+
+              const response =
+                await fetch(
+                  `${API_BASE_URL}/api/locations/${taskId}`,
+                  {
+                    method:
+                      'DELETE',
+                  }
+                );
+
+              const text =
+                await response.text();
+
+              if (!response.ok) {
+                throw new Error(
+                  text ||
+                    `삭제 실패: ${response.status}`
+                );
+              }
+
+              /*
+               * 메인 미처리 목록에서 제거
+               */
+              setIncompleteLocations(
+                (prev) =>
+                  prev.filter(
+                    (loc) =>
+                      Number(
+                        loc.id ??
+                          loc.taskId ??
+                          loc.task_id
+                      ) !==
+                      Number(
+                        taskId
+                      )
+                  )
+              );
+
+              /*
+               * 선택 상태에서도 제거
+               */
+              setSelectedIds(
+                (prev) =>
+                  prev.filter(
+                    (id) =>
+                      Number(id) !==
+                      Number(
+                        taskId
+                      )
+                  )
+              );
+
+              /*
+               * 오늘 외근 목록에서도 제거
+               *
+               * App.js의 routeLocations가
+               * 바뀌기 때문에 AsyncStorage도
+               * 자동으로 갱신된다.
+               */
+              setLocations?.(
+                (prev) =>
+                  (
+                    prev || []
+                  ).filter(
+                    (loc) =>
+                      Number(
+                        loc.id ??
+                          loc.taskId ??
+                          loc.task_id
+                      ) !==
+                      Number(
+                        taskId
+                      )
+                  )
+              );
+
+              showAlert(
+                '삭제 완료',
+                '미처리 작업을 삭제했습니다.'
+              );
+            } catch (error) {
+              console.log(
+                '미처리 작업 삭제 오류:',
+                error
+              );
+
+              showAlert(
+                '삭제 실패',
+                error.message ||
+                  '미처리 작업을 삭제하지 못했습니다.'
+              );
+            } finally {
+              setDeletingId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={{ paddingBottom: 24 }}
+      contentContainerStyle={{
+        paddingBottom: 24,
+      }}
     >
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <View>
-            <Text style={styles.headerEyebrow}>SAHA-GU OFFICE</Text>
-            <Text style={styles.headerTitle}>외근 업무 현황</Text>
-            <Text style={styles.headerDesc}>{today} · 도시안전과</Text>
+            <Text
+              style={
+                styles.headerEyebrow
+              }
+            >
+              SAHA-GU OFFICE
+            </Text>
+
+            <Text
+              style={
+                styles.headerTitle
+              }
+            >
+              외근 업무 현황
+            </Text>
+
+            <Text
+              style={
+                styles.headerDesc
+              }
+            >
+              {today} · 도시안전과
+            </Text>
           </View>
 
           <TouchableOpacity
-            onPress={onDashboard}
-            style={styles.profile}
+            onPress={
+              onDashboard
+            }
+            style={
+              styles.profile
+            }
             activeOpacity={0.85}
           >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>SG</Text>
+            <View
+              style={
+                styles.avatar
+              }
+            >
+              <Text
+                style={
+                  styles.avatarText
+                }
+              >
+                SG
+              </Text>
             </View>
 
             <View>
-              <Text style={styles.profileName}>{user?.name || user?.loginId || '사용자'}</Text>
-              <Text style={styles.profileTeam}>{activeGroup?.groupName || '개인 외근'}</Text>
+              <Text
+                style={
+                  styles.profileName
+                }
+              >
+                {user?.name ||
+                  user?.loginId ||
+                  '사용자'}
+              </Text>
+
+              <Text
+                style={
+                  styles.profileTeam
+                }
+              >
+                {activeGroup?.groupName ||
+                  '개인 외근'}
+              </Text>
             </View>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.progressBox}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.progressLabel}>오늘 업무 진행률</Text>
-            <Text style={styles.progressLabel}>{progress}%</Text>
+        <View
+          style={
+            styles.progressBox
+          }
+        >
+          <View
+            style={
+              styles.rowBetween
+            }
+          >
+            <Text
+              style={
+                styles.progressLabel
+              }
+            >
+              오늘 업무 진행률
+            </Text>
+
+            <Text
+              style={
+                styles.progressLabel
+              }
+            >
+              {progress}%
+            </Text>
           </View>
 
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progress}%` }]} />
+          <View
+            style={
+              styles.progressTrack
+            }
+          >
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  width:
+                    `${progress}%`,
+                },
+              ]}
+            />
           </View>
         </View>
       </View>
 
       <View style={styles.kpiRow}>
-        <Kpi title="오늘 외근" value={`${total}`} />
-        <Kpi title="완료" value={`${complete}`} color="#1F9D55" />
-        <Kpi title="미완료" value={`${pending}`} color="#F39C12" />
+        <Kpi
+          title="오늘 외근"
+          value={`${total}`}
+        />
+
+        <Kpi
+          title="완료"
+          value={`${complete}`}
+          color="#1F9D55"
+        />
+
+        <Kpi
+          title="미완료"
+          value={`${pending}`}
+          color="#F39C12"
+        />
       </View>
 
-      {incompleteLocations.length > 0 && (
+      {incompleteLocations.length >
+        0 && (
         <View style={styles.card}>
-          <View style={styles.incompleteHeader}>
+          <View
+            style={
+              styles.incompleteHeader
+            }
+          >
             <View>
-              <Text style={styles.cardEyebrow}>INCOMPLETE FIELDWORK</Text>
-              <Text style={styles.cardTitle}>미처리 작업</Text>
+              <Text
+                style={
+                  styles.cardEyebrow
+                }
+              >
+                INCOMPLETE FIELDWORK
+              </Text>
+
+              <Text
+                style={
+                  styles.cardTitle
+                }
+              >
+                미처리 작업
+              </Text>
             </View>
 
             <TouchableOpacity
-              style={styles.selectAllButton}
-              onPress={toggleSelectAll}
+              style={
+                styles.selectAllButton
+              }
+              onPress={
+                toggleSelectAll
+              }
             >
-              <Text style={styles.selectAllText}>
-                {selectedIds.length === incompleteLocations.length
+              <Text
+                style={
+                  styles.selectAllText
+                }
+              >
+                {selectedIds.length ===
+                incompleteLocations.length
                   ? '전체 해제'
                   : '전체 선택'}
               </Text>
             </TouchableOpacity>
           </View>
 
-          {incompleteLocations.map((item, index) => {
-            const selected = selectedIds.includes(item.id);
-            const statusInfo = getStatusInfo(item.status);
-            
-            return (
-              
-              <View key={`${item.id}-${index}`} style={styles.incompleteItem}>
-                <TouchableOpacity
-                  onPress={() => toggleSelect(item.id)}
-                  style={[
-                    styles.circleSelect,
-                    selected && styles.circleSelectActive,
-                  ]}
-                  activeOpacity={0.8}
+          {incompleteLocations.map(
+            (item, index) => {
+              const selected =
+                selectedIds.includes(
+                  item.id
+                );
+
+              const statusInfo =
+                getStatusInfo(
+                  item.status
+                );
+
+              const status =
+                String(
+                  item.status || ''
+                ).toLowerCase();
+
+              const canDelete =
+                status === 'pending';
+
+              const deleting =
+                Number(
+                  deletingId
+                ) ===
+                Number(
+                  item.id
+                );
+
+              return (
+                <View
+                  key={`${item.id}-${index}`}
+                  style={
+                    styles.incompleteItem
+                  }
                 >
-                  {selected && <Text style={styles.circleCheckText}>✓</Text>}
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() =>
+                      toggleSelect(
+                        item.id
+                      )
+                    }
+                    style={[
+                      styles.circleSelect,
+                      selected &&
+                        styles.circleSelectActive,
+                    ]}
+                    activeOpacity={
+                      0.8
+                    }
+                  >
+                    {selected && (
+                      <Text
+                        style={
+                          styles.circleCheckText
+                        }
+                      >
+                        ✓
+                      </Text>
+                    )}
+                  </TouchableOpacity>
 
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.entryName} numberOfLines={1}>
-                    {item.detailAddress || '이름 없음'}
-                  </Text>
-                  <Text style={styles.entryMemo} numberOfLines={1}>
-                    {item.roadAddress || '주소 없음'}
-                  </Text>
+                  <View
+                    style={{
+                      flex: 1,
+                    }}
+                  >
+                    <Text
+                      style={
+                        styles.entryName
+                      }
+                      numberOfLines={
+                        1
+                      }
+                    >
+                      {item.detailAddress ||
+                        '이름 없음'}
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.entryMemo
+                      }
+                      numberOfLines={
+                        1
+                      }
+                    >
+                      {item.roadAddress ||
+                        '주소 없음'}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={
+                      styles.itemRight
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.entryStatus,
+                        styles[
+                          statusInfo
+                            .styleName
+                        ],
+                      ]}
+                    >
+                      {
+                        statusInfo.label
+                      }
+                    </Text>
+
+                    {canDelete && (
+                      <TouchableOpacity
+                        style={[
+                          styles.deleteButton,
+                          deleting &&
+                            styles.deleteButtonDisabled,
+                        ]}
+                        disabled={
+                          deleting
+                        }
+                        activeOpacity={
+                          0.8
+                        }
+                        onPress={() =>
+                          deleteIncompleteLocation(
+                            item
+                          )
+                        }
+                      >
+                        <Text
+                          style={[
+                            styles.deleteButtonText,
+                            deleting &&
+                              styles.deleteButtonTextDisabled,
+                          ]}
+                        >
+                          {deleting
+                            ? '삭제중'
+                            : '삭제'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
-
-                <Text style={[styles.entryStatus, styles[statusInfo.styleName]]}>
-                  {statusInfo.label}
-                </Text>
-              </View>
-            );
-          })}
+              );
+            }
+          )}
 
           <TouchableOpacity
             style={[
               styles.addTodayButton,
-              selectedIds.length === 0 && styles.addTodayButtonDisabled,
+              selectedIds.length ===
+                0 &&
+                styles.addTodayButtonDisabled,
             ]}
-            onPress={addSelectedToToday}
-            disabled={selectedIds.length === 0}
+            onPress={
+              addSelectedToToday
+            }
+            disabled={
+              selectedIds.length ===
+              0
+            }
             activeOpacity={0.85}
           >
-            <Text style={styles.addTodayText}>
+            <Text
+              style={
+                styles.addTodayText
+              }
+            >
               선택한 작업 오늘 외근에 추가
-              {selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}
+              {selectedIds.length >
+              0
+                ? ` (${selectedIds.length})`
+                : ''}
             </Text>
           </TouchableOpacity>
         </View>
       )}
 
-      <View style={styles.actions}>
+      <View
+        style={
+          styles.actions
+        }
+      >
         <Action
           title="경로 설정"
           desc="방문지 선택 및 최적 경로 확인"
           icon="🗺️"
           onPress={onRoute}
         />
+
         <Action
           title="보고서 생성"
           desc="현장 기록 기반 자동 보고서"
           icon="📄"
           onPress={onReport}
         />
+
         <Action
           title="그룹 설정"
-          desc={activeGroup ? `${activeGroup.groupName} · 방문지 분담` : '그룹 생성, 초대 및 방문지 분담'}
+          desc={
+            activeGroup
+              ? `${activeGroup.groupName} · 방문지 분담`
+              : '그룹 생성, 초대 및 방문지 분담'
+          }
           icon="👥"
           onPress={onGroup}
         />
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardEyebrow}>RECENT FIELDWORK</Text>
-        <Text style={styles.cardTitle}>최근 방문 기록</Text>
+        <Text
+          style={
+            styles.cardEyebrow
+          }
+        >
+          RECENT FIELDWORK
+        </Text>
 
-        <Text style={styles.emptyText}>최근 방문 기록이 없습니다.</Text>
+        <Text
+          style={
+            styles.cardTitle
+          }
+        >
+          최근 방문 기록
+        </Text>
+
+        <Text
+          style={
+            styles.emptyText
+          }
+        >
+          최근 방문 기록이 없습니다.
+        </Text>
       </View>
     </ScrollView>
   );
 }
 
-function Kpi({ title, value, color = '#12395B' }) {
+function Kpi({
+  title,
+  value,
+  color = '#12395B',
+}) {
   return (
     <View style={styles.kpi}>
-      <Text style={[styles.kpiValue, { color }]}>{value}</Text>
-      <Text style={styles.kpiTitle}>{title}</Text>
+      <Text
+        style={[
+          styles.kpiValue,
+          {
+            color,
+          },
+        ]}
+      >
+        {value}
+      </Text>
+
+      <Text
+        style={
+          styles.kpiTitle
+        }
+      >
+        {title}
+      </Text>
     </View>
   );
 }
 
-function Action({ title, desc, icon, onPress }) {
+function Action({
+  title,
+  desc,
+  icon,
+  onPress,
+}) {
   return (
-    <TouchableOpacity onPress={onPress} style={styles.action} activeOpacity={0.85}>
-      <Text style={styles.actionIcon}>{icon}</Text>
-      <Text style={styles.actionTitle}>{title}</Text>
-      <Text style={styles.actionDesc}>{desc}</Text>
+    <TouchableOpacity
+      onPress={onPress}
+      style={styles.action}
+      activeOpacity={0.85}
+    >
+      <Text
+        style={
+          styles.actionIcon
+        }
+      >
+        {icon}
+      </Text>
+
+      <Text
+        style={
+          styles.actionTitle
+        }
+      >
+        {title}
+      </Text>
+
+      <Text
+        style={
+          styles.actionDesc
+        }
+      >
+        {desc}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -329,26 +930,34 @@ function Action({ title, desc, icon, onPress }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F4F7FA',
+    backgroundColor:
+      '#F4F7FA',
   },
 
   header: {
-    backgroundColor: '#12395B',
+    backgroundColor:
+      '#12395B',
+
     padding: 20,
     paddingTop: 22,
+
     borderBottomWidth: 4,
-    borderBottomColor: '#0F2E4A',
+    borderBottomColor:
+      '#0F2E4A',
   },
 
   headerTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent:
+      'space-between',
     gap: 12,
     marginBottom: 20,
   },
 
   headerEyebrow: {
-    color: 'rgba(255,255,255,.6)',
+    color:
+      'rgba(255,255,255,.6)',
+
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 2.2,
@@ -362,7 +971,9 @@ const styles = StyleSheet.create({
   },
 
   headerDesc: {
-    color: 'rgba(255,255,255,.6)',
+    color:
+      'rgba(255,255,255,.6)',
+
     fontSize: 10,
     marginTop: 4,
   },
@@ -371,8 +982,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(255,255,255,.1)',
-    borderColor: 'rgba(255,255,255,.2)',
+
+    backgroundColor:
+      'rgba(255,255,255,.1)',
+
+    borderColor:
+      'rgba(255,255,255,.2)',
+
     borderWidth: 1,
     borderRadius: 14,
     padding: 8,
@@ -381,10 +997,15 @@ const styles = StyleSheet.create({
   avatar: {
     width: 32,
     height: 32,
+
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,.2)',
+
+    backgroundColor:
+      'rgba(255,255,255,.2)',
+
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent:
+      'center',
   },
 
   avatarText: {
@@ -399,21 +1020,29 @@ const styles = StyleSheet.create({
   },
 
   profileTeam: {
-    color: 'rgba(255,255,255,.55)',
+    color:
+      'rgba(255,255,255,.55)',
+
     fontSize: 9,
   },
 
   progressBox: {
-    backgroundColor: 'rgba(255,255,255,.1)',
+    backgroundColor:
+      'rgba(255,255,255,.1)',
+
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,.15)',
+
+    borderColor:
+      'rgba(255,255,255,.15)',
+
     borderRadius: 18,
     padding: 14,
   },
 
   rowBetween: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent:
+      'space-between',
   },
 
   progressLabel: {
@@ -425,7 +1054,10 @@ const styles = StyleSheet.create({
   progressTrack: {
     height: 8,
     borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,.18)',
+
+    backgroundColor:
+      'rgba(255,255,255,.18)',
+
     marginTop: 10,
     overflow: 'hidden',
   },
@@ -433,7 +1065,8 @@ const styles = StyleSheet.create({
   progressFill: {
     height: 8,
     borderRadius: 8,
-    backgroundColor: 'white',
+    backgroundColor:
+      'white',
   },
 
   kpiRow: {
@@ -445,12 +1078,17 @@ const styles = StyleSheet.create({
 
   kpi: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor:
+      'white',
+
     borderRadius: 18,
     padding: 14,
+
     alignItems: 'center',
+
     borderWidth: 1,
-    borderColor: '#D9E1EA',
+    borderColor:
+      '#D9E1EA',
   },
 
   kpiValue: {
@@ -475,11 +1113,16 @@ const styles = StyleSheet.create({
   action: {
     flexGrow: 1,
     flexBasis: '46%',
-    backgroundColor: 'white',
+
+    backgroundColor:
+      'white',
+
     borderRadius: 18,
     padding: 16,
+
     borderWidth: 1,
-    borderColor: '#D9E1EA',
+    borderColor:
+      '#D9E1EA',
   },
 
   actionIcon: {
@@ -501,13 +1144,18 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    backgroundColor: 'white',
+    backgroundColor:
+      'white',
+
     marginHorizontal: 16,
     marginTop: 16,
+
     borderRadius: 18,
     padding: 16,
+
     borderWidth: 1,
-    borderColor: '#D9E1EA',
+    borderColor:
+      '#D9E1EA',
   },
 
   cardEyebrow: {
@@ -527,18 +1175,27 @@ const styles = StyleSheet.create({
 
   incompleteHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    justifyContent:
+      'space-between',
+
+    alignItems:
+      'flex-start',
+
     marginBottom: 8,
   },
 
   selectAllButton: {
-    backgroundColor: '#EAF1F7',
+    backgroundColor:
+      '#EAF1F7',
+
     borderRadius: 999,
+
     paddingHorizontal: 10,
     paddingVertical: 6,
+
     borderWidth: 1,
-    borderColor: '#D9E1EA',
+    borderColor:
+      '#D9E1EA',
   },
 
   selectAllText: {
@@ -550,26 +1207,40 @@ const styles = StyleSheet.create({
   incompleteItem: {
     flexDirection: 'row',
     alignItems: 'center',
+
     gap: 10,
+
     paddingVertical: 10,
+
     borderTopWidth: 1,
-    borderTopColor: '#EEF2F6',
+    borderTopColor:
+      '#EEF2F6',
   },
 
   circleSelect: {
     width: 24,
     height: 24,
+
     borderRadius: 12,
+
     borderWidth: 2,
-    borderColor: '#B0B8C1',
-    backgroundColor: '#F1F3F5',
+    borderColor:
+      '#B0B8C1',
+
+    backgroundColor:
+      '#F1F3F5',
+
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent:
+      'center',
   },
 
   circleSelectActive: {
-    backgroundColor: '#12395B',
-    borderColor: '#12395B',
+    backgroundColor:
+      '#12395B',
+
+    borderColor:
+      '#12395B',
   },
 
   circleCheckText: {
@@ -578,16 +1249,79 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
 
+  /*
+   * 상태 + 삭제 버튼을
+   * 오른쪽에 세로 정렬
+   */
+  itemRight: {
+    minWidth: 54,
+
+    alignItems:
+      'center',
+
+    justifyContent:
+      'center',
+
+    gap: 5,
+  },
+
+  deleteButton: {
+    minWidth: 48,
+
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+
+    borderRadius: 10,
+
+    borderWidth: 1,
+    borderColor:
+      '#E74C3C',
+
+    backgroundColor:
+      '#FFFFFF',
+
+    alignItems:
+      'center',
+
+    justifyContent:
+      'center',
+  },
+
+  deleteButtonDisabled: {
+    borderColor:
+      '#B0B8C1',
+
+    backgroundColor:
+      '#F1F3F5',
+  },
+
+  deleteButtonText: {
+    color: '#E74C3C',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+
+  deleteButtonTextDisabled: {
+    color: '#A0AEC0',
+  },
+
   addTodayButton: {
     marginTop: 12,
-    backgroundColor: '#12395B',
+
+    backgroundColor:
+      '#12395B',
+
     borderRadius: 14,
+
     paddingVertical: 12,
-    alignItems: 'center',
+
+    alignItems:
+      'center',
   },
 
   addTodayButtonDisabled: {
-    backgroundColor: '#B0B8C1',
+    backgroundColor:
+      '#B0B8C1',
   },
 
   addTodayText: {
@@ -611,19 +1345,25 @@ const styles = StyleSheet.create({
   entryStatus: {
     fontSize: 9,
     fontWeight: '900',
+
     borderRadius: 10,
+
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
 
   pendingStatus: {
     color: '#E74C3C',
-    backgroundColor: '#FDECEC',
+
+    backgroundColor:
+      '#FDECEC',
   },
 
   progressStatus: {
     color: '#B7791F',
-    backgroundColor: '#FFF4CC',
+
+    backgroundColor:
+      '#FFF4CC',
   },
 
   emptyText: {

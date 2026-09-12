@@ -1,7 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { BackHandler, PanResponder, Platform, SafeAreaView, StatusBar, StyleSheet, View } from 'react-native';
+import {
+  BackHandler,
+  PanResponder,
+  Platform,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  View,
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
 
 import RegisterScreen from './screens/RegisterScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -20,7 +27,6 @@ import AssignmentScreen from './screens/AssignmentScreen';
 import { groupApi } from './utils/groupApi';
 import { CustomAlertHost } from './components/CustomAlert';
 
-
 export default function App() {
   const [screen, setScreen] = useState('login');
   const [user, setUser] = useState(null);
@@ -38,9 +44,12 @@ export default function App() {
   const [isGuiding, setIsGuiding] = useState(false);
   const [totalDuration, setTotalDuration] = useState(null);
   const [panelOpen, setPanelOpen] = useState(true);
+
   const historyRef = useRef([]);
   const screenRef = useRef('login');
+
   const [todayLocationsLoaded, setTodayLocationsLoaded] = useState(false);
+
   const TODAY_LOCATIONS_KEY = 'pang3_today_route_locations';
 
   const [activeGroup, setActiveGroup] = useState(null);
@@ -48,9 +57,11 @@ export default function App() {
 
   const go = (next, options = {}) => {
     if (next === screenRef.current) return;
+
     if (!options.replace) {
       historyRef.current.push(screen);
     }
+
     screenRef.current = next;
     setScreen(next);
   };
@@ -58,6 +69,7 @@ export default function App() {
   const goBack = (fallback = 'main') => {
     const previous = historyRef.current.pop();
     const next = previous || fallback;
+
     screenRef.current = next;
     setScreen(next);
   };
@@ -66,9 +78,13 @@ export default function App() {
     const restoreTodayLocations = async () => {
       try {
         const saved = await AsyncStorage.getItem(TODAY_LOCATIONS_KEY);
+
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) setRouteLocations(parsed);
+
+          if (Array.isArray(parsed)) {
+            setRouteLocations(parsed);
+          }
         }
       } catch (error) {
         console.log('오늘 외근 복원 실패:', error);
@@ -76,45 +92,77 @@ export default function App() {
         setTodayLocationsLoaded(true);
       }
     };
+
     restoreTodayLocations();
   }, []);
 
   useEffect(() => {
     if (!todayLocationsLoaded) return;
-    AsyncStorage.setItem(TODAY_LOCATIONS_KEY, JSON.stringify(routeLocations)).catch((error) => {
+
+    AsyncStorage.setItem(
+      TODAY_LOCATIONS_KEY,
+      JSON.stringify(routeLocations)
+    ).catch((error) => {
       console.log('오늘 외근 저장 실패:', error);
     });
   }, [routeLocations, todayLocationsLoaded]);
 
   useEffect(() => {
-    if (Platform.OS !== 'android') return undefined;
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (screen === 'login') return false;
-      goBack(screen === 'register' ? 'login' : 'main');
-      return true;
-    });
+    if (Platform.OS !== 'android') {
+      return undefined;
+    }
+
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        if (screen === 'login') {
+          return false;
+        }
+
+        goBack(
+          screen === 'register'
+            ? 'login'
+            : 'main'
+        );
+
+        return true;
+      }
+    );
+
     return () => subscription.remove();
   }, [screen]);
 
   const swipeBackResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (evt, gestureState) =>
+      onMoveShouldSetPanResponder: (
+        evt,
+        gestureState
+      ) =>
         Platform.OS === 'ios' &&
         screenRef.current !== 'login' &&
         evt.nativeEvent.pageX - gestureState.dx <= 28 &&
         gestureState.dx > 18 &&
         Math.abs(gestureState.dy) < 35,
-      onPanResponderRelease: (_evt, gestureState) => {
-        if (gestureState.dx > 70 && Math.abs(gestureState.dy) < 80) {
+
+      onPanResponderRelease: (
+        _evt,
+        gestureState
+      ) => {
+        if (
+          gestureState.dx > 70 &&
+          Math.abs(gestureState.dy) < 80
+        ) {
           goBack('main');
         }
       },
     })
   ).current;
 
-
   const refreshGroupAssignments = useCallback(async () => {
-    if (!activeGroup?.groupId || !user?.userId) {
+    if (
+      !activeGroup?.groupId ||
+      !user?.userId
+    ) {
       setGroupAssignments([]);
       return;
     }
@@ -123,18 +171,33 @@ export default function App() {
       const data = await groupApi(
         `/api/groups/${activeGroup.groupId}/assignments?userId=${user.userId}`
       );
-      setGroupAssignments(Array.isArray(data) ? data : []);
+
+      setGroupAssignments(
+        Array.isArray(data)
+          ? data
+          : []
+      );
     } catch (error) {
-      console.log('그룹 담당자 조회 실패:', error.message);
+      console.log(
+        '그룹 담당자 조회 실패:',
+        error.message
+      );
+
       setGroupAssignments([]);
     }
-  }, [activeGroup?.groupId, user?.userId]);
+  }, [
+    activeGroup?.groupId,
+    user?.userId,
+  ]);
 
   useEffect(() => {
     refreshGroupAssignments();
   }, [refreshGroupAssignments]);
 
-  const onLocationClick = (loc, type) => {
+  const onLocationClick = (
+    loc,
+    type
+  ) => {
     setSelectedLocation(loc);
     setActionType(type);
     go('fieldAction');
@@ -142,192 +205,345 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.app} {...swipeBackResponder.panHandlers}>
-      <StatusBar barStyle="dark-content" />
+      <View
+        style={styles.app}
+        {...swipeBackResponder.panHandlers}
+      >
+        <StatusBar barStyle="dark-content" />
 
-      {screen === 'login' && (
-        <LoginScreen
-          onLogin={(loginUser) => {
-            setUser(loginUser);
-            setActiveGroup(null);
-            setGroupAssignments([]);
-            historyRef.current = [];
-            go('main', { replace: true });
+        {screen === 'login' && (
+          <LoginScreen
+            onLogin={(loginUser) => {
+              setUser(loginUser);
+              setActiveGroup(null);
+              setGroupAssignments([]);
 
-          }}
-          onRegister={() => go('register')}
-        />
-      )}
+              historyRef.current = [];
 
-      {screen === 'register' && (
-        <RegisterScreen onBack={() => goBack('login')} />
-      )}
+              go(
+                'main',
+                {
+                  replace: true,
+                }
+              );
+            }}
+            onRegister={() =>
+              go('register')
+            }
+          />
+        )}
 
-      {screen === 'main' && (
-        <MainScreen
-          user={user}
-          activeGroup={activeGroup}
-          onRoute={() => go('mapDirect')}
-          onReport={() => go('reportList')}
-          onGroup={() => go('groupHome')}
-          onDashboard={() => go('dashboard')}
-          locations={routeLocations}
-          setLocations={setRouteLocations}
-        />
-      )}
+        {screen === 'register' && (
+          <RegisterScreen
+            onBack={() =>
+              goBack('login')
+            }
+          />
+        )}
 
-      {screen === 'groupHome' && (
-        <GroupScreen
-          user={user}
-          activeGroup={activeGroup}
-          onBack={() => go('main')}
-          onCreate={() => go('groupCreate')}
-          onInvitations={() => go('groupInvitations')}
-          onOpenGroup={(group) => {
-            setActiveGroup(group);
-            go('groupDetail');
-          }}
-        />
-      )}
+        {screen === 'main' && (
+          <MainScreen
+            user={user}
+            activeGroup={activeGroup}
+            onRoute={() =>
+              go('mapDirect')
+            }
+            onReport={() =>
+              go('reportList')
+            }
+            onGroup={() =>
+              go('groupHome')
+            }
+            onDashboard={() =>
+              go('dashboard')
+            }
+            locations={routeLocations}
+            setLocations={setRouteLocations}
+          />
+        )}
 
-      {screen === 'groupCreate' && (
-        <GroupCreateScreen
-          user={user}
-          onBack={() => go('groupHome')}
-          onCreated={(group) => {
-            setActiveGroup(group);
-            go('groupDetail');
-          }}
-        />
-      )}
+        {screen === 'groupHome' && (
+          <GroupScreen
+            user={user}
+            activeGroup={activeGroup}
+            onBack={() =>
+              go('main')
+            }
+            onCreate={() =>
+              go('groupCreate')
+            }
+            onInvitations={() =>
+              go('groupInvitations')
+            }
+            onOpenGroup={(group) => {
+              setActiveGroup(group);
+              go('groupDetail');
+            }}
+          />
+        )}
 
-      {screen === 'groupInvitations' && (
-        <GroupInvitationsScreen
-          user={user}
-          onBack={() => go('groupHome')}
-          onAccepted={(group) => {
-            setActiveGroup(group);
-            go('groupDetail');
-          }}
-        />
-      )}
+        {screen === 'groupCreate' && (
+          <GroupCreateScreen
+            user={user}
+            onBack={() =>
+              go('groupHome')
+            }
+            onCreated={(group) => {
+              setActiveGroup(group);
+              go('groupDetail');
+            }}
+          />
+        )}
 
-      {screen === 'groupDetail' && activeGroup && (
-        <GroupDetailScreen
-          user={user}
-          group={activeGroup}
-          onBack={() => go('groupHome')}
-          onUpdatedGroup={(group) => setActiveGroup(group)}
-          onAssign={(group) => {
-            setActiveGroup(group);
-            go('assignment');
-          }}
-        />
-      )}
+        {screen === 'groupInvitations' && (
+          <GroupInvitationsScreen
+            user={user}
+            onBack={() =>
+              go('groupHome')
+            }
+            onAccepted={(group) => {
+              setActiveGroup(group);
+              go('groupDetail');
+            }}
+          />
+        )}
 
-      {screen === 'assignment' && activeGroup && (
-        <AssignmentScreen
-          user={user}
-          group={activeGroup}
-          onBack={() => {
-            refreshGroupAssignments();
-            go('groupDetail');
-          }}
-          onChanged={refreshGroupAssignments}
-        />
-      )}
+        {screen === 'groupDetail' &&
+          activeGroup && (
+            <GroupDetailScreen
+              user={user}
+              group={activeGroup}
+              onBack={() =>
+                go('groupHome')
+              }
+              onUpdatedGroup={(group) =>
+                setActiveGroup(group)
+              }
+              onAssign={(group) => {
+                setActiveGroup(group);
+                go('assignment');
+              }}
+            />
+          )}
 
-      {screen === 'dashboard' && (
-        <DashboardScreen onBack={() => goBack('main')} />
-      )}
+        {screen === 'assignment' &&
+          activeGroup && (
+            <AssignmentScreen
+              user={user}
+              group={activeGroup}
+              onBack={() => {
+                refreshGroupAssignments();
+                go('groupDetail');
+              }}
+              onChanged={
+                refreshGroupAssignments
+              }
+            />
+          )}
 
-      {screen === 'mapDirect' && (
-        <MapScreen
-          locations={routeLocations}
-          setLocations={setRouteLocations}
-          activeGroup={activeGroup}
-          groupAssignments={groupAssignments}
-          onBack={() => goBack('main')}
+        {screen === 'dashboard' && (
+          <DashboardScreen
+            onBack={() =>
+              goBack('main')
+            }
+          />
+        )}
 
-          onLocationClick={onLocationClick}
-          roadPath={roadPath}
-          setRoadPath={setRoadPath}
-          routeSegments={routeSegments}
-          setRouteSegments={setRouteSegments}
-          currentSegmentIndex={currentSegmentIndex}
-          setCurrentSegmentIndex={setCurrentSegmentIndex}
-          optimized={optimized}
-          setOptimized={setOptimized}
-          isGuiding={isGuiding}
-          setIsGuiding={setIsGuiding}
-          totalDuration={totalDuration}
-          setTotalDuration={setTotalDuration}
-          panelOpen={panelOpen}
-          setPanelOpen={setPanelOpen}
-          onReportPress={() => go('reportList')}
-        />
-      )}
+        {screen === 'mapDirect' && (
+          <MapScreen
+            locations={routeLocations}
+            setLocations={
+              setRouteLocations
+            }
+            activeGroup={activeGroup}
+            groupAssignments={
+              groupAssignments
+            }
+            onBack={() =>
+              goBack('main')
+            }
+            onLocationClick={
+              onLocationClick
+            }
+            roadPath={roadPath}
+            setRoadPath={setRoadPath}
+            routeSegments={
+              routeSegments
+            }
+            setRouteSegments={
+              setRouteSegments
+            }
+            currentSegmentIndex={
+              currentSegmentIndex
+            }
+            setCurrentSegmentIndex={
+              setCurrentSegmentIndex
+            }
+            optimized={optimized}
+            setOptimized={setOptimized}
+            isGuiding={isGuiding}
+            setIsGuiding={setIsGuiding}
+            totalDuration={
+              totalDuration
+            }
+            setTotalDuration={
+              setTotalDuration
+            }
+            panelOpen={panelOpen}
+            setPanelOpen={setPanelOpen}
+            onReportPress={() =>
+              go('reportList')
+            }
+          />
+        )}
 
-      {screen === 'fieldAction' && (
-        <FieldActionScreen
-          location={selectedLocation}
-          actionType={actionType}
-          onBack={() => goBack('reportList')}
-          onSave={(savedReport) => {
-            setRouteLocations((prev) =>
-              prev.map((loc) =>
-                loc.id === selectedLocation?.id
-                  ? {
-                      ...loc,
-                      status: savedReport.progressStatus || loc.status,
-                    }
-                  : loc
-              )
-            );
+        {screen === 'fieldAction' && (
+          <FieldActionScreen
+            location={selectedLocation}
+            actionType={actionType}
+            onBack={() =>
+              goBack('reportList')
+            }
+            onSave={(savedReport) => {
+              setRouteLocations(
+                (prev) =>
+                  prev.map((loc) =>
+                    loc.id ===
+                    selectedLocation?.id
+                      ? {
+                          ...loc,
+                          status:
+                            savedReport.progressStatus ||
+                            loc.status,
+                        }
+                      : loc
+                  )
+              );
 
-            goBack('reportList');
-          }}
-        />
-      )}
+              goBack('reportList');
+            }}
+          />
+        )}
 
-      {screen === 'reportList' && (
-        <ReportListScreen
-          locations={routeLocations}
-          activeGroup={activeGroup}
-          groupAssignments={groupAssignments}
-          onBack={() => goBack('mapDirect')}
+        {screen === 'reportList' && (
+          <ReportListScreen
+            locations={routeLocations}
+            activeGroup={activeGroup}
+            groupAssignments={
+              groupAssignments
+            }
+            onBack={() =>
+              goBack('mapDirect')
+            }
+            onSelectLocation={(loc) => {
+              setSelectedLocation(loc);
+              setActionType('report');
+              go('fieldAction');
+            }}
+            onCreateReport={(
+              selectedLocations
+            ) => {
+              setReportTargets(
+                selectedLocations
+              );
 
-          onSelectLocation={(loc) => {
-            setSelectedLocation(loc);
-            setActionType('report');
-            go('fieldAction');
-          }}
-          onCreateReport={(selectedLocations) => {
-            setReportTargets(selectedLocations);
-            go('report');
-          }}
-        />
-      )}
+              go('report');
+            }}
+            onDeleteLocation={(id) => {
+              /*
+               * 현재 방문지 목록에서 제거
+               * routeLocations가 변경되면
+               * 위 useEffect에서 AsyncStorage도
+               * 자동으로 갱신된다.
+               */
+              setRouteLocations(
+                (prev) =>
+                  prev.filter(
+                    (loc) =>
+                      Number(
+                        loc.id ??
+                          loc.taskId ??
+                          loc.task_id
+                      ) !==
+                      Number(id)
+                  )
+              );
 
-      {screen === 'report' && (
-        <ReportScreen
-          locations={reportTargets}
-          onBack={() => goBack('reportList')}
-          onDownload={(info) => {
-            setDownloadInfo(info);
-            go('download');
-          }}
-        />
-      )}
+              /*
+               * 삭제된 방문지에 대한
+               * 담당자 정보도 현재 화면에서 제거
+               */
+              setGroupAssignments(
+                (prev) =>
+                  prev.filter(
+                    (item) =>
+                      Number(
+                        item.taskId
+                      ) !==
+                      Number(id)
+                  )
+              );
 
-      {screen === 'download' && (
-        <DownloadScreen
-          onBack={() => goBack('main')}
-          downloadInfo={downloadInfo}
-        />
-      )}
+              /*
+               * 혹시 보고서 선택 목록에
+               * 남아있으면 같이 제거
+               */
+              setReportTargets(
+                (prev) =>
+                  prev.filter(
+                    (loc) =>
+                      Number(
+                        loc.id ??
+                          loc.taskId ??
+                          loc.task_id
+                      ) !==
+                      Number(id)
+                  )
+              );
 
-      <CustomAlertHost />
+              /*
+               * 현재 선택 중인 방문지가
+               * 삭제된 방문지라면 선택 해제
+               */
+              if (
+                Number(
+                  selectedLocation?.id ??
+                    selectedLocation?.taskId ??
+                    selectedLocation?.task_id
+                ) ===
+                Number(id)
+              ) {
+                setSelectedLocation(null);
+              }
+            }}
+          />
+        )}
+
+        {screen === 'report' && (
+          <ReportScreen
+            locations={reportTargets}
+            onBack={() =>
+              goBack('reportList')
+            }
+            onDownload={(info) => {
+              setDownloadInfo(info);
+              go('download');
+            }}
+          />
+        )}
+
+        {screen === 'download' && (
+          <DownloadScreen
+            onBack={() =>
+              goBack('main')
+            }
+            downloadInfo={
+              downloadInfo
+            }
+          />
+        )}
+
+        <CustomAlertHost />
       </View>
     </SafeAreaView>
   );
@@ -338,8 +554,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F4F7FA',
   },
+
   app: {
     flex: 1,
   },
 });
-
