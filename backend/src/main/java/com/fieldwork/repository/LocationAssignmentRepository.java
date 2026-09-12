@@ -25,4 +25,6 @@ public interface LocationAssignmentRepository
             WorkGroup group,
             Task task
     );
+
+    void deleteByTask_TaskId(Long taskId);
 }

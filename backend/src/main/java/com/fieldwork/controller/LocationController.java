@@ -38,10 +38,12 @@ public class LocationController {
             if (!body.containsKey("detailAddress") && body.get("name") != null) {
                 body.put("detailAddress", body.get("name"));
             }
+
             if (!body.containsKey("roadAddress") && body.get("address") != null) {
                 body.put("roadAddress", body.get("address"));
             }
         }
+
         return taskService.createFromFrontendBody(body);
     }
 
@@ -53,9 +55,21 @@ public class LocationController {
         String status = body.get("status") != null
                 ? body.get("status").toString()
                 : null;
+
         if (status == null && body.get("taskStatus") != null) {
             status = body.get("taskStatus").toString();
         }
+
         return taskService.updateStatus(id, status);
+    }
+
+    /**
+     * 미처리 방문지 삭제
+     */
+    @DeleteMapping("/{id}")
+    public Map<String, Object> deleteLocation(
+            @PathVariable Long id
+    ) {
+        return taskService.deletePendingTask(id);
     }
 }
