@@ -42,8 +42,7 @@ public class GroupService {
             GroupInvitationRepository groupInvitationRepository,
             LocationAssignmentRepository locationAssignmentRepository,
             UserRepository userRepository,
-            TaskRepository taskRepository
-    ) {
+            TaskRepository taskRepository) {
         this.workGroupRepository = workGroupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.groupInvitationRepository = groupInvitationRepository;
@@ -118,8 +117,7 @@ public class GroupService {
     public Map<String, Object> inviteMember(
             Long groupId,
             Long inviterUserId,
-            String inviteeLoginId
-    ) {
+            String inviteeLoginId) {
         WorkGroup group = getGroup(groupId);
         User inviter = requireLeader(group, inviterUserId);
 
@@ -141,8 +139,7 @@ public class GroupService {
         if (groupInvitationRepository.existsByGroupAndInviteeAndStatus(
                 group,
                 invitee,
-                INVITE_PENDING
-        )) {
+                INVITE_PENDING)) {
             throw new RuntimeException("이미 대기 중인 초대가 있습니다.");
         }
 
@@ -215,8 +212,7 @@ public class GroupService {
             Long groupId,
             Long taskId,
             Long leaderUserId,
-            Long assigneeUserId
-    ) {
+            Long assigneeUserId) {
         WorkGroup group = getGroup(groupId);
         User leader = requireLeader(group, leaderUserId);
         User assignee = getUser(assigneeUserId);
@@ -240,6 +236,32 @@ public class GroupService {
         LocationAssignment saved = locationAssignmentRepository.save(assignment);
         Map<String, Object> result = assignmentMap(saved);
         result.put("message", "담당자가 지정되었습니다.");
+
+        return result;
+    }
+
+    @Transactional
+    public List<Map<String, Object>> assignTasksBulk(
+            Long groupId,
+            List<Long> taskIds,
+            Long leaderUserId,
+            Long assigneeUserId) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            throw new RuntimeException("배정할 방문지가 없습니다.");
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        for (Long taskId : taskIds) {
+            Map<String, Object> assigned = assignTask(
+                    groupId,
+                    taskId,
+                    leaderUserId,
+                    assigneeUserId);
+
+            result.add(assigned);
+        }
+
         return result;
     }
 
@@ -247,8 +269,7 @@ public class GroupService {
     public Map<String, Object> unassignTask(
             Long groupId,
             Long taskId,
-            Long leaderUserId
-    ) {
+            Long leaderUserId) {
         WorkGroup group = getGroup(groupId);
         requireLeader(group, leaderUserId);
 

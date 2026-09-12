@@ -31,6 +31,15 @@ public class Task {
     @Column(name = "task_status")
     private String taskStatus;
 
+    @Column(name = "sido")
+    private String sido;
+
+    @Column(name = "sigungu")
+    private String sigungu;
+
+    @Column(name = "admin_dong")
+    private String adminDong;
+
     public Long getTaskId() {
         return taskId;
     }
@@ -85,5 +94,29 @@ public class Task {
 
     public void setTaskStatus(String taskStatus) {
         this.taskStatus = taskStatus;
+    }
+
+    public String getSido() {
+        return sido;
+    }
+
+    public void setSido(String sido) {
+        this.sido = sido;
+    }
+
+    public String getSigungu() {
+        return sigungu;
+    }
+
+    public void setSigungu(String sigungu) {
+        this.sigungu = sigungu;
+    }
+
+    public String getAdminDong() {
+        return adminDong;
+    }
+
+    public void setAdminDong(String adminDong) {
+        this.adminDong = adminDong;
     }
 }

@@ -34,27 +34,33 @@ public class TaskService {
         task.setDetailAddress(firstNonBlank(
                 str(body.get("detailAddress")),
                 str(body.get("name")),
-                str(body.get("detail_address"))
-        ));
+                str(body.get("detail_address"))));
         task.setRoadAddress(firstNonBlank(
                 str(body.get("roadAddress")),
                 str(body.get("address")),
-                str(body.get("road_address"))
-        ));
+                str(body.get("road_address"))));
         task.setLat(toDouble(body.get("lat"), body.get("latitude")));
         task.setLng(toDouble(body.get("lng"), body.get("longitude")));
         task.setTaskCategory(firstNonBlank(
                 str(body.get("taskCategory")),
                 str(body.get("task")),
                 str(body.get("task_category")),
-                "현장 확인"
-        ));
+                "현장 확인"));
         task.setTaskStatus(firstNonBlank(
                 str(body.get("taskStatus")),
                 str(body.get("status")),
                 str(body.get("task_status")),
-                "pending"
-        ));
+                "pending"));
+
+        task.setSido(firstNonBlank(
+                str(body.get("sido"))));
+
+        task.setSigungu(firstNonBlank(
+                str(body.get("sigungu"))));
+
+        task.setAdminDong(firstNonBlank(
+                str(body.get("adminDong")),
+                str(body.get("admin_dong"))));
 
         return toFrontendMap(taskRepository.save(task));
     }
@@ -90,6 +96,10 @@ public class TaskService {
         map.put("status", task.getTaskStatus());
         map.put("taskStatus", task.getTaskStatus());
         map.put("task_status", task.getTaskStatus());
+        map.put("sido", task.getSido());
+        map.put("sigungu", task.getSigungu());
+        map.put("adminDong", task.getAdminDong());
+        map.put("admin_dong", task.getAdminDong());
         return map;
     }
 
