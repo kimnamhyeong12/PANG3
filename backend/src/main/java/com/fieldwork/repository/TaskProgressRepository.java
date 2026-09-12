@@ -5,8 +5,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
-public interface TaskProgressRepository extends JpaRepository<TaskProgress, Long> {
+public interface TaskProgressRepository
+        extends JpaRepository<TaskProgress, Long> {
 
     Optional<TaskProgress> findTopByTask_TaskIdOrderByCreatedAtDesc(Long taskId);
 
+    void deleteByTask_TaskId(Long taskId);
 }
