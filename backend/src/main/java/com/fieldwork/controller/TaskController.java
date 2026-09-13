@@ -18,8 +18,11 @@ public class TaskController {
     }
 
     @GetMapping
-    public List<Map<String, Object>> getTasks() {
-        return taskService.getAllForFrontend();
+    public List<Map<String, Object>> getTasks(
+            @RequestParam Long userId,
+            @RequestParam(required = false) Long groupId
+    ) {
+        return taskService.getForFrontend(userId, groupId);
     }
 
     @PostMapping

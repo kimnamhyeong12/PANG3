@@ -1,9 +1,15 @@
 package com.fieldwork.service;
 
 import com.fieldwork.entity.Task;
+import com.fieldwork.entity.GroupMember;
+import com.fieldwork.entity.User;
+import com.fieldwork.entity.WorkGroup;
+import com.fieldwork.repository.GroupMemberRepository;
 import com.fieldwork.repository.LocationAssignmentRepository;
 import com.fieldwork.repository.TaskProgressRepository;
 import com.fieldwork.repository.TaskRepository;
+import com.fieldwork.repository.UserRepository;
+import com.fieldwork.repository.WorkGroupRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,20 +24,67 @@ public class TaskService {
     private final TaskRepository taskRepository;
     private final TaskProgressRepository taskProgressRepository;
     private final LocationAssignmentRepository locationAssignmentRepository;
+    private final UserRepository userRepository;
+    private final WorkGroupRepository workGroupRepository;
+    private final GroupMemberRepository groupMemberRepository;
 
     public TaskService(
             TaskRepository taskRepository,
             TaskProgressRepository taskProgressRepository,
-            LocationAssignmentRepository locationAssignmentRepository
+            LocationAssignmentRepository locationAssignmentRepository,
+            UserRepository userRepository,
+            WorkGroupRepository workGroupRepository,
+            GroupMemberRepository groupMemberRepository
     ) {
         this.taskRepository = taskRepository;
         this.taskProgressRepository = taskProgressRepository;
         this.locationAssignmentRepository = locationAssignmentRepository;
+        this.userRepository = userRepository;
+        this.workGroupRepository = workGroupRepository;
+        this.groupMemberRepository = groupMemberRepository;
     }
 
     public List<Map<String, Object>> getAllForFrontend() {
         return taskRepository.findAll().stream()
                 .map(this::toFrontendMap)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getForFrontend(Long userId, Long groupId) {
+        User user = getUser(userId);
+
+        if (groupId == null) {
+            return taskRepository.findByCreatedByAndGroupIsNullOrderByTaskIdDesc(user)
+                    .stream()
+                    .map(this::toFrontendMap)
+                    .collect(Collectors.toList());
+        }
+
+        WorkGroup group = getGroup(groupId);
+        GroupMember member = groupMemberRepository.findByGroupAndUser(group, user)
+                .orElseThrow(() -> new RuntimeException("해당 그룹의 멤버가 아닙니다."));
+
+        if ("LEADER".equalsIgnoreCase(member.getRole())) {
+            List<Task> tasks = new java.util.ArrayList<>(
+                    taskRepository.findByGroupOrderByTaskIdDesc(group)
+            );
+
+            // 팀장이 개인으로 등록한 방문지도 이 그룹에 배정할 수 있다.
+            tasks.addAll(taskRepository.findByCreatedByAndGroupIsNullOrderByTaskIdDesc(user));
+
+            // 소유권 컬럼 추가 전에 만들어진 방문지는 팀장만 확인하고 배정할 수 있다.
+            tasks.addAll(taskRepository.findByCreatedByIsNullAndGroupIsNullOrderByTaskIdDesc());
+
+            return tasks.stream()
+                    .map(this::toFrontendMap)
+                    .collect(Collectors.toList());
+        }
+
+        return locationAssignmentRepository
+                .findByGroupAndAssigneeOrderByAssignedAtDesc(group, user)
+                .stream()
+                .map(assignment -> toFrontendMap(assignment.getTask()))
                 .collect(Collectors.toList());
     }
 
@@ -42,6 +95,23 @@ public class TaskService {
 
     public Map<String, Object> createFromFrontendBody(Map<String, Object> body) {
         Task task = new Task();
+
+        Long createdByUserId = toLong(body.get("createdByUserId"), body.get("userId"));
+        if (createdByUserId == null) {
+            throw new RuntimeException("방문지 생성 사용자 ID가 필요합니다.");
+        }
+
+        User creator = getUser(createdByUserId);
+        task.setCreatedBy(creator);
+
+        Long groupId = toLong(body.get("groupId"));
+        if (groupId != null) {
+            WorkGroup group = getGroup(groupId);
+            if (!groupMemberRepository.existsByGroupAndUser(group, creator)) {
+                throw new RuntimeException("해당 그룹의 멤버만 그룹 방문지를 만들 수 있습니다.");
+            }
+            task.setGroup(group);
+        }
 
         task.setDetailAddress(firstNonBlank(
                 str(body.get("detailAddress")),
@@ -195,6 +265,13 @@ public class TaskService {
         map.put("adminDong", task.getAdminDong());
         map.put("admin_dong", task.getAdminDong());
 
+        map.put("createdByUserId", task.getCreatedBy() != null
+                ? task.getCreatedBy().getUserId()
+                : null);
+        map.put("groupId", task.getGroup() != null
+                ? task.getGroup().getGroupId()
+                : null);
+
         return map;
     }
 
@@ -209,6 +286,25 @@ public class TaskService {
             }
         }
         return null;
+    }
+
+    private Long toLong(Object... values) {
+        for (Object value : values) {
+            if (value != null && !value.toString().isBlank()) {
+                return Long.valueOf(value.toString());
+            }
+        }
+        return null;
+    }
+
+    private User getUser(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+    }
+
+    private WorkGroup getGroup(Long groupId) {
+        return workGroupRepository.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("그룹을 찾을 수 없습니다."));
     }
 
     private String firstNonBlank(String... values) {
