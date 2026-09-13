@@ -30,6 +30,7 @@ const getStatusInfo = (statusValue) => {
 export default function MainScreen({
   user,
   activeGroup,
+  groupAssignments = [],
   onRoute,
   onReport,
   onGroup,
@@ -54,22 +55,45 @@ export default function MainScreen({
   const [deletingId, setDeletingId] =
     React.useState(null);
 
-  const total = locations.length;
+  const myAssignments = activeGroup
+    ? groupAssignments.filter(
+        (item) =>
+          Number(item.assigneeUserId) ===
+          Number(user?.userId)
+      )
+    : [];
 
-  const complete = locations.filter(
-    (loc) =>
-      loc.status === 'complete' ||
-      loc.status === 'done'
+  const displayLocations = activeGroup
+    ? myAssignments
+    : locations;
+
+  const displayTotal = displayLocations.length;
+  const displayComplete = displayLocations.filter(
+    (item) => {
+      const status = String(
+        item.status ||
+        item.taskStatus ||
+        ''
+      ).toLowerCase();
+      return status === 'complete' || status === 'done';
+    }
   ).length;
+  const displayPending = displayTotal - displayComplete;
+  const displayProgress = displayTotal === 0
+    ? 0
+    : Math.round((displayComplete / displayTotal) * 100);
 
-  const pending = total - complete;
+  const myAssignmentIds = new Set(
+    myAssignments.map((item) =>
+      Number(item.taskId ?? item.locationId)
+    )
+  );
 
-  const progress =
-    total === 0
-      ? 0
-      : Math.round(
-          (complete / total) * 100
-        );
+  const visibleIncompleteLocations = activeGroup
+    ? incompleteLocations.filter((item) =>
+        myAssignmentIds.has(Number(item.id ?? item.taskId ?? item.task_id))
+      )
+    : incompleteLocations;
 
   React.useEffect(() => {
     loadIncompleteLocations();
@@ -190,14 +214,14 @@ export default function MainScreen({
   const toggleSelectAll = () => {
     if (
       selectedIds.length ===
-      incompleteLocations.length
+      visibleIncompleteLocations.length
     ) {
       setSelectedIds([]);
       return;
     }
 
     setSelectedIds(
-      incompleteLocations.map(
+      visibleIncompleteLocations.map(
         (loc) => loc.id
       )
     );
@@ -205,7 +229,7 @@ export default function MainScreen({
 
   const addSelectedToToday = () => {
     const selectedItems =
-      incompleteLocations.filter(
+      visibleIncompleteLocations.filter(
         (loc) =>
           selectedIds.includes(
             loc.id
@@ -533,7 +557,7 @@ export default function MainScreen({
                 styles.progressLabel
               }
             >
-              {progress}%
+              {displayProgress}%
             </Text>
           </View>
 
@@ -547,7 +571,7 @@ export default function MainScreen({
                 styles.progressFill,
                 {
                   width:
-                    `${progress}%`,
+                    `${displayProgress}%`,
                 },
               ]}
             />
@@ -557,24 +581,83 @@ export default function MainScreen({
 
       <View style={styles.kpiRow}>
         <Kpi
-          title="오늘 외근"
-          value={`${total}`}
+          title={activeGroup ? '내 담당' : '오늘 외근'}
+          value={`${displayTotal}`}
         />
 
         <Kpi
-          title="완료"
-          value={`${complete}`}
+          title={activeGroup ? '내 완료' : '완료'}
+          value={`${displayComplete}`}
           color="#1F9D55"
         />
 
         <Kpi
-          title="미완료"
-          value={`${pending}`}
+          title={activeGroup ? '내 미완료' : '미완료'}
+          value={`${displayPending}`}
           color="#F39C12"
         />
       </View>
 
-      {incompleteLocations.length >
+      <View style={styles.currentWorkCard}>
+        <View style={styles.currentWorkHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardEyebrow}>
+              {activeGroup ? 'CURRENT GROUP' : 'TODAY'}
+            </Text>
+            <Text style={styles.currentWorkTitle}>
+              {activeGroup?.groupName || '개인 외근'}
+            </Text>
+          </View>
+          <View style={styles.currentRoleBadge}>
+            <Text style={styles.currentRoleText}>
+              {activeGroup
+                ? activeGroup.role === 'LEADER'
+                  ? '팀장'
+                  : '팀원'
+                : '개인'}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.currentWorkDesc}>
+          {activeGroup
+            ? activeGroup.role === 'LEADER'
+              ? `내 담당 ${displayTotal}곳 · 팀 전체 ${groupAssignments.length}곳`
+              : `내 담당 방문지 ${displayTotal}곳`
+            : `내가 등록한 방문지 ${displayTotal}곳`}
+        </Text>
+
+        {activeGroup?.role === 'LEADER' ? (
+          <View style={styles.currentWorkButtons}>
+            <TouchableOpacity
+              style={styles.currentWorkSecondaryButton}
+              onPress={onRoute}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.currentWorkSecondaryText}>내 업무 보기</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.currentWorkPrimaryButton}
+              onPress={onWorkStatus}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.currentWorkPrimaryText}>팀 작업현황</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.currentWorkPrimaryButton}
+            onPress={activeGroup ? onWorkStatus : onRoute}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.currentWorkPrimaryText}>
+              {activeGroup ? '내 담당 업무 보기' : '내 업무 지도 보기'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {visibleIncompleteLocations.length >
         0 && (
         <View style={styles.card}>
           <View
@@ -614,14 +697,14 @@ export default function MainScreen({
                 }
               >
                 {selectedIds.length ===
-                incompleteLocations.length
+                visibleIncompleteLocations.length
                   ? '전체 해제'
                   : '전체 선택'}
               </Text>
             </TouchableOpacity>
           </View>
 
-          {incompleteLocations.map(
+          {visibleIncompleteLocations.map(
             (item, index) => {
               const selected =
                 selectedIds.includes(
@@ -830,18 +913,6 @@ export default function MainScreen({
           onPress={onGroup}
         />
 
-        {activeGroup && (
-          <Action
-            title="업무 현황"
-            desc={
-              activeGroup.role === 'LEADER'
-                ? '팀 전체 담당 구역 및 진행 상태 확인'
-                : '내 담당 구역 및 방문지 진행 상태 확인'
-            }
-            icon="📊"
-            onPress={onWorkStatus}
-          />
-        )}
       </View>
 
       <View style={styles.card}>
@@ -1115,6 +1186,89 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#607086',
     marginTop: 4,
+  },
+
+  currentWorkCard: {
+    backgroundColor: 'white',
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#D9E1EA',
+  },
+
+  currentWorkHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+
+  currentWorkTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#1F2D3D',
+    marginTop: 5,
+  },
+
+  currentRoleBadge: {
+    backgroundColor: '#EAF1F7',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+
+  currentRoleText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#12395B',
+  },
+
+  currentWorkDesc: {
+    fontSize: 11,
+    color: '#718096',
+    marginTop: 12,
+    marginBottom: 14,
+  },
+
+  currentWorkButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  currentWorkPrimaryButton: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 12,
+    backgroundColor: '#12395B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+
+  currentWorkPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+
+  currentWorkSecondaryButton: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#BFCEDB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+
+  currentWorkSecondaryText: {
+    color: '#12395B',
+    fontSize: 11,
+    fontWeight: '900',
   },
 
   actions: {

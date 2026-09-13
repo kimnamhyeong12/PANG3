@@ -10,6 +10,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { BackButton } from '../components/ui';
 
+const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
+
 const AREA_COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#14B8A6', '#EC4899', '#6366F1'];
 
 const normalizeStatus = (value) => {
@@ -34,17 +36,67 @@ export default function WorkStatusScreen({
 }) {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedArea, setSelectedArea] = useState(null);
+  const [resolvedAssignments, setResolvedAssignments] = useState(assignments);
   const isLeader = group?.role === 'LEADER';
 
   useEffect(() => {
     onRefresh?.();
   }, [onRefresh]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveAreas = async () => {
+      const source = Array.isArray(assignments) ? assignments : [];
+      if (!KAKAO_REST_API_KEY) {
+        setResolvedAssignments(source);
+        return;
+      }
+
+      const cache = new Map();
+      const enriched = await Promise.all(
+        source.map(async (item) => {
+          if (item.adminDong || item.admin_dong) return item;
+          const lat = Number(item.lat ?? item.latitude);
+          const lng = Number(item.lng ?? item.longitude);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return item;
+
+          const key = `${lat},${lng}`;
+          if (!cache.has(key)) {
+            cache.set(key, (async () => {
+              try {
+                const response = await fetch(
+                  'https://dapi.kakao.com/v2/local/geo/coord2regioncode.json' +
+                  `?x=${encodeURIComponent(lng)}&y=${encodeURIComponent(lat)}`,
+                  { headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` } }
+                );
+                if (!response.ok) return null;
+                const data = await response.json();
+                const region = data.documents?.find((value) => value.region_type === 'H');
+                return region?.region_3depth_name || null;
+              } catch (_error) {
+                return null;
+              }
+            })());
+          }
+
+          const adminDong = await cache.get(key);
+          return adminDong ? { ...item, adminDong } : item;
+        })
+      );
+
+      if (!cancelled) setResolvedAssignments(enriched);
+    };
+
+    resolveAreas();
+    return () => { cancelled = true; };
+  }, [assignments]);
+
   const visibleAssignments = useMemo(() => {
-    const source = Array.isArray(assignments) ? assignments : [];
+    const source = Array.isArray(resolvedAssignments) ? resolvedAssignments : [];
     if (isLeader) return source;
     return source.filter((item) => Number(item.assigneeUserId) === Number(user?.userId));
-  }, [assignments, isLeader, user?.userId]);
+  }, [resolvedAssignments, isLeader, user?.userId]);
 
   const areas = useMemo(() => {
     const result = new Map();

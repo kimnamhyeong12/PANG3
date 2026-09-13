@@ -56,6 +56,50 @@ export default function App() {
   const [activeGroup, setActiveGroup] = useState(null);
   const [groupAssignments, setGroupAssignments] = useState([]);
 
+  const selectActiveGroup = useCallback(async (group, targetUser = user) => {
+    setActiveGroup(group || null);
+
+    if (group?.groupId && targetUser?.userId) {
+      try {
+        await AsyncStorage.setItem(
+          `pang3_active_group_${targetUser.userId}`,
+          String(group.groupId)
+        );
+      } catch (error) {
+        console.log('현재 그룹 저장 실패:', error);
+      }
+    }
+  }, [user]);
+
+  const restoreActiveGroup = useCallback(async (loginUser) => {
+    if (!loginUser?.userId) return;
+
+    try {
+      const [groups, savedGroupId] = await Promise.all([
+        groupApi(`/api/groups/user/${loginUser.userId}`),
+        AsyncStorage.getItem(`pang3_active_group_${loginUser.userId}`),
+      ]);
+
+      const groupList = Array.isArray(groups) ? groups : [];
+      const restored = groupList.find(
+        (group) => Number(group.groupId) === Number(savedGroupId)
+      );
+      const selected = restored || groupList[0] || null;
+
+      setActiveGroup(selected);
+
+      if (selected?.groupId) {
+        await AsyncStorage.setItem(
+          `pang3_active_group_${loginUser.userId}`,
+          String(selected.groupId)
+        );
+      }
+    } catch (error) {
+      console.log('현재 그룹 복원 실패:', error);
+      setActiveGroup(null);
+    }
+  }, []);
+
   const go = (next, options = {}) => {
     if (next === screenRef.current) return;
 
@@ -230,8 +274,8 @@ export default function App() {
           <LoginScreen
             onLogin={(loginUser) => {
               setUser(loginUser);
-              setActiveGroup(null);
               setGroupAssignments([]);
+              restoreActiveGroup(loginUser);
 
               historyRef.current = [];
 
@@ -260,6 +304,7 @@ export default function App() {
           <MainScreen
             user={user}
             activeGroup={activeGroup}
+            groupAssignments={groupAssignments}
             onRoute={() =>
               go('mapDirect')
             }
@@ -294,7 +339,7 @@ export default function App() {
               go('groupInvitations')
             }
             onOpenGroup={(group) => {
-              setActiveGroup(group);
+              selectActiveGroup(group);
               go('groupDetail');
             }}
           />
@@ -307,7 +352,7 @@ export default function App() {
               go('groupHome')
             }
             onCreated={(group) => {
-              setActiveGroup(group);
+              selectActiveGroup(group);
               go('groupDetail');
             }}
           />
@@ -320,7 +365,7 @@ export default function App() {
               go('groupHome')
             }
             onAccepted={(group) => {
-              setActiveGroup(group);
+              selectActiveGroup(group);
               go('groupDetail');
             }}
           />
@@ -335,10 +380,10 @@ export default function App() {
                 go('groupHome')
               }
               onUpdatedGroup={(group) =>
-                setActiveGroup(group)
+                selectActiveGroup(group)
               }
               onAssign={(group) => {
-                setActiveGroup(group);
+                selectActiveGroup(group);
                 go('assignment');
               }}
             />
