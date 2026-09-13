@@ -6,11 +6,9 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BackButton, PrimaryButton } from '../components/ui';
-import { API_BASE_URL } from '../utils/api';
 
 const getStatusLabel = (status) => {
   if (status === 'complete') return '작업 후';
@@ -31,10 +29,8 @@ export default function ReportListScreen({
   onBack,
   onSelectLocation,
   onCreateReport,
-  onDeleteLocation,
 }) {
   const [selectedIds, setSelectedIds] = useState([]);
-  const [deletingId, setDeletingId] = useState(null);
 
   const assignmentMap = new Map(
     groupAssignments.map((item) => [Number(item.taskId), item])
@@ -75,88 +71,6 @@ export default function ReportListScreen({
     }
 
     onCreateReport?.(selectedLocations);
-  };
-
-  const handleDeleteLocation = (loc) => {
-    if (isReportable(loc)) {
-      showAlert(
-        '삭제 불가',
-        '미처리 방문지만 삭제할 수 있습니다.'
-      );
-      return;
-    }
-
-    const taskId =
-      loc.id ??
-      loc.taskId ??
-      loc.task_id;
-
-    if (!taskId) {
-      showAlert(
-        '삭제 실패',
-        '방문지 ID를 찾을 수 없습니다.'
-      );
-      return;
-    }
-
-    Alert.alert(
-      '방문지 삭제',
-      `${loc.detailAddress || loc.roadAddress || '방문지'}를 삭제하시겠습니까?`,
-      [
-        {
-          text: '취소',
-          style: 'cancel',
-        },
-        {
-          text: '삭제',
-          style: 'destructive',
-          onPress: async () => {
-            if (deletingId != null) return;
-
-            try {
-              setDeletingId(taskId);
-
-              const response = await fetch(
-                `${API_BASE_URL}/api/locations/${taskId}`,
-                {
-                  method: 'DELETE',
-                }
-              );
-
-              const text = await response.text();
-
-              if (!response.ok) {
-                throw new Error(
-                  text || `삭제 실패: ${response.status}`
-                );
-              }
-
-              setSelectedIds((prev) =>
-                prev.filter(
-                  (id) =>
-                    Number(id) !== Number(taskId)
-                )
-              );
-
-              onDeleteLocation?.(taskId);
-            } catch (error) {
-              console.log(
-                '방문지 삭제 오류:',
-                error
-              );
-
-              showAlert(
-                '삭제 실패',
-                error.message ||
-                  '방문지를 삭제하지 못했습니다.'
-              );
-            } finally {
-              setDeletingId(null);
-            }
-          },
-        },
-      ]
-    );
   };
 
   return (
@@ -215,10 +129,6 @@ export default function ReportListScreen({
               loc.id ??
               loc.taskId ??
               loc.task_id;
-
-            const deleting =
-              Number(deletingId) ===
-              Number(taskId);
 
             return (
               <View
@@ -355,42 +265,6 @@ export default function ReportListScreen({
                   />
                 </TouchableOpacity>
 
-                {!reportable && (
-                  <TouchableOpacity
-                    style={[
-                      styles.deleteButton,
-                      deleting &&
-                        styles.deleteButtonDisabled,
-                    ]}
-                    disabled={deleting}
-                    onPress={() =>
-                      handleDeleteLocation(loc)
-                    }
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons
-                      name="trash-outline"
-                      size={18}
-                      color={
-                        deleting
-                          ? '#A0AEC0'
-                          : '#E74C3C'
-                      }
-                    />
-
-                    <Text
-                      style={[
-                        styles.deleteButtonText,
-                        deleting &&
-                          styles.deleteButtonTextDisabled,
-                      ]}
-                    >
-                      {deleting
-                        ? '삭제중'
-                        : '삭제'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
               </View>
             );
           })
@@ -583,30 +457,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     color: '#E74C3C',
-  },
-
-  deleteButton: {
-    minWidth: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-    marginLeft: 2,
-  },
-
-  deleteButtonDisabled: {
-    opacity: 0.6,
-  },
-
-  deleteButtonText: {
-    marginTop: 2,
-    fontSize: 9,
-    fontWeight: '900',
-    color: '#E74C3C',
-  },
-
-  deleteButtonTextDisabled: {
-    color: '#A0AEC0',
   },
 
   bottomBar: {

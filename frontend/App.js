@@ -24,6 +24,7 @@ import GroupCreateScreen from './screens/GroupCreateScreen';
 import GroupInvitationsScreen from './screens/GroupInvitationsScreen';
 import GroupDetailScreen from './screens/GroupDetailScreen';
 import AssignmentScreen from './screens/AssignmentScreen';
+import WorkStatusScreen from './screens/WorkStatusScreen';
 import { groupApi } from './utils/groupApi';
 import { CustomAlertHost } from './components/CustomAlert';
 
@@ -268,6 +269,9 @@ export default function App() {
             onGroup={() =>
               go('groupHome')
             }
+            onWorkStatus={() =>
+              go('workStatus')
+            }
             onDashboard={() =>
               go('dashboard')
             }
@@ -352,6 +356,17 @@ export default function App() {
               onChanged={
                 refreshGroupAssignments
               }
+            />
+          )}
+
+        {screen === 'workStatus' &&
+          activeGroup && (
+            <WorkStatusScreen
+              user={user}
+              group={activeGroup}
+              assignments={groupAssignments}
+              onBack={() => goBack('main')}
+              onRefresh={refreshGroupAssignments}
             />
           )}
 
@@ -463,73 +478,6 @@ export default function App() {
               );
 
               go('report');
-            }}
-            onDeleteLocation={(id) => {
-              /*
-               * 현재 방문지 목록에서 제거
-               * routeLocations가 변경되면
-               * 위 useEffect에서 AsyncStorage도
-               * 자동으로 갱신된다.
-               */
-              setRouteLocations(
-                (prev) =>
-                  prev.filter(
-                    (loc) =>
-                      Number(
-                        loc.id ??
-                        loc.taskId ??
-                        loc.task_id
-                      ) !==
-                      Number(id)
-                  )
-              );
-
-              /*
-               * 삭제된 방문지에 대한
-               * 담당자 정보도 현재 화면에서 제거
-               */
-              setGroupAssignments(
-                (prev) =>
-                  prev.filter(
-                    (item) =>
-                      Number(
-                        item.taskId
-                      ) !==
-                      Number(id)
-                  )
-              );
-
-              /*
-               * 혹시 보고서 선택 목록에
-               * 남아있으면 같이 제거
-               */
-              setReportTargets(
-                (prev) =>
-                  prev.filter(
-                    (loc) =>
-                      Number(
-                        loc.id ??
-                        loc.taskId ??
-                        loc.task_id
-                      ) !==
-                      Number(id)
-                  )
-              );
-
-              /*
-               * 현재 선택 중인 방문지가
-               * 삭제된 방문지라면 선택 해제
-               */
-              if (
-                Number(
-                  selectedLocation?.id ??
-                  selectedLocation?.taskId ??
-                  selectedLocation?.task_id
-                ) ===
-                Number(id)
-              ) {
-                setSelectedLocation(null);
-              }
             }}
           />
         )}

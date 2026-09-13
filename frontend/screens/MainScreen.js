@@ -33,6 +33,7 @@ export default function MainScreen({
   onRoute,
   onReport,
   onGroup,
+  onWorkStatus,
   onDashboard,
   locations = [],
   setLocations,
@@ -828,6 +829,19 @@ export default function MainScreen({
           icon="👥"
           onPress={onGroup}
         />
+
+        {activeGroup && (
+          <Action
+            title="업무 현황"
+            desc={
+              activeGroup.role === 'LEADER'
+                ? '팀 전체 담당 구역 및 진행 상태 확인'
+                : '내 담당 구역 및 방문지 진행 상태 확인'
+            }
+            icon="📊"
+            onPress={onWorkStatus}
+          />
+        )}
       </View>
 
       <View style={styles.card}>
