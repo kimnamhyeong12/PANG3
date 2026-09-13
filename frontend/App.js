@@ -194,6 +194,20 @@ export default function App() {
     refreshGroupAssignments();
   }, [refreshGroupAssignments]);
 
+  const handleLogout = () => {
+    setUser(null);
+    setActiveGroup(null);
+    setGroupAssignments([]);
+    setSelectedLocation(null);
+    setActionType(null);
+
+    historyRef.current = [];
+    screenRef.current = 'login';
+    setScreen('login');
+  };
+
+
+
   const onLocationClick = (
     loc,
     type
@@ -343,9 +357,10 @@ export default function App() {
 
         {screen === 'dashboard' && (
           <DashboardScreen
-            onBack={() =>
-              goBack('main')
-            }
+            user={user}
+            activeGroup={activeGroup}
+            onBack={() => goBack('main')}
+            onLogout={handleLogout}
           />
         )}
 
@@ -409,13 +424,13 @@ export default function App() {
                 (prev) =>
                   prev.map((loc) =>
                     loc.id ===
-                    selectedLocation?.id
+                      selectedLocation?.id
                       ? {
-                          ...loc,
-                          status:
-                            savedReport.progressStatus ||
-                            loc.status,
-                        }
+                        ...loc,
+                        status:
+                          savedReport.progressStatus ||
+                          loc.status,
+                      }
                       : loc
                   )
               );
@@ -462,8 +477,8 @@ export default function App() {
                     (loc) =>
                       Number(
                         loc.id ??
-                          loc.taskId ??
-                          loc.task_id
+                        loc.taskId ??
+                        loc.task_id
                       ) !==
                       Number(id)
                   )
@@ -494,8 +509,8 @@ export default function App() {
                     (loc) =>
                       Number(
                         loc.id ??
-                          loc.taskId ??
-                          loc.task_id
+                        loc.taskId ??
+                        loc.task_id
                       ) !==
                       Number(id)
                   )
@@ -508,8 +523,8 @@ export default function App() {
               if (
                 Number(
                   selectedLocation?.id ??
-                    selectedLocation?.taskId ??
-                    selectedLocation?.task_id
+                  selectedLocation?.taskId ??
+                  selectedLocation?.task_id
                 ) ===
                 Number(id)
               ) {
