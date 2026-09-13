@@ -1,7 +1,5 @@
 package com.fieldwork.controller;
 
-import com.fieldwork.entity.Location;
-import com.fieldwork.service.LocationService;
 import com.fieldwork.service.TaskService;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,16 +11,14 @@ import java.util.Map;
 @CrossOrigin(origins = "*")
 public class LocationController {
 
-    private final LocationService locationService;
     private final TaskService taskService;
 
-    public LocationController(LocationService locationService, TaskService taskService) {
-        this.locationService = locationService;
+    public LocationController(TaskService taskService) {
         this.taskService = taskService;
     }
 
     /**
-     * 신규: task 테이블 기준 목록 (프론트 호환 필드 포함)
+     * 로그인 사용자와 현재 그룹을 기준으로 방문지 조회
      */
     @GetMapping
     public List<Map<String, Object>> getLocations(
@@ -33,16 +29,20 @@ public class LocationController {
     }
 
     /**
-     * 신규: task 생성 (기존 locations POST 와 동일 URL 유지)
+     * 신규 방문지를 task 테이블에 저장
      */
     @PostMapping
-    public Map<String, Object> createLocation(@RequestBody Map<String, Object> body) {
+    public Map<String, Object> createLocation(
+            @RequestBody Map<String, Object> body
+    ) {
         if (body.containsKey("name") || body.containsKey("address")) {
-            if (!body.containsKey("detailAddress") && body.get("name") != null) {
+            if (!body.containsKey("detailAddress")
+                    && body.get("name") != null) {
                 body.put("detailAddress", body.get("name"));
             }
 
-            if (!body.containsKey("roadAddress") && body.get("address") != null) {
+            if (!body.containsKey("roadAddress")
+                    && body.get("address") != null) {
                 body.put("roadAddress", body.get("address"));
             }
         }
@@ -50,6 +50,9 @@ public class LocationController {
         return taskService.createFromFrontendBody(body);
     }
 
+    /**
+     * 방문지 작업 상태 변경
+     */
     @PatchMapping("/{id}/status")
     public Map<String, Object> updateStatus(
             @PathVariable Long id,
@@ -73,6 +76,6 @@ public class LocationController {
     public Map<String, Object> deleteLocation(
             @PathVariable Long id
     ) {
-        return taskService.deletePendingTask(id);
+        return taskService.deletePendingTask(id(id);
     }
 }
