@@ -431,6 +431,9 @@ public class GroupService {
         map.put("roadAddress", task.getRoadAddress());
         map.put("taskCategory", task.getTaskCategory());
         map.put("status", task.getTaskStatus());
+        map.put("adminDong", task.getAdminDong());
+        map.put("sido", task.getSido());
+        map.put("sigungu", task.getSigungu());
         map.put("lat", task.getLat());
         map.put("lng", task.getLng());
         map.put("assigneeUserId", assignee.getUserId());
