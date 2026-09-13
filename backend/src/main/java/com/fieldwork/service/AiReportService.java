@@ -69,7 +69,6 @@ public class AiReportService {
         return payload;
     }
 
-    @SuppressWarnings("unchecked")
     public Map<String, Object> generateReport(Task task, TaskProgress progress) throws Exception {
         Map<String, Object> payload = buildPayload(task, progress);
         String jsonPayload = objectMapper.writeValueAsString(payload);
@@ -94,7 +93,6 @@ public class AiReportService {
         return result;
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, Object> callPythonWithRetry(String jsonPayload) {
         int maxRetries = 3;
         int retryDelayMs = 2000;

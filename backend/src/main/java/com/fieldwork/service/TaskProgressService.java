@@ -77,7 +77,6 @@ public class TaskProgressService {
         return toResponseMap(progress, task);
     }
 
-    @SuppressWarnings("unchecked")
     public Map<String, Object> saveFromJson(Map<String, Object> body) throws Exception {
         Long taskId = Long.valueOf(body.get("taskId").toString());
         Task task = taskService.getById(taskId);
