@@ -22,9 +22,9 @@ import java.time.Instant;
 public class SgisBoundaryService {
 
     private static final String AUTH_URL =
-            "https://sgisapi.kostat.go.kr/OpenAPI3/auth/authentication.json";
+            "https://sgisapi.mods.go.kr/OpenAPI3/auth/authentication.json";
     private static final String BOUNDARY_URL =
-            "https://sgisapi.kostat.go.kr/OpenAPI3/boundary/hadmarea.geojson";
+            "https://sgisapi.mods.go.kr/OpenAPI3/boundary/hadmarea.geojson";
 
     private final RestClient restClient = RestClient.create();
     private final ObjectMapper objectMapper;
