@@ -2,9 +2,11 @@ import { showAlert } from '../components/CustomAlert';
 import React from 'react';
 import {
   Alert,
+  BackHandler,
   ScrollView,
   StyleSheet,
   Text,
+  ToastAndroid,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -54,6 +56,46 @@ export default function MainScreen({
 
   const [deletingId, setDeletingId] =
     React.useState(null);
+
+  const backPressedOnce = React.useRef(false);
+  const backPressTimer = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleBackPress = () => {
+      if (backPressedOnce.current) {
+        BackHandler.exitApp();
+        return true;
+      }
+
+      backPressedOnce.current = true;
+      ToastAndroid.show(
+        '뒤로가기 버튼을 한 번 더 누르면 종료됩니다.',
+        ToastAndroid.SHORT
+      );
+
+      backPressTimer.current = setTimeout(() => {
+        backPressedOnce.current = false;
+      }, 2000);
+
+      return true;
+    };
+
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      handleBackPress
+    );
+
+    return () => {
+      subscription.remove();
+
+      if (backPressTimer.current) {
+        clearTimeout(backPressTimer.current);
+        backPressTimer.current = null;
+      }
+
+      backPressedOnce.current = false;
+    };
+  }, []);
 
   const myAssignments = activeGroup
     ? groupAssignments.filter(
