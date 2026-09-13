@@ -49,6 +49,7 @@ const cleanLocation = (loc, fallbackName = '위치') => {
 };
 
 export default function MapScreen({
+  user,
   onBack,
   onLocationClick,
   onReportPress,
@@ -490,6 +491,8 @@ export default function MapScreen({
       sido: region?.sido || null,
       sigungu: region?.sigungu || null,
       adminDong: region?.adminDong || null,
+      createdByUserId: user?.userId,
+      groupId: activeGroup?.groupId ?? null,
     };
 
     try {

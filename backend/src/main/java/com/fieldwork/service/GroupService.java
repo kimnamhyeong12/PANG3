@@ -224,6 +224,27 @@ public class GroupService {
         Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new RuntimeException("방문지를 찾을 수 없습니다."));
 
+        if (task.getGroup() != null
+                && !task.getGroup().getGroupId().equals(group.getGroupId())) {
+            throw new RuntimeException("다른 그룹의 방문지는 배정할 수 없습니다.");
+        }
+
+        if (task.getGroup() == null
+                && task.getCreatedBy() != null
+                && !task.getCreatedBy().getUserId().equals(leader.getUserId())) {
+            throw new RuntimeException("다른 사용자의 개인 방문지는 배정할 수 없습니다.");
+        }
+
+        if (task.getGroup() == null) {
+            task.setGroup(group);
+        }
+
+        if (task.getCreatedBy() == null) {
+            task.setCreatedBy(leader);
+        }
+
+        taskRepository.save(task);
+
         LocationAssignment assignment = locationAssignmentRepository
                 .findByGroupAndTask(group, task)
                 .orElseGet(LocationAssignment::new);

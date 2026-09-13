@@ -51,7 +51,7 @@ export default function App() {
 
   const [todayLocationsLoaded, setTodayLocationsLoaded] = useState(false);
 
-  const TODAY_LOCATIONS_KEY = 'pang3_today_route_locations';
+  const TODAY_LOCATIONS_KEY_PREFIX = 'pang3_today_route_locations';
 
   const [activeGroup, setActiveGroup] = useState(null);
   const [groupAssignments, setGroupAssignments] = useState([]);
@@ -120,37 +120,54 @@ export default function App() {
   };
 
   useEffect(() => {
+    let cancelled = false;
+
     const restoreTodayLocations = async () => {
+      if (!user?.userId) {
+        setRouteLocations([]);
+        setTodayLocationsLoaded(false);
+        return;
+      }
+
+      setTodayLocationsLoaded(false);
+      setRouteLocations([]);
+
       try {
-        const saved = await AsyncStorage.getItem(TODAY_LOCATIONS_KEY);
+        const saved = await AsyncStorage.getItem(
+          `${TODAY_LOCATIONS_KEY_PREFIX}_${user.userId}`
+        );
 
         if (saved) {
           const parsed = JSON.parse(saved);
 
           if (Array.isArray(parsed)) {
-            setRouteLocations(parsed);
+            if (!cancelled) setRouteLocations(parsed);
           }
         }
       } catch (error) {
         console.log('오늘 외근 복원 실패:', error);
       } finally {
-        setTodayLocationsLoaded(true);
+        if (!cancelled) setTodayLocationsLoaded(true);
       }
     };
 
     restoreTodayLocations();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.userId]);
 
   useEffect(() => {
-    if (!todayLocationsLoaded) return;
+    if (!todayLocationsLoaded || !user?.userId) return;
 
     AsyncStorage.setItem(
-      TODAY_LOCATIONS_KEY,
+      `${TODAY_LOCATIONS_KEY_PREFIX}_${user.userId}`,
       JSON.stringify(routeLocations)
     ).catch((error) => {
       console.log('오늘 외근 저장 실패:', error);
     });
-  }, [routeLocations, todayLocationsLoaded]);
+  }, [routeLocations, todayLocationsLoaded, user?.userId]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') {
@@ -245,6 +262,16 @@ export default function App() {
     setGroupAssignments([]);
     setSelectedLocation(null);
     setActionType(null);
+    setRouteLocations([]);
+    setReportTargets([]);
+    setDownloadInfo(null);
+    setRoadPath([]);
+    setRouteSegments([]);
+    setCurrentSegmentIndex(0);
+    setOptimized(false);
+    setIsGuiding(false);
+    setTotalDuration(null);
+    setTodayLocationsLoaded(false);
 
     historyRef.current = [];
     screenRef.current = 'login';
@@ -273,6 +300,9 @@ export default function App() {
         {screen === 'login' && (
           <LoginScreen
             onLogin={(loginUser) => {
+              setRouteLocations([]);
+              setReportTargets([]);
+              setTodayLocationsLoaded(false);
               setUser(loginUser);
               setGroupAssignments([]);
               restoreActiveGroup(loginUser);
@@ -426,6 +456,7 @@ export default function App() {
 
         {screen === 'mapDirect' && (
           <MapScreen
+            user={user}
             locations={routeLocations}
             setLocations={
               setRouteLocations

@@ -97,7 +97,9 @@ export default function AssignmentScreen({
           groupApi(
             `/api/groups/${group.groupId}/assignments?userId=${user.userId}`
           ),
-          fetch(`${API_BASE_URL}/api/locations`),
+          fetch(
+            `${API_BASE_URL}/api/locations?userId=${encodeURIComponent(user.userId)}&groupId=${encodeURIComponent(group.groupId)}`
+          ),
         ]);
 
       if (!locationResponse.ok) {

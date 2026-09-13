@@ -97,7 +97,7 @@ export default function MainScreen({
 
   React.useEffect(() => {
     loadIncompleteLocations();
-  }, [locations]);
+  }, [locations, user?.userId, activeGroup?.groupId]);
 
   const loadIncompleteLocations = async () => {
     try {
@@ -106,8 +106,19 @@ export default function MainScreen({
         return;
       }
 
+      if (!user?.userId) {
+        setIncompleteLocations([]);
+        return;
+      }
+
+      const query =
+        `userId=${encodeURIComponent(user.userId)}` +
+        (activeGroup?.groupId
+          ? `&groupId=${encodeURIComponent(activeGroup.groupId)}`
+          : '');
+
       const res = await fetch(
-        `${API_BASE_URL}/api/locations`
+        `${API_BASE_URL}/api/locations?${query}`
       );
 
       const text = await res.text();

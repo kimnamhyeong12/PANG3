@@ -25,8 +25,11 @@ public class LocationController {
      * 신규: task 테이블 기준 목록 (프론트 호환 필드 포함)
      */
     @GetMapping
-    public List<Map<String, Object>> getLocations() {
-        return taskService.getAllForFrontend();
+    public List<Map<String, Object>> getLocations(
+            @RequestParam Long userId,
+            @RequestParam(required = false) Long groupId
+    ) {
+        return taskService.getForFrontend(userId, groupId);
     }
 
     /**

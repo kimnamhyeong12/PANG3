@@ -5,6 +5,9 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 @Entity
@@ -39,6 +42,14 @@ public class Task {
 
     @Column(name = "admin_dong")
     private String adminDong;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by_user_id")
+    private User createdBy;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_id")
+    private WorkGroup group;
 
     public Long getTaskId() {
         return taskId;
@@ -118,5 +129,21 @@ public class Task {
 
     public void setAdminDong(String adminDong) {
         this.adminDong = adminDong;
+    }
+
+    public User getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(User createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public WorkGroup getGroup() {
+        return group;
+    }
+
+    public void setGroup(WorkGroup group) {
+        this.group = group;
     }
 }

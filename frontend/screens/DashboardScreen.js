@@ -153,7 +153,7 @@ export default function DashboardScreen({
          */
         const locationResponse =
           await fetch(
-            `${API_BASE_URL}/api/locations`
+            `${API_BASE_URL}/api/locations?userId=${encodeURIComponent(user.userId)}&groupId=${encodeURIComponent(activeGroup.groupId)}`
           );
 
         if (!locationResponse.ok) {
