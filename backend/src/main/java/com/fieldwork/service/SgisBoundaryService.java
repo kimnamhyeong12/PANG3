@@ -148,7 +148,7 @@ public class SgisBoundaryService {
             ObjectNode converted = feature.deepCopy();
             JsonNode geometry = feature.path("geometry");
             String type = geometry.path("type").asText();
-            ObjectNode convertedGeometry = converted.with("geometry");
+            ObjectNode convertedGeometry = converted.withObject("geometry");
 
             if ("Polygon".equals(type)) {
                 convertedGeometry.set("coordinates", convertPolygon(geometry.path("coordinates")));

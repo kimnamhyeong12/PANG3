@@ -76,6 +76,6 @@ public class LocationController {
     public Map<String, Object> deleteLocation(
             @PathVariable Long id
     ) {
-        return taskService.deletePendingTask(id(id);
+        return taskService.deletePendingTask(id);
     }
 }
