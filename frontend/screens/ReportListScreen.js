@@ -1,19 +1,20 @@
+import { showAlert } from '../components/CustomAlert';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   View,
   Text,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BackButton, PrimaryButton } from '../components/ui';
 
 const getStatusLabel = (status) => {
-  if (status === 'complete') return '작업완료';
-  if (status === 'working') return '작업중';
-  return '미작업';
+  if (status === 'complete') return '작업 후';
+  if (status === 'working') return '작업 중';
+  return '작업 전';
 };
 
 const getStatusColor = (status) => {
@@ -22,36 +23,77 @@ const getStatusColor = (status) => {
   return '#E74C3C';
 };
 
+const getTaskId = (loc) =>
+  loc?.id ??
+  loc?.taskId ??
+  loc?.task_id ??
+  null;
+
+const getGroupName = (loc, activeGroup, assignment) =>
+  loc?.groupName ||
+  loc?.group_name ||
+  loc?.group?.groupName ||
+  assignment?.groupName ||
+  activeGroup?.groupName ||
+  '팀';
+
+const isPersonalGroup = (group) =>
+  Boolean(
+    group?.personalWorkspace ||
+    group?.personal ||
+    group?.workspaceType === 'PERSONAL'
+  );
+
 export default function ReportListScreen({
   locations = [],
+  loading = false,
+  user,
+  activeGroup,
+  groupAssignments = [],
   onBack,
   onSelectLocation,
   onCreateReport,
 }) {
   const [selectedIds, setSelectedIds] = useState([]);
 
+  const assignmentMap = new Map(
+    groupAssignments.map((item) => [Number(item.taskId), item])
+  );
+
   const isReportable = (loc) =>
     loc.status === 'working' || loc.status === 'complete';
 
   const toggleSelect = (loc) => {
     if (!isReportable(loc)) {
-      Alert.alert('선택 불가', '미작업 방문지는 보고서에 포함할 수 없습니다.');
+      showAlert(
+        '선택 불가',
+        '작업 전 방문지는 보고서에 포함할 수 없습니다.'
+      );
       return;
     }
 
-    const id = loc.id;
+    const id = getTaskId(loc);
+
     setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]
+      prev.includes(id)
+        ? prev.filter((v) => v !== id)
+        : [...prev, id]
     );
   };
 
   const selectedLocations = locations.filter((loc) =>
-    selectedIds.includes(loc.id)
+    selectedIds.includes(getTaskId(loc))
   );
+
+  const workspaceName = activeGroup?.groupName || user?.name || user?.loginId || '나';
+  const personalWorkspace = !activeGroup || isPersonalGroup(activeGroup);
 
   const handleCreateReport = () => {
     if (selectedLocations.length === 0) {
-      Alert.alert('선택 필요', '보고서에 포함할 방문지를 선택하세요.');
+      showAlert(
+        '선택 필요',
+        '보고서에 포함할 방문지를 선택하세요.'
+      );
       return;
     }
 
@@ -62,50 +104,103 @@ export default function ReportListScreen({
     <View style={styles.container}>
       <View style={styles.header}>
         <BackButton onPress={onBack} />
+
         <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>FIELD REPORT</Text>
-          <Text style={styles.title}>보고서 작성</Text>
+          <Text style={styles.eyebrow}>
+            FIELD REPORT
+          </Text>
+
+          <Text style={styles.title}>
+            보고서 작성
+          </Text>
+
           <Text style={styles.desc}>
-            작업중 또는 작업완료 방문지만 보고서에 포함할 수 있습니다
+            작업 중 또는 작업 후 방문지만 보고서에 포함할 수 있습니다
+          </Text>
+
+          <Text style={styles.scopeSummary}>
+            현재 업무공간 · {workspaceName}
           </Text>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body}>
-        {locations.length === 0 ? (
+      <ScrollView
+        contentContainerStyle={styles.body}
+      >
+        {loading ? (
           <View style={styles.emptyBox}>
-            <Ionicons name="document-text-outline" size={36} color="#8A98A8" />
-            <Text style={styles.emptyTitle}>등록된 방문지가 없습니다</Text>
+            <ActivityIndicator size="large" color="#173A5E" />
+            <Text style={styles.emptyTitle}>방문지를 불러오는 중입니다</Text>
+          </View>
+        ) : locations.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Ionicons
+              name="document-text-outline"
+              size={36}
+              color="#8A98A8"
+            />
+
+            <Text style={styles.emptyTitle}>
+              등록된 방문지가 없습니다
+            </Text>
+
             <Text style={styles.emptyDesc}>
               지도에서 방문지를 먼저 추가해주세요.
             </Text>
           </View>
         ) : (
           locations.map((loc, index) => {
-            const reportable = isReportable(loc);
-            const checked = selectedIds.includes(loc.id);
+            const reportable =
+              isReportable(loc);
+
+            const taskId = getTaskId(loc);
+
+            const checked =
+              selectedIds.includes(taskId);
+
+            const assignment =
+              assignmentMap.get(
+                Number(taskId)
+              );
+
+            // 이제 1인 그룹도 groupId와 담당자 배정을 가지므로 현재 그룹 유형으로 구분한다.
+            const isTeamLocation = !personalWorkspace;
+
+            const groupName = isTeamLocation
+              ? getGroupName(
+                  loc,
+                  activeGroup,
+                  assignment
+                )
+              : null;
 
             return (
               <View
-                key={loc.id ?? index}
-                style={[
-                  styles.item,
-                ]}
+                key={taskId ?? index}
+                style={styles.item}
               >
                 <TouchableOpacity
                   style={styles.checkArea}
-                  onPress={() => toggleSelect(loc)}
+                  onPress={() =>
+                    toggleSelect(loc)
+                  }
                   activeOpacity={0.8}
                 >
                   <View
                     style={[
                       styles.checkBox,
-                      checked && styles.checkBoxActive,
-                      !reportable && styles.checkBoxDisabled,
+                      checked &&
+                        styles.checkBoxActive,
+                      !reportable &&
+                        styles.checkBoxDisabled,
                     ]}
                   >
                     {checked && (
-                      <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                      <Ionicons
+                        name="checkmark"
+                        size={16}
+                        color="#FFFFFF"
+                      />
                     )}
                   </View>
                 </TouchableOpacity>
@@ -113,38 +208,133 @@ export default function ReportListScreen({
                 <TouchableOpacity
                   style={styles.itemMain}
                   activeOpacity={0.85}
-                  onPress={() => onSelectLocation?.(loc)}
+                  onPress={() =>
+                    onSelectLocation?.(loc)
+                  }
                 >
                   <View
                     style={[
                       styles.noBox,
-                      { backgroundColor: getStatusColor(loc.status) },
+                      {
+                        backgroundColor:
+                          getStatusColor(
+                            loc.status
+                          ),
+                      },
                     ]}
                   >
-                    <Text style={styles.noText}>{index + 1}</Text>
+                    <Text style={styles.noText}>
+                      {index + 1}
+                    </Text>
                   </View>
 
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.itemTitle} numberOfLines={1}>
-                      {loc.detailAddress || loc.roadAddress || '이름 없음'}
+                    <Text
+                      style={styles.itemTitle}
+                      numberOfLines={1}
+                    >
+                      {loc.detailAddress ||
+                        loc.roadAddress ||
+                        '이름 없음'}
                     </Text>
 
-                    <Text style={styles.itemAddr} numberOfLines={1}>
-                      {loc.roadAddress || '주소 없음'}
+                    <View style={styles.scopeRow}>
+                      <View
+                        style={[
+                          styles.scopeBadge,
+                          isTeamLocation
+                            ? styles.teamScopeBadge
+                            : styles.personalScopeBadge,
+                        ]}
+                      >
+                        <Ionicons
+                          name={
+                            isTeamLocation
+                              ? 'people'
+                              : 'person'
+                          }
+                          size={11}
+                          color={
+                            isTeamLocation
+                              ? '#12395B'
+                              : '#475569'
+                          }
+                        />
+
+                        <Text
+                          style={[
+                            styles.scopeBadgeText,
+                            isTeamLocation
+                              ? styles.teamScopeText
+                              : styles.personalScopeText,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {isTeamLocation
+                            ? `팀 · ${groupName}`
+                            : `1인 · ${workspaceName}`}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text
+                      style={styles.itemAddr}
+                      numberOfLines={1}
+                    >
+                      {loc.roadAddress ||
+                        '주소 없음'}
                     </Text>
+
+                    {isTeamLocation && (
+                      <View
+                        style={styles.assigneeRow}
+                      >
+                        <Ionicons
+                          name="person-outline"
+                          size={12}
+                          color="#12395B"
+                        />
+
+                        <Text
+                          style={[
+                            styles.assigneeText,
+                            !assignment &&
+                              styles.assigneeEmpty,
+                          ]}
+                        >
+                          {assignment
+                            ? `담당자: ${
+                                assignment.assigneeName ||
+                                assignment.assigneeLoginId
+                              }`
+                            : '담당자 미지정'}
+                        </Text>
+                      </View>
+                    )}
 
                     <View style={styles.statusRow}>
                       <Text
                         style={[
                           styles.statusBadge,
-                          { color: getStatusColor(loc.status) },
+                          {
+                            color:
+                              getStatusColor(
+                                loc.status
+                              ),
+                          },
                         ]}
                       >
-                        {getStatusLabel(loc.status)}
+                        {getStatusLabel(
+                          loc.status
+                        )}
                       </Text>
 
                       {!reportable && (
-                        <Text style={styles.disabledText}>
+                        <Text
+                          style={
+                            styles.disabledText
+                          }
+                        >
                           보고서 포함 불가
                         </Text>
                       )}
@@ -157,6 +347,7 @@ export default function ReportListScreen({
                     color="#607086"
                   />
                 </TouchableOpacity>
+
               </View>
             );
           })
@@ -171,7 +362,9 @@ export default function ReportListScreen({
         <PrimaryButton
           title="선택한 방문지로 보고서 만들기"
           onPress={handleCreateReport}
-          disabled={selectedLocations.length === 0}
+          disabled={
+            selectedLocations.length === 0
+          }
         />
       </View>
     </View>
@@ -189,7 +382,11 @@ const styles = StyleSheet.create({
     gap: 12,
     alignItems: 'center',
     backgroundColor: 'white',
-    padding: 14,
+
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    paddingTop: 34,
+
     borderBottomWidth: 1,
     borderBottomColor: '#D9E1EA',
   },
@@ -210,6 +407,13 @@ const styles = StyleSheet.create({
   desc: {
     fontSize: 10,
     color: '#718096',
+  },
+
+  scopeSummary: {
+    marginTop: 5,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#12395B',
   },
 
   body: {
@@ -304,10 +508,69 @@ const styles = StyleSheet.create({
     color: '#1F2D3D',
   },
 
+  scopeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+
+  scopeBadge: {
+    maxWidth: '100%',
+    minHeight: 25,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+  },
+
+  teamScopeBadge: {
+    backgroundColor: '#EAF1F7',
+    borderColor: '#C7D7E6',
+  },
+
+  personalScopeBadge: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#D7DEE7',
+  },
+
+  scopeBadgeText: {
+    flexShrink: 1,
+    fontSize: 9,
+    fontWeight: '900',
+  },
+
+  teamScopeText: {
+    color: '#12395B',
+  },
+
+  personalScopeText: {
+    color: '#475569',
+  },
+
   itemAddr: {
-    marginTop: 4,
+    marginTop: 5,
     fontSize: 11,
     color: '#607086',
+  },
+
+  assigneeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 5,
+  },
+
+  assigneeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#12395B',
+  },
+
+  assigneeEmpty: {
+    color: '#E67E22',
   },
 
   statusRow: {
@@ -334,7 +597,11 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: '#FFFFFF',
-    padding: 14,
+
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 60,
+
     borderTopWidth: 1,
     borderTopColor: '#D9E1EA',
   },

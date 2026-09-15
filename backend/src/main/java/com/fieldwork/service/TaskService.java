@@ -28,6 +28,7 @@ public class TaskService {
     private final UserRepository userRepository;
     private final WorkGroupRepository workGroupRepository;
     private final GroupMemberRepository groupMemberRepository;
+    private final GroupService groupService;
 
     public TaskService(
             TaskRepository taskRepository,
@@ -35,7 +36,8 @@ public class TaskService {
             LocationAssignmentRepository locationAssignmentRepository,
             UserRepository userRepository,
             WorkGroupRepository workGroupRepository,
-            GroupMemberRepository groupMemberRepository
+            GroupMemberRepository groupMemberRepository,
+            GroupService groupService
     ) {
         this.taskRepository = taskRepository;
         this.taskProgressRepository = taskProgressRepository;
@@ -43,23 +45,22 @@ public class TaskService {
         this.userRepository = userRepository;
         this.workGroupRepository = workGroupRepository;
         this.groupMemberRepository = groupMemberRepository;
+        this.groupService = groupService;
     }
 
+    @Transactional(readOnly = true)
     public List<Map<String, Object>> getAllForFrontend() {
         return taskRepository.findAll().stream()
                 .map(this::toFrontendMap)
                 .collect(Collectors.toList());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<Map<String, Object>> getForFrontend(Long userId, Long groupId) {
         User user = getUser(userId);
 
         if (groupId == null) {
-            return taskRepository.findByCreatedByAndGroupIsNullOrderByTaskIdDesc(user)
-                    .stream()
-                    .map(this::toFrontendMap)
-                    .collect(Collectors.toList());
+            groupId = groupService.ensurePersonalGroup(user).getGroupId();
         }
 
         WorkGroup group = getGroup(groupId);
@@ -112,15 +113,16 @@ public class TaskService {
         task.setCreatedBy(creator);
 
         Long groupId = toLong(body.get("groupId"));
+        if (groupId == null) {
+            groupId = groupService.ensurePersonalGroup(creator).getGroupId();
+        }
         GroupMember creatorMembership = null;
         WorkGroup taskGroup = null;
-        if (groupId != null) {
-            WorkGroup group = getGroup(groupId);
-            creatorMembership = groupMemberRepository.findByGroupAndUser(group, creator)
-                    .orElseThrow(() -> new RuntimeException("해당 그룹의 멤버만 그룹 방문지를 만들 수 있습니다."));
-            task.setGroup(group);
-            taskGroup = group;
-        }
+        WorkGroup group = getGroup(groupId);
+        creatorMembership = groupMemberRepository.findByGroupAndUser(group, creator)
+                .orElseThrow(() -> new RuntimeException("해당 그룹의 멤버만 방문지를 만들 수 있습니다."));
+        task.setGroup(group);
+        taskGroup = group;
 
         task.setDetailAddress(firstNonBlank(
                 str(body.get("detailAddress")),
@@ -173,11 +175,12 @@ public class TaskService {
 
         Task savedTask = taskRepository.save(task);
 
-        // 팀원이 그룹 안에서 추가한 방문지는 등록한 팀원 본인에게 즉시 배정한다.
-        // 팀장이 추가한 방문지는 담당자 지정 화면에서 그룹원에게 배정한다.
+        // 1인 그룹과 일반 팀원은 등록 즉시 본인 담당으로 연결한다.
+        // 다인 그룹의 팀장이 추가한 방문지는 담당자 지정 화면에서 배정한다.
         if (taskGroup != null
                 && creatorMembership != null
-                && "MEMBER".equalsIgnoreCase(creatorMembership.getRole())) {
+                && (taskGroup.isPersonal()
+                    || "MEMBER".equalsIgnoreCase(creatorMembership.getRole()))) {
             LocationAssignment assignment = new LocationAssignment();
             assignment.setGroup(taskGroup);
             assignment.setTask(savedTask);
@@ -189,6 +192,7 @@ public class TaskService {
         return toFrontendMap(savedTask);
     }
 
+    @Transactional
     public Map<String, Object> updateStatus(Long taskId, String status) {
         Task task = getById(taskId);
         task.setTaskStatus(status);
@@ -295,6 +299,15 @@ public class TaskService {
         map.put("groupId", task.getGroup() != null
                 ? task.getGroup().getGroupId()
                 : null);
+        map.put("groupName", task.getGroup() != null
+                ? task.getGroup().getName()
+                : null);
+        map.put("personalWorkspace", task.getGroup() != null
+                && task.getGroup().isPersonal());
+        map.put("workspaceType", task.getGroup() != null
+                && task.getGroup().isPersonal()
+                ? "PERSONAL"
+                : "TEAM");
 
         return map;
     }

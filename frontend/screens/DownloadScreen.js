@@ -1,3 +1,4 @@
+import { showAlert } from '../components/CustomAlert';
 import React from 'react';
 import { View, Text, StyleSheet, Linking, Alert } from 'react-native';
 import { BackButton, PrimaryButton } from '../components/ui';
@@ -7,14 +8,14 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
   const openReport = async () => {
     const url = resolveApiUrl(downloadInfo?.reportDownloadUrl);
     if (!url) {
-      Alert.alert('다운로드 불가', '생성된 보고서 파일이 없습니다. 현장 화면에서 먼저 저장하세요.');
+      showAlert('다운로드 불가', '생성된 보고서 파일이 없습니다. 현장 화면에서 먼저 저장하세요.');
       return;
     }
     try {
       await Linking.openURL(url);
     } catch (error) {
       console.log(error);
-      Alert.alert('열기 실패', url);
+      showAlert('열기 실패', url);
     }
   };
 

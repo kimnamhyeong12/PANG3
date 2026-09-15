@@ -1,3 +1,4 @@
+import { showAlert } from '../components/CustomAlert';
 import React, { useState } from 'react';
 import {
   View,
@@ -6,7 +7,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { PrimaryButton } from '../components/ui';
 
@@ -40,11 +40,11 @@ export default function RegisterScreen({ onBack }) {
         throw new Error('회원가입 실패');
       }
 
-      Alert.alert('회원가입 완료', '이제 로그인할 수 있습니다.');
+      showAlert('회원가입 완료', '이제 로그인할 수 있습니다.');
       onBack();
     } catch (error) {
       console.log(error);
-      Alert.alert('회원가입 실패', '이미 존재하는 아이디이거나 서버 오류입니다.');
+      showAlert('회원가입 실패', '이미 존재하는 아이디이거나 서버 오류입니다.');
     } finally {
       setLoading(false);
     }

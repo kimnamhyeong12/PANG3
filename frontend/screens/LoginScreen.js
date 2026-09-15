@@ -1,3 +1,4 @@
+import { showAlert } from '../components/CustomAlert';
 import React, { useState } from 'react';
 import {
   View,
@@ -6,7 +7,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { PrimaryButton } from '../components/ui';
 
@@ -45,7 +45,7 @@ export default function LoginScreen({ onLogin, onRegister }) {
       onLogin(data);
     } catch (error) {
       console.log(error);
-      Alert.alert('로그인 실패', '아이디 또는 비밀번호를 확인해주세요.');
+      showAlert('로그인 실패', '아이디 또는 비밀번호를 확인해주세요.');
     } finally {
       setLoading(false);
     }

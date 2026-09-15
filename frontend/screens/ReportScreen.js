@@ -3,14 +3,23 @@ import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from 'react-nat
 import { BackButton, PrimaryButton } from '../components/ui';
 import { API_BASE_URL } from '../utils/api';
 
+const isPersonalGroup = (group) =>
+  Boolean(
+    group?.personalWorkspace ||
+    group?.personal ||
+    group?.workspaceType === 'PERSONAL'
+  );
+
 const getStatusLabel = (status) => {
-  if (status === 'complete') return '작업완료';
-  if (status === 'working') return '작업중';
-  return '미작업';
+  if (status === 'complete') return '작업 후';
+  if (status === 'working') return '작업 중';
+  return '작업 전';
 };
 
 export default function ReportScreen({
   locations = [],
+  user,
+  activeGroup,
   onBack,
   onDownload,
 }) {
@@ -54,6 +63,8 @@ export default function ReportScreen({
   const complete = locations.filter((l) => l.status === 'complete').length;
   const working = locations.filter((l) => l.status === 'working').length;
   const firstWithReport = rows.find((r) => r.progress?.reportDownloadUrl);
+  const workspaceName = activeGroup?.groupName || user?.name || user?.loginId || '나';
+  const workspaceType = !activeGroup || isPersonalGroup(activeGroup) ? '1인 그룹' : '팀 그룹';
 
   return (
     <View style={styles.container}>
@@ -69,9 +80,10 @@ export default function ReportScreen({
       <ScrollView contentContainerStyle={styles.body}>
         <View style={styles.reportPaper}>
           <Text style={styles.reportTitle}>사하구 외근 업무 결과 보고서</Text>
+          <Text style={styles.line}>업무공간: {workspaceName} ({workspaceType})</Text>
           <Text style={styles.line}>보고 대상 방문지: {locations.length}개</Text>
           <Text style={styles.line}>
-            작업완료: {complete}개 / 작업중: {working}개
+            작업 후: {complete}개 / 작업 중: {working}개
           </Text>
 
           <View style={styles.divider} />

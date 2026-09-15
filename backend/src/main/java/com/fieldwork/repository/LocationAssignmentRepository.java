@@ -26,5 +26,7 @@ public interface LocationAssignmentRepository
             Task task
     );
 
+    List<LocationAssignment> findByTaskOrderByAssignedAtAsc(Task task);
+
     void deleteByTask_TaskId(Long taskId);
 }

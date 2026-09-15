@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { showAlert } from '../components/CustomAlert';
+import React, { useEffect, useRef, useState } from 'react';
+
 import {
   View,
   Text,
@@ -8,14 +10,51 @@ import {
   ScrollView,
   Image,
 } from 'react-native';
+
 import * as ImagePicker from 'expo-image-picker';
-import { BackButton, PrimaryButton } from '../components/ui';
+import { WebView } from 'react-native-webview';
+
+import {
+  BackButton,
+  PrimaryButton,
+} from '../components/ui';
+
 import VoiceTextInput from '../components/VoiceTextInput';
 import PhotoMarkupEditor from '../components/PhotoMarkupEditor';
-import { API_BASE_URL, resolveApiUrl } from '../utils/api';
+
+import {
+  API_BASE_URL,
+  resolveApiUrl,
+} from '../utils/api';
+
+const KAKAO_JAVASCRIPT_KEY =
+  process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY || '';
+
+const PHOTO_TYPES = [
+  {
+    key: 'before',
+    label: '작업 전',
+  },
+  {
+    key: 'during',
+    label: '작업 중',
+  },
+  {
+    key: 'after',
+    label: '작업 후',
+  },
+];
+
+const createEmptyPhotos = () =>
+  PHOTO_TYPES.map((type) => ({
+    type: type.key,
+    label: type.label,
+    uri: null,
+    comment: '',
+  }));
 
 function getAiRecommendation(memo) {
-  const text = memo.toLowerCase();
+  const text = (memo || '').toLowerCase();
 
   if (
     text.includes('배수') ||
@@ -51,8 +90,201 @@ function getAiRecommendation(memo) {
     category: '일반 점검',
     risk: '보통',
     riskColor: '#F39C12',
-    report: '현장 점검 결과 특이사항을 기록하고 추후 필요 시 재확인함.',
+    report:
+      '현장 점검 결과 특이사항을 기록하고 추후 필요 시 재확인함.',
   };
+}
+
+function isValidCoordinate(latitude, longitude) {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
+}
+
+function getInteractiveMapHtml(latitude, longitude) {
+  const valid = isValidCoordinate(
+    latitude,
+    longitude
+  );
+
+  const lat = valid
+    ? Number(latitude)
+    : 35.104578;
+
+  const lng = valid
+    ? Number(longitude)
+    : 128.975;
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta
+          name="viewport"
+          content="
+            width=device-width,
+            initial-scale=1.0,
+            maximum-scale=5.0,
+            minimum-scale=1.0,
+            user-scalable=yes
+          "
+        />
+
+        <style>
+          * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+          }
+
+          html,
+          body,
+          #map {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+          }
+
+          body {
+            background: #EAF1F7;
+          }
+        </style>
+
+        <script
+          type="text/javascript"
+          src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JAVASCRIPT_KEY}&autoload=false"
+        ></script>
+      </head>
+
+      <body>
+        <div id="map"></div>
+
+        <script>
+          var map = null;
+          var marker = null;
+          var ready = false;
+
+          function postMessage(data) {
+            if (!window.ReactNativeWebView) {
+              return;
+            }
+
+            window.ReactNativeWebView.postMessage(
+              JSON.stringify(data)
+            );
+          }
+
+          window.setExternalPosition = function(
+            latitude,
+            longitude
+          ) {
+            if (!ready || !map || !marker) {
+              return;
+            }
+
+            var lat = Number(latitude);
+            var lng = Number(longitude);
+
+            if (
+              !Number.isFinite(lat) ||
+              !Number.isFinite(lng)
+            ) {
+              return;
+            }
+
+            var position =
+              new window.kakao.maps.LatLng(
+                lat,
+                lng
+              );
+
+            marker.setPosition(position);
+
+            map.relayout();
+            map.panTo(position);
+          };
+
+          function startMap() {
+            if (
+              !window.kakao ||
+              !window.kakao.maps ||
+              !window.kakao.maps.load
+            ) {
+              setTimeout(startMap, 100);
+              return;
+            }
+
+            window.kakao.maps.load(function() {
+              var initialPosition =
+                new window.kakao.maps.LatLng(
+                  ${lat},
+                  ${lng}
+                );
+
+              var container =
+                document.getElementById('map');
+
+              map =
+                new window.kakao.maps.Map(
+                  container,
+                  {
+                    center: initialPosition,
+                    level: 4
+                  }
+                );
+
+              marker =
+                new window.kakao.maps.Marker({
+                  position: initialPosition,
+                  map: map
+                });
+
+              ready = true;
+
+              setTimeout(function() {
+                map.relayout();
+                map.setCenter(
+                  initialPosition
+                );
+              }, 300);
+
+              window.kakao.maps.event.addListener(
+                map,
+                'click',
+                function(mouseEvent) {
+                  var position =
+                    mouseEvent.latLng;
+
+                  marker.setPosition(
+                    position
+                  );
+
+                  map.panTo(position);
+
+                  postMessage({
+                    type: 'LOCATION_SELECTED',
+                    latitude: position.getLat(),
+                    longitude: position.getLng()
+                  });
+                }
+              );
+            });
+          }
+
+          startMap();
+        </script>
+      </body>
+    </html>
+  `;
 }
 
 export default function FieldActionScreen({
@@ -61,489 +293,1294 @@ export default function FieldActionScreen({
   onBack,
   onSave,
 }) {
-  console.log('현재 location:', location);
-  console.log('location.id:', location?.id);
-  console.log('location.taskId:', location?.taskId);
-  console.log('location.task_id:', location?.task_id);
-  const [status, setStatus] = useState(location?.status || 'pending');
+  const mapRef = useRef(null);
 
-  const [latitude, setLatitude] = useState(
-    location?.latitude || location?.lat
-      ? String(location.latitude ?? location.lat)
-      : ''
-  );
+  const [
+    mapInteracting,
+    setMapInteracting,
+  ] = useState(false);
 
-  const [longitude, setLongitude] = useState(
-    location?.longitude || location?.lng
-      ? String(location.longitude ?? location.lng)
-      : ''
-  );
+  const [status, setStatus] =
+    useState(
+      location?.status || 'pending'
+    );
 
-  const [locationMapImage, setLocationMapImage] = useState(null);
-  const [photos, setPhotos] = useState([]);
-  const [mainComment, setMainComment] = useState('');
-  const [fieldMemo, setFieldMemo] = useState('');
-  const [aiRefinedContent, setAiRefinedContent] = useState('');
-  const [reportDownloadUrl, setReportDownloadUrl] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [photoEditor, setPhotoEditor] = useState({ visible: false, uri: null, index: null, isNew: false });
+  const [latitude, setLatitude] =
+    useState(
+      location?.latitude !== null &&
+        location?.latitude !== undefined
+        ? String(location.latitude)
+        : location?.lat !== null &&
+          location?.lat !== undefined
+        ? String(location.lat)
+        : ''
+    );
 
-  const taskId = location?.id ?? location?.taskId ?? location?.task_id;
+  const [longitude, setLongitude] =
+    useState(
+      location?.longitude !== null &&
+        location?.longitude !== undefined
+        ? String(location.longitude)
+        : location?.lng !== null &&
+          location?.lng !== undefined
+        ? String(location.lng)
+        : ''
+    );
 
+  const [photos, setPhotos] =
+    useState(createEmptyPhotos());
+
+  const [
+    fieldMemo,
+    setFieldMemo,
+  ] = useState('');
+
+  const [
+    aiRefinedContent,
+    setAiRefinedContent,
+  ] = useState('');
+
+  const [
+    reportDownloadUrl,
+    setReportDownloadUrl,
+  ] = useState(null);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [
+    photoEditor,
+    setPhotoEditor,
+  ] = useState({
+    visible: false,
+    uri: null,
+    index: null,
+  });
+
+  const taskId =
+    location?.id ??
+    location?.taskId ??
+    location?.task_id;
+
+  /*
+   * 기존 저장 보고서 불러오기
+   */
   useEffect(() => {
-    const loadSavedReport = async () => {
-      if (!taskId || !API_BASE_URL) return;
-
-      try {
-        console.log('보고서 불러오기 taskId:', taskId);
-
-        const res = await fetch(
-          `${API_BASE_URL}/api/task-progress/task/${taskId}`
-        );
-
-        if (!res.ok) {
-          console.log('보고서 불러오기 실패 status:', res.status);
+    const loadSavedReport =
+      async () => {
+        if (
+          !taskId ||
+          !API_BASE_URL
+        ) {
           return;
         }
 
-        const data = await res.json();
+        try {
+          console.log(
+            '보고서 불러오기 taskId:',
+            taskId
+          );
 
-        if (!data) return;
+          const res =
+            await fetch(
+              `${API_BASE_URL}/api/task-progress/task/${taskId}`
+            );
 
-        console.log('저장된 보고서 불러오기 성공:', data);
+          if (!res.ok) {
+            console.log(
+              '보고서 불러오기 실패 status:',
+              res.status
+            );
+            return;
+          }
 
-        setLatitude(
-          data.latitude !== null && data.latitude !== undefined
-            ? String(data.latitude)
-            : ''
-        );
+          /*
+           * 응답이 비어있는 경우
+           * JSON parse 오류 방지
+           */
+          const responseText =
+            await res.text();
 
-        setLongitude(
-          data.longitude !== null && data.longitude !== undefined
-            ? String(data.longitude)
-            : ''
-        );
+          if (
+            !responseText ||
+            !responseText.trim()
+          ) {
+            return;
+          }
 
-        setLocationMapImage(resolveApiUrl(data.locationMapImage) || null);
-        setPhotos(
-          (data.fieldPhotos || []).map((p) => ({
-            uri: resolveApiUrl(p.uri || p.path) || p.uri || p.path,
-            comment: p.comment || '',
-          }))
-        );
-        setMainComment(data.mainComment || '');
-        setFieldMemo(data.fieldMemo || '');
-        setAiRefinedContent(data.aiRefinedContent || '');
-        setReportDownloadUrl(
-          data.reportDownloadUrl
-            ? resolveApiUrl(data.reportDownloadUrl)
-            : null
-        );
-        setStatus(data.progressStatus || location?.status || 'pending');
-      } catch (error) {
-        console.log('저장된 보고서 불러오기 실패:', error);
-      }
-    };
+          let data;
+
+          try {
+            data =
+              JSON.parse(responseText);
+          } catch (error) {
+            console.log(
+              '보고서 응답 JSON 변환 실패:',
+              error
+            );
+            return;
+          }
+
+          if (!data) {
+            return;
+          }
+
+          console.log(
+            '저장된 보고서 불러오기 성공:',
+            data
+          );
+
+          if (
+            data.latitude !== null &&
+            data.latitude !== undefined
+          ) {
+            setLatitude(
+              String(data.latitude)
+            );
+          }
+
+          if (
+            data.longitude !== null &&
+            data.longitude !== undefined
+          ) {
+            setLongitude(
+              String(data.longitude)
+            );
+          }
+
+          const savedPhotos =
+            data.fieldPhotos || [];
+
+          setPhotos(
+            PHOTO_TYPES.map(
+              (type, index) => {
+                const savedPhoto =
+                  savedPhotos[index];
+
+                return {
+                  type: type.key,
+                  label: type.label,
+
+                  uri: savedPhoto
+                    ? resolveApiUrl(
+                        savedPhoto.uri ||
+                          savedPhoto.path
+                      ) ||
+                      savedPhoto.uri ||
+                      savedPhoto.path
+                    : null,
+
+                  comment:
+                    savedPhoto?.comment ||
+                    '',
+                };
+              }
+            )
+          );
+
+          setFieldMemo(
+            data.fieldMemo || ''
+          );
+
+          setAiRefinedContent(
+            data.aiRefinedContent || ''
+          );
+
+          setReportDownloadUrl(
+            data.reportDownloadUrl
+              ? resolveApiUrl(
+                  data.reportDownloadUrl
+                )
+              : null
+          );
+
+          const currentLocationStatus = location?.status;
+          setStatus(
+            currentLocationStatus === 'working' || currentLocationStatus === 'complete'
+              ? currentLocationStatus
+              : data.progressStatus || currentLocationStatus || 'pending'
+          );
+        } catch (error) {
+          console.log(
+            '저장된 보고서 불러오기 실패:',
+            error
+          );
+        }
+      };
 
     loadSavedReport();
   }, [taskId]);
 
-  const rec = getAiRecommendation(`${mainComment} ${fieldMemo}`);
+  const rec =
+    getAiRecommendation(
+      fieldMemo
+    );
 
-  const pickLocationMapImage = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return;
+  /*
+   * 지도에서 위치 선택
+   */
+  const handleMapMessage = (
+    event
+  ) => {
+    try {
+      const data =
+        JSON.parse(
+          event.nativeEvent.data
+        );
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      quality: 0.8,
-    });
+      if (
+        data.type ===
+        'LOCATION_SELECTED'
+      ) {
+        setLatitude(
+          String(data.latitude)
+        );
 
-    if (!result.canceled) {
-      setLocationMapImage(result.assets[0].uri);
+        setLongitude(
+          String(data.longitude)
+        );
+      }
+    } catch (error) {
+      console.log(
+        '지도 메시지 오류:',
+        error
+      );
     }
   };
 
-  const pickImage = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) return;
+  /*
+   * 위도/경도 직접 수정
+   */
+  const applyCoordinateToMap =
+    () => {
+      if (
+        !isValidCoordinate(
+          latitude,
+          longitude
+        )
+      ) {
+        return;
+      }
 
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 0.7,
-    });
+      if (!mapRef.current) {
+        return;
+      }
+
+      const lat =
+        Number(latitude);
+
+      const lng =
+        Number(longitude);
+
+      mapRef.current.injectJavaScript(`
+        if (
+          window.setExternalPosition
+        ) {
+          window.setExternalPosition(
+            ${lat},
+            ${lng}
+          );
+        }
+
+        true;
+      `);
+    };
+
+  useEffect(() => {
+    if (!isValidCoordinate(latitude, longitude)) return;
+    const timer = setTimeout(() => { applyCoordinateToMap(); }, 150);
+    return () => clearTimeout(timer);
+  }, [latitude, longitude]);
+
+  const handleMapTouchStart =
+    () => {
+      setMapInteracting(true);
+    };
+
+  const handleMapTouchEnd =
+    () => {
+      setTimeout(() => {
+        setMapInteracting(false);
+      }, 100);
+    };
+
+  /*
+   * 카메라 촬영
+   */
+  const takePhoto = async (
+    index
+  ) => {
+    const permission =
+      await ImagePicker
+        .requestCameraPermissionsAsync();
+
+    if (!permission.granted) {
+      showAlert(
+        '카메라 권한이 필요합니다.'
+      );
+      return;
+    }
+
+    const result =
+      await ImagePicker
+        .launchCameraAsync({
+          quality: 0.7,
+        });
 
     if (!result.canceled) {
       setPhotoEditor({
         visible: true,
-        uri: result.assets[0].uri,
-        index: null,
-        isNew: true,
-      });
-    }
-  };
-
-  const retakePhoto = async (index) => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) return;
-
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 0.7,
-    });
-
-    if (!result.canceled) {
-      setPhotoEditor({
-        visible: true,
-        uri: result.assets[0].uri,
+        uri:
+          result.assets[0].uri,
         index,
-        isNew: false,
       });
     }
   };
 
-  const deletePhoto = (index) => {
-    const nextPhotos = photos.filter((_, i) => i !== index);
-    setPhotos(nextPhotos);
+  /*
+   * 앨범에서 사진 선택
+   */
+  const pickPhotoFromLibrary =
+    async (index) => {
+      const permission =
+        await ImagePicker
+          .requestMediaLibraryPermissionsAsync();
+
+      if (!permission.granted) {
+        showAlert(
+          '사진 접근 권한이 필요합니다.'
+        );
+        return;
+      }
+
+      const result =
+        await ImagePicker
+          .launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsMultipleSelection:
+              false,
+            quality: 0.7,
+          });
+
+      if (!result.canceled) {
+        setPhotoEditor({
+          visible: true,
+          uri:
+            result.assets[0].uri,
+          index,
+        });
+      }
+    };
+
+  /*
+   * 사진 선택 버튼
+   *
+   * 촬영 또는 앨범 선택
+   */
+  const selectPhoto = (
+    index
+  ) => {
+    showAlert(
+      '사진 선택',
+      '사진을 가져올 방법을 선택해주세요.',
+      [
+        {
+          text: '사진 촬영',
+          onPress: () =>
+            takePhoto(index),
+        },
+        {
+          text: '앨범 선택',
+          onPress: () =>
+            pickPhotoFromLibrary(
+              index
+            ),
+        },
+        {
+          text: '취소',
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
-  const updatePhotoComment = (index, text) => {
-    const nextPhotos = [...photos];
-    nextPhotos[index].comment = text;
-    setPhotos(nextPhotos);
+  /*
+   * 기존 사진 변경
+   */
+  const retakePhoto = (
+    index
+  ) => {
+    selectPhoto(index);
   };
 
-  const editExistingPhoto = (index) => {
+  const deletePhoto = (
+    index
+  ) => {
+    setPhotos((prev) =>
+      prev.map(
+        (
+          photo,
+          photoIndex
+        ) =>
+          photoIndex === index
+            ? {
+                ...photo,
+                uri: null,
+              }
+            : photo
+      )
+    );
+  };
+
+  const updatePhotoComment = (
+    index,
+    text
+  ) => {
+    setPhotos((prev) =>
+      prev.map(
+        (
+          photo,
+          photoIndex
+        ) =>
+          photoIndex === index
+            ? {
+                ...photo,
+                comment: text,
+              }
+            : photo
+      )
+    );
+  };
+
+  const editExistingPhoto = (
+    index
+  ) => {
+    const photo =
+      photos[index];
+
+    if (!photo?.uri) {
+      return;
+    }
+
     setPhotoEditor({
       visible: true,
-      uri: photos[index]?.uri,
+      uri: photo.uri,
       index,
-      isNew: false,
     });
   };
 
-  const closePhotoEditor = () => {
-    setPhotoEditor({ visible: false, uri: null, index: null, isNew: false });
-  };
+  const closePhotoEditor =
+    () => {
+      setPhotoEditor({
+        visible: false,
+        uri: null,
+        index: null,
+      });
+    };
 
-  const completePhotoEdit = (editedUri) => {
-    if (!editedUri) {
+  const completePhotoEdit = (
+    editedUri
+  ) => {
+    if (
+      !editedUri ||
+      photoEditor.index ===
+        null
+    ) {
       closePhotoEditor();
       return;
     }
 
-    if (photoEditor.isNew) {
-      setPhotos((prev) => [...prev, { uri: editedUri, comment: '' }]);
-    } else if (photoEditor.index !== null) {
-      setPhotos((prev) =>
-        prev.map((photo, index) =>
-          index === photoEditor.index ? { ...photo, uri: editedUri } : photo
-        )
-      );
-    }
+    setPhotos((prev) =>
+      prev.map(
+        (photo, index) =>
+          index ===
+          photoEditor.index
+            ? {
+                ...photo,
+                uri: editedUri,
+              }
+            : photo
+      )
+    );
 
     closePhotoEditor();
   };
 
+  /*
+   * 보고서 저장
+   */
   const handleSave = async () => {
     try {
       if (!taskId) {
-        alert('방문지 ID를 찾을 수 없습니다.');
+        showAlert(
+          '방문지 ID를 찾을 수 없습니다.'
+        );
         return;
       }
 
       if (!API_BASE_URL) {
-        alert('EXPO_PUBLIC_API_BASE_URL을 설정하세요.');
+        showAlert(
+          'EXPO_PUBLIC_API_BASE_URL을 설정하세요.'
+        );
+        return;
+      }
+
+      if (
+        !isValidCoordinate(
+          latitude,
+          longitude
+        )
+      ) {
+        showAlert(
+          '위도와 경도를 확인해주세요.'
+        );
         return;
       }
 
       setSaving(true);
 
-      const form = new FormData();
-      form.append('taskId', String(taskId));
-      form.append('latitude', String(latitude || ''));
-      form.append('longitude', String(longitude || ''));
-      form.append('mainComment', mainComment || '');
-      form.append('fieldMemo', fieldMemo || '');
-      form.append('progressStatus', status || 'pending');
-      form.append('photoComments', JSON.stringify(photos.map((p) => p.comment || '')));
+      console.log('보고서 저장 좌표:', latitude, longitude);
 
-      const isLocalUri = (uri) =>
-        uri && (uri.startsWith('file://') || uri.startsWith('content://'));
+      const form =
+        new FormData();
 
-      if (locationMapImage && isLocalUri(locationMapImage)) {
-        form.append('mapImage', {
-          uri: locationMapImage,
-          name: 'map.jpg',
-          type: 'image/jpeg',
-        });
-      }
-
-      photos.forEach((photo, index) => {
-        if (photo.uri && isLocalUri(photo.uri)) {
-          form.append('fieldPhotos', {
-            uri: photo.uri,
-            name: `photo_${index}.jpg`,
-            type: 'image/jpeg',
-          });
-        }
-      });
-
-      const res = await fetch(`${API_BASE_URL}/api/task-progress`, {
-        method: 'POST',
-        body: form,
-      });
-
-      if (!res.ok) {
-        throw new Error(`보고서 저장 실패: ${res.status}`);
-      }
-
-      const savedReport = await res.json();
-
-      setAiRefinedContent(savedReport.aiRefinedContent || '');
-      setReportDownloadUrl(
-        savedReport.reportDownloadUrl
-          ? resolveApiUrl(savedReport.reportDownloadUrl)
-          : null
+      form.append(
+        'taskId',
+        String(taskId)
       );
 
-      if (savedReport.locationMapImage) {
-        setLocationMapImage(resolveApiUrl(savedReport.locationMapImage));
+      form.append(
+        'latitude',
+        String(latitude || '')
+      );
+
+      form.append(
+        'longitude',
+        String(longitude || '')
+      );
+
+      form.append(
+        'mainComment',
+        ''
+      );
+
+      form.append(
+        'fieldMemo',
+        fieldMemo || ''
+      );
+
+      form.append(
+        'progressStatus',
+        status || 'pending'
+      );
+
+      form.append(
+        'photoComments',
+        JSON.stringify(
+          photos.map(
+            (photo) =>
+              photo.comment || ''
+          )
+        )
+      );
+
+      const isLocalUri = (
+        uri
+      ) =>
+        uri &&
+        (
+          uri.startsWith(
+            'file://'
+          ) ||
+          uri.startsWith(
+            'content://'
+          )
+        );
+
+      for (const photo of photos) {
+        if (photo.uri && isLocalUri(photo.uri)) {
+          const photoResponse = await fetch(photo.uri);
+          const photoBlob = await photoResponse.blob();
+          const fileName = photo.type === 'before' ? 'before.jpg' : photo.type === 'during' ? 'during.jpg' : 'after.jpg';
+          form.append('fieldPhotos', photoBlob, fileName);
+        }
       }
-      if (savedReport.fieldPhotos) {
-        setPhotos(
-          savedReport.fieldPhotos.map((p) => ({
-            uri: resolveApiUrl(p.uri || p.path),
-            comment: p.comment || '',
-          }))
+
+      const res =
+        await fetch(
+          `${API_BASE_URL}/api/task-progress`,
+          {
+            method: 'POST',
+            body: form,
+          }
+        );
+
+      if (!res.ok) {
+        throw new Error(
+          `보고서 저장 실패: ${res.status}`
         );
       }
 
-      onSave?.(savedReport);
-      alert('보고서가 저장되었고 AI 분석이 완료되었습니다.');
+      const savedReport =
+        await res.json();
+
+      setAiRefinedContent(
+        savedReport
+          .aiRefinedContent ||
+          ''
+      );
+
+      setReportDownloadUrl(
+        savedReport
+          .reportDownloadUrl
+          ? resolveApiUrl(
+              savedReport
+                .reportDownloadUrl
+            )
+          : null
+      );
+
+      if (
+        savedReport.fieldPhotos
+      ) {
+        const savedPhotos =
+          savedReport.fieldPhotos;
+
+        setPhotos(
+          PHOTO_TYPES.map(
+            (type, index) => {
+              const savedPhoto =
+                savedPhotos[index];
+
+              return {
+                type:
+                  type.key,
+
+                label:
+                  type.label,
+
+                uri: savedPhoto
+                  ? resolveApiUrl(
+                      savedPhoto.uri ||
+                        savedPhoto.path
+                    ) ||
+                    savedPhoto.uri ||
+                    savedPhoto.path
+                  : null,
+
+                comment:
+                  savedPhoto
+                    ?.comment ||
+                  photos[index]
+                    ?.comment ||
+                  '',
+              };
+            }
+          )
+        );
+      }
+
+      onSave?.(
+        savedReport
+      );
+
+      showAlert(
+        '보고서가 저장되었고 AI 분석이 완료되었습니다.'
+      );
     } catch (error) {
       console.log(error);
-      alert('보고서 저장 중 문제가 발생했습니다.');
+
+      showAlert(
+        '보고서 저장 중 문제가 발생했습니다.'
+      );
     } finally {
       setSaving(false);
     }
   };
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <BackButton onPress={onBack} />
+  const [
+    initialMapHtml,
+  ] = useState(() =>
+    getInteractiveMapHtml(
+      latitude,
+      longitude
+    )
+  );
 
-        <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>FIELD RECORD</Text>
-          <Text style={styles.title}>
-            {location?.detailAddress || location?.name || '방문지 기록'}
+  return (
+    <View
+      style={
+        styles.container
+      }
+    >
+      <View
+        style={styles.header}
+      >
+        <BackButton
+          onPress={onBack}
+        />
+
+        <View
+          style={{ flex: 1 }}
+        >
+          <Text
+            style={
+              styles.eyebrow
+            }
+          >
+            FIELD RECORD
           </Text>
-          <Text style={styles.desc}>
-            {location?.roadAddress || location?.address || ''}
+
+          <Text
+            style={styles.title}
+          >
+            {location
+              ?.detailAddress ||
+              location?.name ||
+              '방문지 기록'}
+          </Text>
+
+          <Text
+            style={styles.desc}
+          >
+            {location
+              ?.roadAddress ||
+              location?.address ||
+              ''}
           </Text>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView
+        contentContainerStyle={
+          styles.body
+        }
+        keyboardShouldPersistTaps="handled"
+        scrollEnabled={
+          !mapInteracting
+        }
+      >
+        {/* 1. 업무 유형 */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>업무 유형</Text>
-          <Text style={styles.typeText}>
-            {actionType === 'report'
+          <Text
+            style={
+              styles.cardTitle
+            }
+          >
+            업무 유형
+          </Text>
+
+          <Text
+            style={
+              styles.typeText
+            }
+          >
+            {actionType ===
+            'report'
               ? '보고서 작성'
-              : actionType === 'photo'
+              : actionType ===
+                'photo'
               ? '사진 기록'
-              : actionType === 'memo'
+              : actionType ===
+                'memo'
               ? '메모 작성'
               : '상태 변경'}
           </Text>
         </View>
 
+        {/* 2. 작업 위치 */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>위도 / 경도 수정</Text>
+          <Text
+            style={
+              styles.cardTitle
+            }
+          >
+            작업 위치
+          </Text>
 
-          <Text style={styles.inputLabel}>위도</Text>
+          <View
+            style={
+              styles.mapWrapper
+            }
+          >
+            <WebView
+              ref={mapRef}
+
+              originWhitelist={[
+                '*',
+              ]}
+
+              source={{
+                html:
+                  initialMapHtml,
+
+                baseUrl:
+                  'https://localhost/',
+              }}
+
+              style={
+                styles.map
+              }
+
+              javaScriptEnabled
+              domStorageEnabled
+              nestedScrollEnabled
+              scrollEnabled
+
+              onTouchStart={
+                handleMapTouchStart
+              }
+
+              onTouchMove={
+                handleMapTouchStart
+              }
+
+              onTouchEnd={
+                handleMapTouchEnd
+              }
+
+              onTouchCancel={
+                handleMapTouchEnd
+              }
+
+              onMessage={
+                handleMapMessage
+              }
+
+              onLoadEnd={() => {
+                setTimeout(() => {
+                  applyCoordinateToMap();
+                }, 500);
+              }}
+
+              overScrollMode="never"
+
+              setBuiltInZoomControls={
+                false
+              }
+
+              setDisplayZoomControls={
+                false
+              }
+            />
+          </View>
+
+          <Text
+            style={
+              styles.mapGuide
+            }
+          >
+            지도를 움직이거나 터치해서 작업 위치를 선택할 수 있습니다.
+          </Text>
+
+          <Text
+            style={
+              styles.inputLabel
+            }
+          >
+            위도
+          </Text>
+
           <TextInput
             value={latitude}
-            onChangeText={setLatitude}
+
+            onChangeText={
+              setLatitude
+            }
+
+            onEndEditing={
+              applyCoordinateToMap
+            }
+
             placeholder="예: 35.116234"
+
             keyboardType="decimal-pad"
+
             style={styles.input}
           />
 
-          <Text style={styles.inputLabel}>경도</Text>
+          <Text
+            style={
+              styles.inputLabel
+            }
+          >
+            경도
+          </Text>
+
           <TextInput
             value={longitude}
-            onChangeText={setLongitude}
+
+            onChangeText={
+              setLongitude
+            }
+
+            onEndEditing={
+              applyCoordinateToMap
+            }
+
             placeholder="예: 128.968123"
+
             keyboardType="decimal-pad"
+
             style={styles.input}
           />
-
-          <Text style={styles.guideText}>
-            입력한 위도/경도는 보고서 저장 시 반영됩니다.
-          </Text>
         </View>
 
+        {/* 3. 현장 사진 */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>위치도 사진</Text>
-
-          {locationMapImage ? (
-            <Image
-              source={{ uri: locationMapImage }}
-              style={styles.locationMapImage}
-            />
-          ) : (
-            <View style={styles.photoEmpty}>
-              <Text style={styles.photoEmptyText}>등록된 위치도 없음</Text>
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={pickLocationMapImage}
+          <Text
+            style={
+              styles.cardTitle
+            }
           >
-            <Text style={styles.secondaryText}>위치도 사진 업로드</Text>
-          </TouchableOpacity>
-        </View>
+            현장 사진
+          </Text>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>현장 사진</Text>
+          {photos.map(
+            (
+              item,
+              index
+            ) => (
+              <View
+                key={item.type}
 
-          {photos.length === 0 ? (
-            <TouchableOpacity style={styles.photoEmpty} onPress={pickImage}>
-              <Text style={styles.photoEmptyText}>촬영된 사진 없음</Text>
-            </TouchableOpacity>
-          ) : (
-            photos.map((item, index) => (
-              <View key={index} style={styles.photoItem}>
-                <Image source={{ uri: item.uri }} style={styles.photo} />
+                style={[
+                  styles.photoSlot,
 
-                <View style={styles.photoButtonRow}>
+                  index !==
+                    photos.length -
+                      1 &&
+                    styles.photoSlotDivider,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.photoStageTitle
+                  }
+                >
+                  {item.label}
+                </Text>
+
+                {item.uri ? (
+                  <>
+                    <Image
+                      source={{
+                        uri:
+                          item.uri,
+                      }}
+
+                      style={
+                        styles.photo
+                      }
+                    />
+
+                    <View
+                      style={
+                        styles.photoButtonRow
+                      }
+                    >
+                      <TouchableOpacity
+                        style={
+                          styles.photoSmallButton
+                        }
+
+                        onPress={() =>
+                          editExistingPhoto(
+                            index
+                          )
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.photoSmallButtonText
+                          }
+                        >
+                          사진 편집
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={
+                          styles.photoSmallButton
+                        }
+
+                        onPress={() =>
+                          retakePhoto(
+                            index
+                          )
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.photoSmallButtonText
+                          }
+                        >
+                          사진 변경
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.photoSmallButton,
+                          styles.deleteButton,
+                        ]}
+
+                        onPress={() =>
+                          deletePhoto(
+                            index
+                          )
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.photoSmallButtonText
+                          }
+                        >
+                          삭제
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
                   <TouchableOpacity
-                    style={styles.photoSmallButton}
-                    onPress={() => editExistingPhoto(index)}
-                  >
-                    <Text style={styles.photoSmallButtonText}>사진 편집</Text>
-                  </TouchableOpacity>
+                    style={
+                      styles.emptyPhotoSlot
+                    }
 
-                  <TouchableOpacity
-                    style={styles.photoSmallButton}
-                    onPress={() => retakePhoto(index)}
+                    onPress={() =>
+                      selectPhoto(
+                        index
+                      )
+                    }
                   >
-                    <Text style={styles.photoSmallButtonText}>다시찍기</Text>
-                  </TouchableOpacity>
+                    <Text
+                      style={
+                        styles.emptyPhotoPlus
+                      }
+                    >
+                      ＋
+                    </Text>
 
-                  <TouchableOpacity
-                    style={[styles.photoSmallButton, styles.deleteButton]}
-                    onPress={() => deletePhoto(index)}
-                  >
-                    <Text style={styles.photoSmallButtonText}>삭제</Text>
+                    <Text
+                      style={
+                        styles.emptyPhotoText
+                      }
+                    >
+                      {item.label}{' '}
+                      사진 선택
+                    </Text>
                   </TouchableOpacity>
-                </View>
+                )}
 
                 <VoiceTextInput
-                  value={item.comment}
-                  onChangeText={(text) => updatePhotoComment(index, text)}
-                  placeholder="현장사진(2)|캡션 또는 전/중/후"
-                  inputStyle={styles.photoMemo}
+                  value={
+                    item.comment
+                  }
+
+                  onChangeText={(
+                    text
+                  ) =>
+                    updatePhotoComment(
+                      index,
+                      text
+                    )
+                  }
+
+                  placeholder={`${item.label} 사진 메모`}
+
+                  inputStyle={
+                    styles.photoMemo
+                  }
                 />
               </View>
-            ))
+            )
           )}
-
-          <TouchableOpacity style={styles.addPhotoBox} onPress={pickImage}>
-            <Text style={styles.addPhotoPlus}>＋</Text>
-            <Text style={styles.addPhotoText}>사진 추가</Text>
-          </TouchableOpacity>
         </View>
 
+        {/* 4. 현장 메모 */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>종합 의견</Text>
-          <VoiceTextInput
-            value={mainComment}
-            onChangeText={setMainComment}
-            placeholder="예: 23:00(현행) → 24:00(변경) 소등시간 연장"
-            inputStyle={styles.memo}
-          />
-        </View>
+          <Text
+            style={
+              styles.cardTitle
+            }
+          >
+            현장 메모
+          </Text>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>현장 메모</Text>
           <VoiceTextInput
             value={fieldMemo}
-            onChangeText={setFieldMemo}
+
+            onChangeText={
+              setFieldMemo
+            }
+
             placeholder="예: 담당자 확인 필요, 추가 점검 예정, 민원인 요청사항 등"
-            inputStyle={styles.memo}
+
+            inputStyle={
+              styles.memo
+            }
           />
         </View>
 
+        {/* 5. 처리 상태 */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>처리 상태</Text>
+          <Text
+            style={
+              styles.cardTitle
+            }
+          >
+            처리 상태
+          </Text>
 
-          <View style={styles.statusRow}>
+          <View
+            style={
+              styles.statusRow
+            }
+          >
             <TouchableOpacity
               style={[
                 styles.statusBtn,
-                status === 'pending' && styles.statusActive,
+
+                status ===
+                  'pending' &&
+                  styles.statusActive,
               ]}
-              onPress={() => setStatus('pending')}
+
+              onPress={() =>
+                setStatus(
+                  'pending'
+                )
+              }
             >
               <Text
                 style={[
                   styles.statusText,
-                  status === 'pending' && styles.statusTextActive,
+
+                  status ===
+                    'pending' &&
+                    styles.statusTextActive,
                 ]}
               >
-                미작업
+                작업 전
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
                 styles.statusBtn,
-                status === 'working' && styles.statusActive,
+
+                status ===
+                  'working' &&
+                  styles.statusActive,
               ]}
-              onPress={() => setStatus('working')}
+
+              onPress={() =>
+                setStatus(
+                  'working'
+                )
+              }
             >
               <Text
                 style={[
                   styles.statusText,
-                  status === 'working' && styles.statusTextActive,
+
+                  status ===
+                    'working' &&
+                    styles.statusTextActive,
                 ]}
               >
-                작업중
+                작업 중
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
                 styles.statusBtn,
-                status === 'complete' && styles.statusActive,
+
+                status ===
+                  'complete' &&
+                  styles.statusActive,
               ]}
-              onPress={() => setStatus('complete')}
+
+              onPress={() =>
+                setStatus(
+                  'complete'
+                )
+              }
             >
               <Text
                 style={[
                   styles.statusText,
-                  status === 'complete' && styles.statusTextActive,
+
+                  status ===
+                    'complete' &&
+                    styles.statusTextActive,
                 ]}
               >
-                작업완료
+                작업 후
               </Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        <View style={styles.aiCard}>
-          <Text style={styles.aiEyebrow}>AI 분석 결과</Text>
+        {/* AI 분석 */}
+        <View
+          style={styles.aiCard}
+        >
+          <Text
+            style={
+              styles.aiEyebrow
+            }
+          >
+            AI 분석 결과
+          </Text>
+
           {aiRefinedContent ? (
-            <Text style={styles.aiReport}>{aiRefinedContent}</Text>
+            <Text
+              style={
+                styles.aiReport
+              }
+            >
+              {aiRefinedContent}
+            </Text>
           ) : (
             <>
-              <Text style={styles.aiTitle}>{rec.category} (미리보기)</Text>
-              <Text style={[styles.risk, { color: rec.riskColor }]}>
-                위험도: {rec.risk}
+              <Text
+                style={
+                  styles.aiTitle
+                }
+              >
+                {rec.category}{' '}
+                (미리보기)
               </Text>
-              <Text style={styles.aiReport}>{rec.report}</Text>
-              <Text style={styles.guideText}>
+
+              <Text
+                style={[
+                  styles.risk,
+
+                  {
+                    color:
+                      rec.riskColor,
+                  },
+                ]}
+              >
+                위험도:{' '}
+                {rec.risk}
+              </Text>
+
+              <Text
+                style={
+                  styles.aiReport
+                }
+              >
+                {rec.report}
+              </Text>
+
+              <Text
+                style={
+                  styles.guideText
+                }
+              >
                 저장 후 Gemini 분석 결과가 여기에 표시됩니다.
               </Text>
             </>
@@ -551,275 +1588,430 @@ export default function FieldActionScreen({
         </View>
 
         <PrimaryButton
-          title={saving ? '저장 중...' : '보고서 저장 및 AI 생성'}
-          onPress={handleSave}
+          title={
+            saving
+              ? '저장 중...'
+              : '보고서 저장'
+          }
+
+          onPress={
+            handleSave
+          }
         />
       </ScrollView>
 
       <PhotoMarkupEditor
-        visible={photoEditor.visible}
-        uri={photoEditor.uri}
-        onCancel={closePhotoEditor}
-        onComplete={completePhotoEdit}
+        visible={
+          photoEditor.visible
+        }
+
+        uri={
+          photoEditor.uri
+        }
+
+        onCancel={
+          closePhotoEditor
+        }
+
+        onComplete={
+          completePhotoEdit
+        }
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F7FA' },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        '#F4F7FA',
+    },
 
-  header: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
-    backgroundColor: 'white',
-    padding: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#D9E1EA',
-  },
+    header: {
+      flexDirection: 'row',
+      gap: 12,
+      alignItems: 'center',
+      backgroundColor:
+        'white',
 
-  eyebrow: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#607086',
-    letterSpacing: 1.6,
-  },
+      paddingHorizontal: 14,
+      paddingBottom: 14,
+      paddingTop: 34,
 
-  title: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#1F2D3D',
-  },
 
-  desc: {
-    fontSize: 10,
-    color: '#718096',
-  },
+      borderBottomWidth: 1,
+      borderBottomColor:
+        '#D9E1EA',
+    },
 
-  body: {
-    padding: 16,
-    gap: 14,
-    paddingBottom: 30,
-  },
+    eyebrow: {
+      fontSize: 10,
+      fontWeight: '900',
+      color: '#607086',
+      letterSpacing: 1.6,
+    },
 
-  card: {
-    backgroundColor: 'white',
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#D9E1EA',
-  },
+    title: {
+      fontSize: 16,
+      fontWeight: '900',
+      color: '#1F2D3D',
+    },
 
-  cardTitle: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#607086',
-    marginBottom: 10,
-  },
+    desc: {
+      fontSize: 10,
+      color: '#718096',
+    },
 
-  typeText: {
-    color: '#12395B',
-    fontSize: 16,
-    fontWeight: '900',
-  },
+    body: {
+      padding: 16,
+      gap: 14,
+      paddingBottom: 70,
+    },
 
-  inputLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#607086',
-    marginBottom: 6,
-  },
+    card: {
+      backgroundColor:
+        'white',
 
-  input: {
-    borderWidth: 1,
-    borderColor: '#D9E1EA',
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 13,
-    marginBottom: 10,
-    color: '#1F2D3D',
-  },
+      borderRadius: 18,
 
-  guideText: {
-    fontSize: 10,
-    color: '#718096',
-    marginTop: 2,
-  },
+      padding: 16,
 
-  locationMapImage: {
-    height: 210,
-    borderRadius: 14,
-    marginBottom: 10,
-  },
+      borderWidth: 1,
 
-  photoEmpty: {
-    height: 150,
-    borderRadius: 14,
-    backgroundColor: '#EAF1F7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
+      borderColor:
+        '#D9E1EA',
+    },
 
-  photoEmptyText: {
-    fontSize: 11,
-    color: '#718096',
-    fontWeight: '800',
-  },
+    cardTitle: {
+      fontSize: 12,
 
-  photoItem: {
-    marginBottom: 14,
-  },
+      fontWeight: '900',
 
-  photo: {
-    height: 180,
-    borderRadius: 14,
-    marginBottom: 8,
-  },
+      color: '#607086',
 
-  photoMemo: {
-    minHeight: 70,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#D9E1EA',
-    padding: 10,
-    textAlignVertical: 'top',
-    fontSize: 12,
-  },
+      marginBottom: 10,
+    },
 
-  photoButtonRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
+    typeText: {
+      color: '#12395B',
 
-  photoSmallButton: {
-    flex: 1,
-    backgroundColor: '#12395B',
-    borderRadius: 10,
-    paddingVertical: 9,
-    alignItems: 'center',
-  },
+      fontSize: 16,
 
-  deleteButton: {
-    backgroundColor: '#E74C3C',
-  },
+      fontWeight: '900',
+    },
 
-  photoSmallButtonText: {
-    color: 'white',
-    fontSize: 11,
-    fontWeight: '900',
-  },
+    mapWrapper: {
+      height: 260,
 
-  addPhotoBox: {
-    height: 70,
-    borderRadius: 14,
-    backgroundColor: '#F8FBFD',
-    borderWidth: 1,
-    borderColor: '#D9E1EA',
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
+      borderRadius: 14,
 
-  addPhotoPlus: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: '#12395B',
-  },
+      overflow: 'hidden',
 
-  addPhotoText: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: '#607086',
-  },
+      borderWidth: 1,
 
-  secondaryButton: {
-    backgroundColor: '#12395B',
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
+      borderColor:
+        '#D9E1EA',
 
-  secondaryText: {
-    color: 'white',
-    fontWeight: '900',
-    fontSize: 12,
-  },
+      backgroundColor:
+        '#EAF1F7',
 
-  memo: {
-    minHeight: 120,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#D9E1EA',
-    padding: 12,
-    textAlignVertical: 'top',
-    fontSize: 13,
-  },
+      marginBottom: 8,
+    },
 
-  statusRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+    map: {
+      flex: 1,
 
-  statusBtn: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#D9E1EA',
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
+      backgroundColor:
+        '#EAF1F7',
+    },
 
-  statusActive: {
-    backgroundColor: '#12395B',
-    borderColor: '#12395B',
-  },
+    mapGuide: {
+      fontSize: 10,
 
-  statusText: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#607086',
-  },
+      color: '#718096',
 
-  statusTextActive: {
-    color: 'white',
-  },
+      marginBottom: 14,
 
-  aiCard: {
-    backgroundColor: '#FFF7ED',
-    borderColor: '#FED7AA',
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 16,
-  },
+      lineHeight: 16,
+    },
 
-  aiEyebrow: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#C2410C',
-    letterSpacing: 1.4,
-  },
+    inputLabel: {
+      fontSize: 11,
 
-  aiTitle: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: '#1F2D3D',
-    marginTop: 6,
-  },
+      fontWeight: '800',
 
-  risk: {
-    fontSize: 12,
-    fontWeight: '900',
-    marginTop: 8,
-  },
+      color: '#607086',
 
-  aiReport: {
-    fontSize: 11,
-    lineHeight: 18,
-    color: '#607086',
-    marginTop: 8,
-  },
-});
+      marginBottom: 6,
+    },
+
+    input: {
+      borderWidth: 1,
+
+      borderColor:
+        '#D9E1EA',
+
+      borderRadius: 12,
+
+      padding: 12,
+
+      fontSize: 13,
+
+      marginBottom: 10,
+
+      color: '#1F2D3D',
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    photoSlot: {
+      paddingTop: 4,
+
+      paddingBottom: 18,
+    },
+
+    photoSlotDivider: {
+      borderBottomWidth: 1,
+
+      borderBottomColor:
+        '#EEF2F6',
+
+      marginBottom: 18,
+    },
+
+    photoStageTitle: {
+      fontSize: 14,
+
+      fontWeight: '900',
+
+      color: '#1F2D3D',
+
+      marginBottom: 10,
+    },
+
+    emptyPhotoSlot: {
+      height: 150,
+
+      borderRadius: 14,
+
+      backgroundColor:
+        '#F8FBFD',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#D9E1EA',
+
+      borderStyle: 'dashed',
+
+      alignItems: 'center',
+
+      justifyContent:
+        'center',
+
+      marginBottom: 10,
+    },
+
+    emptyPhotoPlus: {
+      fontSize: 28,
+
+      color: '#12395B',
+
+      fontWeight: '900',
+
+      marginBottom: 4,
+    },
+
+    emptyPhotoText: {
+      fontSize: 12,
+
+      color: '#607086',
+
+      fontWeight: '900',
+    },
+
+    photo: {
+      height: 180,
+
+      borderRadius: 14,
+
+      marginBottom: 8,
+
+      backgroundColor:
+        '#EAF1F7',
+    },
+
+    photoButtonRow: {
+      flexDirection: 'row',
+
+      gap: 8,
+
+      marginBottom: 8,
+    },
+
+    photoSmallButton: {
+      flex: 1,
+
+      backgroundColor:
+        '#12395B',
+
+      borderRadius: 10,
+
+      paddingVertical: 9,
+
+      alignItems: 'center',
+    },
+
+    deleteButton: {
+      backgroundColor:
+        '#E74C3C',
+    },
+
+    photoSmallButtonText: {
+      color: 'white',
+
+      fontSize: 11,
+
+      fontWeight: '900',
+    },
+
+    photoMemo: {
+      minHeight: 70,
+
+      borderRadius: 12,
+
+      borderWidth: 1,
+
+      borderColor:
+        '#D9E1EA',
+
+      padding: 10,
+
+      textAlignVertical:
+        'top',
+
+      fontSize: 12,
+    },
+
+    memo: {
+      minHeight: 120,
+
+      borderRadius: 14,
+
+      borderWidth: 1,
+
+      borderColor:
+        '#D9E1EA',
+
+      padding: 12,
+
+      textAlignVertical:
+        'top',
+
+      fontSize: 13,
+    },
+
+    statusRow: {
+      flexDirection: 'row',
+
+      gap: 8,
+    },
+
+    statusBtn: {
+      flex: 1,
+
+      borderRadius: 12,
+
+      borderWidth: 1,
+
+      borderColor:
+        '#D9E1EA',
+
+      paddingVertical: 13,
+
+      alignItems: 'center',
+    },
+
+    statusActive: {
+      backgroundColor:
+        '#12395B',
+
+      borderColor:
+        '#12395B',
+    },
+
+    statusText: {
+      fontSize: 12,
+
+      fontWeight: '900',
+
+      color: '#607086',
+    },
+
+    statusTextActive: {
+      color: 'white',
+    },
+
+    guideText: {
+      fontSize: 10,
+
+      color: '#718096',
+
+      marginTop: 2,
+    },
+
+    aiCard: {
+      backgroundColor:
+        '#FFF7ED',
+
+      borderColor:
+        '#FED7AA',
+
+      borderWidth: 1,
+
+      borderRadius: 18,
+
+      padding: 16,
+    },
+
+    aiEyebrow: {
+      fontSize: 10,
+
+      fontWeight: '900',
+
+      color: '#C2410C',
+
+      letterSpacing: 1.4,
+    },
+
+    aiTitle: {
+      fontSize: 15,
+
+      fontWeight: '900',
+
+      color: '#1F2D3D',
+
+      marginTop: 6,
+    },
+
+    risk: {
+      fontSize: 12,
+
+      fontWeight: '900',
+
+      marginTop: 8,
+    },
+
+    aiReport: {
+      fontSize: 11,
+
+      lineHeight: 18,
+
+      color: '#607086',
+
+      marginTop: 8,
+    },
+  });
