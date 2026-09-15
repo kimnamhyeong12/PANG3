@@ -412,7 +412,7 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={['bottom']}>
       <View
         style={styles.app}
         {...swipeBackResponder.panHandlers}

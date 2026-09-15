@@ -459,10 +459,6 @@ export default function AssignmentScreen({
           <Text style={styles.title}>
             방문지 담당자 지정
           </Text>
-
-          <Text style={styles.desc}>
-            {group?.groupName} · 팀장 전용
-          </Text>
         </View>
       </View>
 
@@ -1151,7 +1147,7 @@ const styles = StyleSheet.create({
     gap: 12,
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    padding: 14,
+    paddingHorizontal: 14, paddingTop: 30, paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#D9E1EA',
   },

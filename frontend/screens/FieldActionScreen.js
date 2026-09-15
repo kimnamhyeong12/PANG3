@@ -1031,23 +1031,10 @@ export default function FieldActionScreen({
             FIELD RECORD
           </Text>
 
-          <Text
-            style={styles.title}
-          >
-            {location
-              ?.detailAddress ||
-              location?.name ||
-              '방문지 기록'}
+          <Text style={styles.title}>
+            보고서 양식 작성
           </Text>
 
-          <Text
-            style={styles.desc}
-          >
-            {location
-              ?.roadAddress ||
-              location?.address ||
-              ''}
-          </Text>
         </View>
       </View>
 
@@ -1638,7 +1625,7 @@ const styles =
 
       paddingHorizontal: 14,
       paddingBottom: 14,
-      paddingTop: 34,
+      paddingTop: 30,
 
 
       borderBottomWidth: 1,

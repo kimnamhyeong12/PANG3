@@ -114,13 +114,6 @@ export default function ReportListScreen({
             보고서 작성
           </Text>
 
-          <Text style={styles.desc}>
-            작업 중 또는 작업 후 방문지만 보고서에 포함할 수 있습니다
-          </Text>
-
-          <Text style={styles.scopeSummary}>
-            현재 업무공간 · {workspaceName}
-          </Text>
         </View>
       </View>
 
@@ -385,7 +378,7 @@ const styles = StyleSheet.create({
 
     paddingHorizontal: 14,
     paddingBottom: 14,
-    paddingTop: 34,
+    paddingTop: 30,
 
     borderBottomWidth: 1,
     borderBottomColor: '#D9E1EA',
@@ -600,7 +593,7 @@ const styles = StyleSheet.create({
 
     paddingHorizontal: 14,
     paddingTop: 14,
-    paddingBottom: 60,
+    paddingBottom: 14,
 
     borderTopWidth: 1,
     borderTopColor: '#D9E1EA',

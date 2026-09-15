@@ -961,18 +961,7 @@ export default function MapScreen({
       />
 
       <View style={styles.topOverlay}>
-        <View style={styles.teamModeBadge}>
-          <Ionicons
-            name={locationScope === 'team' ? 'people' : 'person'}
-            size={14}
-            color="#FFFFFF"
-          />
-          <Text style={styles.teamModeBadgeText}>
-            {locationScope === 'team'
-              ? `${activeGroup?.groupName || '그룹'} · 팀 업무공간`
-              : `${user?.name || user?.loginId || '나'} · 1인 작업공간`}
-          </Text>
-        </View>
+        
         <View style={styles.searchControlRow}>
           <TouchableOpacity
             style={styles.searchBox}
@@ -981,10 +970,7 @@ export default function MapScreen({
               if (!addressSearchMode) setAddMenuOpen(true);
             }}
           >
-            <TouchableOpacity onPress={onBack}>
-              <Ionicons name="chevron-back" size={20} color="#12395B" />
-            </TouchableOpacity>
-
+            
             <TouchableOpacity
               onPress={() => {
                 resetAddModes();
@@ -1639,7 +1625,7 @@ const styles = StyleSheet.create({
 
   topOverlay: {
     position: 'absolute',
-    top: 48,
+    top: 35,
     left: 10,
     right: 10,
     zIndex: 20,
