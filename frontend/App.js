@@ -3,12 +3,15 @@ import {
   BackHandler,
   PanResponder,
   Platform,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
+  Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
 import RegisterScreen from './screens/RegisterScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -56,6 +59,16 @@ export default function App() {
   const [activeGroup, setActiveGroup] = useState(null);
   const [groupAssignments, setGroupAssignments] = useState([]);
   const [teamLocations, setTeamLocations] = useState([]);
+
+  // 팀 방문지 지도는 개인 지도와 경로 상태를 완전히 분리한다.
+  // 그룹 화면에서 팀 방문지 관리를 열어도 개인 경로가 사라지지 않는다.
+  const [teamRoadPath, setTeamRoadPath] = useState([]);
+  const [teamRouteSegments, setTeamRouteSegments] = useState([]);
+  const [teamCurrentSegmentIndex, setTeamCurrentSegmentIndex] = useState(0);
+  const [teamOptimized, setTeamOptimized] = useState(false);
+  const [teamIsGuiding, setTeamIsGuiding] = useState(false);
+  const [teamTotalDuration, setTeamTotalDuration] = useState(null);
+  const [teamPanelOpen, setTeamPanelOpen] = useState(true);
 
   const selectActiveGroup = useCallback(async (group, targetUser = user) => {
     setActiveGroup(group || null);
@@ -292,6 +305,16 @@ export default function App() {
     setOptimized(false);
     setIsGuiding(false);
     setTotalDuration(null);
+
+    setTeamLocations([]);
+    setTeamRoadPath([]);
+    setTeamRouteSegments([]);
+    setTeamCurrentSegmentIndex(0);
+    setTeamOptimized(false);
+    setTeamIsGuiding(false);
+    setTeamTotalDuration(null);
+    setTeamPanelOpen(true);
+
     setTodayLocationsLoaded(false);
 
     historyRef.current = [];
@@ -310,14 +333,30 @@ export default function App() {
     go('fieldAction');
   };
 
+  const openPersonalMap = () => {
+    go('mapDirect');
+  };
+
+  const openTeamMap = async () => {
+    if (!activeGroup?.groupId) {
+      go('groupHome');
+      return;
+    }
+
+    await loadTeamLocations(activeGroup);
+    await refreshGroupAssignments();
+    go('teamLocations');
+  };
+
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View
         style={styles.app}
         {...swipeBackResponder.panHandlers}
       >
         <StatusBar barStyle="dark-content" />
 
+        <View style={styles.screenHost}>
         {screen === 'login' && (
           <LoginScreen
             onLogin={(loginUser) => {
@@ -364,6 +403,11 @@ export default function App() {
             }
             onGroup={() =>
               go('groupHome')
+            }
+            onCurrentGroup={() =>
+              activeGroup
+                ? go('groupDetail')
+                : go('groupHome')
             }
             onWorkStatus={() =>
               go('workStatus')
@@ -439,11 +483,6 @@ export default function App() {
               }}
               onTeamLocations={(group) => {
                 selectActiveGroup(group);
-                setRoadPath([]);
-                setRouteSegments([]);
-                setCurrentSegmentIndex(0);
-                setOptimized(false);
-                setIsGuiding(false);
                 loadTeamLocations(group);
                 go('teamLocations');
               }}
@@ -463,21 +502,22 @@ export default function App() {
               go('groupDetail');
             }}
             onLocationClick={onLocationClick}
-            roadPath={roadPath}
-            setRoadPath={setRoadPath}
-            routeSegments={routeSegments}
-            setRouteSegments={setRouteSegments}
-            currentSegmentIndex={currentSegmentIndex}
-            setCurrentSegmentIndex={setCurrentSegmentIndex}
-            optimized={optimized}
-            setOptimized={setOptimized}
-            isGuiding={isGuiding}
-            setIsGuiding={setIsGuiding}
-            totalDuration={totalDuration}
-            setTotalDuration={setTotalDuration}
-            panelOpen={panelOpen}
-            setPanelOpen={setPanelOpen}
-            onReportPress={() => go('reportList')}
+            onOpenPersonalMap={openPersonalMap}
+            onOpenTeamMap={openTeamMap}
+            roadPath={teamRoadPath}
+            setRoadPath={setTeamRoadPath}
+            routeSegments={teamRouteSegments}
+            setRouteSegments={setTeamRouteSegments}
+            currentSegmentIndex={teamCurrentSegmentIndex}
+            setCurrentSegmentIndex={setTeamCurrentSegmentIndex}
+            optimized={teamOptimized}
+            setOptimized={setTeamOptimized}
+            isGuiding={teamIsGuiding}
+            setIsGuiding={setTeamIsGuiding}
+            totalDuration={teamTotalDuration}
+            setTotalDuration={setTeamTotalDuration}
+            panelOpen={teamPanelOpen}
+            setPanelOpen={setTeamPanelOpen}
           />
         )}
 
@@ -525,15 +565,15 @@ export default function App() {
             }
             activeGroup={activeGroup}
             locationScope="personal"
-            groupAssignments={
-              groupAssignments
-            }
+            groupAssignments={[]}
             onBack={() =>
               goBack('main')
             }
             onLocationClick={
               onLocationClick
             }
+            onOpenPersonalMap={openPersonalMap}
+            onOpenTeamMap={openTeamMap}
             roadPath={roadPath}
             setRoadPath={setRoadPath}
             routeSegments={
@@ -560,9 +600,6 @@ export default function App() {
             }
             panelOpen={panelOpen}
             setPanelOpen={setPanelOpen}
-            onReportPress={() =>
-              go('reportList')
-            }
           />
         )}
 
@@ -645,9 +682,136 @@ export default function App() {
           />
         )}
 
+        </View>
+
+        {user &&
+          !['login', 'register', 'dashboard'].includes(screen) && (
+            <BottomNavigation
+              screen={screen}
+              onHome={() => go('main')}
+              // 하단 '지도'는 항상 개인 민원/개인 경로 지도
+              onMap={openPersonalMap}
+              onReport={() => go('reportList')}
+              onGroup={() => go('groupHome')}
+            />
+          )}
+
         <CustomAlertHost />
       </View>
     </SafeAreaView>
+  );
+}
+
+
+function BottomNavigation({
+  screen,
+  onHome,
+  onMap,
+  onReport,
+  onGroup,
+}) {
+  const activeTab =
+    screen === 'mapDirect' ||
+    screen === 'teamLocations'
+      ? 'map'
+      : [
+          'reportList',
+          'fieldAction',
+          'report',
+          'download',
+        ].includes(screen)
+      ? 'report'
+      : [
+          'groupHome',
+          'groupCreate',
+          'groupInvitations',
+          'groupDetail',
+          'assignment',
+        ].includes(screen)
+      ? 'group'
+      : 'home';
+
+  return (
+    <View style={styles.bottomNav}>
+      <BottomNavItem
+        icon={
+          activeTab === 'home'
+            ? 'home'
+            : 'home-outline'
+        }
+        label="홈"
+        active={activeTab === 'home'}
+        onPress={onHome}
+      />
+
+      <BottomNavItem
+        icon={
+          activeTab === 'map'
+            ? 'map'
+            : 'map-outline'
+        }
+        label="지도"
+        active={activeTab === 'map'}
+        onPress={onMap}
+      />
+
+      <BottomNavItem
+        icon={
+          activeTab === 'report'
+            ? 'document-text'
+            : 'document-text-outline'
+        }
+        label="보고서"
+        active={activeTab === 'report'}
+        onPress={onReport}
+      />
+
+      <BottomNavItem
+        icon={
+          activeTab === 'group'
+            ? 'people'
+            : 'people-outline'
+        }
+        label="그룹"
+        active={activeTab === 'group'}
+        onPress={onGroup}
+      />
+    </View>
+  );
+}
+
+function BottomNavItem({
+  icon,
+  label,
+  active,
+  onPress,
+}) {
+  return (
+    <TouchableOpacity
+      style={styles.bottomNavItem}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <Ionicons
+        name={icon}
+        size={23}
+        color={
+          active
+            ? '#173A5E'
+            : '#7D8998'
+        }
+      />
+
+      <Text
+        style={[
+          styles.bottomNavLabel,
+          active &&
+            styles.bottomNavLabelActive,
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
 }
 
@@ -660,4 +824,45 @@ const styles = StyleSheet.create({
   app: {
     flex: 1,
   },
+
+  screenHost: {
+    flex: 1,
+  },
+
+  bottomNav: {
+    height: 66,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E4E9EF',
+    elevation: 12,
+    shadowColor: '#1E3550',
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: {
+      width: 0,
+      height: -4,
+    },
+  },
+
+  bottomNavItem: {
+    flex: 1,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+
+  bottomNavLabel: {
+    color: '#7D8998',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  bottomNavLabelActive: {
+    color: '#173A5E',
+    fontWeight: '900',
+  },
+
 });

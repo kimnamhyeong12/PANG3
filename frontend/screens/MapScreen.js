@@ -52,7 +52,8 @@ export default function MapScreen({
   user,
   onBack,
   onLocationClick,
-  onReportPress,
+  onOpenPersonalMap,
+  onOpenTeamMap,
   locations,
   setLocations,
   activeGroup,
@@ -79,6 +80,7 @@ export default function MapScreen({
   const [transportMode, setTransportMode] = useState('car');
   const [segmentChanging, setSegmentChanging] = useState(false);
   const [guideStartOpen, setGuideStartOpen] = useState(false);
+  const [scopePickerOpen, setScopePickerOpen] = useState(false);
 
   const [keyword, setKeyword] = useState('');
   const [searchedPlace, setSearchedPlace] = useState(null);
@@ -192,6 +194,11 @@ export default function MapScreen({
 
   useEffect(() => {
     const backAction = () => {
+      if (scopePickerOpen) {
+        setScopePickerOpen(false);
+        return true;
+      }
+
       if (coordSheetOpen) {
         setCoordSheetOpen(false);
         setCoordLat('');
@@ -240,6 +247,7 @@ export default function MapScreen({
 
     return () => subscription.remove();
   }, [
+    scopePickerOpen,
     coordSheetOpen,
     mapSelectMode,
     addMenuOpen,
@@ -929,12 +937,32 @@ export default function MapScreen({
     updateGuideTargetSegment(nextIndex);
   };
 
-  const handleReportButtonPress = () => {
+  const handleMapSwitchPress = () => {
     setGuideStartOpen(false);
     setSelected(null);
     setVisitListOpen(false);
     setAddMenuOpen(false);
-    onReportPress?.();
+    setScopePickerOpen(true);
+  };
+
+  const selectMapScope = (scope) => {
+    setScopePickerOpen(false);
+
+    if (scope === locationScope) {
+      return;
+    }
+
+    if (scope === 'team') {
+      if (!activeGroup?.groupId) {
+        showAlert('그룹 없음', '팀 방문지 지도를 사용하려면 먼저 그룹을 선택하세요.');
+        return;
+      }
+
+      onOpenTeamMap?.();
+      return;
+    }
+
+    onOpenPersonalMap?.();
   };
 
   return (
@@ -968,12 +996,12 @@ export default function MapScreen({
       />
 
       <TouchableOpacity
-        style={styles.reportFab}
+        style={styles.mapSwitchFab}
         activeOpacity={0.9}
-        onPress={handleReportButtonPress}
+        onPress={handleMapSwitchPress}
       >
-        <Ionicons name="document-text" size={22} color="#FFFFFF" />
-        <Text style={styles.reportFabText}>보고서</Text>
+        <Ionicons name="swap-horizontal" size={24} color="#FFFFFF" />
+        <Text style={styles.mapSwitchFabText}>지도 전환</Text>
       </TouchableOpacity>
 
       <View style={styles.topOverlay}>
@@ -1461,6 +1489,90 @@ export default function MapScreen({
       )}
 
       <Modal
+        visible={scopePickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setScopePickerOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBg}
+          activeOpacity={1}
+          onPress={() => setScopePickerOpen(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.scopeSheet}>
+            <View style={styles.handle} />
+
+            <Text style={styles.scopeTitle}>방문지 지도 선택</Text>
+            <Text style={styles.scopeDesc}>
+              개인 방문지와 팀 방문지 지도를 전환할 수 있습니다.
+            </Text>
+
+            <TouchableOpacity
+              style={[
+                styles.scopeOption,
+                locationScope === 'personal' && styles.scopeOptionActive,
+              ]}
+              activeOpacity={0.85}
+              onPress={() => selectMapScope('personal')}
+            >
+              <View style={styles.scopeOptionIcon}>
+                <Ionicons name="person" size={22} color="#12395B" />
+              </View>
+
+              <View style={styles.scopeOptionTextWrap}>
+                <Text style={styles.scopeOptionTitle}>개인 방문지 관리</Text>
+                <Text style={styles.scopeOptionDesc}>
+                  내 개인 민원·방문지와 경로를 관리합니다.
+                </Text>
+              </View>
+
+              {locationScope === 'personal' && (
+                <View style={styles.scopeCurrentBadge}>
+                  <Text style={styles.scopeCurrentBadgeText}>현재</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.scopeOption,
+                locationScope === 'team' && styles.scopeOptionActive,
+                !activeGroup?.groupId && styles.scopeOptionDisabled,
+              ]}
+              activeOpacity={0.85}
+              onPress={() => selectMapScope('team')}
+            >
+              <View style={styles.scopeOptionIcon}>
+                <Ionicons name="people" size={22} color="#12395B" />
+              </View>
+
+              <View style={styles.scopeOptionTextWrap}>
+                <Text style={styles.scopeOptionTitle}>팀 방문지 관리</Text>
+                <Text style={styles.scopeOptionDesc}>
+                  {activeGroup?.groupName
+                    ? `${activeGroup.groupName} 팀 방문지와 담당 업무를 확인합니다.`
+                    : '선택된 그룹이 없습니다.'}
+                </Text>
+              </View>
+
+              {locationScope === 'team' && (
+                <View style={styles.scopeCurrentBadge}>
+                  <Text style={styles.scopeCurrentBadgeText}>현재</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.scopeCancelButton}
+              onPress={() => setScopePickerOpen(false)}
+            >
+              <Text style={styles.scopeCancelText}>취소</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
         visible={guideStartOpen}
         transparent
         animationType="slide"
@@ -1534,7 +1646,7 @@ export default function MapScreen({
                 <Text style={styles.placeAddr}>
                   {selected?.roadAddress || selected?.task || '주소 없음'}
                 </Text>
-                {activeGroup && (
+                {locationScope === 'team' && activeGroup && (
                   <Text style={styles.assigneeInfo}>
                     {assignmentMap.get(Number(selected?.id))
                       ? `담당자: ${assignmentMap.get(Number(selected?.id)).assigneeName || assignmentMap.get(Number(selected?.id)).assigneeLoginId}`
@@ -2389,13 +2501,13 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
 
-  reportFab: {
+  mapSwitchFab: {
     position: 'absolute',
     right: 18,
     bottom: 96,
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 78,
+    height: 78,
+    borderRadius: 39,
     backgroundColor: '#12395B',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2407,10 +2519,112 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
 
-  reportFabText: {
+  mapSwitchFabText: {
     marginTop: 3,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
     color: '#FFFFFF',
+  },
+
+  scopeSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 28,
+  },
+
+  scopeTitle: {
+    fontSize: 19,
+    fontWeight: '900',
+    color: '#12395B',
+  },
+
+  scopeDesc: {
+    marginTop: 6,
+    marginBottom: 16,
+    fontSize: 11,
+    lineHeight: 17,
+    color: '#718096',
+  },
+
+  scopeOption: {
+    minHeight: 84,
+    borderWidth: 1,
+    borderColor: '#D9E1EA',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+
+  scopeOptionActive: {
+    borderColor: '#12395B',
+    backgroundColor: '#F2F7FB',
+  },
+
+  scopeOptionDisabled: {
+    opacity: 0.55,
+  },
+
+  scopeOptionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#EAF1F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+
+  scopeOptionTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  scopeOptionTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#1F2D3D',
+  },
+
+  scopeOptionDesc: {
+    marginTop: 4,
+    fontSize: 10,
+    lineHeight: 15,
+    color: '#718096',
+  },
+
+  scopeCurrentBadge: {
+    marginLeft: 8,
+    borderRadius: 999,
+    backgroundColor: '#12395B',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+
+  scopeCurrentBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+
+  scopeCancelButton: {
+    marginTop: 4,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#EEF2F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  scopeCancelText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#607086',
   },
 });

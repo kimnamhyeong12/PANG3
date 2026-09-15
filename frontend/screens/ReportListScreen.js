@@ -22,6 +22,26 @@ const getStatusColor = (status) => {
   return '#E74C3C';
 };
 
+const getTaskId = (loc) =>
+  loc?.id ??
+  loc?.taskId ??
+  loc?.task_id ??
+  null;
+
+const getGroupId = (loc) =>
+  loc?.groupId ??
+  loc?.group_id ??
+  loc?.group?.groupId ??
+  null;
+
+const getGroupName = (loc, activeGroup, assignment) =>
+  loc?.groupName ||
+  loc?.group_name ||
+  loc?.group?.groupName ||
+  assignment?.groupName ||
+  activeGroup?.groupName ||
+  '팀';
+
 export default function ReportListScreen({
   locations = [],
   activeGroup,
@@ -90,6 +110,32 @@ export default function ReportListScreen({
           <Text style={styles.desc}>
             작업 중 또는 작업 후 방문지만 보고서에 포함할 수 있습니다
           </Text>
+
+          {locations.length > 0 && (
+            <Text style={styles.scopeSummary}>
+              개인 {
+                locations.filter((loc) => {
+                  const id = getTaskId(loc);
+                  const assignment =
+                    assignmentMap.get(Number(id));
+                  return (
+                    !getGroupId(loc) &&
+                    !assignment
+                  );
+                }).length
+              } · 팀 {
+                locations.filter((loc) => {
+                  const id = getTaskId(loc);
+                  const assignment =
+                    assignmentMap.get(Number(id));
+                  return (
+                    Boolean(getGroupId(loc)) ||
+                    Boolean(assignment)
+                  );
+                }).length
+              }
+            </Text>
+          )}
         </View>
       </View>
 
@@ -120,15 +166,28 @@ export default function ReportListScreen({
             const checked =
               selectedIds.includes(loc.id);
 
+            const taskId = getTaskId(loc);
+
             const assignment =
               assignmentMap.get(
-                Number(loc.id)
+                Number(taskId)
               );
 
-            const taskId =
-              loc.id ??
-              loc.taskId ??
-              loc.task_id;
+            const groupId = getGroupId(loc);
+
+            // groupId가 있으면 확실한 팀 방문지.
+            // 오래된 응답에서 groupId가 빠진 경우에는 담당자 배정 정보가 있으면 팀 방문지로 본다.
+            const isTeamLocation =
+              Boolean(groupId) ||
+              Boolean(assignment);
+
+            const groupName = isTeamLocation
+              ? getGroupName(
+                  loc,
+                  activeGroup,
+                  assignment
+                )
+              : null;
 
             return (
               <View
@@ -194,6 +253,45 @@ export default function ReportListScreen({
                         '이름 없음'}
                     </Text>
 
+                    <View style={styles.scopeRow}>
+                      <View
+                        style={[
+                          styles.scopeBadge,
+                          isTeamLocation
+                            ? styles.teamScopeBadge
+                            : styles.personalScopeBadge,
+                        ]}
+                      >
+                        <Ionicons
+                          name={
+                            isTeamLocation
+                              ? 'people'
+                              : 'person'
+                          }
+                          size={11}
+                          color={
+                            isTeamLocation
+                              ? '#12395B'
+                              : '#475569'
+                          }
+                        />
+
+                        <Text
+                          style={[
+                            styles.scopeBadgeText,
+                            isTeamLocation
+                              ? styles.teamScopeText
+                              : styles.personalScopeText,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {isTeamLocation
+                            ? `팀 방문지 · ${groupName}`
+                            : '개인 방문지'}
+                        </Text>
+                      </View>
+                    </View>
+
                     <Text
                       style={styles.itemAddr}
                       numberOfLines={1}
@@ -202,7 +300,7 @@ export default function ReportListScreen({
                         '주소 없음'}
                     </Text>
 
-                    {activeGroup && (
+                    {isTeamLocation && (
                       <View
                         style={styles.assigneeRow}
                       >
@@ -326,6 +424,13 @@ const styles = StyleSheet.create({
     color: '#718096',
   },
 
+  scopeSummary: {
+    marginTop: 5,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#12395B',
+  },
+
   body: {
     padding: 16,
     gap: 12,
@@ -418,8 +523,50 @@ const styles = StyleSheet.create({
     color: '#1F2D3D',
   },
 
+  scopeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+
+  scopeBadge: {
+    maxWidth: '100%',
+    minHeight: 25,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+  },
+
+  teamScopeBadge: {
+    backgroundColor: '#EAF1F7',
+    borderColor: '#C7D7E6',
+  },
+
+  personalScopeBadge: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#D7DEE7',
+  },
+
+  scopeBadgeText: {
+    flexShrink: 1,
+    fontSize: 9,
+    fontWeight: '900',
+  },
+
+  teamScopeText: {
+    color: '#12395B',
+  },
+
+  personalScopeText: {
+    color: '#475569',
+  },
+
   itemAddr: {
-    marginTop: 4,
+    marginTop: 5,
     fontSize: 11,
     color: '#607086',
   },

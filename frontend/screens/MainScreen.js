@@ -1,5 +1,6 @@
 import { showAlert } from '../components/CustomAlert';
 import React from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import {
   Alert,
   BackHandler,
@@ -36,6 +37,7 @@ export default function MainScreen({
   onRoute,
   onReport,
   onGroup,
+  onCurrentGroup,
   onWorkStatus,
   onDashboard,
   locations = [],
@@ -506,494 +508,408 @@ export default function MainScreen({
     );
   };
 
+
+  const displayName =
+    user?.name ||
+    user?.loginId ||
+    '사용자';
+
+  const roleLabel = activeGroup
+    ? activeGroup.role === 'LEADER'
+      ? '팀장'
+      : '팀원'
+    : '개인';
+
+  const currentTask =
+    visibleIncompleteLocations.find(
+      (item) =>
+        String(item.status || '').toLowerCase() ===
+        'working'
+    ) ||
+    visibleIncompleteLocations[0] ||
+    null;
+
+  const recentCompleted = displayLocations
+    .filter((item) => {
+      const status = String(
+        item.status ||
+          item.taskStatus ||
+          ''
+      ).toLowerCase();
+
+      return (
+        status === 'complete' ||
+        status === 'done'
+      );
+    })
+    .slice(0, 3);
+
   return (
     <ScrollView
-      style={styles.container}
-      contentContainerStyle={{
-        paddingBottom: 24,
-      }}
+      style={styles.homeContainer}
+      contentContainerStyle={styles.homeContent}
+      showsVerticalScrollIndicator={false}
     >
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View>
-            <Text
-              style={
-                styles.headerEyebrow
-              }
-            >
-              SAHA-GU OFFICE
+      <View style={styles.homeHeader}>
+        <View style={styles.homeTopBar}>
+          <Text style={styles.homeAppName}>
+            외근도우미
+          </Text>
+
+          <TouchableOpacity
+            style={styles.homeSettingsButton}
+            onPress={onDashboard}
+            activeOpacity={0.75}
+          >
+            <Ionicons
+              name="settings-outline"
+              size={24}
+              color="#173A5E"
+            />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.homeGreetingRow}>
+          <View style={styles.homeGreetingTextBox}>
+            <Text style={styles.homeTodayText}>
+              {today}
             </Text>
 
             <Text
-              style={
-                styles.headerTitle
-              }
+              style={styles.homeGreetingTitle}
+              numberOfLines={1}
             >
-              외근 업무 현황
+              {displayName}님, 안녕하세요
             </Text>
 
-            <Text
-              style={
-                styles.headerDesc
-              }
-            >
-              {today} · 도시안전과
+            <Text style={styles.homeDepartmentText}>
+              도시안전과
             </Text>
           </View>
 
           <TouchableOpacity
-            onPress={
-              onDashboard
-            }
-            style={
-              styles.profile
-            }
-            activeOpacity={0.85}
+            style={styles.homeAvatar}
+            onPress={onDashboard}
+            activeOpacity={0.75}
           >
-            <View
-              style={
-                styles.avatar
-              }
-            >
-              <Text
-                style={
-                  styles.avatarText
-                }
-              >
-                SG
-              </Text>
-            </View>
-
-            <View>
-              <Text
-                style={
-                  styles.profileName
-                }
-              >
-                {user?.name ||
-                  user?.loginId ||
-                  '사용자'}
-              </Text>
-
-              <Text
-                style={
-                  styles.profileTeam
-                }
-              >
-                {activeGroup?.groupName ||
-                  '개인 외근'}
-              </Text>
-            </View>
+            <Ionicons
+              name="person"
+              size={29}
+              color="#315E87"
+            />
           </TouchableOpacity>
         </View>
 
-        <View
-          style={
-            styles.progressBox
+        <TouchableOpacity
+          style={styles.homeGroupShortcut}
+          onPress={
+            activeGroup
+              ? onCurrentGroup
+              : onGroup
           }
+          activeOpacity={0.75}
         >
-          <View
-            style={
-              styles.rowBetween
-            }
-          >
-            <Text
-              style={
-                styles.progressLabel
-              }
-            >
-              오늘 업무 진행률
-            </Text>
-
-            <Text
-              style={
-                styles.progressLabel
-              }
-            >
-              {displayProgress}%
-            </Text>
-          </View>
-
-          <View
-            style={
-              styles.progressTrack
-            }
-          >
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width:
-                    `${displayProgress}%`,
-                },
-              ]}
+          <View style={styles.homeGroupLeft}>
+            <Ionicons
+              name="people-outline"
+              size={22}
+              color="#172538"
             />
+
+            <Text
+              style={styles.homeGroupName}
+              numberOfLines={1}
+            >
+              {activeGroup?.groupName ||
+                '소속 그룹 없음'}
+            </Text>
+
+            <View style={styles.homeRoleBadge}>
+              <Text style={styles.homeRoleText}>
+                {roleLabel}
+              </Text>
+            </View>
           </View>
+
+          <Ionicons
+            name="chevron-forward"
+            size={21}
+            color="#173A5E"
+          />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.homeProgressCard}>
+        <View style={styles.homeProgressHeader}>
+          <View>
+            <Text style={styles.homeProgressTitle}>
+              오늘의 업무
+            </Text>
+            <Text style={styles.homeProgressDesc}>
+              {displayTotal}건 중 {displayComplete}건 완료
+            </Text>
+          </View>
+
+          <Text style={styles.homeProgressPercent}>
+            {displayProgress}%
+          </Text>
+        </View>
+
+        <View style={styles.homeProgressTrack}>
+          <View
+            style={[
+              styles.homeProgressFill,
+              {
+                width: `${displayProgress}%`,
+              },
+            ]}
+          />
+        </View>
+
+        <View style={styles.homeMetricRow}>
+          <HomeMetric
+            label="담당"
+            value={displayTotal}
+          />
+          <View style={styles.homeMetricDivider} />
+          <HomeMetric
+            label="완료"
+            value={displayComplete}
+          />
+          <View style={styles.homeMetricDivider} />
+          <HomeMetric
+            label="미완료"
+            value={displayPending}
+          />
         </View>
       </View>
 
-      <View style={styles.kpiRow}>
-        <Kpi
-          title={activeGroup ? '내 담당' : '오늘 외근'}
-          value={`${displayTotal}`}
-        />
-
-        <Kpi
-          title={activeGroup ? '내 완료' : '완료'}
-          value={`${displayComplete}`}
-          color="#1F9D55"
-        />
-
-        <Kpi
-          title={activeGroup ? '내 미완료' : '미완료'}
-          value={`${displayPending}`}
-          color="#F39C12"
-        />
-      </View>
-
-      <View style={styles.currentWorkCard}>
-        <View style={styles.currentWorkHeader}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cardEyebrow}>
-              {activeGroup ? 'CURRENT GROUP' : 'TODAY'}
-            </Text>
-            <Text style={styles.currentWorkTitle}>
-              {activeGroup?.groupName || '개인 외근'}
-            </Text>
-          </View>
-          <View style={styles.currentRoleBadge}>
-            <Text style={styles.currentRoleText}>
-              {activeGroup
-                ? activeGroup.role === 'LEADER'
-                  ? '팀장'
-                  : '팀원'
-                : '개인'}
-            </Text>
-          </View>
-        </View>
-
-        <Text style={styles.currentWorkDesc}>
-          {activeGroup
-            ? activeGroup.role === 'LEADER'
-              ? `내 담당 ${displayTotal}곳 · 팀 전체 ${groupAssignments.length}곳`
-              : `내 담당 방문지 ${displayTotal}곳`
-            : `내가 등록한 방문지 ${displayTotal}곳`}
+      <View style={styles.homeSectionHeader}>
+        <Text style={styles.homeSectionTitle}>
+          내 담당 업무
         </Text>
 
-        {activeGroup?.role === 'LEADER' ? (
-          <View style={styles.currentWorkButtons}>
-            <TouchableOpacity
-              style={styles.currentWorkSecondaryButton}
-              onPress={onRoute}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.currentWorkSecondaryText}>내 업무 보기</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.currentWorkPrimaryButton}
-              onPress={onWorkStatus}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.currentWorkPrimaryText}>팀 작업현황</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.currentWorkPrimaryButton}
-            onPress={activeGroup ? onWorkStatus : onRoute}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.currentWorkPrimaryText}>
-              {activeGroup ? '내 담당 업무 보기' : '내 업무 지도 보기'}
-            </Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={styles.homeSectionLinkButton}
+          onPress={
+            activeGroup
+              ? onWorkStatus
+              : onRoute
+          }
+          activeOpacity={0.7}
+        >
+          <Text style={styles.homeSectionLink}>
+            전체 보기
+          </Text>
+          <Ionicons
+            name="chevron-forward"
+            size={15}
+            color="#173A5E"
+          />
+        </TouchableOpacity>
       </View>
 
-      {visibleIncompleteLocations.length >
-        0 && (
-        <View style={styles.card}>
+      {currentTask ? (
+        <View style={styles.homeTaskCard}>
           <View
-            style={
-              styles.incompleteHeader
-            }
-          >
-            <View>
-              <Text
-                style={
-                  styles.cardEyebrow
-                }
-              >
-                INCOMPLETE FIELDWORK
-              </Text>
-
-              <Text
-                style={
-                  styles.cardTitle
-                }
-              >
-                미처리 작업
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={
-                styles.selectAllButton
-              }
-              onPress={
-                toggleSelectAll
-              }
-            >
-              <Text
-                style={
-                  styles.selectAllText
-                }
-              >
-                {selectedIds.length ===
-                visibleIncompleteLocations.length
-                  ? '전체 해제'
-                  : '전체 선택'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {visibleIncompleteLocations.map(
-            (item, index) => {
-              const selected =
-                selectedIds.includes(
-                  item.id
-                );
-
-              const statusInfo =
-                getStatusInfo(
-                  item.status
-                );
-
-              const status =
-                String(
-                  item.status || ''
-                ).toLowerCase();
-
-              const canDelete =
-                status === 'pending';
-
-              const deleting =
-                Number(
-                  deletingId
-                ) ===
-                Number(
-                  item.id
-                );
-
-              return (
-                <View
-                  key={`${item.id}-${index}`}
-                  style={
-                    styles.incompleteItem
-                  }
-                >
-                  <TouchableOpacity
-                    onPress={() =>
-                      toggleSelect(
-                        item.id
-                      )
-                    }
-                    style={[
-                      styles.circleSelect,
-                      selected &&
-                        styles.circleSelectActive,
-                    ]}
-                    activeOpacity={
-                      0.8
-                    }
-                  >
-                    {selected && (
-                      <Text
-                        style={
-                          styles.circleCheckText
-                        }
-                      >
-                        ✓
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-
-                  <View
-                    style={{
-                      flex: 1,
-                    }}
-                  >
-                    <Text
-                      style={
-                        styles.entryName
-                      }
-                      numberOfLines={
-                        1
-                      }
-                    >
-                      {item.detailAddress ||
-                        '이름 없음'}
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.entryMemo
-                      }
-                      numberOfLines={
-                        1
-                      }
-                    >
-                      {item.roadAddress ||
-                        '주소 없음'}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={
-                      styles.itemRight
-                    }
-                  >
-                    <Text
-                      style={[
-                        styles.entryStatus,
-                        styles[
-                          statusInfo
-                            .styleName
-                        ],
-                      ]}
-                    >
-                      {
-                        statusInfo.label
-                      }
-                    </Text>
-
-                    {canDelete && (
-                      <TouchableOpacity
-                        style={[
-                          styles.deleteButton,
-                          deleting &&
-                            styles.deleteButtonDisabled,
-                        ]}
-                        disabled={
-                          deleting
-                        }
-                        activeOpacity={
-                          0.8
-                        }
-                        onPress={() =>
-                          deleteIncompleteLocation(
-                            item
-                          )
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.deleteButtonText,
-                            deleting &&
-                              styles.deleteButtonTextDisabled,
-                          ]}
-                        >
-                          {deleting
-                            ? '삭제중'
-                            : '삭제'}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              );
-            }
-          )}
-
-          <TouchableOpacity
             style={[
-              styles.addTodayButton,
-              selectedIds.length ===
-                0 &&
-                styles.addTodayButtonDisabled,
+              styles.homeStatusBadge,
+              String(
+                currentTask.status || ''
+              ).toLowerCase() ===
+                'working' &&
+                styles.homeStatusBadgeWorking,
             ]}
-            onPress={
-              addSelectedToToday
-            }
-            disabled={
-              selectedIds.length ===
-              0
-            }
-            activeOpacity={0.85}
           >
             <Text
-              style={
-                styles.addTodayText
-              }
+              style={[
+                styles.homeStatusText,
+                String(
+                  currentTask.status || ''
+                ).toLowerCase() ===
+                  'working' &&
+                  styles.homeStatusTextWorking,
+              ]}
             >
-              선택한 작업 오늘 외근에 추가
-              {selectedIds.length >
-              0
-                ? ` (${selectedIds.length})`
-                : ''}
+              {String(
+                currentTask.status || ''
+              ).toLowerCase() ===
+              'working'
+                ? '진행 중'
+                : '진행 전'}
+            </Text>
+          </View>
+
+          <Text
+            style={styles.homeTaskTitle}
+            numberOfLines={1}
+          >
+            {currentTask.detailAddress ||
+              currentTask.task ||
+              '현장 업무'}
+          </Text>
+
+          <Text
+            style={styles.homeTaskSubText}
+            numberOfLines={1}
+          >
+            {currentTask.task ||
+              '현장 확인'}
+            {' · '}
+            {currentTask.roadAddress ||
+              '주소 정보 없음'}
+          </Text>
+
+          <View style={styles.homeTaskDivider} />
+
+          <View style={styles.homeRemainingRow}>
+            <Ionicons
+              name="location-outline"
+              size={20}
+              color="#173A5E"
+            />
+            <Text style={styles.homeRemainingText}>
+              남은 방문지{' '}
+              {visibleIncompleteLocations.length}곳
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.homeRouteButton}
+            onPress={onRoute}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name="git-branch-outline"
+              size={19}
+              color="#FFFFFF"
+            />
+            <Text style={styles.homeRouteButtonText}>
+              남은 업무 경로 확인
             </Text>
           </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.homeEmptyWorkCard}>
+          <View style={styles.homeCompleteIcon}>
+            <Ionicons
+              name="checkmark"
+              size={22}
+              color="#FFFFFF"
+            />
+          </View>
+
+          <View style={styles.homeEmptyWorkTextBox}>
+            <Text style={styles.homeEmptyWorkTitle}>
+              오늘 담당 업무를 모두 완료했어요
+            </Text>
+            <Text
+              style={
+                styles.homeEmptyWorkDescription
+              }
+            >
+              새 업무가 배정되면 이곳에 표시됩니다.
+            </Text>
+          </View>
         </View>
       )}
 
-      <View
-        style={
-          styles.actions
-        }
-      >
-        <Action
-          title="경로 설정"
-          desc="방문지 선택 및 최적 경로 확인"
-          icon="🗺️"
-          onPress={onRoute}
-        />
-
-        <Action
-          title="보고서 생성"
-          desc="현장 기록 기반 자동 보고서"
-          icon="📄"
-          onPress={onReport}
-        />
-
-        <Action
-          title="그룹 설정"
-          desc={
-            activeGroup
-              ? `${activeGroup.groupName} · 방문지 분담`
-              : '그룹 생성, 초대 및 방문지 분담'
-          }
-          icon="👥"
-          onPress={onGroup}
-        />
-
-      </View>
-
-      <View style={styles.card}>
-        <Text
-          style={
-            styles.cardEyebrow
-          }
-        >
-          RECENT FIELDWORK
-        </Text>
-
-        <Text
-          style={
-            styles.cardTitle
-          }
-        >
+      <View style={styles.homeSectionHeader}>
+        <Text style={styles.homeSectionTitle}>
           최근 방문 기록
         </Text>
+      </View>
 
-        <Text
-          style={
-            styles.emptyText
-          }
-        >
-          최근 방문 기록이 없습니다.
-        </Text>
+      <View style={styles.homeHistoryCard}>
+        {recentCompleted.length > 0 ? (
+          recentCompleted.map(
+            (item, index) => (
+              <View
+                key={`recent-${
+                  item.id ??
+                  item.taskId ??
+                  index
+                }`}
+                style={[
+                  styles.homeHistoryItem,
+                  index > 0 &&
+                    styles.homeHistoryItemBorder,
+                ]}
+              >
+                <View
+                  style={
+                    styles.homeHistoryCheck
+                  }
+                >
+                  <Ionicons
+                    name="checkmark"
+                    size={16}
+                    color="#FFFFFF"
+                  />
+                </View>
+
+                <View
+                  style={
+                    styles.homeHistoryTextBox
+                  }
+                >
+                  <Text
+                    style={
+                      styles.homeHistoryTitle
+                    }
+                    numberOfLines={1}
+                  >
+                    {item.detailAddress ||
+                      item.task ||
+                      '현장 업무'}
+                  </Text>
+                  <Text
+                    style={
+                      styles.homeHistoryDescription
+                    }
+                    numberOfLines={1}
+                  >
+                    {item.roadAddress ||
+                      '업무 완료'}
+                  </Text>
+                </View>
+              </View>
+            )
+          )
+        ) : (
+          <View style={styles.homeEmptyHistory}>
+            <Ionicons
+              name="time-outline"
+              size={21}
+              color="#8A97A6"
+            />
+            <Text
+              style={
+                styles.homeEmptyHistoryText
+              }
+            >
+              최근 방문 기록이 없습니다.
+            </Text>
+          </View>
+        )}
       </View>
     </ScrollView>
+  );
+}
+
+function HomeMetric({
+  label,
+  value,
+}) {
+  return (
+    <View style={styles.homeMetric}>
+      <Text style={styles.homeMetricLabel}>
+        {label}
+      </Text>
+      <Text style={styles.homeMetricValue}>
+        {value}
+      </Text>
+    </View>
   );
 }
 
@@ -1591,4 +1507,421 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#718096',
   },
+
+  homeContainer: {
+    flex: 1,
+    backgroundColor: '#F5F7FA',
+  },
+
+  homeContent: {
+    paddingBottom: 28,
+  },
+
+  homeHeader: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 22,
+    paddingTop: 14,
+    paddingBottom: 16,
+  },
+
+  homeTopBar: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  homeAppName: {
+    color: '#173A5E',
+    fontSize: 27,
+    fontWeight: '900',
+    letterSpacing: -0.8,
+  },
+
+  homeSettingsButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  homeGreetingRow: {
+    marginTop: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  homeGreetingTextBox: {
+    flex: 1,
+    paddingRight: 12,
+  },
+
+  homeTodayText: {
+    color: '#728096',
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+
+  homeGreetingTitle: {
+    color: '#152438',
+    fontSize: 25,
+    fontWeight: '900',
+    letterSpacing: -0.9,
+  },
+
+  homeDepartmentText: {
+    color: '#66758A',
+    fontSize: 15,
+    fontWeight: '500',
+    marginTop: 4,
+  },
+
+  homeAvatar: {
+    width: 55,
+    height: 55,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E7EEF6',
+  },
+
+  homeGroupShortcut: {
+    marginTop: 20,
+    minHeight: 54,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: '#DCE3EA',
+    backgroundColor: '#FBFCFD',
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  homeGroupLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  homeGroupName: {
+    maxWidth: '58%',
+    color: '#19283A',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+
+  homeRoleBadge: {
+    borderRadius: 999,
+    backgroundColor: '#E8EFF6',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+
+  homeRoleText: {
+    color: '#173A5E',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+
+  homeProgressCard: {
+    marginHorizontal: 22,
+    marginTop: 14,
+    borderRadius: 14,
+    backgroundColor: '#173A5E',
+    paddingHorizontal: 18,
+    paddingVertical: 17,
+    elevation: 3,
+    shadowColor: '#173A5E',
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+  },
+
+  homeProgressHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+
+  homeProgressTitle: {
+    color: '#FFFFFF',
+    fontSize: 19,
+    fontWeight: '900',
+  },
+
+  homeProgressDesc: {
+    color: 'rgba(255,255,255,0.78)',
+    fontSize: 13,
+    marginTop: 4,
+  },
+
+  homeProgressPercent: {
+    color: '#FFFFFF',
+    fontSize: 26,
+    fontWeight: '900',
+  },
+
+  homeProgressTrack: {
+    height: 9,
+    borderRadius: 999,
+    marginTop: 14,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    overflow: 'hidden',
+  },
+
+  homeProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: '#5FD48A',
+  },
+
+  homeMetricRow: {
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  homeMetric: {
+    flex: 1,
+    alignItems: 'center',
+  },
+
+  homeMetricLabel: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  homeMetricValue: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+
+  homeMetricDivider: {
+    width: 1,
+    height: 39,
+    backgroundColor: 'rgba(255,255,255,0.17)',
+  },
+
+  homeSectionHeader: {
+    marginTop: 22,
+    marginBottom: 9,
+    paddingHorizontal: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  homeSectionTitle: {
+    color: '#152438',
+    fontSize: 19,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+  },
+
+  homeSectionLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  homeSectionLink: {
+    color: '#173A5E',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  homeTaskCard: {
+    marginHorizontal: 22,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#DDE4EB',
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    elevation: 1,
+    shadowColor: '#1E3550',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+  },
+
+  homeStatusBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#FFF0D8',
+  },
+
+  homeStatusBadgeWorking: {
+    backgroundColor: '#E2F5E9',
+  },
+
+  homeStatusText: {
+    color: '#AD6800',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+
+  homeStatusTextWorking: {
+    color: '#276A48',
+  },
+
+  homeTaskTitle: {
+    color: '#19283A',
+    fontSize: 18,
+    fontWeight: '900',
+    marginTop: 9,
+  },
+
+  homeTaskSubText: {
+    color: '#798698',
+    fontSize: 13,
+    marginTop: 5,
+  },
+
+  homeTaskDivider: {
+    height: 1,
+    backgroundColor: '#EDF1F4',
+    marginTop: 13,
+    marginBottom: 12,
+  },
+
+  homeRemainingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+
+  homeRemainingText: {
+    color: '#31445B',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  homeRouteButton: {
+    minHeight: 47,
+    borderRadius: 11,
+    backgroundColor: '#173A5E',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 13,
+  },
+
+  homeRouteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+
+  homeEmptyWorkCard: {
+    marginHorizontal: 22,
+    minHeight: 90,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#DDE4EB',
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  homeCompleteIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#39A866',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  homeEmptyWorkTextBox: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  homeEmptyWorkTitle: {
+    color: '#19283A',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+
+  homeEmptyWorkDescription: {
+    color: '#7D8998',
+    fontSize: 12,
+    marginTop: 4,
+  },
+
+  homeHistoryCard: {
+    marginHorizontal: 22,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#DDE4EB',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 15,
+  },
+
+  homeHistoryItem: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  homeHistoryItemBorder: {
+    borderTopWidth: 1,
+    borderTopColor: '#EDF1F4',
+  },
+
+  homeHistoryCheck: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#39A866',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  homeHistoryTextBox: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  homeHistoryTitle: {
+    color: '#19283A',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  homeHistoryDescription: {
+    color: '#7D8998',
+    fontSize: 12,
+    marginTop: 3,
+  },
+
+  homeEmptyHistory: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+
+  homeEmptyHistoryText: {
+    color: '#7D8998',
+    fontSize: 13,
+  },
+
 });
