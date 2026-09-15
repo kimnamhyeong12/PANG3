@@ -62,6 +62,7 @@ public class GroupService {
         WorkGroup group = new WorkGroup();
         group.setName(groupName.trim());
         group.setLeader(leader);
+        group.setPersonal(false);
         WorkGroup savedGroup = workGroupRepository.save(group);
 
         GroupMember leaderMember = new GroupMember();
@@ -75,20 +76,71 @@ public class GroupService {
         return result;
     }
 
-    @Transactional(readOnly = true)
+    /**
+     * 모든 계정은 로그인 아이디를 이름으로 사용하는 실제 1인 그룹을 하나 가진다.
+     * 기존 사용자의 group_id가 없던 방문지도 최초 로그인/그룹 조회 때 이곳으로 이전한다.
+     */
+    @Transactional
+    public WorkGroup ensurePersonalGroup(User user) {
+        if (user == null || user.getUserId() == null) {
+            throw new RuntimeException("사용자 정보가 없습니다.");
+        }
+
+        WorkGroup personalGroup = workGroupRepository
+                .findFirstByLeaderAndPersonalTrue(user)
+                .orElseGet(() -> {
+                    WorkGroup created = new WorkGroup();
+                    created.setName(user.getLoginId());
+                    created.setLeader(user);
+                    created.setPersonal(true);
+                    return workGroupRepository.save(created);
+                });
+
+        if (!user.getLoginId().equals(personalGroup.getName())) {
+            personalGroup.setName(user.getLoginId());
+            personalGroup = workGroupRepository.save(personalGroup);
+        }
+
+        if (!groupMemberRepository.existsByGroupAndUser(personalGroup, user)) {
+            GroupMember member = new GroupMember();
+            member.setGroup(personalGroup);
+            member.setUser(user);
+            member.setRole(ROLE_LEADER);
+            groupMemberRepository.save(member);
+        }
+
+        migrateLegacyPersonalTasks(user, personalGroup);
+        ensurePersonalAssignments(user, personalGroup);
+        return personalGroup;
+    }
+
+    @Transactional
     public List<Map<String, Object>> getUserGroups(Long userId) {
         User user = getUser(userId);
+        ensurePersonalGroup(user);
 
-        return groupMemberRepository.findByUserOrderByJoinedAtDesc(user)
+        List<GroupMember> memberships =
+                groupMemberRepository.findByUserOrderByJoinedAtDesc(user);
+
+        // 예전 데이터는 담당 배정만 있고 task.group_id가 비어 있을 수 있다.
+        // 해당 팀의 누구든 그룹 목록을 조회하면 소유 그룹을 자동 복구한다.
+        memberships.forEach(member ->
+                synchronizeAssignedTaskGroups(member.getGroup()));
+
+        return memberships
                 .stream()
+                .sorted((left, right) -> Boolean.compare(
+                        right.getGroup().isPersonal(),
+                        left.getGroup().isPersonal()))
                 .map(member -> groupSummary(member.getGroup(), member.getRole()))
                 .toList();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public Map<String, Object> getGroupDetail(Long groupId, Long userId) {
         WorkGroup group = getGroup(groupId);
         GroupMember requester = requireMember(group, userId);
+        synchronizeAssignedTaskGroups(group);
 
         Map<String, Object> result = groupSummary(group, requester.getRole());
         result.put("members", groupMemberRepository.findByGroupOrderByJoinedAtAsc(group)
@@ -120,6 +172,10 @@ public class GroupService {
             String inviteeLoginId) {
         WorkGroup group = getGroup(groupId);
         User inviter = requireLeader(group, inviterUserId);
+
+        if (group.isPersonal()) {
+            throw new RuntimeException("자동 1인 그룹에는 팀원을 초대할 수 없습니다. 새 그룹을 만들어주세요.");
+        }
 
         if (inviteeLoginId == null || inviteeLoginId.trim().isEmpty()) {
             throw new RuntimeException("초대할 사용자 아이디를 입력해주세요.");
@@ -217,6 +273,10 @@ public class GroupService {
         User leader = requireLeader(group, leaderUserId);
         User assignee = getUser(assigneeUserId);
 
+        if (group.isPersonal() && !assignee.getUserId().equals(group.getLeader().getUserId())) {
+            throw new RuntimeException("1인 그룹의 담당자는 본인만 선택할 수 있습니다.");
+        }
+
         if (!groupMemberRepository.existsByGroupAndUser(group, assignee)) {
             throw new RuntimeException("담당자는 해당 그룹의 멤버여야 합니다.");
         }
@@ -294,6 +354,10 @@ public class GroupService {
         WorkGroup group = getGroup(groupId);
         requireLeader(group, leaderUserId);
 
+        if (group.isPersonal()) {
+            throw new RuntimeException("1인 그룹의 본인 담당 배정은 해제할 수 없습니다.");
+        }
+
         Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new RuntimeException("방문지를 찾을 수 없습니다."));
 
@@ -310,10 +374,11 @@ public class GroupService {
         return result;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<Map<String, Object>> getAssignments(Long groupId, Long requesterUserId) {
         WorkGroup group = getGroup(groupId);
         requireMember(group, requesterUserId);
+        synchronizeAssignedTaskGroups(group);
 
         return locationAssignmentRepository.findByGroupOrderByAssignedAtDesc(group)
                 .stream()
@@ -321,10 +386,11 @@ public class GroupService {
                 .toList();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<Map<String, Object>> getMyAssignments(Long groupId, Long userId) {
         WorkGroup group = getGroup(groupId);
         GroupMember member = requireMember(group, userId);
+        synchronizeAssignedTaskGroups(group);
 
         return locationAssignmentRepository
                 .findByGroupAndAssigneeOrderByAssignedAtDesc(group, member.getUser())
@@ -397,6 +463,62 @@ public class GroupService {
         return normalized;
     }
 
+    private void migrateLegacyPersonalTasks(User user, WorkGroup personalGroup) {
+        List<Task> legacyTasks = taskRepository
+                .findByCreatedByAndGroupIsNullOrderByTaskIdDesc(user);
+
+        for (Task task : legacyTasks) {
+            List<LocationAssignment> existingAssignments =
+                    locationAssignmentRepository.findByTaskOrderByAssignedAtAsc(task);
+
+            // 예전 팀 배정이 이미 존재하면 그 팀 소유 방문지로 복구한다.
+            if (!existingAssignments.isEmpty()) {
+                task.setGroup(existingAssignments.get(0).getGroup());
+                taskRepository.save(task);
+                continue;
+            }
+
+            task.setGroup(personalGroup);
+            taskRepository.save(task);
+        }
+    }
+
+    private void ensurePersonalAssignments(User user, WorkGroup personalGroup) {
+        for (Task task : taskRepository.findByGroupOrderByTaskIdDesc(personalGroup)) {
+            LocationAssignment assignment = locationAssignmentRepository
+                    .findByGroupAndTask(personalGroup, task)
+                    .orElse(null);
+
+            if (assignment != null
+                    && assignment.getAssignee().getUserId().equals(user.getUserId())
+                    && assignment.getAssignedBy().getUserId().equals(user.getUserId())) {
+                continue;
+            }
+
+            if (assignment == null) {
+                assignment = new LocationAssignment();
+            }
+
+            assignment.setGroup(personalGroup);
+            assignment.setTask(task);
+            assignment.setAssignee(user);
+            assignment.setAssignedBy(user);
+            locationAssignmentRepository.save(assignment);
+        }
+    }
+
+    private void synchronizeAssignedTaskGroups(WorkGroup group) {
+        for (LocationAssignment assignment :
+                locationAssignmentRepository.findByGroupOrderByAssignedAtDesc(group)) {
+            Task task = assignment.getTask();
+
+            if (task.getGroup() == null) {
+                task.setGroup(group);
+                taskRepository.save(task);
+            }
+        }
+    }
+
     private Map<String, Object> groupSummary(WorkGroup group, String role) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("groupId", group.getGroupId());
@@ -405,6 +527,9 @@ public class GroupService {
         map.put("leaderLoginId", group.getLeader().getLoginId());
         map.put("leaderName", group.getLeader().getName());
         map.put("role", role);
+        map.put("personal", group.isPersonal());
+        map.put("personalWorkspace", group.isPersonal());
+        map.put("workspaceType", group.isPersonal() ? "PERSONAL" : "TEAM");
         map.put("memberCount", groupMemberRepository.countByGroup(group));
         map.put("createdAt", group.getCreatedAt());
         return map;
@@ -446,11 +571,16 @@ public class GroupService {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("assignmentId", assignment.getAssignmentId());
         map.put("groupId", assignment.getGroup().getGroupId());
+        map.put("groupName", assignment.getGroup().getName());
+        map.put("personalWorkspace", assignment.getGroup().isPersonal());
+        map.put("workspaceType", assignment.getGroup().isPersonal() ? "PERSONAL" : "TEAM");
         map.put("taskId", task.getTaskId());
         map.put("locationId", task.getTaskId());
+        map.put("id", task.getTaskId());
         map.put("detailAddress", task.getDetailAddress());
         map.put("roadAddress", task.getRoadAddress());
         map.put("taskCategory", task.getTaskCategory());
+        map.put("task", task.getTaskCategory());
         map.put("status", task.getTaskStatus());
         map.put("adminDong", task.getAdminDong());
         map.put("sido", task.getSido());

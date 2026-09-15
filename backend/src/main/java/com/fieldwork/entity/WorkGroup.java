@@ -21,6 +21,13 @@ public class WorkGroup {
     @JoinColumn(name = "leader_id", nullable = false)
     private User leader;
 
+    /**
+     * true면 회원가입 시 자동 생성되는 1인 업무공간이다.
+     * 방문지/담당자 구조는 일반 팀과 동일하고, 초대 같은 관리 기능만 제한한다.
+     */
+    @Column(name = "is_personal", nullable = false, columnDefinition = "boolean default false")
+    private Boolean personal = false;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -30,6 +37,9 @@ public class WorkGroup {
     @PrePersist
     public void prePersist() {
         this.createdAt = LocalDateTime.now();
+        if (this.personal == null) {
+            this.personal = false;
+        }
     }
 
     public Long getGroupId() {
@@ -54,6 +64,14 @@ public class WorkGroup {
 
     public void setLeader(User leader) {
         this.leader = leader;
+    }
+
+    public boolean isPersonal() {
+        return Boolean.TRUE.equals(personal);
+    }
+
+    public void setPersonal(boolean personal) {
+        this.personal = personal;
     }
 
     public LocalDateTime getCreatedAt() {
