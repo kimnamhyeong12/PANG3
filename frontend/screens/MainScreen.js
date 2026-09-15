@@ -1647,7 +1647,7 @@ const styles = StyleSheet.create({
   homeHeader: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 22,
-    paddingTop: 14,
+    paddingTop: 30,
     paddingBottom: 16,
   },
 

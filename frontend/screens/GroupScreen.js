@@ -62,7 +62,6 @@ export default function GroupScreen({
         <View style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>TEAM WORKSPACE</Text>
           <Text style={styles.title}>그룹 설정</Text>
-          <Text style={styles.desc}>팀을 만들고 방문지를 조원에게 분담합니다.</Text>
         </View>
       </View>
 
@@ -175,7 +174,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F7FA' },
   header: {
     flexDirection: 'row', gap: 12, alignItems: 'center', backgroundColor: '#FFFFFF',
-    padding: 14, borderBottomWidth: 1, borderBottomColor: '#D9E1EA',
+    paddingHorizontal: 14,
+    paddingTop: 30,
+    paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#D9E1EA',
   },
   eyebrow: { fontSize: 10, fontWeight: '900', color: '#607086', letterSpacing: 1.6 },
   title: { fontSize: 17, fontWeight: '900', color: '#1F2D3D' },

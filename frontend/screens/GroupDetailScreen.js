@@ -74,7 +74,6 @@ export default function GroupDetailScreen({
         <View style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>GROUP DETAIL</Text>
           <Text style={styles.title}>{detail?.groupName || group?.groupName || '그룹'}</Text>
-          <Text style={styles.desc}>{isLeader ? '팀장 권한으로 관리 중' : '팀원으로 참여 중'}</Text>
         </View>
       </View>
 
@@ -213,7 +212,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F7FA' },
   header: {
     flexDirection: 'row', gap: 12, alignItems: 'center', backgroundColor: '#FFFFFF',
-    padding: 14, borderBottomWidth: 1, borderBottomColor: '#D9E1EA',
+    paddingHorizontal: 14,
+  paddingTop: 30,
+  paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#D9E1EA',
   },
   eyebrow: { fontSize: 10, fontWeight: '900', color: '#607086', letterSpacing: 1.6 },
   title: { fontSize: 17, fontWeight: '900', color: '#1F2D3D' },
