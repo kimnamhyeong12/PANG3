@@ -2,6 +2,7 @@ package com.fieldwork.service;
 
 import com.fieldwork.entity.Task;
 import com.fieldwork.entity.GroupMember;
+import com.fieldwork.entity.LocationAssignment;
 import com.fieldwork.entity.User;
 import com.fieldwork.entity.WorkGroup;
 import com.fieldwork.repository.GroupMemberRepository;
@@ -66,17 +67,7 @@ public class TaskService {
                 .orElseThrow(() -> new RuntimeException("해당 그룹의 멤버가 아닙니다."));
 
         if ("LEADER".equalsIgnoreCase(member.getRole())) {
-            List<Task> tasks = new java.util.ArrayList<>(
-                    taskRepository.findByGroupOrderByTaskIdDesc(group)
-            );
-
-            // 팀장이 개인으로 등록한 방문지도 이 그룹에 배정할 수 있다.
-            tasks.addAll(taskRepository.findByCreatedByAndGroupIsNullOrderByTaskIdDesc(user));
-
-            // 소유권 컬럼 추가 전에 만들어진 방문지는 팀장만 확인하고 배정할 수 있다.
-            tasks.addAll(taskRepository.findByCreatedByIsNullAndGroupIsNullOrderByTaskIdDesc());
-
-            return tasks.stream()
+            return taskRepository.findByGroupOrderByTaskIdDesc(group).stream()
                     .map(this::toFrontendMap)
                     .collect(Collectors.toList());
         }
@@ -88,11 +79,27 @@ public class TaskService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getGroupLocations(Long groupId, Long userId) {
+        User user = getUser(userId);
+        WorkGroup group = getGroup(groupId);
+
+        if (!groupMemberRepository.existsByGroupAndUser(group, user)) {
+            throw new RuntimeException("해당 그룹의 멤버가 아닙니다.");
+        }
+
+        return taskRepository.findByGroupOrderByTaskIdDesc(group)
+                .stream()
+                .map(this::toFrontendMap)
+                .collect(Collectors.toList());
+    }
+
     public Task getById(Long taskId) {
         return taskRepository.findById(taskId)
                 .orElseThrow(() -> new RuntimeException("Task not found: " + taskId));
     }
 
+    @Transactional
     public Map<String, Object> createFromFrontendBody(Map<String, Object> body) {
         Task task = new Task();
 
@@ -105,12 +112,14 @@ public class TaskService {
         task.setCreatedBy(creator);
 
         Long groupId = toLong(body.get("groupId"));
+        GroupMember creatorMembership = null;
+        WorkGroup taskGroup = null;
         if (groupId != null) {
             WorkGroup group = getGroup(groupId);
-            if (!groupMemberRepository.existsByGroupAndUser(group, creator)) {
-                throw new RuntimeException("해당 그룹의 멤버만 그룹 방문지를 만들 수 있습니다.");
-            }
+            creatorMembership = groupMemberRepository.findByGroupAndUser(group, creator)
+                    .orElseThrow(() -> new RuntimeException("해당 그룹의 멤버만 그룹 방문지를 만들 수 있습니다."));
             task.setGroup(group);
+            taskGroup = group;
         }
 
         task.setDetailAddress(firstNonBlank(
@@ -162,7 +171,22 @@ public class TaskService {
                 str(body.get("admin_dong"))
         ));
 
-        return toFrontendMap(taskRepository.save(task));
+        Task savedTask = taskRepository.save(task);
+
+        // 팀원이 그룹 안에서 추가한 방문지는 등록한 팀원 본인에게 즉시 배정한다.
+        // 팀장이 추가한 방문지는 담당자 지정 화면에서 그룹원에게 배정한다.
+        if (taskGroup != null
+                && creatorMembership != null
+                && "MEMBER".equalsIgnoreCase(creatorMembership.getRole())) {
+            LocationAssignment assignment = new LocationAssignment();
+            assignment.setGroup(taskGroup);
+            assignment.setTask(savedTask);
+            assignment.setAssignee(creator);
+            assignment.setAssignedBy(creator);
+            locationAssignmentRepository.save(assignment);
+        }
+
+        return toFrontendMap(savedTask);
     }
 
     public Map<String, Object> updateStatus(Long taskId, String status) {

@@ -28,6 +28,15 @@ public class LocationController {
         return taskService.getForFrontend(userId, groupId);
     }
 
+    /** 그룹에 등록된 전체 팀 방문지 조회 */
+    @GetMapping("/group/{groupId}")
+    public List<Map<String, Object>> getGroupLocations(
+            @PathVariable Long groupId,
+            @RequestParam Long userId
+    ) {
+        return taskService.getGroupLocations(groupId, userId);
+    }
+
     /**
      * 신규 방문지를 task 테이블에 저장
      */
