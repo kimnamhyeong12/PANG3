@@ -15,6 +15,13 @@ import {
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
+const isPersonalGroup = (group) =>
+  Boolean(
+    group?.personalWorkspace ||
+    group?.personal ||
+    group?.workspaceType === 'PERSONAL'
+  );
+
 const getStatusInfo = (statusValue) => {
   const status = String(statusValue || '').toLowerCase();
 
@@ -520,11 +527,11 @@ export default function MainScreen({
     user?.loginId ||
     '사용자';
 
-  const roleLabel = activeGroup
-    ? activeGroup.role === 'LEADER'
-      ? '팀장'
-      : '팀원'
-    : '1인';
+  const roleLabel = !activeGroup || isPersonalGroup(activeGroup)
+    ? '1인'
+    : activeGroup?.role === 'LEADER'
+    ? '팀장'
+    : '팀원';
 
   const workspaceName =
     activeGroup?.groupName || displayName;
@@ -631,7 +638,7 @@ export default function MainScreen({
         >
           <View style={styles.homeGroupLeft}>
             <Ionicons
-              name={activeGroup ? 'people-outline' : 'person-outline'}
+              name={isPersonalGroup(activeGroup) ? 'person-outline' : 'people-outline'}
               size={22}
               color="#172538"
             />
@@ -938,8 +945,6 @@ function WorkspacePickerModal({
   onManage,
   onClose,
 }) {
-  const personalName = user?.name || user?.loginId || '나';
-
   return (
     <Modal
       visible={visible}
@@ -967,28 +972,9 @@ function WorkspacePickerModal({
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={[
-              styles.workspaceOption,
-              !activeGroup && styles.workspaceOptionActive,
-            ]}
-            activeOpacity={0.82}
-            onPress={() => onSelect?.(null)}
-          >
-            <View style={[styles.workspaceIcon, styles.personalWorkspaceIcon]}>
-              <Ionicons name="person" size={20} color="#FFFFFF" />
-            </View>
-            <View style={styles.workspaceOptionText}>
-              <Text style={styles.workspaceOptionName}>나 · {personalName}</Text>
-              <Text style={styles.workspaceOptionMeta}>1인 작업공간 · 내 방문지</Text>
-            </View>
-            {!activeGroup && (
-              <Ionicons name="checkmark-circle" size={23} color="#2563EB" />
-            )}
-          </TouchableOpacity>
-
           {groups.map((group) => {
             const selected = Number(activeGroup?.groupId) === Number(group.groupId);
+            const personal = isPersonalGroup(group);
             return (
               <TouchableOpacity
                 key={group.groupId}
@@ -999,13 +985,26 @@ function WorkspacePickerModal({
                 activeOpacity={0.82}
                 onPress={() => onSelect?.(group)}
               >
-                <View style={styles.workspaceIcon}>
-                  <Ionicons name="people" size={20} color="#FFFFFF" />
+                <View
+                  style={[
+                    styles.workspaceIcon,
+                    personal && styles.personalWorkspaceIcon,
+                  ]}
+                >
+                  <Ionicons
+                    name={personal ? 'person' : 'people'}
+                    size={20}
+                    color="#FFFFFF"
+                  />
                 </View>
                 <View style={styles.workspaceOptionText}>
-                  <Text style={styles.workspaceOptionName}>{group.groupName}</Text>
+                  <Text style={styles.workspaceOptionName}>
+                    {personal ? `나 · ${group.groupName}` : group.groupName}
+                  </Text>
                   <Text style={styles.workspaceOptionMeta}>
-                    {group.memberCount || 1}명 · {group.role === 'LEADER' ? '팀장' : '팀원'}
+                    {personal
+                      ? `1인 그룹 · ${user?.name || user?.loginId || '본인'}`
+                      : `${group.memberCount || 1}명 · ${group.role === 'LEADER' ? '팀장' : '팀원'}`}
                   </Text>
                 </View>
                 {selected && (

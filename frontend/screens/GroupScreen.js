@@ -13,6 +13,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { BackButton } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
 
+const isPersonalGroup = (group) =>
+  Boolean(
+    group?.personalWorkspace ||
+    group?.personal ||
+    group?.workspaceType === 'PERSONAL'
+  );
+
 export default function GroupScreen({
   user,
   activeGroup,
@@ -20,7 +27,6 @@ export default function GroupScreen({
   onCreate,
   onInvitations,
   onOpenGroup,
-  onSelectPersonal,
 }) {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -84,12 +90,16 @@ export default function GroupScreen({
         <View style={styles.activeCard}>
           <Text style={styles.activeSectionLabel}>CURRENT WORKSPACE</Text>
           <Text style={styles.activeName}>
-            {activeGroup?.groupName || user?.name || user?.loginId || '나'}
+            {isPersonalGroup(activeGroup)
+              ? `나 · ${activeGroup.groupName}`
+              : activeGroup?.groupName || '업무공간 불러오는 중'}
           </Text>
           <Text style={styles.activeMeta}>
-            {activeGroup
+            {isPersonalGroup(activeGroup)
+              ? '현재 선택된 1인 그룹'
+              : activeGroup
               ? `현재 선택된 팀 · ${activeGroup.role === 'LEADER' ? '팀장' : '팀원'}`
-              : '현재 선택된 1인 작업공간'}
+              : '현재 작업공간을 불러오는 중입니다'}
           </Text>
         </View>
 
@@ -97,22 +107,6 @@ export default function GroupScreen({
           <Text style={styles.sectionLabel}>MY GROUPS</Text>
           <Text style={styles.sectionTitle}>업무공간</Text>
         </View>
-
-        <TouchableOpacity
-          style={[styles.groupCard, !activeGroup && styles.selectedGroupCard]}
-          onPress={onSelectPersonal}
-          activeOpacity={0.85}
-        >
-          <View style={[styles.groupIcon, styles.personalIcon]}>
-            <Ionicons name="person" size={20} color="#FFFFFF" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.groupName}>나 · {user?.name || user?.loginId || '개인'}</Text>
-            <Text style={styles.groupMeta}>1명 · 내 방문지와 보고서</Text>
-          </View>
-          {!activeGroup && <Ionicons name="checkmark-circle" size={22} color="#2563EB" />}
-          <Ionicons name="chevron-forward" size={18} color="#8A98A8" />
-        </TouchableOpacity>
 
         {loading ? (
           <View style={styles.loadingBox}>
@@ -125,30 +119,40 @@ export default function GroupScreen({
             <Text style={styles.emptyDesc}>그룹을 만들거나 초대를 받아보세요.</Text>
           </View>
         ) : (
-          groups.map((group) => (
-            <TouchableOpacity
-              key={group.groupId}
-              style={styles.groupCard}
-              onPress={() => onOpenGroup?.(group)}
-              activeOpacity={0.85}
-            >
-              <View style={styles.groupIcon}>
-                <Ionicons name="people" size={20} color="#FFFFFF" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.groupName}>{group.groupName}</Text>
-                <Text style={styles.groupMeta}>
-                  팀장 {group.leaderName || group.leaderLoginId} · {group.memberCount || 1}명
-                </Text>
-              </View>
-              <View style={styles.roleBadge}>
-                <Text style={styles.roleText}>
-                  {group.role === 'LEADER' ? '팀장' : '팀원'}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#8A98A8" />
-            </TouchableOpacity>
-          ))
+          groups.map((group) => {
+            const personal = isPersonalGroup(group);
+            const selected = Number(activeGroup?.groupId) === Number(group.groupId);
+
+            return (
+              <TouchableOpacity
+                key={group.groupId}
+                style={[styles.groupCard, selected && styles.selectedGroupCard]}
+                onPress={() => onOpenGroup?.(group)}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.groupIcon, personal && styles.personalIcon]}>
+                  <Ionicons name={personal ? 'person' : 'people'} size={20} color="#FFFFFF" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.groupName}>
+                    {personal ? `나 · ${group.groupName}` : group.groupName}
+                  </Text>
+                  <Text style={styles.groupMeta}>
+                    {personal
+                      ? `1명 · ${user?.name || user?.loginId || '본인'}`
+                      : `팀장 ${group.leaderName || group.leaderLoginId} · ${group.memberCount || 1}명`}
+                  </Text>
+                </View>
+                <View style={styles.roleBadge}>
+                  <Text style={styles.roleText}>
+                    {personal ? '1인' : group.role === 'LEADER' ? '팀장' : '팀원'}
+                  </Text>
+                </View>
+                {selected && <Ionicons name="checkmark-circle" size={20} color="#2563EB" />}
+                <Ionicons name="chevron-forward" size={18} color="#8A98A8" />
+              </TouchableOpacity>
+            );
+          })
         )}
       </ScrollView>
     </View>

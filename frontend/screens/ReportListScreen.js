@@ -29,12 +29,6 @@ const getTaskId = (loc) =>
   loc?.task_id ??
   null;
 
-const getGroupId = (loc) =>
-  loc?.groupId ??
-  loc?.group_id ??
-  loc?.group?.groupId ??
-  null;
-
 const getGroupName = (loc, activeGroup, assignment) =>
   loc?.groupName ||
   loc?.group_name ||
@@ -42,6 +36,13 @@ const getGroupName = (loc, activeGroup, assignment) =>
   assignment?.groupName ||
   activeGroup?.groupName ||
   '팀';
+
+const isPersonalGroup = (group) =>
+  Boolean(
+    group?.personalWorkspace ||
+    group?.personal ||
+    group?.workspaceType === 'PERSONAL'
+  );
 
 export default function ReportListScreen({
   locations = [],
@@ -85,6 +86,7 @@ export default function ReportListScreen({
   );
 
   const workspaceName = activeGroup?.groupName || user?.name || user?.loginId || '나';
+  const personalWorkspace = !activeGroup || isPersonalGroup(activeGroup);
 
   const handleCreateReport = () => {
     if (selectedLocations.length === 0) {
@@ -161,13 +163,8 @@ export default function ReportListScreen({
                 Number(taskId)
               );
 
-            const groupId = getGroupId(loc);
-
-            // groupId가 있으면 확실한 팀 방문지.
-            // 오래된 응답에서 groupId가 빠진 경우에는 담당자 배정 정보가 있으면 팀 방문지로 본다.
-            const isTeamLocation =
-              Boolean(groupId) ||
-              Boolean(assignment);
+            // 이제 1인 그룹도 groupId와 담당자 배정을 가지므로 현재 그룹 유형으로 구분한다.
+            const isTeamLocation = !personalWorkspace;
 
             const groupName = isTeamLocation
               ? getGroupName(

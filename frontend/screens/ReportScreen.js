@@ -3,6 +3,13 @@ import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from 'react-nat
 import { BackButton, PrimaryButton } from '../components/ui';
 import { API_BASE_URL } from '../utils/api';
 
+const isPersonalGroup = (group) =>
+  Boolean(
+    group?.personalWorkspace ||
+    group?.personal ||
+    group?.workspaceType === 'PERSONAL'
+  );
+
 const getStatusLabel = (status) => {
   if (status === 'complete') return '작업 후';
   if (status === 'working') return '작업 중';
@@ -57,7 +64,7 @@ export default function ReportScreen({
   const working = locations.filter((l) => l.status === 'working').length;
   const firstWithReport = rows.find((r) => r.progress?.reportDownloadUrl);
   const workspaceName = activeGroup?.groupName || user?.name || user?.loginId || '나';
-  const workspaceType = activeGroup ? '팀 업무공간' : '1인 작업공간';
+  const workspaceType = !activeGroup || isPersonalGroup(activeGroup) ? '1인 그룹' : '팀 그룹';
 
   return (
     <View style={styles.container}>

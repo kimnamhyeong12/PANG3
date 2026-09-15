@@ -16,6 +16,12 @@ const KAKAO_JAVASCRIPT_KEY =
   process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY ||
   process.env.EXPO_PUBLIC_KAKAO_MAP_API_KEY;
 const MEMBER_COLORS = ['#2E8BFF', '#8B5CF6', '#F97316', '#14B8A6', '#EC4899', '#6366F1'];
+const isPersonalGroup = (group) =>
+  Boolean(
+    group?.personalWorkspace ||
+    group?.personal ||
+    group?.workspaceType === 'PERSONAL'
+  );
 
 const normalizeStatus = (value) => {
   const status = String(value || 'pending').toLowerCase();
@@ -87,6 +93,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
   const [focusedAreaBounds, setFocusedAreaBounds] = useState(null);
   const [mapInteracting, setMapInteracting] = useState(false);
   const isLeader = group?.role === 'LEADER';
+  const personalWorkspace = isPersonalGroup(group);
 
   const loadBoundaries = useCallback(async () => {
     setLoadingBoundary(true);
@@ -183,8 +190,12 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
         <BackButton onPress={onBack} />
         <View style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>TEAM STATUS</Text>
-          <Text style={styles.title}>{isLeader ? '팀 작업현황' : '내 담당 업무'}</Text>
-          <Text style={styles.desc}>{group?.groupName || '현재 그룹'} · {isLeader ? '팀장 화면' : '팀원 화면'}</Text>
+          <Text style={styles.title}>
+            {personalWorkspace ? '내 업무 현황' : isLeader ? '팀 작업현황' : '내 담당 업무'}
+          </Text>
+          <Text style={styles.desc}>
+            {group?.groupName || '현재 그룹'} · {personalWorkspace ? '1인 그룹' : isLeader ? '팀장 화면' : '팀원 화면'}
+          </Text>
         </View>
       </View>
 
@@ -251,7 +262,9 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
 
         <View style={styles.memberCard}>
           <View style={styles.memberHeader}>
-            <Text style={styles.memberTitle}>팀원별 진행 현황</Text>
+            <Text style={styles.memberTitle}>
+              {personalWorkspace ? '내 진행 현황' : '팀원별 진행 현황'}
+            </Text>
             {!!selectedMemberId && (
               <TouchableOpacity onPress={() => { setSelectedMemberId(null); setSelectedAreaKey(null); setFocusedAreaBounds(null); }}>
                 <Text style={styles.showAllText}>전체 보기</Text>
@@ -259,7 +272,9 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
             )}
           </View>
           {memberProgress.length === 0 ? (
-            <Text style={styles.emptyText}>배정된 팀 업무가 없습니다.</Text>
+            <Text style={styles.emptyText}>
+              {personalWorkspace ? '등록된 업무가 없습니다.' : '배정된 팀 업무가 없습니다.'}
+            </Text>
           ) : (
             <ScrollView style={styles.memberList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
               {memberProgress.map((member) => {

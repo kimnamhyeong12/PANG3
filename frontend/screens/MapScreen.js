@@ -52,6 +52,7 @@ export default function MapScreen({
   user,
   onBack,
   onLocationClick,
+  onDataChanged,
   locations,
   setLocations,
   activeGroup,
@@ -492,7 +493,8 @@ export default function MapScreen({
       sigungu: region?.sigungu || null,
       adminDong: region?.adminDong || null,
       createdByUserId: user?.userId,
-      groupId: locationScope === 'team' ? activeGroup?.groupId ?? null : null,
+      // 1인/다인 구분 없이 모든 방문지는 현재 선택된 실제 그룹에 저장한다.
+      groupId: activeGroup?.groupId ?? null,
     };
 
     try {
@@ -526,6 +528,7 @@ export default function MapScreen({
           priority: savedLocation.priority || '',
         },
       ]);
+      onDataChanged?.();
 
       if (locationScope === 'team') {
         showAlert(
@@ -565,6 +568,7 @@ export default function MapScreen({
 
     const nextLocations = markers.filter((loc) => loc.id !== id);
     setLocations?.(nextLocations);
+    onDataChanged?.();
   };
 
   const getPathDistance = (path = []) => {

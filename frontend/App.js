@@ -31,6 +31,13 @@ import WorkStatusScreen from './screens/WorkStatusScreen';
 import { groupApi } from './utils/groupApi';
 import { CustomAlertHost } from './components/CustomAlert';
 
+const isPersonalGroup = (group) =>
+  Boolean(
+    group?.personalWorkspace ||
+    group?.personal ||
+    group?.workspaceType === 'PERSONAL'
+  );
+
 export default function App() {
   const [screen, setScreen] = useState('login');
   const [user, setUser] = useState(null);
@@ -87,7 +94,7 @@ export default function App() {
       try {
         await AsyncStorage.setItem(
           `pang3_active_group_${targetUser.userId}`,
-          group?.groupId ? String(group.groupId) : 'personal'
+          group?.groupId ? String(group.groupId) : ''
         );
       } catch (error) {
         console.log('현재 그룹 저장 실패:', error);
@@ -99,26 +106,18 @@ export default function App() {
     if (!loginUser?.userId) return;
 
     try {
-      const [groups, savedGroupId] = await Promise.all([
-        groupApi(`/api/groups/user/${loginUser.userId}`),
-        AsyncStorage.getItem(`pang3_active_group_${loginUser.userId}`),
-      ]);
+      const groups = await groupApi(`/api/groups/user/${loginUser.userId}`);
 
       const groupList = Array.isArray(groups) ? groups : [];
       setAvailableGroups(groupList);
-      const restored = groupList.find(
-        (group) => Number(group.groupId) === Number(savedGroupId)
-      );
-      // 저장된 선택이 없으면 언제나 '나(1인 작업공간)'가 기본값이다.
-      const selected = savedGroupId && savedGroupId !== 'personal'
-        ? restored || null
-        : null;
+      // 로그인할 때는 로그인 아이디 이름의 자동 1인 그룹이 기본 작업공간이다.
+      const selected = groupList.find(isPersonalGroup) || groupList[0] || null;
 
       setActiveGroup(selected);
 
       await AsyncStorage.setItem(
         `pang3_active_group_${loginUser.userId}`,
-        selected?.groupId ? String(selected.groupId) : 'personal'
+        selected?.groupId ? String(selected.groupId) : ''
       );
     } catch (error) {
       console.log('현재 그룹 복원 실패:', error);
@@ -148,7 +147,7 @@ export default function App() {
 
   const workspaceCacheKey = useCallback((targetUser = user, group = activeGroup) => {
     if (!targetUser?.userId) return null;
-    const scope = group?.groupId ? `group_${group.groupId}` : 'personal';
+    const scope = group?.groupId ? `group_${group.groupId}` : 'unselected';
     return `${WORKSPACE_LOCATIONS_KEY_PREFIX}_${targetUser.userId}_${scope}`;
   }, [activeGroup?.groupId, user?.userId]);
 
@@ -496,11 +495,7 @@ export default function App() {
             onOpenGroup={(group) => {
               rememberAvailableGroup(group);
               selectActiveGroup(group);
-              go('groupDetail');
-            }}
-            onSelectPersonal={() => {
-              selectActiveGroup(null);
-              go('main');
+              go(isPersonalGroup(group) ? 'main' : 'groupDetail');
             }}
           />
         )}
@@ -569,6 +564,7 @@ export default function App() {
               go('groupDetail');
             }}
             onLocationClick={onLocationClick}
+            onDataChanged={refreshGroupAssignments}
             roadPath={teamRoadPath}
             setRoadPath={setTeamRoadPath}
             routeSegments={teamRouteSegments}
@@ -629,7 +625,7 @@ export default function App() {
               setRouteLocations
             }
             activeGroup={activeGroup}
-            locationScope={activeGroup?.groupId ? 'team' : 'personal'}
+            locationScope={!activeGroup || isPersonalGroup(activeGroup) ? 'personal' : 'team'}
             groupAssignments={activeGroup?.groupId ? groupAssignments : []}
             onBack={() =>
               goBack('main')
@@ -637,6 +633,10 @@ export default function App() {
             onLocationClick={
               onLocationClick
             }
+            onDataChanged={() => {
+              refreshGroupAssignments();
+              loadWorkspaceLocations();
+            }}
             roadPath={roadPath}
             setRoadPath={setRoadPath}
             routeSegments={
@@ -687,6 +687,7 @@ export default function App() {
 
               setRouteLocations(applySavedStatus);
               setTeamLocations(applySavedStatus);
+              refreshGroupAssignments();
 
               goBack('reportList');
             }}
