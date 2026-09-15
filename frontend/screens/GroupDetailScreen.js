@@ -18,6 +18,7 @@ export default function GroupDetailScreen({
   group,
   onBack,
   onAssign,
+  onTeamLocations,
   onUpdatedGroup,
 }) {
   const [detail, setDetail] = useState(group || null);
@@ -118,6 +119,25 @@ export default function GroupDetailScreen({
                 />
               </View>
             )}
+
+            <View style={styles.card}>
+              <View style={styles.sectionRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionLabel}>TEAM LOCATIONS</Text>
+                  <Text style={styles.sectionTitle}>팀 방문지 관리</Text>
+                  <Text style={styles.sectionDesc}>
+                    그룹 방문지를 지도에서 추가하고 경로를 확인합니다.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.teamLocationButton}
+                  onPress={() => onTeamLocations?.(detail)}
+                >
+                  <Ionicons name="map-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.teamLocationButtonText}>들어가기</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
             <View style={styles.card}>
               <View style={styles.sectionRow}>
@@ -225,6 +245,8 @@ const styles = StyleSheet.create({
   leaderText: { color: '#12395B' },
   smallButton: { flexDirection: 'row', gap: 5, alignItems: 'center', backgroundColor: '#12395B', paddingHorizontal: 11, paddingVertical: 8, borderRadius: 11 },
   smallButtonText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  teamLocationButton: { flexDirection: 'row', gap: 6, alignItems: 'center', backgroundColor: '#12395B', paddingHorizontal: 13, paddingVertical: 11, borderRadius: 12, marginLeft: 10 },
+  teamLocationButtonText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },
   assignmentRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#EDF2F7' },
   assignmentPlace: { fontSize: 12, fontWeight: '900', color: '#1F2D3D' },
   assignmentAddr: { fontSize: 9, color: '#718096', marginTop: 3 },

@@ -55,6 +55,7 @@ export default function App() {
 
   const [activeGroup, setActiveGroup] = useState(null);
   const [groupAssignments, setGroupAssignments] = useState([]);
+  const [teamLocations, setTeamLocations] = useState([]);
 
   const selectActiveGroup = useCallback(async (group, targetUser = user) => {
     setActiveGroup(group || null);
@@ -252,6 +253,26 @@ export default function App() {
     user?.userId,
   ]);
 
+  const loadTeamLocations = useCallback(async (group = activeGroup) => {
+    if (!group?.groupId || !user?.userId) {
+      setTeamLocations([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/locations/group/${group.groupId}?userId=${user.userId}`
+      );
+      const text = await response.text();
+      if (!response.ok) throw new Error(text || '팀 방문지 조회 실패');
+      const data = JSON.parse(text);
+      setTeamLocations(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.log('팀 방문지 조회 실패:', error);
+      setTeamLocations([]);
+    }
+  }, [activeGroup, user?.userId]);
+
   useEffect(() => {
     refreshGroupAssignments();
   }, [refreshGroupAssignments]);
@@ -416,8 +437,49 @@ export default function App() {
                 selectActiveGroup(group);
                 go('assignment');
               }}
+              onTeamLocations={(group) => {
+                selectActiveGroup(group);
+                setRoadPath([]);
+                setRouteSegments([]);
+                setCurrentSegmentIndex(0);
+                setOptimized(false);
+                setIsGuiding(false);
+                loadTeamLocations(group);
+                go('teamLocations');
+              }}
             />
           )}
+
+        {screen === 'teamLocations' && activeGroup && (
+          <MapScreen
+            user={user}
+            locations={teamLocations}
+            setLocations={setTeamLocations}
+            activeGroup={activeGroup}
+            locationScope="team"
+            groupAssignments={groupAssignments}
+            onBack={() => {
+              refreshGroupAssignments();
+              go('groupDetail');
+            }}
+            onLocationClick={onLocationClick}
+            roadPath={roadPath}
+            setRoadPath={setRoadPath}
+            routeSegments={routeSegments}
+            setRouteSegments={setRouteSegments}
+            currentSegmentIndex={currentSegmentIndex}
+            setCurrentSegmentIndex={setCurrentSegmentIndex}
+            optimized={optimized}
+            setOptimized={setOptimized}
+            isGuiding={isGuiding}
+            setIsGuiding={setIsGuiding}
+            totalDuration={totalDuration}
+            setTotalDuration={setTotalDuration}
+            panelOpen={panelOpen}
+            setPanelOpen={setPanelOpen}
+            onReportPress={() => go('reportList')}
+          />
+        )}
 
         {screen === 'assignment' &&
           activeGroup && (
@@ -462,6 +524,7 @@ export default function App() {
               setRouteLocations
             }
             activeGroup={activeGroup}
+            locationScope="personal"
             groupAssignments={
               groupAssignments
             }

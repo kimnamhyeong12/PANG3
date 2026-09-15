@@ -56,6 +56,7 @@ export default function MapScreen({
   locations,
   setLocations,
   activeGroup,
+  locationScope = 'personal',
   groupAssignments = [],
   roadPath,
   setRoadPath,
@@ -492,7 +493,7 @@ export default function MapScreen({
       sigungu: region?.sigungu || null,
       adminDong: region?.adminDong || null,
       createdByUserId: user?.userId,
-      groupId: activeGroup?.groupId ?? null,
+      groupId: locationScope === 'team' ? activeGroup?.groupId ?? null : null,
     };
 
     try {
@@ -527,6 +528,15 @@ export default function MapScreen({
         },
       ]);
 
+      if (locationScope === 'team') {
+        showAlert(
+          '팀 방문지 추가 완료',
+          activeGroup?.role === 'MEMBER'
+            ? '팀 방문지로 등록했으며 본인에게 자동 배정되었습니다.'
+            : '팀 방문지로 등록했습니다. 담당자를 지정해주세요.'
+        );
+      }
+
       setKeyword('');
       setAddressSearchMode(false);
       closeAddSheet();
@@ -540,6 +550,22 @@ export default function MapScreen({
   };
 
   const removeLocation = async (id) => {
+    if (locationScope === 'team') {
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/api/locations/${id}`,
+          { method: 'DELETE' }
+        );
+
+        const text = await res.text();
+        if (!res.ok) throw new Error(text || `삭제 실패: ${res.status}`);
+      } catch (error) {
+        console.log('팀 방문지 삭제 실패:', error);
+        showAlert('삭제 실패', '작업 전인 팀 방문지만 삭제할 수 있습니다.');
+        return;
+      }
+    }
+
     const nextLocations = markers.filter((loc) => loc.id !== id);
     setLocations?.(nextLocations);
   };
@@ -951,6 +977,14 @@ export default function MapScreen({
       </TouchableOpacity>
 
       <View style={styles.topOverlay}>
+        {locationScope === 'team' && (
+          <View style={styles.teamModeBadge}>
+            <Ionicons name="people" size={14} color="#FFFFFF" />
+            <Text style={styles.teamModeBadgeText}>
+              {activeGroup?.groupName || '그룹'} · 팀 방문지 관리
+            </Text>
+          </View>
+        )}
         <View style={styles.searchControlRow}>
           <TouchableOpacity
             style={styles.searchBox}
@@ -1621,6 +1655,24 @@ const styles = StyleSheet.create({
     left: 10,
     right: 10,
     zIndex: 20,
+  },
+
+  teamModeBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#12395B',
+    borderRadius: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+
+  teamModeBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
   },
 
   searchControlRow: {
