@@ -11,6 +11,8 @@ const getStatusLabel = (status) => {
 
 export default function ReportScreen({
   locations = [],
+  user,
+  activeGroup,
   onBack,
   onDownload,
 }) {
@@ -54,6 +56,8 @@ export default function ReportScreen({
   const complete = locations.filter((l) => l.status === 'complete').length;
   const working = locations.filter((l) => l.status === 'working').length;
   const firstWithReport = rows.find((r) => r.progress?.reportDownloadUrl);
+  const workspaceName = activeGroup?.groupName || user?.name || user?.loginId || '나';
+  const workspaceType = activeGroup ? '팀 업무공간' : '1인 작업공간';
 
   return (
     <View style={styles.container}>
@@ -69,6 +73,7 @@ export default function ReportScreen({
       <ScrollView contentContainerStyle={styles.body}>
         <View style={styles.reportPaper}>
           <Text style={styles.reportTitle}>사하구 외근 업무 결과 보고서</Text>
+          <Text style={styles.line}>업무공간: {workspaceName} ({workspaceType})</Text>
           <Text style={styles.line}>보고 대상 방문지: {locations.length}개</Text>
           <Text style={styles.line}>
             작업 후: {complete}개 / 작업 중: {working}개

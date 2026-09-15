@@ -1,6 +1,7 @@
 import { showAlert } from '../components/CustomAlert';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   View,
   Text,
   ScrollView,
@@ -44,6 +45,8 @@ const getGroupName = (loc, activeGroup, assignment) =>
 
 export default function ReportListScreen({
   locations = [],
+  loading = false,
+  user,
   activeGroup,
   groupAssignments = [],
   onBack,
@@ -68,7 +71,7 @@ export default function ReportListScreen({
       return;
     }
 
-    const id = loc.id;
+    const id = getTaskId(loc);
 
     setSelectedIds((prev) =>
       prev.includes(id)
@@ -78,8 +81,10 @@ export default function ReportListScreen({
   };
 
   const selectedLocations = locations.filter((loc) =>
-    selectedIds.includes(loc.id)
+    selectedIds.includes(getTaskId(loc))
   );
+
+  const workspaceName = activeGroup?.groupName || user?.name || user?.loginId || '나';
 
   const handleCreateReport = () => {
     if (selectedLocations.length === 0) {
@@ -111,38 +116,21 @@ export default function ReportListScreen({
             작업 중 또는 작업 후 방문지만 보고서에 포함할 수 있습니다
           </Text>
 
-          {locations.length > 0 && (
-            <Text style={styles.scopeSummary}>
-              개인 {
-                locations.filter((loc) => {
-                  const id = getTaskId(loc);
-                  const assignment =
-                    assignmentMap.get(Number(id));
-                  return (
-                    !getGroupId(loc) &&
-                    !assignment
-                  );
-                }).length
-              } · 팀 {
-                locations.filter((loc) => {
-                  const id = getTaskId(loc);
-                  const assignment =
-                    assignmentMap.get(Number(id));
-                  return (
-                    Boolean(getGroupId(loc)) ||
-                    Boolean(assignment)
-                  );
-                }).length
-              }
-            </Text>
-          )}
+          <Text style={styles.scopeSummary}>
+            현재 업무공간 · {workspaceName}
+          </Text>
         </View>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.body}
       >
-        {locations.length === 0 ? (
+        {loading ? (
+          <View style={styles.emptyBox}>
+            <ActivityIndicator size="large" color="#173A5E" />
+            <Text style={styles.emptyTitle}>방문지를 불러오는 중입니다</Text>
+          </View>
+        ) : locations.length === 0 ? (
           <View style={styles.emptyBox}>
             <Ionicons
               name="document-text-outline"
@@ -163,10 +151,10 @@ export default function ReportListScreen({
             const reportable =
               isReportable(loc);
 
-            const checked =
-              selectedIds.includes(loc.id);
-
             const taskId = getTaskId(loc);
+
+            const checked =
+              selectedIds.includes(taskId);
 
             const assignment =
               assignmentMap.get(
@@ -286,8 +274,8 @@ export default function ReportListScreen({
                           numberOfLines={1}
                         >
                           {isTeamLocation
-                            ? `팀 방문지 · ${groupName}`
-                            : '개인 방문지'}
+                            ? `팀 · ${groupName}`
+                            : `1인 · ${workspaceName}`}
                         </Text>
                       </View>
                     </View>

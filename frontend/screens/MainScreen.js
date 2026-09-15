@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   Alert,
   BackHandler,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -33,11 +34,13 @@ const getStatusInfo = (statusValue) => {
 export default function MainScreen({
   user,
   activeGroup,
+  availableGroups = [],
   groupAssignments = [],
   onRoute,
   onReport,
   onGroup,
-  onCurrentGroup,
+  onSelectWorkspace,
+  onRefreshWorkspaces,
   onWorkStatus,
   onDashboard,
   locations = [],
@@ -58,6 +61,9 @@ export default function MainScreen({
 
   const [deletingId, setDeletingId] =
     React.useState(null);
+
+  const [workspacePickerOpen, setWorkspacePickerOpen] =
+    React.useState(false);
 
   const backPressedOnce = React.useRef(false);
   const backPressTimer = React.useRef(null);
@@ -518,15 +524,32 @@ export default function MainScreen({
     ? activeGroup.role === 'LEADER'
       ? '팀장'
       : '팀원'
-    : '개인';
+    : '1인';
 
+  const workspaceName =
+    activeGroup?.groupName || displayName;
+
+  const openWorkspacePicker = () => {
+    setWorkspacePickerOpen(true);
+    onRefreshWorkspaces?.();
+  };
+
+  const chooseWorkspace = (group) => {
+    onSelectWorkspace?.(group);
+    setWorkspacePickerOpen(false);
+  };
+
+  // 오늘의 업무 집계와 같은 목록을 사용해야 숫자와 카드가 어긋나지 않는다.
+  // 작업 중 업무를 우선 표시하고, 없으면 완료되지 않은 첫 업무를 표시한다.
   const currentTask =
-    visibleIncompleteLocations.find(
-      (item) =>
-        String(item.status || '').toLowerCase() ===
-        'working'
-    ) ||
-    visibleIncompleteLocations[0] ||
+    displayLocations.find((item) => {
+      const status = String(item.status || item.taskStatus || '').toLowerCase();
+      return status === 'working';
+    }) ||
+    displayLocations.find((item) => {
+      const status = String(item.status || item.taskStatus || '').toLowerCase();
+      return status !== 'complete' && status !== 'done';
+    }) ||
     null;
 
   const recentCompleted = displayLocations
@@ -545,6 +568,7 @@ export default function MainScreen({
     .slice(0, 3);
 
   return (
+    <>
     <ScrollView
       style={styles.homeContainer}
       contentContainerStyle={styles.homeContent}
@@ -602,16 +626,12 @@ export default function MainScreen({
 
         <TouchableOpacity
           style={styles.homeGroupShortcut}
-          onPress={
-            activeGroup
-              ? onCurrentGroup
-              : onGroup
-          }
+          onPress={openWorkspacePicker}
           activeOpacity={0.75}
         >
           <View style={styles.homeGroupLeft}>
             <Ionicons
-              name="people-outline"
+              name={activeGroup ? 'people-outline' : 'person-outline'}
               size={22}
               color="#172538"
             />
@@ -620,8 +640,7 @@ export default function MainScreen({
               style={styles.homeGroupName}
               numberOfLines={1}
             >
-              {activeGroup?.groupName ||
-                '소속 그룹 없음'}
+              {workspaceName}
             </Text>
 
             <View style={styles.homeRoleBadge}>
@@ -894,6 +913,115 @@ export default function MainScreen({
         )}
       </View>
     </ScrollView>
+    <WorkspacePickerModal
+      visible={workspacePickerOpen}
+      user={user}
+      activeGroup={activeGroup}
+      groups={availableGroups}
+      onSelect={chooseWorkspace}
+      onManage={() => {
+        setWorkspacePickerOpen(false);
+        onGroup?.();
+      }}
+      onClose={() => setWorkspacePickerOpen(false)}
+    />
+    </>
+  );
+}
+
+function WorkspacePickerModal({
+  visible,
+  user,
+  activeGroup,
+  groups,
+  onSelect,
+  onManage,
+  onClose,
+}) {
+  const personalName = user?.name || user?.loginId || '나';
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity
+        style={styles.workspaceModalBackdrop}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <TouchableOpacity
+          style={styles.workspaceModalCard}
+          activeOpacity={1}
+          onPress={() => {}}
+        >
+          <View style={styles.workspaceModalHeader}>
+            <View>
+              <Text style={styles.workspaceModalEyebrow}>WORKSPACE</Text>
+              <Text style={styles.workspaceModalTitle}>업무공간 선택</Text>
+            </View>
+            <TouchableOpacity style={styles.workspaceCloseButton} onPress={onClose}>
+              <Ionicons name="close" size={22} color="#526174" />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.workspaceOption,
+              !activeGroup && styles.workspaceOptionActive,
+            ]}
+            activeOpacity={0.82}
+            onPress={() => onSelect?.(null)}
+          >
+            <View style={[styles.workspaceIcon, styles.personalWorkspaceIcon]}>
+              <Ionicons name="person" size={20} color="#FFFFFF" />
+            </View>
+            <View style={styles.workspaceOptionText}>
+              <Text style={styles.workspaceOptionName}>나 · {personalName}</Text>
+              <Text style={styles.workspaceOptionMeta}>1인 작업공간 · 내 방문지</Text>
+            </View>
+            {!activeGroup && (
+              <Ionicons name="checkmark-circle" size={23} color="#2563EB" />
+            )}
+          </TouchableOpacity>
+
+          {groups.map((group) => {
+            const selected = Number(activeGroup?.groupId) === Number(group.groupId);
+            return (
+              <TouchableOpacity
+                key={group.groupId}
+                style={[
+                  styles.workspaceOption,
+                  selected && styles.workspaceOptionActive,
+                ]}
+                activeOpacity={0.82}
+                onPress={() => onSelect?.(group)}
+              >
+                <View style={styles.workspaceIcon}>
+                  <Ionicons name="people" size={20} color="#FFFFFF" />
+                </View>
+                <View style={styles.workspaceOptionText}>
+                  <Text style={styles.workspaceOptionName}>{group.groupName}</Text>
+                  <Text style={styles.workspaceOptionMeta}>
+                    {group.memberCount || 1}명 · {group.role === 'LEADER' ? '팀장' : '팀원'}
+                  </Text>
+                </View>
+                {selected && (
+                  <Ionicons name="checkmark-circle" size={23} color="#2563EB" />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+
+          <TouchableOpacity style={styles.workspaceManageButton} onPress={onManage}>
+            <Ionicons name="settings-outline" size={17} color="#173A5E" />
+            <Text style={styles.workspaceManageText}>그룹 만들기·초대 관리</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
   );
 }
 
@@ -1922,6 +2050,120 @@ const styles = StyleSheet.create({
   homeEmptyHistoryText: {
     color: '#7D8998',
     fontSize: 13,
+  },
+
+  workspaceModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.48)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+
+  workspaceModalCard: {
+    maxHeight: '72%',
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    padding: 18,
+    elevation: 12,
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+
+  workspaceModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+
+  workspaceModalEyebrow: {
+    color: '#6B7A8C',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+
+  workspaceModalTitle: {
+    color: '#172538',
+    fontSize: 20,
+    fontWeight: '900',
+    marginTop: 3,
+  },
+
+  workspaceCloseButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  workspaceOption: {
+    minHeight: 72,
+    borderWidth: 1,
+    borderColor: '#DEE5ED',
+    borderRadius: 16,
+    paddingHorizontal: 13,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+
+  workspaceOptionActive: {
+    borderColor: '#5B8DEF',
+    backgroundColor: '#EFF6FF',
+  },
+
+  workspaceIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#173A5E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+
+  personalWorkspaceIcon: {
+    backgroundColor: '#3A9D68',
+  },
+
+  workspaceOptionText: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  workspaceOptionName: {
+    color: '#172538',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+
+  workspaceOptionMeta: {
+    color: '#7D8998',
+    fontSize: 11,
+    marginTop: 4,
+  },
+
+  workspaceManageButton: {
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#EAF1F7',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginTop: 4,
+  },
+
+  workspaceManageText: {
+    color: '#173A5E',
+    fontSize: 12,
+    fontWeight: '900',
   },
 
 });

@@ -51,12 +51,14 @@ export default function App() {
 
   const historyRef = useRef([]);
   const screenRef = useRef('login');
+  const workspaceLoadIdRef = useRef(0);
 
   const [todayLocationsLoaded, setTodayLocationsLoaded] = useState(false);
 
-  const TODAY_LOCATIONS_KEY_PREFIX = 'pang3_today_route_locations';
+  const WORKSPACE_LOCATIONS_KEY_PREFIX = 'pang3_workspace_locations';
 
   const [activeGroup, setActiveGroup] = useState(null);
+  const [availableGroups, setAvailableGroups] = useState([]);
   const [groupAssignments, setGroupAssignments] = useState([]);
   const [teamLocations, setTeamLocations] = useState([]);
 
@@ -72,12 +74,20 @@ export default function App() {
 
   const selectActiveGroup = useCallback(async (group, targetUser = user) => {
     setActiveGroup(group || null);
+    setGroupAssignments([]);
+    setRouteLocations([]);
+    setRoadPath([]);
+    setRouteSegments([]);
+    setCurrentSegmentIndex(0);
+    setOptimized(false);
+    setIsGuiding(false);
+    setTotalDuration(null);
 
-    if (group?.groupId && targetUser?.userId) {
+    if (targetUser?.userId) {
       try {
         await AsyncStorage.setItem(
           `pang3_active_group_${targetUser.userId}`,
-          String(group.groupId)
+          group?.groupId ? String(group.groupId) : 'personal'
         );
       } catch (error) {
         console.log('현재 그룹 저장 실패:', error);
@@ -95,21 +105,24 @@ export default function App() {
       ]);
 
       const groupList = Array.isArray(groups) ? groups : [];
+      setAvailableGroups(groupList);
       const restored = groupList.find(
         (group) => Number(group.groupId) === Number(savedGroupId)
       );
-      const selected = restored || groupList[0] || null;
+      // 저장된 선택이 없으면 언제나 '나(1인 작업공간)'가 기본값이다.
+      const selected = savedGroupId && savedGroupId !== 'personal'
+        ? restored || null
+        : null;
 
       setActiveGroup(selected);
 
-      if (selected?.groupId) {
-        await AsyncStorage.setItem(
-          `pang3_active_group_${loginUser.userId}`,
-          String(selected.groupId)
-        );
-      }
+      await AsyncStorage.setItem(
+        `pang3_active_group_${loginUser.userId}`,
+        selected?.groupId ? String(selected.groupId) : 'personal'
+      );
     } catch (error) {
       console.log('현재 그룹 복원 실패:', error);
+      setAvailableGroups([]);
       setActiveGroup(null);
     }
   }, []);
@@ -133,55 +146,80 @@ export default function App() {
     setScreen(next);
   };
 
-  useEffect(() => {
-    let cancelled = false;
+  const workspaceCacheKey = useCallback((targetUser = user, group = activeGroup) => {
+    if (!targetUser?.userId) return null;
+    const scope = group?.groupId ? `group_${group.groupId}` : 'personal';
+    return `${WORKSPACE_LOCATIONS_KEY_PREFIX}_${targetUser.userId}_${scope}`;
+  }, [activeGroup?.groupId, user?.userId]);
 
-    const restoreTodayLocations = async () => {
-      if (!user?.userId) {
-        setRouteLocations([]);
-        setTodayLocationsLoaded(false);
-        return;
-      }
+  const loadWorkspaceLocations = useCallback(async () => {
+    const requestId = ++workspaceLoadIdRef.current;
 
-      setTodayLocationsLoaded(false);
+    if (!user?.userId) {
       setRouteLocations([]);
+      setTodayLocationsLoaded(false);
+      return;
+    }
 
-      try {
-        const saved = await AsyncStorage.getItem(
-          `${TODAY_LOCATIONS_KEY_PREFIX}_${user.userId}`
-        );
+    const cacheKey = workspaceCacheKey();
+    setTodayLocationsLoaded(false);
+    setRouteLocations([]);
 
-        if (saved) {
-          const parsed = JSON.parse(saved);
+    try {
+      // 그룹에서는 홈의 '내 담당 업무'와 같은 담당자 배정 데이터를 사용한다.
+      // 이전 데이터에 task.group_id가 비어 있어도 task_assignments가 있으면
+      // 지도와 보고서에 동일하게 표시된다.
+      const path = activeGroup?.groupId
+        ? `/api/groups/${activeGroup.groupId}/assignments/mine?userId=${encodeURIComponent(user.userId)}`
+        : `/api/locations?userId=${encodeURIComponent(user.userId)}`;
+      const data = await groupApi(path);
+      const rows = (Array.isArray(data) ? data : []).map((item) => ({
+        ...item,
+        id: item.id ?? item.taskId ?? item.locationId ?? item.task_id,
+        task: item.task ?? item.taskCategory ?? item.task_category ?? '현장 확인',
+        status: item.status ?? item.taskStatus ?? item.task_status ?? 'pending',
+        lat: item.lat ?? item.latitude,
+        lng: item.lng ?? item.longitude,
+      }));
+      if (requestId !== workspaceLoadIdRef.current) return;
+      setRouteLocations(rows);
 
-          if (Array.isArray(parsed)) {
-            if (!cancelled) setRouteLocations(parsed);
-          }
-        }
-      } catch (error) {
-        console.log('오늘 외근 복원 실패:', error);
-      } finally {
-        if (!cancelled) setTodayLocationsLoaded(true);
+      if (cacheKey) {
+        await AsyncStorage.setItem(cacheKey, JSON.stringify(rows));
       }
-    };
+    } catch (error) {
+      console.log('현재 작업공간 방문지 조회 실패:', error);
 
-    restoreTodayLocations();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.userId]);
+      // 네트워크가 잠시 끊겼을 때만 마지막 DB 조회 결과를 임시로 보여준다.
+      try {
+        const cached = cacheKey ? await AsyncStorage.getItem(cacheKey) : null;
+        const parsed = cached ? JSON.parse(cached) : [];
+        if (requestId !== workspaceLoadIdRef.current) return;
+        setRouteLocations(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        if (requestId !== workspaceLoadIdRef.current) return;
+        setRouteLocations([]);
+      }
+    } finally {
+      if (requestId === workspaceLoadIdRef.current) {
+        setTodayLocationsLoaded(true);
+      }
+    }
+  }, [activeGroup?.groupId, user?.userId, workspaceCacheKey]);
 
   useEffect(() => {
-    if (!todayLocationsLoaded || !user?.userId) return;
+    loadWorkspaceLocations();
+  }, [loadWorkspaceLocations]);
 
-    AsyncStorage.setItem(
-      `${TODAY_LOCATIONS_KEY_PREFIX}_${user.userId}`,
-      JSON.stringify(routeLocations)
-    ).catch((error) => {
-      console.log('오늘 외근 저장 실패:', error);
+  useEffect(() => {
+    if (!todayLocationsLoaded) return;
+    const cacheKey = workspaceCacheKey();
+    if (!cacheKey) return;
+
+    AsyncStorage.setItem(cacheKey, JSON.stringify(routeLocations)).catch((error) => {
+      console.log('작업공간 방문지 캐시 저장 실패:', error);
     });
-  }, [routeLocations, todayLocationsLoaded, user?.userId]);
+  }, [routeLocations, todayLocationsLoaded, workspaceCacheKey]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') {
@@ -266,6 +304,31 @@ export default function App() {
     user?.userId,
   ]);
 
+  const refreshAvailableGroups = useCallback(async () => {
+    if (!user?.userId) {
+      setAvailableGroups([]);
+      return [];
+    }
+
+    try {
+      const data = await groupApi(`/api/groups/user/${user.userId}`);
+      const groups = Array.isArray(data) ? data : [];
+      setAvailableGroups(groups);
+      return groups;
+    } catch (error) {
+      console.log('업무공간 목록 조회 실패:', error.message);
+      return [];
+    }
+  }, [user?.userId]);
+
+  const rememberAvailableGroup = useCallback((group) => {
+    if (!group?.groupId) return;
+    setAvailableGroups((prev) => [
+      group,
+      ...prev.filter((item) => Number(item.groupId) !== Number(group.groupId)),
+    ]);
+  }, []);
+
   const loadTeamLocations = useCallback(async (group = activeGroup) => {
     if (!group?.groupId || !user?.userId) {
       setTeamLocations([]);
@@ -293,6 +356,7 @@ export default function App() {
   const handleLogout = () => {
     setUser(null);
     setActiveGroup(null);
+    setAvailableGroups([]);
     setGroupAssignments([]);
     setSelectedLocation(null);
     setActionType(null);
@@ -333,7 +397,7 @@ export default function App() {
     go('fieldAction');
   };
 
-  const openPersonalMap = () => {
+  const openWorkspaceMap = () => {
     go('mapDirect');
   };
 
@@ -394,21 +458,17 @@ export default function App() {
           <MainScreen
             user={user}
             activeGroup={activeGroup}
+            availableGroups={availableGroups}
             groupAssignments={groupAssignments}
-            onRoute={() =>
-              go('mapDirect')
-            }
+            onRoute={openWorkspaceMap}
             onReport={() =>
               go('reportList')
             }
             onGroup={() =>
               go('groupHome')
             }
-            onCurrentGroup={() =>
-              activeGroup
-                ? go('groupDetail')
-                : go('groupHome')
-            }
+            onSelectWorkspace={(group) => selectActiveGroup(group)}
+            onRefreshWorkspaces={refreshAvailableGroups}
             onWorkStatus={() =>
               go('workStatus')
             }
@@ -434,8 +494,13 @@ export default function App() {
               go('groupInvitations')
             }
             onOpenGroup={(group) => {
+              rememberAvailableGroup(group);
               selectActiveGroup(group);
               go('groupDetail');
+            }}
+            onSelectPersonal={() => {
+              selectActiveGroup(null);
+              go('main');
             }}
           />
         )}
@@ -447,6 +512,7 @@ export default function App() {
               go('groupHome')
             }
             onCreated={(group) => {
+              rememberAvailableGroup(group);
               selectActiveGroup(group);
               go('groupDetail');
             }}
@@ -460,6 +526,7 @@ export default function App() {
               go('groupHome')
             }
             onAccepted={(group) => {
+              rememberAvailableGroup(group);
               selectActiveGroup(group);
               go('groupDetail');
             }}
@@ -502,8 +569,6 @@ export default function App() {
               go('groupDetail');
             }}
             onLocationClick={onLocationClick}
-            onOpenPersonalMap={openPersonalMap}
-            onOpenTeamMap={openTeamMap}
             roadPath={teamRoadPath}
             setRoadPath={setTeamRoadPath}
             routeSegments={teamRouteSegments}
@@ -564,16 +629,14 @@ export default function App() {
               setRouteLocations
             }
             activeGroup={activeGroup}
-            locationScope="personal"
-            groupAssignments={[]}
+            locationScope={activeGroup?.groupId ? 'team' : 'personal'}
+            groupAssignments={activeGroup?.groupId ? groupAssignments : []}
             onBack={() =>
               goBack('main')
             }
             onLocationClick={
               onLocationClick
             }
-            onOpenPersonalMap={openPersonalMap}
-            onOpenTeamMap={openTeamMap}
             roadPath={roadPath}
             setRoadPath={setRoadPath}
             routeSegments={
@@ -611,20 +674,19 @@ export default function App() {
               goBack('reportList')
             }
             onSave={(savedReport) => {
-              setRouteLocations(
-                (prev) =>
-                  prev.map((loc) =>
-                    loc.id ===
-                      selectedLocation?.id
-                      ? {
+              const applySavedStatus = (items) =>
+                items.map((loc) =>
+                  Number(loc.id ?? loc.taskId) ===
+                    Number(selectedLocation?.id ?? selectedLocation?.taskId)
+                    ? {
                         ...loc,
-                        status:
-                          savedReport.progressStatus ||
-                          loc.status,
+                        status: savedReport.progressStatus || loc.status,
                       }
-                      : loc
-                  )
-              );
+                    : loc
+                );
+
+              setRouteLocations(applySavedStatus);
+              setTeamLocations(applySavedStatus);
 
               goBack('reportList');
             }}
@@ -634,6 +696,8 @@ export default function App() {
         {screen === 'reportList' && (
           <ReportListScreen
             locations={routeLocations}
+            loading={!todayLocationsLoaded}
+            user={user}
             activeGroup={activeGroup}
             groupAssignments={
               groupAssignments
@@ -661,6 +725,8 @@ export default function App() {
         {screen === 'report' && (
           <ReportScreen
             locations={reportTargets}
+            user={user}
+            activeGroup={activeGroup}
             onBack={() =>
               goBack('reportList')
             }
@@ -689,8 +755,8 @@ export default function App() {
             <BottomNavigation
               screen={screen}
               onHome={() => go('main')}
-              // 하단 '지도'는 항상 개인 민원/개인 경로 지도
-              onMap={openPersonalMap}
+              // 하단 메뉴도 홈에서 선택한 현재 작업공간을 그대로 따른다.
+              onMap={openWorkspaceMap}
               onReport={() => go('reportList')}
               onGroup={() => go('groupHome')}
             />

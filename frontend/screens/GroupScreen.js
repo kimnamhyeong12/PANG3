@@ -20,6 +20,7 @@ export default function GroupScreen({
   onCreate,
   onInvitations,
   onOpenGroup,
+  onSelectPersonal,
 }) {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -80,20 +81,38 @@ export default function GroupScreen({
           />
         </View>
 
-        {activeGroup && (
-          <View style={styles.activeCard}>
-            <Text style={styles.sectionLabel}>CURRENT GROUP</Text>
-            <Text style={styles.activeName}>{activeGroup.groupName}</Text>
-            <Text style={styles.activeMeta}>
-              현재 선택된 그룹 · {activeGroup.role === 'LEADER' ? '팀장' : '팀원'}
-            </Text>
-          </View>
-        )}
+        <View style={styles.activeCard}>
+          <Text style={styles.activeSectionLabel}>CURRENT WORKSPACE</Text>
+          <Text style={styles.activeName}>
+            {activeGroup?.groupName || user?.name || user?.loginId || '나'}
+          </Text>
+          <Text style={styles.activeMeta}>
+            {activeGroup
+              ? `현재 선택된 팀 · ${activeGroup.role === 'LEADER' ? '팀장' : '팀원'}`
+              : '현재 선택된 1인 작업공간'}
+          </Text>
+        </View>
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionLabel}>MY GROUPS</Text>
-          <Text style={styles.sectionTitle}>내 그룹</Text>
+          <Text style={styles.sectionTitle}>업무공간</Text>
         </View>
+
+        <TouchableOpacity
+          style={[styles.groupCard, !activeGroup && styles.selectedGroupCard]}
+          onPress={onSelectPersonal}
+          activeOpacity={0.85}
+        >
+          <View style={[styles.groupIcon, styles.personalIcon]}>
+            <Ionicons name="person" size={20} color="#FFFFFF" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.groupName}>나 · {user?.name || user?.loginId || '개인'}</Text>
+            <Text style={styles.groupMeta}>1명 · 내 방문지와 보고서</Text>
+          </View>
+          {!activeGroup && <Ionicons name="checkmark-circle" size={22} color="#2563EB" />}
+          <Ionicons name="chevron-forward" size={18} color="#8A98A8" />
+        </TouchableOpacity>
 
         {loading ? (
           <View style={styles.loadingBox}>
@@ -172,6 +191,7 @@ const styles = StyleSheet.create({
   activeCard: {
     backgroundColor: '#12395B', borderRadius: 18, padding: 17, marginTop: 16,
   },
+  activeSectionLabel: { fontSize: 10, fontWeight: '900', color: '#C9D9E8', letterSpacing: 1.5 },
   activeName: { color: '#FFFFFF', fontSize: 17, fontWeight: '900', marginTop: 5 },
   activeMeta: { color: '#DCE7F1', fontSize: 10, marginTop: 4 },
   sectionHeader: { marginTop: 24, marginBottom: 10 },
@@ -192,6 +212,8 @@ const styles = StyleSheet.create({
     width: 42, height: 42, borderRadius: 13, backgroundColor: '#12395B',
     alignItems: 'center', justifyContent: 'center',
   },
+  personalIcon: { backgroundColor: '#3A9D68' },
+  selectedGroupCard: { borderColor: '#5B8DEF', backgroundColor: '#EFF6FF' },
   groupName: { fontSize: 14, fontWeight: '900', color: '#1F2D3D' },
   groupMeta: { fontSize: 10, color: '#718096', marginTop: 4 },
   roleBadge: { backgroundColor: '#EAF1F7', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 12 },
