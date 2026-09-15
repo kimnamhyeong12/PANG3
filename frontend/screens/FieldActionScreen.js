@@ -874,16 +874,6 @@ export default function FieldActionScreen({
         status || 'pending'
       );
 
-      form.append(
-        'photoComments',
-        JSON.stringify(
-          photos.map(
-            (photo) =>
-              photo.comment || ''
-          )
-        )
-      );
-
       const isLocalUri = (
         uri
       ) =>
@@ -897,13 +887,26 @@ export default function FieldActionScreen({
           )
         );
 
-      for (const photo of photos) {
-        if (photo.uri && isLocalUri(photo.uri)) {
-          const photoResponse = await fetch(photo.uri);
-          const photoBlob = await photoResponse.blob();
-          const fileName = photo.type === 'before' ? 'before.jpg' : photo.type === 'during' ? 'during.jpg' : 'after.jpg';
-          form.append('fieldPhotos', photoBlob, fileName);
-        }
+      // 실제로 업로드되는 사진만 골라서, 코멘트 배열과 파일 배열의 순서를
+      // 1:1로 맞춘다 (전/중/후 라벨이 엉뚱한 사진에 붙는 것을 방지).
+      const uploadPhotos = photos.filter(
+        (photo) => photo.uri && isLocalUri(photo.uri)
+      );
+
+      form.append(
+        'photoComments',
+        JSON.stringify(
+          uploadPhotos.map(
+            (photo) => `${photo.label}|${photo.comment || ''}`
+          )
+        )
+      );
+
+      for (const photo of uploadPhotos) {
+        const photoResponse = await fetch(photo.uri);
+        const photoBlob = await photoResponse.blob();
+        const fileName = photo.type === 'before' ? 'before.jpg' : photo.type === 'during' ? 'during.jpg' : 'after.jpg';
+        form.append('fieldPhotos', photoBlob, fileName);
       }
 
       const res =
