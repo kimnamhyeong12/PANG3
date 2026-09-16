@@ -1260,7 +1260,12 @@ export default function FieldActionScreen({
                 style={styles.map}
               />
 
-              <View style={styles.photoButtonRow}>
+              <View
+                style={[
+                  styles.photoButtonRow,
+                  styles.mapEditButtonSpacing,
+                ]}
+              >
                 <TouchableOpacity
                   style={styles.photoSmallButton}
                   onPress={openMapEditor}
@@ -1282,11 +1287,14 @@ export default function FieldActionScreen({
             </>
           ) : (
             <TouchableOpacity
-              style={styles.photoSmallButton}
+              style={[
+                styles.photoSmallButton,
+                styles.mapEditButtonSpacing,
+              ]}
               onPress={openMapEditor}
             >
               <Text style={styles.photoSmallButtonText}>
-                위치도에 빨간 표시 추가
+                위치도 편집
               </Text>
             </TouchableOpacity>
           )}
@@ -1911,6 +1919,12 @@ const styles =
       gap: 8,
 
       marginBottom: 8,
+    },
+
+    // 위치도 편집 버튼을 위/아래 텍스트와 겹치지 않게, 정확히 중간에
+    // 오도록 위아래 여백을 동일하게 준다.
+    mapEditButtonSpacing: {
+      marginBottom: 14,
     },
 
     photoSmallButton: {
