@@ -21,6 +21,25 @@ import KakaoMapWebView from '../components/KakaoMapWebView';
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 
+const getLocalDateKey = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getWorkDateKey = (item) => {
+  const value = item?.workDate ?? item?.work_date ?? item?.createdAt ?? item?.created_at;
+  return value ? String(value).slice(0, 10) : '';
+};
+
+const formatShortDate = (value) => {
+  const key = value ? String(value).slice(0, 10) : '';
+  const parts = key.split('-');
+  if (parts.length !== 3) return '';
+  return `${parts[1]}.${parts[2]}`;
+};
+
 const getStatusColor = (status) => {
   if (status === 'complete') return '#1F9D55';
   if (status === 'working') return '#FACC15';
@@ -43,7 +62,15 @@ const cleanLocation = (loc, fallbackName = '위치') => {
     lat: Number(loc.lat ?? loc.latitude),
     lng: Number(loc.lng ?? loc.longitude),
     status: loc.status || 'pending',
-    task: loc.task || '',
+    task: loc.task || loc.taskCategory || loc.task_category || '',
+    createdAt: loc.createdAt || loc.created_at || null,
+    workDate: loc.workDate || loc.work_date || null,
+    scheduledDate:
+      loc.scheduledDate ||
+      loc.scheduled_date ||
+      loc.workDate ||
+      loc.work_date ||
+      null,
     priority: loc.priority ?? null,
   };
 };
@@ -487,7 +514,10 @@ export default function MapScreen({
       lat: searchedPlace.lat,
       lng: searchedPlace.lng,
       status: 'pending',
-      task: task || '점검',
+      task: task || '',
+      // workDate는 최초 등록일, scheduledDate는 현재 업무 목록 배치일이다.
+      workDate: getLocalDateKey(),
+      scheduledDate: getLocalDateKey(),
 
       sido: region?.sido || null,
       sigungu: region?.sigungu || null,
@@ -524,7 +554,13 @@ export default function MapScreen({
           detailAddress: savedLocation.detailAddress || newLoc.detailAddress,
           roadAddress: savedLocation.roadAddress || newLoc.roadAddress,
           status: savedLocation.status || 'pending',
-          task: savedLocation.taskCategory || newLoc.task || '',
+          task: savedLocation.taskCategory || savedLocation.task || newLoc.task || '',
+          createdAt: savedLocation.createdAt || savedLocation.created_at || null,
+          workDate: savedLocation.workDate || savedLocation.work_date || newLoc.workDate,
+          scheduledDate:
+            savedLocation.scheduledDate ||
+            savedLocation.scheduled_date ||
+            newLoc.scheduledDate,
           priority: savedLocation.priority || '',
         },
       ]);
@@ -1147,6 +1183,9 @@ export default function MapScreen({
                   </View>
 
                   <Text style={styles.chipText} numberOfLines={1}>
+                    {formatShortDate(getWorkDateKey(item))
+                      ? `${formatShortDate(getWorkDateKey(item))} · `
+                      : ''}
                     {item.detailAddress}
                   </Text>
                 </TouchableOpacity>
@@ -1199,7 +1238,12 @@ export default function MapScreen({
                       {loc.detailAddress || '이름 없음'}
                     </Text>
                     <Text style={styles.visitTask} numberOfLines={1}>
-                      {loc.task || getStatusLabel(loc.status)}
+                      {formatShortDate(getWorkDateKey(loc))
+                        ? `업무일 ${formatShortDate(getWorkDateKey(loc))}`
+                        : ''}
+                      {loc.task
+                        ? `${formatShortDate(getWorkDateKey(loc)) ? ' · ' : ''}${loc.task}`
+                        : ''}
                     </Text>
                   </View>
                 </TouchableOpacity>
