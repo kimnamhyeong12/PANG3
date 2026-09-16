@@ -454,9 +454,8 @@ def run_pipeline(payload: dict) -> dict:
         payload.get("map_image"),
         str(work_dir / "map.jpg"),
         canvas_size=(1920, 1080),
-        # 지도는 잘리면 위치 파악이 안 되니, 잘라내지 않고(cover) 전체가
-        # 다 보이도록(contain) 흰 여백을 두더라도 통째로 넣는다.
-        fit_mode="contain",
+        # 흰 여백 없이 박스를 꽉 채우도록 cover로 (모서리가 살짝 잘릴 수 있음)
+        fit_mode="cover",
     )
 
     sanitized_photos = []
@@ -464,9 +463,8 @@ def run_pipeline(payload: dict) -> dict:
     for idx, raw in enumerate(payload.get("field_photos") or []):
         src = raw.get("path") or raw.get("file")
         temp = str(work_dir / f"field_{idx}.jpg")
-        # 사진이 이상하게 잘리거나 확대되어 보이지 않도록, 잘라내지 않고(cover)
-        # 원본 비율 그대로 축소해서 박스 안에 전체가 다 보이게(contain) 넣는다.
-        sanitized = sanitize_image(src, temp, canvas_size=(1600, 1100), fit_mode="contain")
+        # 흰 여백 없이 박스를 꽉 채우도록 cover로 (모서리가 살짝 잘릴 수 있음)
+        sanitized = sanitize_image(src, temp, canvas_size=(1600, 1100), fit_mode="cover")
         _, caption = parse_photo_comment(raw.get("comment", ""), idx + 1)
         captions.append(caption)
         sanitized_photos.append(
