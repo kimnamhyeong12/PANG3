@@ -27,7 +27,8 @@
         "NSSpeechRecognitionUsageDescription": "현장 메모를 텍스트로 변환하기 위해 음성 인식 권한이 필요합니다.",
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
-        }
+        },
+        "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.pang3.fieldworkhelper"
     },
@@ -52,6 +53,12 @@
           }
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "aa6c9a25-f681-459e-be40-f39d21298bbf"
+      }
+    }
   }
 }
