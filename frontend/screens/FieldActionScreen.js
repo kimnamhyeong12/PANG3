@@ -13,6 +13,7 @@ import {
 
 import * as ImagePicker from 'expo-image-picker';
 import { WebView } from 'react-native-webview';
+import { captureRef } from 'react-native-view-shot';
 
 import {
   BackButton,
@@ -294,6 +295,7 @@ export default function FieldActionScreen({
   onSave,
 }) {
   const mapRef = useRef(null);
+  const mapWrapperRef = useRef(null);
 
   const [
     mapInteracting,
@@ -356,6 +358,21 @@ export default function FieldActionScreen({
     uri: null,
     index: null,
   });
+
+  // 위치도(지도)에 빨간 박스·화살표로 라벨을 표시하는 마킹 에디터 상태.
+  // markedMapUri가 있으면 보고서에는 이 마킹된 이미지를 사용한다.
+  const [
+    mapEditor,
+    setMapEditor,
+  ] = useState({
+    visible: false,
+    uri: null,
+  });
+
+  const [
+    markedMapUri,
+    setMarkedMapUri,
+  ] = useState(null);
 
   const taskId =
     location?.id ??
@@ -769,6 +786,48 @@ export default function FieldActionScreen({
     });
   };
 
+  /*
+   * 위치도(지도) 마킹 편집 열기
+   * - 지금 보이는 지도 화면을 캡처한 뒤, 그 위에 빨간 박스/화살표로
+   *   라벨을 그릴 수 있도록 PhotoMarkupEditor를 재사용해서 연다.
+   */
+  const openMapEditor = async () => {
+    try {
+      mapRef.current?.injectJavaScript(
+        'if (window.map) { window.map.relayout(); } true;'
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 400));
+
+      const capturedUri = await captureRef(mapWrapperRef, {
+        format: 'jpg',
+        quality: 0.9,
+      });
+
+      setMapEditor({
+        visible: true,
+        uri: capturedUri,
+      });
+    } catch (captureError) {
+      console.log('지도 캡처 실패:', captureError?.message);
+      showAlert('지도 캡처에 실패했습니다. 다시 시도해주세요.');
+    }
+  };
+
+  const closeMapEditor = () => {
+    setMapEditor({
+      visible: false,
+      uri: null,
+    });
+  };
+
+  const completeMapEdit = (editedUri) => {
+    if (editedUri) {
+      setMarkedMapUri(editedUri);
+    }
+    closeMapEditor();
+  };
+
   const closePhotoEditor =
     () => {
       setPhotoEditor({
@@ -841,6 +900,30 @@ export default function FieldActionScreen({
 
       console.log('보고서 저장 좌표:', latitude, longitude);
 
+      // 위치도에 빨간 표시로 마킹해둔 이미지가 있으면 그걸 그대로 쓰고,
+      // 없으면 지도를 확대/이동해 둔 상태 그대로 캡처해서 사용한다.
+      let mapImageUri = markedMapUri;
+
+      if (!mapImageUri) {
+        try {
+          // WebView(지도)가 화면에 완전히 그려진 뒤에 캡처해야
+          // 빈 화면이 캡처되는 걸 막을 수 있어서, 캡처 직전에
+          // 한 번 다시 그리게 하고 살짝 기다린다.
+          mapRef.current?.injectJavaScript(
+            'if (window.map) { window.map.relayout(); } true;'
+          );
+
+          await new Promise((resolve) => setTimeout(resolve, 400));
+
+          mapImageUri = await captureRef(mapWrapperRef, {
+            format: 'jpg',
+            quality: 0.8,
+          });
+        } catch (captureError) {
+          console.log('지도 캡처 실패:', captureError?.message);
+        }
+      }
+
       const form =
         new FormData();
 
@@ -907,6 +990,12 @@ export default function FieldActionScreen({
         const photoBlob = await photoResponse.blob();
         const fileName = photo.type === 'before' ? 'before.jpg' : photo.type === 'during' ? 'during.jpg' : 'after.jpg';
         form.append('fieldPhotos', photoBlob, fileName);
+      }
+
+      if (mapImageUri) {
+        const mapResponse = await fetch(mapImageUri);
+        const mapBlob = await mapResponse.blob();
+        form.append('mapImage', mapBlob, 'map.jpg');
       }
 
       const res =
@@ -1089,6 +1178,7 @@ export default function FieldActionScreen({
           </Text>
 
           <View
+            ref={mapWrapperRef}
             style={
               styles.mapWrapper
             }
@@ -1162,6 +1252,44 @@ export default function FieldActionScreen({
           >
             지도를 움직이거나 터치해서 작업 위치를 선택할 수 있습니다.
           </Text>
+
+          {markedMapUri ? (
+            <>
+              <Image
+                source={{ uri: markedMapUri }}
+                style={styles.map}
+              />
+
+              <View style={styles.photoButtonRow}>
+                <TouchableOpacity
+                  style={styles.photoSmallButton}
+                  onPress={openMapEditor}
+                >
+                  <Text style={styles.photoSmallButtonText}>
+                    다시 편집
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.photoSmallButton}
+                  onPress={() => setMarkedMapUri(null)}
+                >
+                  <Text style={styles.photoSmallButtonText}>
+                    표시 지우기
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={styles.photoSmallButton}
+              onPress={openMapEditor}
+            >
+              <Text style={styles.photoSmallButtonText}>
+                위치도에 빨간 표시 추가
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <Text
             style={
@@ -1513,70 +1641,6 @@ export default function FieldActionScreen({
           </View>
         </View>
 
-        {/* AI 분석 */}
-        <View
-          style={styles.aiCard}
-        >
-          <Text
-            style={
-              styles.aiEyebrow
-            }
-          >
-            AI 분석 결과
-          </Text>
-
-          {aiRefinedContent ? (
-            <Text
-              style={
-                styles.aiReport
-              }
-            >
-              {aiRefinedContent}
-            </Text>
-          ) : (
-            <>
-              <Text
-                style={
-                  styles.aiTitle
-                }
-              >
-                {rec.category}{' '}
-                (미리보기)
-              </Text>
-
-              <Text
-                style={[
-                  styles.risk,
-
-                  {
-                    color:
-                      rec.riskColor,
-                  },
-                ]}
-              >
-                위험도:{' '}
-                {rec.risk}
-              </Text>
-
-              <Text
-                style={
-                  styles.aiReport
-                }
-              >
-                {rec.report}
-              </Text>
-
-              <Text
-                style={
-                  styles.guideText
-                }
-              >
-                저장 후 Gemini 분석 결과가 여기에 표시됩니다.
-              </Text>
-            </>
-          )}
-        </View>
-
         <PrimaryButton
           title={
             saving
@@ -1606,6 +1670,13 @@ export default function FieldActionScreen({
         onComplete={
           completePhotoEdit
         }
+      />
+
+      <PhotoMarkupEditor
+        visible={mapEditor.visible}
+        uri={mapEditor.uri}
+        onCancel={closeMapEditor}
+        onComplete={completeMapEdit}
       />
     </View>
   );
