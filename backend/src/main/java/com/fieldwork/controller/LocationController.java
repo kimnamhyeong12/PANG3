@@ -79,6 +79,21 @@ public class LocationController {
     }
 
     /**
+     * 미처리 업무를 특정 날짜(기본: 오늘)의 업무 목록으로 다시 배치한다.
+     * 최초 업무일(workDate)은 유지하고 scheduledDate만 바꾼다.
+     */
+    @PatchMapping("/{id}/scheduled-date")
+    public Map<String, Object> updateScheduledDate(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, Object> body
+    ) {
+        String scheduledDate = body != null && body.get("scheduledDate") != null
+                ? body.get("scheduledDate").toString()
+                : null;
+        return taskService.updateScheduledDate(id, scheduledDate);
+    }
+
+    /**
      * 미처리 방문지 삭제
      */
     @DeleteMapping("/{id}")

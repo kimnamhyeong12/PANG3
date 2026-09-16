@@ -38,6 +38,39 @@ const getStatusInfo = (statusValue) => {
   };
 };
 
+const getLocalDateKey = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getWorkDateKey = (item) => {
+  const value = item?.workDate ?? item?.work_date;
+  return value ? String(value).slice(0, 10) : '';
+};
+
+const formatShortDate = (value) => {
+  const key = value ? String(value).slice(0, 10) : '';
+  const parts = key.split('-');
+  if (parts.length !== 3) return '';
+  return `${parts[1]}.${parts[2]}`;
+};
+
+const getScheduledDateKey = (item) => {
+  const value =
+    item?.scheduledDate ??
+    item?.scheduled_date ??
+    item?.workDate ??
+    item?.work_date;
+  return value ? String(value).slice(0, 10) : '';
+};
+
+const isTodayWork = (item) => {
+  const scheduledDate = getScheduledDateKey(item);
+  return !scheduledDate || scheduledDate === getLocalDateKey();
+};
+
 export default function MainScreen({
   user,
   activeGroup,
@@ -52,7 +85,11 @@ export default function MainScreen({
   onDashboard,
   locations = [],
   setLocations,
+  onRefreshAssignments,
 }) {
+  const [calendarDayKey, setCalendarDayKey] =
+    React.useState(getLocalDateKey());
+
   const today = new Date().toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'long',
@@ -69,11 +106,23 @@ export default function MainScreen({
   const [deletingId, setDeletingId] =
     React.useState(null);
 
+  const [movingToToday, setMovingToToday] =
+    React.useState(false);
+
   const [workspacePickerOpen, setWorkspacePickerOpen] =
     React.useState(false);
 
   const backPressedOnce = React.useRef(false);
   const backPressTimer = React.useRef(null);
+
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      const nextDayKey = getLocalDateKey();
+      setCalendarDayKey((prev) => (prev === nextDayKey ? prev : nextDayKey));
+    }, 60 * 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   React.useEffect(() => {
     const handleBackPress = () => {
@@ -120,9 +169,9 @@ export default function MainScreen({
       )
     : [];
 
-  const displayLocations = activeGroup
-    ? myAssignments
-    : locations;
+  // App.js에서 오늘 업무만 locations로 전달한다.
+  // 한 번 더 날짜를 확인해 날짜가 바뀐 직후에도 과거 업무가 섞이지 않게 한다.
+  const displayLocations = (locations || []).filter(isTodayWork);
 
   const displayTotal = displayLocations.length;
   const displayComplete = displayLocations.filter(
@@ -154,7 +203,7 @@ export default function MainScreen({
 
   React.useEffect(() => {
     loadIncompleteLocations();
-  }, [locations, user?.userId, activeGroup?.groupId]);
+  }, [locations, user?.userId, activeGroup?.groupId, calendarDayKey]);
 
   const loadIncompleteLocations = async () => {
     try {
@@ -234,21 +283,48 @@ export default function MainScreen({
 
             status,
 
+            // 카테고리는 선택하지 않았으면 빈칸을 유지한다.
             task:
               loc.task ||
               loc.taskCategory ||
               loc.task_category ||
-              '현장 확인',
+              '',
+
+            createdAt:
+              loc.createdAt ||
+              loc.created_at ||
+              null,
+
+            workDate:
+              loc.workDate ||
+              loc.work_date ||
+              null,
+
+            scheduledDate:
+              loc.scheduledDate ||
+              loc.scheduled_date ||
+              loc.workDate ||
+              loc.work_date ||
+              null,
           };
         })
         .filter((loc) => {
           const status = String(
             loc.status || ''
           ).toLowerCase();
+          const workDate = getWorkDateKey(loc);
+          const scheduledDate = getScheduledDateKey(loc);
+          const todayKey = getLocalDateKey();
 
+          // 최초 업무일은 그대로 둔다.
+          // 과거에 등록한 작업이 오늘 업무로 재배치되지 않았고,
+          // 상태가 작업 전/작업 중이면 미처리 업무로 표시한다.
           return (
-            status === 'pending' ||
-            status === 'working'
+            Boolean(workDate) &&
+            workDate < todayKey &&
+            Boolean(scheduledDate) &&
+            scheduledDate < todayKey &&
+            (status === 'pending' || status === 'working')
           );
         });
 
@@ -295,57 +371,99 @@ export default function MainScreen({
     );
   };
 
-  const addSelectedToToday = () => {
+  const addSelectedToToday = async () => {
     const selectedItems =
       visibleIncompleteLocations.filter(
-        (loc) =>
-          selectedIds.includes(
-            loc.id
-          )
+        (loc) => selectedIds.includes(loc.id)
       );
 
-    if (
-      selectedItems.length === 0
-    ) {
+    if (selectedItems.length === 0) {
       showAlert(
         '선택 필요',
         '오늘 외근에 추가할 작업을 선택하세요.'
       );
-
       return;
     }
 
-    setLocations?.((prev) => {
-      const current =
-        prev || [];
+    if (!API_BASE_URL) {
+      showAlert('오류', 'API_BASE_URL이 설정되지 않았습니다.');
+      return;
+    }
 
-      const currentIds =
-        new Set(
-          current.map(
-            (loc) => loc.id
-          )
+    const todayKey = getLocalDateKey();
+
+    try {
+      setMovingToToday(true);
+
+      const movedItems = await Promise.all(
+        selectedItems.map(async (item) => {
+          const taskId = item.id ?? item.taskId ?? item.task_id;
+          const response = await fetch(
+            `${API_BASE_URL}/api/locations/${taskId}/scheduled-date`,
+            {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ scheduledDate: todayKey }),
+            }
+          );
+
+          const text = await response.text();
+          if (!response.ok) {
+            throw new Error(text || `오늘 업무 배치 실패: ${response.status}`);
+          }
+
+          const saved = text ? JSON.parse(text) : {};
+          return {
+            ...item,
+            ...saved,
+            id: saved.id ?? saved.taskId ?? saved.task_id ?? taskId,
+            task: saved.task ?? saved.taskCategory ?? saved.task_category ?? item.task ?? '',
+            status: saved.status ?? saved.taskStatus ?? saved.task_status ?? item.status,
+            // workDate는 최초 등록일이므로 절대 오늘 날짜로 덮어쓰지 않는다.
+            workDate: saved.workDate ?? saved.work_date ?? item.workDate ?? item.work_date ?? null,
+            scheduledDate: saved.scheduledDate ?? saved.scheduled_date ?? todayKey,
+            createdAt: saved.createdAt ?? saved.created_at ?? item.createdAt ?? item.created_at ?? null,
+          };
+        })
+      );
+
+      setLocations?.((prev) => {
+        const current = prev || [];
+        const movedIds = new Set(
+          movedItems.map((item) => Number(item.id ?? item.taskId ?? item.task_id))
         );
+        return [
+          ...current.filter(
+            (item) => !movedIds.has(Number(item.id ?? item.taskId ?? item.task_id))
+          ),
+          ...movedItems,
+        ];
+      });
 
-      const onlyNewItems =
-        selectedItems.filter(
-          (loc) =>
-            !currentIds.has(
-              loc.id
-            )
-        );
+      const movedIds = new Set(
+        movedItems.map((item) => Number(item.id ?? item.taskId ?? item.task_id))
+      );
+      setIncompleteLocations((prev) =>
+        prev.filter(
+          (item) => !movedIds.has(Number(item.id ?? item.taskId ?? item.task_id))
+        )
+      );
+      setSelectedIds([]);
+      onRefreshAssignments?.();
 
-      return [
-        ...current,
-        ...onlyNewItems,
-      ];
-    });
-
-    setSelectedIds([]);
-
-    showAlert(
-      '추가 완료',
-      `${selectedItems.length}개의 미처리 작업을 오늘 외근에 추가했습니다.`
-    );
+      showAlert(
+        '추가 완료',
+        `${movedItems.length}개의 미처리 작업을 오늘 업무로 가져왔습니다.`
+      );
+    } catch (error) {
+      console.log('미처리 작업 오늘 업무 이동 실패:', error);
+      showAlert(
+        '추가 실패',
+        error.message || '미처리 작업을 오늘 업무로 가져오지 못했습니다.'
+      );
+    } finally {
+      setMovingToToday(false);
+    }
   };
 
   /*
@@ -559,7 +677,12 @@ export default function MainScreen({
     }) ||
     null;
 
-  const recentCompleted = displayLocations
+  const recentCompletedSource =
+    activeGroup && myAssignments.length > 0
+      ? myAssignments
+      : displayLocations;
+
+  const recentCompleted = recentCompletedSource
     .filter((item) => {
       const status = String(
         item.status ||
@@ -779,11 +902,12 @@ export default function MainScreen({
             style={styles.homeTaskSubText}
             numberOfLines={1}
           >
-            {currentTask.task ||
-              '현장 확인'}
-            {' · '}
-            {currentTask.roadAddress ||
-              '주소 정보 없음'}
+            {[
+              currentTask.task,
+              currentTask.roadAddress || '주소 정보 없음',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </Text>
 
           <View style={styles.homeTaskDivider} />
@@ -795,8 +919,8 @@ export default function MainScreen({
               color="#173A5E"
             />
             <Text style={styles.homeRemainingText}>
-              남은 방문지{' '}
-              {visibleIncompleteLocations.length}곳
+              오늘 남은 방문지{' '}
+              {displayPending}곳
             </Text>
           </View>
 
@@ -837,6 +961,196 @@ export default function MainScreen({
               새 업무가 배정되면 이곳에 표시됩니다.
             </Text>
           </View>
+        </View>
+      )}
+
+      <View style={styles.homeSectionHeader}>
+        <View style={styles.homeSectionTitleRow}>
+          <Text style={styles.homeSectionTitle}>
+            미처리 업무
+          </Text>
+          <View style={styles.overdueCountBadge}>
+            <Text style={styles.overdueCountText}>
+              {visibleIncompleteLocations.length}
+            </Text>
+          </View>
+        </View>
+
+        {visibleIncompleteLocations.length > 0 && (
+          <TouchableOpacity
+            style={styles.overdueSelectAllButton}
+            onPress={toggleSelectAll}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.overdueSelectAllText}>
+              {selectedIds.length === visibleIncompleteLocations.length
+                ? '선택 해제'
+                : '전체 선택'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {visibleIncompleteLocations.length === 0 ? (
+        <View style={styles.overdueEmptyCard}>
+          <View style={styles.overdueEmptyIcon}>
+            <Ionicons
+              name="checkmark-done-outline"
+              size={21}
+              color="#3A8A62"
+            />
+          </View>
+          <View style={styles.overdueEmptyTextBox}>
+            <Text style={styles.overdueEmptyTitle}>
+              미처리 업무가 없습니다
+            </Text>
+            <Text style={styles.overdueEmptyDescription}>
+              날짜가 지난 작업 전·작업 중 업무가 여기에 표시됩니다.
+            </Text>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.overdueListCard}>
+          {visibleIncompleteLocations.map((item, index) => {
+            const itemId = item.id ?? item.taskId ?? item.task_id;
+            const selected = selectedIds.includes(itemId);
+            const statusInfo = getStatusInfo(item.status);
+            const workDate = getWorkDateKey(item);
+            const category = String(item.task || '').trim();
+
+            return (
+              <View
+                key={`overdue-${itemId ?? index}`}
+                style={[
+                  styles.overdueItem,
+                  index > 0 && styles.overdueItemBorder,
+                ]}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.overdueCheckbox,
+                    selected && styles.overdueCheckboxSelected,
+                  ]}
+                  onPress={() => toggleSelect(itemId)}
+                  activeOpacity={0.75}
+                >
+                  {selected && (
+                    <Ionicons
+                      name="checkmark"
+                      size={15}
+                      color="#FFFFFF"
+                    />
+                  )}
+                </TouchableOpacity>
+
+                <View style={styles.overdueContent}>
+                  <View style={styles.overdueMetaRow}>
+                    <View style={styles.overdueDateBadge}>
+                      <Ionicons
+                        name="calendar-outline"
+                        size={12}
+                        color="#173A5E"
+                      />
+                      <Text style={styles.overdueDateText}>
+                        업무일 {formatShortDate(workDate)}
+                      </Text>
+                    </View>
+
+                    {category ? (
+                      <View style={styles.overdueCategoryBadge}>
+                        <Text style={styles.overdueCategoryText}>
+                          {category}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    <View
+                      style={[
+                        styles.overdueStatusBadge,
+                        statusInfo.styleName === 'progressStatus'
+                          ? styles.overdueWorkingBadge
+                          : styles.overduePendingBadge,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.overdueStatusText,
+                          statusInfo.styleName === 'progressStatus'
+                            ? styles.overdueWorkingText
+                            : styles.overduePendingText,
+                        ]}
+                      >
+                        {statusInfo.label}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text
+                    style={styles.overdueTitle}
+                    numberOfLines={1}
+                  >
+                    {item.detailAddress || item.roadAddress || '방문지'}
+                  </Text>
+
+                  <Text
+                    style={styles.overdueAddress}
+                    numberOfLines={1}
+                  >
+                    {item.roadAddress || '주소 정보 없음'}
+                  </Text>
+
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.overdueDeleteButton,
+                    String(item.status || '').toLowerCase() !== 'pending' &&
+                      styles.overdueDeleteButtonDisabled,
+                  ]}
+                  disabled={
+                    String(item.status || '').toLowerCase() !== 'pending' ||
+                    deletingId !== null
+                  }
+                  onPress={() => deleteIncompleteLocation(item)}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons
+                    name="trash-outline"
+                    size={16}
+                    color={
+                      String(item.status || '').toLowerCase() === 'pending'
+                        ? '#D85A55'
+                        : '#A8B1BC'
+                    }
+                  />
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+
+          <TouchableOpacity
+            style={[
+              styles.overdueMoveButton,
+              (selectedIds.length === 0 || movingToToday) &&
+                styles.overdueMoveButtonDisabled,
+            ]}
+            onPress={addSelectedToToday}
+            disabled={selectedIds.length === 0 || movingToToday}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name="arrow-redo-outline"
+              size={18}
+              color="#FFFFFF"
+            />
+            <Text style={styles.overdueMoveButtonText}>
+              {movingToToday
+                ? '오늘 업무로 가져오는 중...'
+                : selectedIds.length > 0
+                ? `선택한 ${selectedIds.length}건 오늘 업무로 가져오기`
+                : '오늘 업무로 가져오기'}
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -1865,6 +2179,246 @@ const styles = StyleSheet.create({
     color: '#173A5E',
     fontSize: 13,
     fontWeight: '700',
+  },
+
+  homeSectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  overdueCountBadge: {
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    paddingHorizontal: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EAF1F7',
+  },
+
+  overdueCountText: {
+    color: '#173A5E',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+
+  overdueSelectAllButton: {
+    minHeight: 32,
+    borderRadius: 10,
+    paddingHorizontal: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EEF3F8',
+  },
+
+  overdueSelectAllText: {
+    color: '#173A5E',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+
+  overdueEmptyCard: {
+    marginHorizontal: 22,
+    minHeight: 78,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#DDE4EB',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  overdueEmptyIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E7F4EC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  overdueEmptyTextBox: {
+    flex: 1,
+    marginLeft: 11,
+  },
+
+  overdueEmptyTitle: {
+    color: '#24364A',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+
+  overdueEmptyDescription: {
+    color: '#7D8998',
+    fontSize: 11,
+    marginTop: 3,
+  },
+
+  overdueListCard: {
+    marginHorizontal: 22,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#DDE4EB',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+  },
+
+  overdueItem: {
+    minHeight: 104,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 13,
+  },
+
+  overdueItemBorder: {
+    borderTopWidth: 1,
+    borderTopColor: '#EDF1F4',
+  },
+
+  overdueCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#9EABB9',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 11,
+  },
+
+  overdueCheckboxSelected: {
+    borderColor: '#173A5E',
+    backgroundColor: '#173A5E',
+  },
+
+  overdueContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  overdueMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+
+  overdueDateBadge: {
+    minHeight: 24,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EAF1F7',
+  },
+
+  overdueDateText: {
+    color: '#173A5E',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+
+  overdueCategoryBadge: {
+    minHeight: 24,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+  },
+
+  overdueCategoryText: {
+    color: '#536477',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+
+  overdueStatusBadge: {
+    minHeight: 24,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  overduePendingBadge: {
+    backgroundColor: '#FFF0E9',
+  },
+
+  overdueWorkingBadge: {
+    backgroundColor: '#FFF7D6',
+  },
+
+  overdueStatusText: {
+    fontSize: 10,
+    fontWeight: '900',
+  },
+
+  overduePendingText: {
+    color: '#C15342',
+  },
+
+  overdueWorkingText: {
+    color: '#9A7410',
+  },
+
+  overdueTitle: {
+    color: '#19283A',
+    fontSize: 15,
+    fontWeight: '900',
+    marginTop: 8,
+  },
+
+  overdueAddress: {
+    color: '#7B8796',
+    fontSize: 11,
+    marginTop: 3,
+  },
+
+  overdueCreatedText: {
+    color: '#9AA4B1',
+    fontSize: 10,
+    marginTop: 4,
+  },
+
+  overdueDeleteButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    backgroundColor: '#FFF3F2',
+  },
+
+  overdueDeleteButtonDisabled: {
+    backgroundColor: '#F3F5F7',
+  },
+
+  overdueMoveButton: {
+    minHeight: 46,
+    borderRadius: 11,
+    backgroundColor: '#173A5E',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginTop: 6,
+  },
+
+  overdueMoveButtonDisabled: {
+    backgroundColor: '#AAB5C0',
+  },
+
+  overdueMoveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
   },
 
   homeTaskCard: {

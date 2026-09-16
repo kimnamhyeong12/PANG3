@@ -582,6 +582,12 @@ public class GroupService {
         map.put("taskCategory", task.getTaskCategory());
         map.put("task", task.getTaskCategory());
         map.put("status", task.getTaskStatus());
+        map.put("createdAt", task.getCreatedAt());
+        map.put("created_at", task.getCreatedAt());
+        map.put("workDate", task.getWorkDate());
+        map.put("work_date", task.getWorkDate());
+        map.put("scheduledDate", task.getScheduledDate());
+        map.put("scheduled_date", task.getScheduledDate());
         map.put("adminDong", task.getAdminDong());
         map.put("sido", task.getSido());
         map.put("sigungu", task.getSigungu());

@@ -9,6 +9,10 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.PrePersist;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "task")
@@ -33,6 +37,18 @@ public class Task {
 
     @Column(name = "task_status")
     private String taskStatus;
+
+    /** 최초 등록 시각. 중복 방문지를 날짜로 구분할 때 사용한다. */
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+
+    /** 방문지를 최초 등록한 날짜. 한 번 생성되면 변경하지 않는다. */
+    @Column(name = "work_date", updatable = false)
+    private LocalDate workDate;
+
+    /** 현재 어느 날짜의 업무 목록에 배치되어 있는지 나타낸다. */
+    @Column(name = "scheduled_date")
+    private LocalDate scheduledDate;
 
     @Column(name = "sido")
     private String sido;
@@ -105,6 +121,43 @@ public class Task {
 
     public void setTaskStatus(String taskStatus) {
         this.taskStatus = taskStatus;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDate getWorkDate() {
+        return workDate;
+    }
+
+    public void setWorkDate(LocalDate workDate) {
+        this.workDate = workDate;
+    }
+
+    public LocalDate getScheduledDate() {
+        return scheduledDate;
+    }
+
+    public void setScheduledDate(LocalDate scheduledDate) {
+        this.scheduledDate = scheduledDate;
+    }
+
+    @PrePersist
+    public void initializeWorkDates() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+        if (workDate == null) {
+            workDate = createdAt.toLocalDate();
+        }
+        if (scheduledDate == null) {
+            scheduledDate = workDate;
+        }
     }
 
     public String getSido() {

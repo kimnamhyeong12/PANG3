@@ -3064,8 +3064,7 @@ export default function KakaoMapWebView({
                             1
                           }
                         >
-                          {location.task ||
-                            "현장 확인"}
+                          {location.task || ""}
                         </Text>
                       </View>
                     </TouchableOpacity>

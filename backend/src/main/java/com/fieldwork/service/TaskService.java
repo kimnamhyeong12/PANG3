@@ -14,6 +14,7 @@ import com.fieldwork.repository.WorkGroupRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -146,12 +147,32 @@ public class TaskService {
                 body.get("longitude")
         ));
 
+        // 카테고리는 선택 사항이다. 선택하지 않은 경우 빈 값(null)을 그대로 유지한다.
         task.setTaskCategory(firstNonBlank(
                 str(body.get("taskCategory")),
                 str(body.get("task")),
-                str(body.get("task_category")),
-                "현장 확인"
+                str(body.get("task_category"))
         ));
+
+        // workDate는 최초 등록일로 한 번만 저장한다.
+        // 프론트가 보낸 한국 로컬 날짜가 있으면 그 값을 사용하고 이후에는 변경하지 않는다.
+        LocalDate requestedWorkDate = toLocalDate(
+                body.get("workDate"),
+                body.get("work_date")
+        );
+        LocalDate originalWorkDate = requestedWorkDate != null
+                ? requestedWorkDate
+                : LocalDate.now();
+        task.setWorkDate(originalWorkDate);
+
+        // scheduledDate는 현재 어느 날짜의 업무 목록에 들어가 있는지를 나타낸다.
+        LocalDate requestedScheduledDate = toLocalDate(
+                body.get("scheduledDate"),
+                body.get("scheduled_date")
+        );
+        task.setScheduledDate(
+                requestedScheduledDate != null ? requestedScheduledDate : originalWorkDate
+        );
 
         task.setTaskStatus(firstNonBlank(
                 str(body.get("taskStatus")),
@@ -196,6 +217,20 @@ public class TaskService {
     public Map<String, Object> updateStatus(Long taskId, String status) {
         Task task = getById(taskId);
         task.setTaskStatus(status);
+        return toFrontendMap(taskRepository.save(task));
+    }
+
+    /**
+     * 미처리 업무를 오늘 업무로 다시 가져올 때 배치 날짜만 갱신한다.
+     * work_date/created_at은 최초 등록 시점 정보이므로 절대 변경하지 않는다.
+     */
+    @Transactional
+    public Map<String, Object> updateScheduledDate(Long taskId, String scheduledDate) {
+        Task task = getById(taskId);
+        LocalDate parsed = (scheduledDate == null || scheduledDate.isBlank())
+                ? LocalDate.now()
+                : LocalDate.parse(scheduledDate.trim());
+        task.setScheduledDate(parsed);
         return toFrontendMap(taskRepository.save(task));
     }
 
@@ -288,6 +323,13 @@ public class TaskService {
         map.put("taskStatus", task.getTaskStatus());
         map.put("task_status", task.getTaskStatus());
 
+        map.put("createdAt", task.getCreatedAt());
+        map.put("created_at", task.getCreatedAt());
+        map.put("workDate", task.getWorkDate());
+        map.put("work_date", task.getWorkDate());
+        map.put("scheduledDate", task.getScheduledDate());
+        map.put("scheduled_date", task.getScheduledDate());
+
         map.put("sido", task.getSido());
         map.put("sigungu", task.getSigungu());
         map.put("adminDong", task.getAdminDong());
@@ -329,6 +371,15 @@ public class TaskService {
         for (Object value : values) {
             if (value != null && !value.toString().isBlank()) {
                 return Long.valueOf(value.toString());
+            }
+        }
+        return null;
+    }
+
+    private LocalDate toLocalDate(Object... values) {
+        for (Object value : values) {
+            if (value != null && !value.toString().isBlank()) {
+                return LocalDate.parse(value.toString().trim().substring(0, 10));
             }
         }
         return null;
