@@ -1179,6 +1179,7 @@ export default function FieldActionScreen({
 
           <View
             ref={mapWrapperRef}
+            collapsable={false}
             style={
               styles.mapWrapper
             }
