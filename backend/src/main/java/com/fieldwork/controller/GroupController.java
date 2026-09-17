@@ -21,7 +21,10 @@ public class GroupController {
     public Map<String, Object> createGroup(@RequestBody Map<String, Object> body) {
         return groupService.createGroup(
                 stringValue(body.get("name")),
-                longValue(body.get("userId")));
+                longValue(body.get("userId")),
+                stringValue(body.get("regionSido")),
+                stringValue(body.get("regionSigungu")),
+                stringValue(body.get("regionAdmCode")));
     }
 
     @GetMapping("/user/{userId}")

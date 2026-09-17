@@ -10,10 +10,29 @@ import {
 
 import { Ionicons } from '@expo/vector-icons';
 
-import {
-  ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
-} from 'expo-speech-recognition';
+// expo-speech-recognition은 네이티브 모듈이라 Expo Go에는 들어있지 않다.
+// Expo Go에서 이 파일을 그냥 import만 해도 앱 전체가 죽지 않도록,
+// 커스텀 dev-client/EAS 빌드가 아닐 때는 안전한 더미로 대체한다.
+// (버튼을 눌렀을 때 "사용할 수 없다"는 안내만 뜨고, 앱 자체는 정상 로드됨)
+let ExpoSpeechRecognitionModule;
+let useSpeechRecognitionEvent;
+
+try {
+  const speechRecognition = require('expo-speech-recognition');
+  ExpoSpeechRecognitionModule = speechRecognition.ExpoSpeechRecognitionModule;
+  useSpeechRecognitionEvent = speechRecognition.useSpeechRecognitionEvent;
+} catch (error) {
+  console.log('[VoiceTextInput] expo-speech-recognition 사용 불가 (Expo Go 등):', error?.message);
+
+  ExpoSpeechRecognitionModule = {
+    isRecognitionAvailable: () => false,
+    requestPermissionsAsync: async () => ({ granted: false }),
+    start: () => {},
+    stop: () => {},
+  };
+
+  useSpeechRecognitionEvent = () => {};
+}
 
 export default function VoiceTextInput({
   value,

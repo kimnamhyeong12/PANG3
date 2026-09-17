@@ -453,7 +453,7 @@ export default function AssignmentScreen({
 
         <View style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>
-            VISIT ASSIGNMENT
+            담당 관리
           </Text>
 
           <Text style={styles.title}>
@@ -514,7 +514,7 @@ export default function AssignmentScreen({
       {loading ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator
-            color="#12395B"
+            color="#0B6B4F"
           />
 
           <Text style={styles.loadingText}>
@@ -532,7 +532,7 @@ export default function AssignmentScreen({
               <Ionicons
                 name="location-outline"
                 size={34}
-                color="#8A98A8"
+                color="#8B9891"
               />
 
               <Text
@@ -719,7 +719,7 @@ export default function AssignmentScreen({
                             <Ionicons
                               name="location-outline"
                               size={14}
-                              color="#607086"
+                              color="#637269"
                             />
 
                             <View
@@ -792,7 +792,7 @@ export default function AssignmentScreen({
                     <Ionicons
                       name="people-outline"
                       size={14}
-                      color="#12395B"
+                      color="#0B6B4F"
                     />
 
                     <Text
@@ -891,7 +891,7 @@ export default function AssignmentScreen({
                         <Ionicons
                           name="person-outline"
                           size={13}
-                          color="#12395B"
+                          color="#0B6B4F"
                         />
 
                         <Text
@@ -1117,7 +1117,7 @@ export default function AssignmentScreen({
               >
                 <ActivityIndicator
                   size="small"
-                  color="#12395B"
+                  color="#0B6B4F"
                 />
 
                 <Text
@@ -1139,7 +1139,7 @@ export default function AssignmentScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F4F7FA',
+    backgroundColor: '#F5F7F5',
   },
 
   header: {
@@ -1149,25 +1149,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 14, paddingTop: 30, paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#D9E1EA',
+    borderBottomColor: '#DCE5E0',
   },
 
   eyebrow: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#607086',
+    color: '#637269',
     letterSpacing: 1.6,
   },
 
   title: {
     fontSize: 17,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#15231D',
   },
 
   desc: {
     fontSize: 10,
-    color: '#718096',
+    color: '#637269',
     marginTop: 2,
   },
 
@@ -1188,13 +1188,13 @@ const styles = StyleSheet.create({
   },
 
   modeTabActive: {
-    backgroundColor: '#12395B',
+    backgroundColor: '#0B6B4F',
   },
 
   modeTabText: {
     fontSize: 11,
     fontWeight: '900',
-    color: '#607086',
+    color: '#637269',
   },
 
   modeTabTextActive: {
@@ -1210,7 +1210,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 10,
     fontSize: 10,
-    color: '#718096',
+    color: '#637269',
   },
 
   body: {
@@ -1225,14 +1225,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#D9E1EA',
+    borderColor: '#DCE5E0',
   },
 
   emptyTitle: {
     marginTop: 10,
     fontSize: 14,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#15231D',
   },
 
   /*
@@ -1243,7 +1243,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 13,
     borderWidth: 1,
-    borderColor: '#D9E1EA',
+    borderColor: '#DCE5E0',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -1253,7 +1253,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#12395B',
+    backgroundColor: '#0B6B4F',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1267,12 +1267,12 @@ const styles = StyleSheet.create({
   placeName: {
     fontSize: 13,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#15231D',
   },
 
   address: {
     fontSize: 9,
-    color: '#718096',
+    color: '#637269',
     marginTop: 3,
   },
 
@@ -1286,7 +1286,7 @@ const styles = StyleSheet.create({
   assignee: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#12395B',
+    color: '#0B6B4F',
   },
 
   unassigned: {
@@ -1298,7 +1298,7 @@ const styles = StyleSheet.create({
   },
 
   assignButton: {
-    backgroundColor: '#12395B',
+    backgroundColor: '#0B6B4F',
     paddingHorizontal: 11,
     paddingVertical: 8,
     borderRadius: 10,
@@ -1312,7 +1312,7 @@ const styles = StyleSheet.create({
   },
 
   clearButton: {
-    backgroundColor: '#EDF2F7',
+    backgroundColor: '#EEF3F0',
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 10,
@@ -1320,7 +1320,7 @@ const styles = StyleSheet.create({
   },
 
   clearText: {
-    color: '#607086',
+    color: '#637269',
     fontSize: 9,
     fontWeight: '900',
   },
@@ -1333,7 +1333,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#D9E1EA',
+    borderColor: '#DCE5E0',
   },
 
   areaHeader: {
@@ -1346,26 +1346,26 @@ const styles = StyleSheet.create({
   areaDong: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#15231D',
   },
 
   areaRegion: {
     marginTop: 2,
     fontSize: 9,
-    color: '#718096',
+    color: '#637269',
   },
 
   areaCount: {
     marginTop: 4,
     fontSize: 10,
     fontWeight: '800',
-    color: '#607086',
+    color: '#637269',
   },
 
   areaLocationList: {
     marginTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#EDF2F7',
+    borderTopColor: '#EEF3F0',
   },
 
   areaLocationRow: {
@@ -1379,7 +1379,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#EAF1F7',
+    backgroundColor: '#E0F1EA',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1387,19 +1387,19 @@ const styles = StyleSheet.create({
   areaNumberText: {
     fontSize: 8,
     fontWeight: '900',
-    color: '#12395B',
+    color: '#0B6B4F',
   },
 
   areaPlaceName: {
     fontSize: 11,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#15231D',
   },
 
   areaAddress: {
     marginTop: 2,
     fontSize: 8,
-    color: '#8A98A8',
+    color: '#8B9891',
   },
 
   /*
@@ -1415,7 +1415,7 @@ const styles = StyleSheet.create({
   areaVisitAssigneeText: {
     fontSize: 9,
     fontWeight: '900',
-    color: '#12395B',
+    color: '#0B6B4F',
   },
 
   areaAssignmentRow: {
@@ -1425,14 +1425,14 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     marginTop: 5,
     borderTopWidth: 1,
-    borderTopColor: '#EDF2F7',
+    borderTopColor: '#EEF3F0',
   },
 
   areaAssignmentText: {
     flex: 1,
     fontSize: 10,
     fontWeight: '900',
-    color: '#12395B',
+    color: '#0B6B4F',
   },
 
   /*
@@ -1466,19 +1466,19 @@ const styles = StyleSheet.create({
   sheetTitle: {
     fontSize: 17,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#15231D',
   },
 
   sheetPlace: {
     fontSize: 11,
-    color: '#718096',
+    color: '#637269',
     marginTop: 4,
     marginBottom: 6,
   },
 
   sheetHint: {
     fontSize: 9,
-    color: '#607086',
+    color: '#637269',
     marginBottom: 10,
   },
 
@@ -1488,39 +1488,39 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 11,
     borderTopWidth: 1,
-    borderTopColor: '#EDF2F7',
+    borderTopColor: '#EEF3F0',
   },
 
   choiceAvatar: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#EAF1F7',
+    backgroundColor: '#E0F1EA',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   choiceAvatarText: {
-    color: '#12395B',
+    color: '#0B6B4F',
     fontWeight: '900',
   },
 
   choiceName: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#15231D',
   },
 
   choiceLogin: {
     fontSize: 9,
-    color: '#718096',
+    color: '#637269',
     marginTop: 2,
   },
 
   choiceRole: {
     fontSize: 9,
     fontWeight: '900',
-    color: '#607086',
+    color: '#637269',
   },
 
   savingBox: {
@@ -1534,6 +1534,6 @@ const styles = StyleSheet.create({
   savingText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#607086',
+    color: '#637269',
   },
 });

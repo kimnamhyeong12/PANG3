@@ -119,7 +119,7 @@ export default function ReportListScreen({
 
         <View style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>
-            FIELD REPORT
+            보고서
           </Text>
 
           <Text style={styles.title}>
@@ -134,7 +134,7 @@ export default function ReportListScreen({
       >
         {loading ? (
           <View style={styles.emptyBox}>
-            <ActivityIndicator size="large" color="#173A5E" />
+            <ActivityIndicator size="large" color="#0B6B4F" />
             <Text style={styles.emptyTitle}>방문지를 불러오는 중입니다</Text>
           </View>
         ) : locations.length === 0 ? (
@@ -142,7 +142,7 @@ export default function ReportListScreen({
             <Ionicons
               name="document-text-outline"
               size={36}
-              color="#8A98A8"
+              color="#8B9891"
             />
 
             <Text style={styles.emptyTitle}>
@@ -261,7 +261,7 @@ export default function ReportListScreen({
                           size={11}
                           color={
                             isTeamLocation
-                              ? '#12395B'
+                              ? '#0B6B4F'
                               : '#475569'
                           }
                         />
@@ -288,7 +288,7 @@ export default function ReportListScreen({
                           <Ionicons
                             name="calendar-outline"
                             size={11}
-                            color="#173A5E"
+                            color="#0B6B4F"
                           />
                           <Text style={styles.taskDateText}>
                             업무일 {formatShortDate(getWorkDateKey(loc))}
@@ -330,7 +330,7 @@ export default function ReportListScreen({
                         <Ionicons
                           name="person-outline"
                           size={12}
-                          color="#12395B"
+                          color="#0B6B4F"
                         />
 
                         <Text
@@ -382,7 +382,7 @@ export default function ReportListScreen({
                   <Ionicons
                     name="create-outline"
                     size={20}
-                    color="#607086"
+                    color="#637269"
                   />
                 </TouchableOpacity>
 
@@ -412,7 +412,7 @@ export default function ReportListScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F4F7FA',
+    backgroundColor: '#F5F7F5',
   },
 
   header: {
@@ -426,32 +426,32 @@ const styles = StyleSheet.create({
     paddingTop: 30,
 
     borderBottomWidth: 1,
-    borderBottomColor: '#D9E1EA',
+    borderBottomColor: '#DCE5E0',
   },
 
   eyebrow: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#607086',
+    color: '#637269',
     letterSpacing: 1.6,
   },
 
   title: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#15231D',
   },
 
   desc: {
     fontSize: 10,
-    color: '#718096',
+    color: '#637269',
   },
 
   scopeSummary: {
     marginTop: 5,
     fontSize: 10,
     fontWeight: '800',
-    color: '#12395B',
+    color: '#0B6B4F',
   },
 
   body: {
@@ -466,20 +466,20 @@ const styles = StyleSheet.create({
     padding: 28,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#D9E1EA',
+    borderColor: '#DCE5E0',
   },
 
   emptyTitle: {
     marginTop: 12,
     fontSize: 15,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#15231D',
   },
 
   emptyDesc: {
     marginTop: 6,
     fontSize: 11,
-    color: '#718096',
+    color: '#637269',
   },
 
   item: {
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#D9E1EA',
+    borderColor: '#DCE5E0',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -504,19 +504,19 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 7,
     borderWidth: 2,
-    borderColor: '#12395B',
+    borderColor: '#0B6B4F',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
   },
 
   checkBoxActive: {
-    backgroundColor: '#12395B',
+    backgroundColor: '#0B6B4F',
   },
 
   checkBoxDisabled: {
     borderColor: '#A0AEC0',
-    backgroundColor: '#EDF2F7',
+    backgroundColor: '#EEF3F0',
   },
 
   itemMain: {
@@ -543,7 +543,7 @@ const styles = StyleSheet.create({
   itemTitle: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#15231D',
   },
 
   scopeRow: {
@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
   },
 
   teamScopeBadge: {
-    backgroundColor: '#EAF1F7',
+    backgroundColor: '#E0F1EA',
     borderColor: '#C7D7E6',
   },
 
@@ -581,7 +581,7 @@ const styles = StyleSheet.create({
   },
 
   teamScopeText: {
-    color: '#12395B',
+    color: '#0B6B4F',
   },
 
   personalScopeText: {
@@ -603,11 +603,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#EAF1F7',
+    backgroundColor: '#E0F1EA',
   },
 
   taskDateText: {
-    color: '#173A5E',
+    color: '#0B6B4F',
     fontSize: 9,
     fontWeight: '900',
   },
@@ -632,7 +632,7 @@ const styles = StyleSheet.create({
   itemAddr: {
     marginTop: 5,
     fontSize: 11,
-    color: '#607086',
+    color: '#637269',
   },
 
   assigneeRow: {
@@ -645,7 +645,7 @@ const styles = StyleSheet.create({
   assigneeText: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#12395B',
+    color: '#0B6B4F',
   },
 
   assigneeEmpty: {
@@ -682,13 +682,13 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
 
     borderTopWidth: 1,
-    borderTopColor: '#D9E1EA',
+    borderTopColor: '#DCE5E0',
   },
 
   selectedText: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#12395B',
+    color: '#0B6B4F',
     marginBottom: 10,
   },
 });

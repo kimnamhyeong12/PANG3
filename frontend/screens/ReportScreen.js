@@ -1,172 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
-import { BackButton, PrimaryButton } from '../components/ui';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { PrimaryButton, ScreenHeader } from '../components/ui';
 import { API_BASE_URL } from '../utils/api';
-
-const isPersonalGroup = (group) =>
-  Boolean(
-    group?.personalWorkspace ||
-    group?.personal ||
-    group?.workspaceType === 'PERSONAL'
-  );
-
-const getStatusLabel = (status) => {
-  if (status === 'complete') return '작업 후';
-  if (status === 'working') return '작업 중';
-  return '작업 전';
-};
-
-export default function ReportScreen({
-  locations = [],
-  user,
-  activeGroup,
-  onBack,
-  onDownload,
-}) {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadProgressRows();
-  }, [locations]);
-
-  const loadProgressRows = async () => {
-    if (!API_BASE_URL || locations.length === 0) {
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const results = await Promise.all(
-        locations.map(async (loc) => {
-          const taskId = loc.id ?? loc.taskId;
-          const res = await fetch(
-            `${API_BASE_URL}/api/task-progress/task/${taskId}`
-          );
-          if (!res.ok) {
-            return { loc, progress: null };
-          }
-          const progress = await res.json();
-          return { loc, progress };
-        })
-      );
-      setRows(results);
-    } catch (error) {
-      console.log(error);
-      setRows(locations.map((loc) => ({ loc, progress: null })));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const complete = locations.filter((l) => l.status === 'complete').length;
-  const working = locations.filter((l) => l.status === 'working').length;
-  const firstWithReport = rows.find((r) => r.progress?.reportDownloadUrl);
-  const workspaceName = activeGroup?.groupName || user?.name || user?.loginId || '나';
-  const workspaceType = !activeGroup || isPersonalGroup(activeGroup) ? '1인 그룹' : '팀 그룹';
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <BackButton onPress={onBack} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>AUTO REPORT</Text>
-          <Text style={styles.title}>외근 보고서</Text>
-        </View>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.body}>
-        <View style={styles.reportPaper}>
-          <Text style={styles.reportTitle}>사하구 외근 업무 결과 보고서</Text>
-          <Text style={styles.line}>업무공간: {workspaceName} ({workspaceType})</Text>
-          <Text style={styles.line}>보고 대상 방문지: {locations.length}개</Text>
-          <Text style={styles.line}>
-            작업 후: {complete}개 / 작업 중: {working}개
-          </Text>
-
-          <View style={styles.divider} />
-
-          {loading ? (
-            <ActivityIndicator size="large" color="#12395B" />
-          ) : rows.length === 0 ? (
-            <Text style={styles.emptyText}>선택된 방문지가 없습니다.</Text>
-          ) : (
-            rows.map(({ loc, progress }, idx) => (
-              <View key={loc.id ?? idx} style={styles.item}>
-                <Text style={styles.itemTitle}>
-                  {idx + 1}. {loc.detailAddress || loc.roadAddress || '이름 없음'}
-                </Text>
-                <Text style={styles.itemText}>
-                  업무: {loc.task || loc.taskCategory || '미지정'}
-                </Text>
-                <Text style={styles.itemText}>
-                  상태: {getStatusLabel(loc.status)}
-                </Text>
-                <Text style={styles.itemText}>
-                  메인 코멘트: {progress?.mainComment || '(없음)'}
-                </Text>
-                <Text style={styles.itemText}>
-                  AI 분석: {progress?.aiRefinedContent ? '생성 완료' : '미생성'}
-                </Text>
-                {progress?.aiRefinedContent ? (
-                  <Text style={styles.aiSnippet}>{progress.aiRefinedContent}</Text>
-                ) : null}
-              </View>
-            ))
-          )}
-        </View>
-
-        <PrimaryButton
-          title="보고서 파일 다운로드"
-          onPress={() =>
-            onDownload?.({
-              progressId: firstWithReport?.progress?.progressId,
-              reportDownloadUrl: firstWithReport?.progress?.reportDownloadUrl,
-            })
-          }
-        />
-      </ScrollView>
-    </View>
-  );
+import { colors, radius } from '../constants/design';
+const isPersonal = (group) => Boolean(group?.personalWorkspace || group?.personal || group?.workspaceType === 'PERSONAL');
+const statusLabel = (status) => status === 'complete' ? '완료' : status === 'working' ? '진행 중' : '진행 전';
+export default function ReportScreen({ locations = [], user, activeGroup, onBack, onDownload }) {
+  const [rows, setRows] = useState([]); const [loading, setLoading] = useState(true);
+  useEffect(() => { (async () => { if (!API_BASE_URL || !locations.length) { setRows([]); setLoading(false); return; } try { const result = await Promise.all(locations.map(async (loc) => { const response = await fetch(`${API_BASE_URL}/api/task-progress/task/${loc.id ?? loc.taskId}`); return { loc, progress: response.ok ? await response.json() : null }; })); setRows(result); } catch { setRows(locations.map((loc) => ({ loc, progress: null }))); } finally { setLoading(false); } })(); }, [locations]);
+  const complete = locations.filter((item) => item.status === 'complete').length; const working = locations.filter((item) => item.status === 'working').length; const first = rows.find((item) => item.progress?.reportDownloadUrl); const workspace = activeGroup?.groupName || user?.name || user?.loginId || '나'; const scope = !activeGroup || isPersonal(activeGroup) ? '개인' : '팀';
+  return <View style={styles.container}><ScreenHeader title="보고서 미리보기" subtitle={`${workspace} · ${locations.length}건`} onBack={onBack} /><ScrollView contentContainerStyle={styles.body}>
+    <View style={styles.summary}><View><Text style={styles.summaryLabel}>선택 업무</Text><Text style={styles.summaryValue}>{locations.length}건</Text></View><View style={styles.summaryLine} /><View><Text style={styles.summaryLabel}>진행 중</Text><Text style={styles.summaryValue}>{working}건</Text></View><View style={styles.summaryLine} /><View><Text style={styles.summaryLabel}>완료</Text><Text style={styles.summaryValue}>{complete}건</Text></View></View>
+    <View style={styles.paper}><View style={styles.paperTitleRow}><View style={styles.docIcon}><Ionicons name="document-text-outline" size={23} color={colors.primary} /></View><View><Text style={styles.title}>외근 업무 결과 보고서</Text><Text style={styles.meta}>{scope} 업무공간 · {workspace}</Text></View></View>{loading ? <ActivityIndicator color={colors.primary} style={{ marginVertical: 30 }} /> : !rows.length ? <Text style={styles.empty}>선택된 방문지가 없습니다.</Text> : rows.map(({ loc, progress }, index) => <View key={loc.id ?? index} style={styles.item}><View style={styles.number}><Text style={styles.numberText}>{index + 1}</Text></View><View style={{ flex: 1 }}><Text style={styles.itemTitle}>{loc.detailAddress || loc.roadAddress || '이름 없음'}</Text><Text style={styles.itemMeta}>{loc.task || loc.taskCategory || '업무 미지정'} · {statusLabel(loc.status)}</Text>{progress?.mainComment ? <Text style={styles.comment}>{progress.mainComment}</Text> : null}{progress?.aiRefinedContent ? <View style={styles.aiBox}><Text style={styles.aiLabel}>AI 정리</Text><Text style={styles.aiText}>{progress.aiRefinedContent}</Text></View> : null}</View></View>)}</View>
+    <PrimaryButton title="보고서 파일 열기" icon="download-outline" onPress={() => onDownload?.({ progressId: first?.progress?.progressId, reportDownloadUrl: first?.progress?.reportDownloadUrl })} />
+  </ScrollView></View>;
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F7FA' },
-  header: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
-    backgroundColor: 'white',
-    paddingHorizontal: 14,
-    paddingBottom: 14,
-    paddingTop: 30,
-    borderBottomWidth: 1,
-    borderBottomColor: '#D9E1EA',
-  },
-  eyebrow: { fontSize: 10, fontWeight: '900', color: '#607086', letterSpacing: 1.6 },
-  title: { fontSize: 16, fontWeight: '900', color: '#1F2D3D' },
-  desc: { fontSize: 10, color: '#718096' },
-  body: { padding: 16, gap: 16 },
-  reportPaper: {
-    backgroundColor: 'white',
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#D9E1EA',
-  },
-  reportTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#1F2D3D',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  line: { fontSize: 12, color: '#334155', marginBottom: 6 },
-  divider: { height: 1, backgroundColor: '#E6EDF3', marginVertical: 14 },
-  item: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#EEF2F6' },
-  itemTitle: { fontSize: 13, fontWeight: '900', color: '#12395B' },
-  itemText: { fontSize: 11, color: '#607086', marginTop: 4 },
-  aiSnippet: { fontSize: 11, color: '#334155', marginTop: 8, lineHeight: 18 },
-  emptyText: { fontSize: 12, color: '#718096', textAlign: 'center' },
-});
+const styles = StyleSheet.create({ container: { flex: 1, backgroundColor: colors.background }, body: { padding: 20, gap: 14, paddingBottom: 34 }, summary: { backgroundColor: colors.primaryDark, borderRadius: radius.large, padding: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' }, summaryLabel: { color: '#BCD8CC', fontSize: 9, textAlign: 'center' }, summaryValue: { color: '#FFFFFF', fontSize: 19, fontWeight: '900', marginTop: 4 }, summaryLine: { width: 1, height: 38, backgroundColor: 'rgba(255,255,255,0.18)' }, paper: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: radius.large, padding: 17 }, paperTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingBottom: 14 }, docIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }, title: { color: colors.text, fontSize: 16, fontWeight: '900' }, meta: { color: colors.textSoft, fontSize: 10, marginTop: 4 }, item: { flexDirection: 'row', gap: 10, borderTopWidth: 1, borderTopColor: colors.line, paddingVertical: 14 }, number: { width: 28, height: 28, borderRadius: 9, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' }, numberText: { color: colors.primary, fontSize: 10, fontWeight: '900' }, itemTitle: { color: colors.text, fontSize: 13, fontWeight: '900' }, itemMeta: { color: colors.textSoft, fontSize: 10, marginTop: 4 }, comment: { color: colors.textSoft, fontSize: 10, lineHeight: 16, marginTop: 7 }, aiBox: { backgroundColor: colors.primarySoft, borderRadius: 12, padding: 10, marginTop: 9 }, aiLabel: { color: colors.primary, fontSize: 9, fontWeight: '900' }, aiText: { color: colors.text, fontSize: 10, lineHeight: 16, marginTop: 4 }, empty: { color: colors.textSoft, textAlign: 'center', paddingVertical: 30 } });

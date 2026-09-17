@@ -26,7 +26,7 @@ public class AuthService {
     }
 
     @Transactional
-    public User register(String loginId, String password, String name) {
+    public User register(String loginId, String password, String name, String workSido) {
         if (userRepository.existsByLoginId(loginId)) {
             throw new RuntimeException("이미 존재하는 아이디입니다.");
         }
@@ -36,6 +36,7 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(password));
         user.setName(name);
         user.setRole("USER");
+        user.setWorkSido(workSido == null || workSido.isBlank() ? "부산광역시" : workSido.trim());
 
         User savedUser = userRepository.save(user);
         groupService.ensurePersonalGroup(savedUser);
@@ -60,6 +61,8 @@ public class AuthService {
         result.put("loginId", user.getLoginId());
         result.put("name", user.getName());
         result.put("role", user.getRole());
+        result.put("workSido", user.getWorkSido() == null ? "부산광역시" : user.getWorkSido());
+        result.put("workSigungu", user.getWorkSigungu());
 
         return result;
     }

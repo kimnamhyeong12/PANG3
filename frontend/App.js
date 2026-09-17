@@ -28,8 +28,11 @@ import GroupInvitationsScreen from './screens/GroupInvitationsScreen';
 import GroupDetailScreen from './screens/GroupDetailScreen';
 import AssignmentScreen from './screens/AssignmentScreen';
 import WorkStatusScreen from './screens/WorkStatusScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import PublicDataAssignmentScreen from './screens/PublicDataAssignmentScreen';
 import { groupApi } from './utils/groupApi';
 import { CustomAlertHost } from './components/CustomAlert';
+import { colors } from './constants/design';
 
 const isPersonalGroup = (group) =>
   Boolean(
@@ -518,6 +521,9 @@ export default function App() {
             onDashboard={() =>
               go('dashboard')
             }
+            onSettings={() =>
+              go('settings')
+            }
             locations={routeLocations}
             setLocations={setRouteLocations}
             onRefreshAssignments={refreshGroupAssignments}
@@ -593,8 +599,20 @@ export default function App() {
                 loadTeamLocations(group);
                 go('teamLocations');
               }}
+              onPublicData={(group) => {
+                selectActiveGroup(group);
+                go('publicDataAssignment');
+              }}
             />
           )}
+
+        {screen === 'publicDataAssignment' && activeGroup && (
+          <PublicDataAssignmentScreen
+            user={user}
+            group={activeGroup}
+            onBack={() => goBack('groupDetail')}
+          />
+        )}
 
         {screen === 'teamLocations' && activeGroup && (
           <MapScreen
@@ -658,6 +676,17 @@ export default function App() {
             user={user}
             activeGroup={activeGroup}
             onBack={() => goBack('main')}
+            onLogout={handleLogout}
+          />
+        )}
+
+        {screen === 'settings' && (
+          <SettingsScreen
+            user={user}
+            activeGroup={activeGroup}
+            onBack={() => goBack('main')}
+            onUpdatedUser={setUser}
+            onDashboard={() => go('dashboard')}
             onLogout={handleLogout}
           />
         )}
@@ -797,7 +826,7 @@ export default function App() {
         </View>
 
         {user &&
-          !['login', 'register', 'dashboard'].includes(screen) && (
+          !['login', 'register', 'dashboard', 'settings', 'publicDataAssignment'].includes(screen) && (
             <BottomNavigation
               screen={screen}
               onHome={() => go('main')}
@@ -839,6 +868,7 @@ function BottomNavigation({
           'groupInvitations',
           'groupDetail',
           'assignment',
+          'publicDataAssignment',
         ].includes(screen)
       ? 'group'
       : 'home';
@@ -909,8 +939,8 @@ function BottomNavItem({
         size={23}
         color={
           active
-            ? '#173A5E'
-            : '#7D8998'
+            ? colors.primary
+            : colors.textFaint
         }
       />
 
@@ -930,7 +960,7 @@ function BottomNavItem({
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#F4F7FA',
+    backgroundColor: colors.background,
   },
 
   app: {
@@ -947,9 +977,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E4E9EF',
+    borderTopColor: colors.line,
     elevation: 12,
-    shadowColor: '#1E3550',
+    shadowColor: '#163126',
     shadowOpacity: 0.1,
     shadowRadius: 12,
     shadowOffset: {
@@ -967,13 +997,13 @@ const styles = StyleSheet.create({
   },
 
   bottomNavLabel: {
-    color: '#7D8998',
+    color: colors.textFaint,
     fontSize: 11,
     fontWeight: '700',
   },
 
   bottomNavLabelActive: {
-    color: '#173A5E',
+    color: colors.primary,
     fontWeight: '900',
   },
 

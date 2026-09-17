@@ -4,6 +4,7 @@ import {
   Image,
   Modal,
   PanResponder,
+  PixelRatio,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -15,6 +16,10 @@ import { captureRef } from 'react-native-view-shot';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 const SCREEN = Dimensions.get('window');
+
+// 화면에는 작은 박스(MAX_W/MAX_H) 안에 축소해서 보여주지만, 저장(캡처)할 때는
+// 이 화면 배율만큼 확대해서 캡처해야 레티나/고밀도 화면에서 화질이 깨지지 않는다.
+const CAPTURE_SCALE = PixelRatio.get();
 
 const MAX_W = Math.min(SCREEN.width - 24, 520);
 const MAX_H = Math.min(SCREEN.height * 0.56, 520);
@@ -544,14 +549,16 @@ export default function PhotoMarkupEditor({
           format: 'jpg',
           quality: 0.95,
 
+          // 화면에 보이는 크기(displaySize) 그대로 캡처하면 실제 픽셀 수가
+          // 너무 작아서 화질이 깨지므로, 기기 화면 배율만큼 키워서 캡처한다.
           width:
             Math.round(
-              displaySize.width
+              displaySize.width * CAPTURE_SCALE
             ),
 
           height:
             Math.round(
-              displaySize.height
+              displaySize.height * CAPTURE_SCALE
             ),
 
           result: 'tmpfile',
@@ -635,13 +642,16 @@ export default function PhotoMarkupEditor({
         const captured =
           await captureStage();
 
+        // captureStage()가 CAPTURE_SCALE만큼 확대해서 캡처하므로,
+        // 그 확대된 이미지 기준으로 자르려면 crop 좌표도 같은 배율로 키워야 한다.
         const width =
           Math.max(
             1,
 
             Math.round(
-              crop.right -
-                crop.left
+              (crop.right -
+                crop.left) *
+                CAPTURE_SCALE
             )
           );
 
@@ -650,8 +660,9 @@ export default function PhotoMarkupEditor({
             1,
 
             Math.round(
-              crop.bottom -
-                crop.top
+              (crop.bottom -
+                crop.top) *
+                CAPTURE_SCALE
             )
           );
 
@@ -665,12 +676,14 @@ export default function PhotoMarkupEditor({
                   crop: {
                     originX:
                       Math.round(
-                        crop.left
+                        crop.left *
+                          CAPTURE_SCALE
                       ),
 
                     originY:
                       Math.round(
-                        crop.top
+                        crop.top *
+                          CAPTURE_SCALE
                       ),
 
                     width,

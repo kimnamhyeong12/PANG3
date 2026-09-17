@@ -1,8 +1,13 @@
 {
     "java.configuration.updateBuildConfiguration": "interactive",
     "java.compile.nullAnalysis.mode": "disabled",
+
+    "java.import.exclusions": [
+        "**/node_modules/**"
+    ],
+
     "python-envs.defaultEnvManager": "ms-python.python:venv",
-    "python-envs.defaultPackageManager": "ms-python.python:pip", // 👈 요기 끝에 쉼표(,)를 꼭 찍어주셔야 합니다!
+    "python-envs.defaultPackageManager": "ms-python.python:pip",
 
     "python.analysis.extraPaths": [
         "./ai",

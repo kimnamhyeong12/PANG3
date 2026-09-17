@@ -99,14 +99,16 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
     setLoadingBoundary(true);
     setBoundaryError('');
     try {
-      const data = await groupApi('/api/sgis/sahagu-boundaries');
+      const data = await groupApi(
+        `/api/sgis/boundaries?admCode=${encodeURIComponent(group?.regionAdmCode || '21100')}`
+      );
       setBoundaries(data?.type === 'FeatureCollection' ? data : { type: 'FeatureCollection', features: [] });
     } catch (error) {
       setBoundaryError(error.message || '행정동 경계를 불러오지 못했습니다.');
     } finally {
       setLoadingBoundary(false);
     }
-  }, []);
+  }, [group?.regionAdmCode]);
 
   useEffect(() => { onRefresh?.(); loadBoundaries(); }, [loadBoundaries, onRefresh]);
 
@@ -189,7 +191,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
       <View style={styles.header}>
         <BackButton onPress={onBack} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>TEAM STATUS</Text>
+          <Text style={styles.eyebrow}>업무 현황</Text>
           <Text style={styles.title}>
             {personalWorkspace ? '내 업무 현황' : isLeader ? '팀 작업현황' : '내 담당 업무'}
           </Text>
@@ -220,7 +222,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
           onTouchCancel={() => setMapInteracting(false)}
         >
           {loadingBoundary ? (
-            <View style={styles.mapState}><ActivityIndicator color="#123F63" /><Text style={styles.mapStateText}>행정동 경계를 불러오는 중입니다.</Text></View>
+            <View style={styles.mapState}><ActivityIndicator color="#084C3A" /><Text style={styles.mapStateText}>행정동 경계를 불러오는 중입니다.</Text></View>
           ) : !KAKAO_JAVASCRIPT_KEY ? (
             <View style={styles.mapState}><Text style={styles.errorText}>카카오 JavaScript 키가 설정되지 않았습니다.</Text></View>
           ) : (
@@ -320,7 +322,7 @@ function Summary({ value, label, color = '#FFFFFF' }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F7FA' },
+  container: { flex: 1, backgroundColor: '#F5F7F5' },
   header: {
   flexDirection: 'row',
   gap: 12,
@@ -330,42 +332,42 @@ const styles = StyleSheet.create({
   paddingBottom: 14,
   paddingTop: 30,
   borderBottomWidth: 1,
-  borderBottomColor: '#D9E1EA',
+  borderBottomColor: '#DCE5E0',
 },
-  eyebrow: { fontSize: 10, fontWeight: '900', color: '#607086', letterSpacing: 1.6 },
-  title: { fontSize: 20, fontWeight: '900', color: '#1F2D3D' },
-  desc: { fontSize: 10, color: '#718096', marginTop: 2 },
+  eyebrow: { fontSize: 10, fontWeight: '900', color: '#637269', letterSpacing: 1.6 },
+  title: { fontSize: 20, fontWeight: '900', color: '#15231D' },
+  desc: { fontSize: 10, color: '#637269', marginTop: 2 },
   screenScroll: { flex: 1 },
   body: { padding: 14, gap: 12, paddingBottom: 32 },
-  summaryCard: { backgroundColor: '#123F63', borderRadius: 18, paddingVertical: 16, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' },
+  summaryCard: { backgroundColor: '#084C3A', borderRadius: 18, paddingVertical: 16, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' },
   summaryItem: { flex: 1, alignItems: 'center' },
   summaryValue: { fontSize: 22, fontWeight: '900' },
   summaryLabel: { color: '#BFD0DE', fontSize: 9, fontWeight: '800', marginTop: 4 },
-  summaryDivider: { width: 1, height: 36, backgroundColor: '#315779' },
-  mapCard: { height: 430, overflow: 'hidden', borderRadius: 20, borderWidth: 1, borderColor: '#D9E1EA', backgroundColor: '#EAF0F5' },
+  summaryDivider: { width: 1, height: 36, backgroundColor: '#2F725E' },
+  mapCard: { height: 430, overflow: 'hidden', borderRadius: 20, borderWidth: 1, borderColor: '#DCE5E0', backgroundColor: '#EAF0F5' },
   map: { flex: 1, backgroundColor: '#EAF0F5' },
   mapState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
-  mapStateText: { fontSize: 11, color: '#607086' },
+  mapStateText: { fontSize: 11, color: '#637269' },
   errorText: { fontSize: 11, color: '#D14343', fontWeight: '700', textAlign: 'center', padding: 20 },
   legend: { position: 'absolute', right: 10, bottom: 10, backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 12, padding: 10, gap: 7, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   legendDot: { width: 9, height: 9, borderRadius: 5 },
   legendText: { fontSize: 9, color: '#334155', fontWeight: '800' },
   boundaryWarning: { fontSize: 10, lineHeight: 15, color: '#B45309', backgroundColor: '#FFF8E6', borderRadius: 10, padding: 10 },
-  memberCard: { maxHeight: 190, minHeight: 106, backgroundColor: '#FFFFFF', borderRadius: 18, padding: 14, borderWidth: 1, borderColor: '#D9E1EA' },
+  memberCard: { maxHeight: 190, minHeight: 106, backgroundColor: '#FFFFFF', borderRadius: 18, padding: 14, borderWidth: 1, borderColor: '#DCE5E0' },
   memberHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
-  memberTitle: { fontSize: 14, fontWeight: '900', color: '#1F2D3D' },
+  memberTitle: { fontSize: 14, fontWeight: '900', color: '#15231D' },
   showAllText: { fontSize: 10, fontWeight: '900', color: '#1769A0' },
   memberList: { flexGrow: 0 },
-  memberRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: '#EDF2F7', paddingVertical: 8, paddingHorizontal: 4, borderRadius: 10 },
+  memberRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: '#EEF3F0', paddingVertical: 8, paddingHorizontal: 4, borderRadius: 10 },
   memberRowSelected: { backgroundColor: '#F0F7FC' },
   ownerDot: { width: 12, height: 12, borderRadius: 6 },
   memberInfo: { flex: 1 },
   memberTextRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  memberName: { minWidth: 42, fontSize: 11, fontWeight: '900', color: '#1F2D3D' },
+  memberName: { minWidth: 42, fontSize: 11, fontWeight: '900', color: '#15231D' },
   memberMeta: { flex: 1, fontSize: 9, color: '#64748B' },
-  memberPercent: { fontSize: 11, fontWeight: '900', color: '#1F2D3D' },
+  memberPercent: { fontSize: 11, fontWeight: '900', color: '#15231D' },
   progressTrack: { height: 6, backgroundColor: '#E5E7EB', borderRadius: 4, overflow: 'hidden', marginTop: 6 },
   progressFill: { height: '100%', borderRadius: 4 },
-  emptyText: { fontSize: 10, color: '#718096', textAlign: 'center', paddingVertical: 18 },
+  emptyText: { fontSize: 10, color: '#637269', textAlign: 'center', paddingVertical: 18 },
 });

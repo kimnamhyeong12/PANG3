@@ -17,6 +17,8 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.time.Instant;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class SgisBoundaryService {
@@ -36,7 +38,7 @@ public class SgisBoundaryService {
 
     private volatile String accessToken;
     private volatile long accessTokenExpiresAtEpochSeconds;
-    private volatile JsonNode cachedBoundary;
+    private final Map<String, JsonNode> cachedBoundaries = new ConcurrentHashMap<>();
 
     public SgisBoundaryService(
             ObjectMapper objectMapper,
@@ -62,18 +64,16 @@ public class SgisBoundaryService {
     }
 
     public JsonNode getSahaguAdministrativeBoundaries() {
-        JsonNode snapshot = cachedBoundary;
-        if (snapshot != null) {
-            return snapshot;
-        }
+        return getAdministrativeBoundaries(sahaguCode);
+    }
 
-        synchronized (this) {
-            if (cachedBoundary == null) {
-                JsonNode raw = requestBoundary(getAccessToken());
-                cachedBoundary = convertFeatureCollection(raw);
-            }
-            return cachedBoundary;
+    public JsonNode getAdministrativeBoundaries(String admCode) {
+        String normalized = admCode == null ? "" : admCode.trim();
+        if (!normalized.matches("\\d{5,7}")) {
+            throw new IllegalArgumentException("올바른 SGIS 행정구역 코드를 입력해 주세요.");
         }
+        return cachedBoundaries.computeIfAbsent(normalized,
+                code -> convertFeatureCollection(requestBoundary(getAccessToken(), code)));
     }
 
     private String getAccessToken() {
@@ -111,13 +111,13 @@ public class SgisBoundaryService {
         return accessToken;
     }
 
-    private JsonNode requestBoundary(String token) {
+    private JsonNode requestBoundary(String token, String admCode) {
         JsonNode response = restClient.get()
                 .uri(URI.create(UriComponentsBuilder
                         .fromUriString(BOUNDARY_URL)
                         .queryParam("accessToken", token)
                         .queryParam("year", boundaryYear)
-                        .queryParam("adm_cd", sahaguCode)
+                        .queryParam("adm_cd", admCode)
                         .queryParam("low_search", 1)
                         .build()
                         .encode()
@@ -125,7 +125,7 @@ public class SgisBoundaryService {
                 .accept(MediaType.APPLICATION_JSON)
                 .retrieve()
                 .body(JsonNode.class);
-        validateSgisResponse(response, "사하구 행정동 경계 조회");
+        validateSgisResponse(response, "행정동 경계 조회");
         return response;
     }
 

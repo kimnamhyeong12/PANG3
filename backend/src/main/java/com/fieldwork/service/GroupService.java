@@ -52,7 +52,12 @@ public class GroupService {
     }
 
     @Transactional
-    public Map<String, Object> createGroup(String groupName, Long leaderUserId) {
+    public Map<String, Object> createGroup(
+            String groupName,
+            Long leaderUserId,
+            String regionSido,
+            String regionSigungu,
+            String regionAdmCode) {
         if (groupName == null || groupName.trim().isEmpty()) {
             throw new RuntimeException("그룹 이름을 입력해주세요.");
         }
@@ -63,6 +68,9 @@ public class GroupService {
         group.setName(groupName.trim());
         group.setLeader(leader);
         group.setPersonal(false);
+        group.setRegionSido(regionSido == null || regionSido.isBlank() ? "부산광역시" : regionSido.trim());
+        group.setRegionSigungu(regionSigungu == null || regionSigungu.isBlank() ? "사하구" : regionSigungu.trim());
+        group.setRegionAdmCode(regionAdmCode == null ? "" : regionAdmCode.trim());
         WorkGroup savedGroup = workGroupRepository.save(group);
 
         GroupMember leaderMember = new GroupMember();
@@ -93,6 +101,7 @@ public class GroupService {
                     created.setName(user.getLoginId());
                     created.setLeader(user);
                     created.setPersonal(true);
+                    created.setRegionSido(user.getWorkSido() == null ? "부산광역시" : user.getWorkSido());
                     return workGroupRepository.save(created);
                 });
 
@@ -530,6 +539,9 @@ public class GroupService {
         map.put("personal", group.isPersonal());
         map.put("personalWorkspace", group.isPersonal());
         map.put("workspaceType", group.isPersonal() ? "PERSONAL" : "TEAM");
+        map.put("regionSido", group.getRegionSido());
+        map.put("regionSigungu", group.getRegionSigungu());
+        map.put("regionAdmCode", group.getRegionAdmCode());
         map.put("memberCount", groupMemberRepository.countByGroup(group));
         map.put("createdAt", group.getCreatedAt());
         return map;

@@ -1,14 +1,9 @@
-import { showAlert } from '../components/CustomAlert';
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { showAlert } from '../components/CustomAlert';
 import { PrimaryButton } from '../components/ui';
+import { colors, radius } from '../constants/design';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
@@ -16,167 +11,82 @@ export default function LoginScreen({ onLogin, onRegister }) {
   const [id, setId] = useState('');
   const [pw, setPw] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const login = async () => {
-    if (!id || !pw || loading) return;
-
+    if (!id.trim() || !pw || loading) return;
     try {
       setLoading(true);
-
       const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          loginId: id,
-          password: pw,
-        }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loginId: id.trim(), password: pw }),
       });
-
-      if (!res.ok) {
-        throw new Error('로그인 실패');
-      }
-
-      const data = await res.json();
-
-      console.log('로그인 성공:', data);
-
-      onLogin(data);
+      if (!res.ok) throw new Error('로그인 실패');
+      onLogin(await res.json());
     } catch (error) {
       console.log(error);
       showAlert('로그인 실패', '아이디 또는 비밀번호를 확인해주세요.');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.container}
-    >
-      <View style={styles.header}>
-        <View style={styles.logo}>
-          <Text style={styles.logoText}>SG</Text>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <View style={styles.brandRow}>
+          <View style={styles.logo}><Ionicons name="navigate" size={24} color="#FFFFFF" /></View>
+          <View>
+            <Text style={styles.brand}>외근도우미</Text>
+            <Text style={styles.brandSub}>현장업무 관리</Text>
+          </View>
         </View>
 
-        <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>SAHA-GU OFFICE</Text>
-          <Text style={styles.title}>외근 업무 지원 시스템</Text>
-          <Text style={styles.desc}>스마트 현장 순회 및 보고 자동화 시스템</Text>
-          <Text style={styles.sub}>FIELDWORK ASSISTANT</Text>
+        <View style={styles.intro}>
+          <Text style={styles.title}>로그인</Text>
+          <Text style={styles.description}>업무 계정으로 접속하세요.</Text>
         </View>
-      </View>
 
-      <View style={styles.loginArea}>
-        <Text style={styles.section}>SECURE LOGIN</Text>
-        <Text style={styles.loginTitle}>직원 로그인</Text>
+        <View style={styles.form}>
+          <Text style={styles.label}>아이디</Text>
+          <View style={styles.inputRow}>
+            <Ionicons name="person-outline" size={19} color={colors.textSoft} />
+            <TextInput value={id} onChangeText={setId} placeholder="아이디 입력" placeholderTextColor={colors.textFaint} autoCapitalize="none" returnKeyType="next" style={styles.input} />
+          </View>
 
-        <Text style={styles.label}>직원번호 또는 업무용 이메일</Text>
-        <TextInput
-          value={id}
-          onChangeText={setId}
-          placeholder="예: saha2026 또는 name@saha.go.kr"
-          autoCapitalize="none"
-          style={styles.input}
-        />
+          <Text style={styles.label}>비밀번호</Text>
+          <View style={styles.inputRow}>
+            <Ionicons name="lock-closed-outline" size={19} color={colors.textSoft} />
+            <TextInput value={pw} onChangeText={setPw} placeholder="비밀번호 입력" placeholderTextColor={colors.textFaint} secureTextEntry={!showPassword} returnKeyType="done" onSubmitEditing={login} style={styles.input} />
+            <TouchableOpacity onPress={() => setShowPassword((v) => !v)}><Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textSoft} /></TouchableOpacity>
+          </View>
 
-        <Text style={styles.label}>비밀번호</Text>
-        <TextInput
-          value={pw}
-          onChangeText={setPw}
-          placeholder="비밀번호 입력"
-          secureTextEntry
-          style={styles.input}
-        />
+          <PrimaryButton title={loading ? '로그인 중...' : '로그인'} onPress={login} disabled={!id.trim() || !pw || loading} style={styles.loginButton} />
 
-        <PrimaryButton
-          title={loading ? '인증 중...' : '로그인'}
-          onPress={login}
-          disabled={!id || !pw || loading}
-        />
-
-        <Text style={styles.registerText} onPress={onRegister}>
-          계정이 없으신가요? 회원가입
-        </Text>
-
-        <View style={styles.notice}>
-          <Text style={styles.noticeText}>
-            본 시스템은 사하구청 외근 담당자 전용 시스템입니다. 모든 접속 기록은 보안 정책에 따라 저장됩니다.
-          </Text>
+          <TouchableOpacity style={styles.registerButton} onPress={onRegister} activeOpacity={0.7}>
+            <Text style={styles.registerMuted}>처음 사용하시나요?</Text>
+            <Text style={styles.registerText}>회원가입</Text>
+          </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F7FA', paddingHorizontal: 28 },
-  header: { flexDirection: 'row', gap: 14, paddingTop: 44, paddingBottom: 28 },
-  logo: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: '#12395B',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoText: { color: 'white', fontWeight: '900', fontSize: 18 },
-  eyebrow: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 2.2,
-    color: '#607086',
-  },
-  title: { fontSize: 22, fontWeight: '900', color: '#1F2D3D', marginTop: 5 },
-  desc: { fontSize: 10, color: '#718096', marginTop: 4 },
-  sub: {
-    marginTop: 14,
-    fontSize: 10,
-    letterSpacing: 2.7,
-    fontWeight: '700',
-    color: '#5E7B95',
-  },
-  loginArea: { flex: 1 },
-  section: {
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1.6,
-    color: '#607086',
-  },
-  loginTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#1F2D3D',
-    marginTop: 4,
-    marginBottom: 20,
-  },
-  label: { fontSize: 11, fontWeight: '800', color: '#607086', marginBottom: 8 },
-  input: {
-    backgroundColor: 'white',
-    borderWidth: 1,
-    borderColor: '#D9E1EA',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    height: 52,
-    marginBottom: 16,
-    fontSize: 13,
-  },
-  registerText: {
-    marginTop: 18,
-    textAlign: 'center',
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#12395B',
-  },
-  notice: {
-    marginTop: 22,
-    backgroundColor: '#EAF1F7',
-    borderWidth: 1,
-    borderColor: '#D9E1EA',
-    borderRadius: 14,
-    padding: 14,
-  },
-  noticeText: { fontSize: 10, lineHeight: 17, color: '#607086' },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 58, paddingBottom: 32 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  logo: { width: 46, height: 46, borderRadius: 15, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  brand: { color: colors.text, fontSize: 20, fontWeight: '900' },
+  brandSub: { color: colors.textSoft, fontSize: 11, marginTop: 2 },
+  intro: { marginTop: 74, marginBottom: 30 },
+  title: { color: colors.text, fontSize: 32, fontWeight: '900' },
+  description: { color: colors.textSoft, fontSize: 13, marginTop: 8 },
+  form: { gap: 10 },
+  label: { color: colors.text, fontSize: 12, fontWeight: '800', marginTop: 4 },
+  inputRow: { height: 56, borderRadius: radius.medium, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 },
+  input: { flex: 1, color: colors.text, fontSize: 14 },
+  loginButton: { marginTop: 12 },
+  registerButton: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 12, padding: 10 },
+  registerMuted: { color: colors.textSoft, fontSize: 12 },
+  registerText: { color: colors.primary, fontSize: 12, fontWeight: '900' },
 });

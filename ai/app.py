@@ -28,6 +28,10 @@ client = genai.Client(api_key=API_KEY) if API_KEY else None
 
 RESULT_PREFIX = "@@AI_RESULT@@"
 
+# 보고서에 "AI 현장 분석 의견" 문단을 넣을지 여부.
+# 사무 보고서에는 AI 요약/분석 텍스트 없이, 실제 입력한 사진·위치·의견만 들어가면 되므로 기본 False.
+ENABLE_AI_ANALYSIS = False
+
 
 
 import urllib.request
@@ -218,6 +222,8 @@ def create_fieldwork_report(report_data: dict, output_filename: str) -> str:
     location_name = str(report_data.get("location_name") or "사하구 관내")
     task_category = str(report_data.get("task_category") or "현장 점검")
     main_comment = str(report_data.get("main_comment") or "")
+    latitude = report_data.get("latitude")
+    longitude = report_data.get("longitude")
     map_image = report_data.get("map_image_path")
     photo_groups = report_data.get("photo_groups") or []
     ai_refined = report_data.get("ai_refined_content") or ""
@@ -240,6 +246,17 @@ def create_fieldwork_report(report_data: dict, output_filename: str) -> str:
     meta_p = doc.add_paragraph()
     meta_p.add_run(f"작성일자: {date.today().strftime('%Y-%m-%d')}", size=9, color="#6B7280", font="Malgun Gothic")
     
+    # 3-1. 작업 위치(주소 · 좌표) 추가
+    heading_loc_p = doc.add_paragraph()
+    heading_loc_p.add_run("■ 작업 위치", bold=True, size=12, color="#153B5C", font="Malgun Gothic")
+
+    loc_p = doc.add_paragraph()
+    loc_p.add_run(f"주소: {location_name}", size=10, color="#27384A", font="Malgun Gothic")
+
+    if latitude is not None and longitude is not None and str(latitude) != "" and str(longitude) != "":
+        coord_p = doc.add_paragraph()
+        coord_p.add_run(f"좌표(위도/경도): {latitude}, {longitude}", size=10, color="#27384A", font="Malgun Gothic")
+
     # 공백 문단 추가
     doc.add_paragraph()
 
@@ -437,6 +454,7 @@ def run_pipeline(payload: dict) -> dict:
         payload.get("map_image"),
         str(work_dir / "map.jpg"),
         canvas_size=(1920, 1080),
+        # 흰 여백 없이 박스를 꽉 채우도록 cover로 (모서리가 살짝 잘릴 수 있음)
         fit_mode="cover",
     )
 
@@ -445,6 +463,7 @@ def run_pipeline(payload: dict) -> dict:
     for idx, raw in enumerate(payload.get("field_photos") or []):
         src = raw.get("path") or raw.get("file")
         temp = str(work_dir / f"field_{idx}.jpg")
+        # 흰 여백 없이 박스를 꽉 채우도록 cover로 (모서리가 살짝 잘릴 수 있음)
         sanitized = sanitize_image(src, temp, canvas_size=(1600, 1100), fit_mode="cover")
         _, caption = parse_photo_comment(raw.get("comment", ""), idx + 1)
         captions.append(caption)
@@ -480,14 +499,17 @@ def run_pipeline(payload: dict) -> dict:
         map_sanitized,
     )
 
-    print("[Engine] Gemini 분석 시작...", file=sys.stderr)
-    ai_refined_content = run_gemini_analysis(
-        primary_image,
-        location_name,
-        field_memo,
-        main_comment,
-        captions,
-    )
+    if ENABLE_AI_ANALYSIS:
+        print("[Engine] Gemini 분석 시작...", file=sys.stderr)
+        ai_refined_content = run_gemini_analysis(
+            primary_image,
+            location_name,
+            field_memo,
+            main_comment,
+            captions,
+        )
+    else:
+        ai_refined_content = ""
 
     report_name = (
         f"위치도_및_현장사진_{safe_filename(location_name)}_{date.today():%Y%m%d}.hwpx"
@@ -500,6 +522,8 @@ def run_pipeline(payload: dict) -> dict:
             "map_image_path": map_sanitized,
             "photo_groups": groups,
             "ai_refined_content": ai_refined_content,
+            "latitude": payload.get("latitude"),
+            "longitude": payload.get("longitude"),
         },
         str(output_dir / report_name),
     )

@@ -1,99 +1,20 @@
 import React, { useState } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { BackButton, PrimaryButton } from '../components/ui';
+import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { showAlert } from '../components/CustomAlert';
+import { PrimaryButton, ScreenHeader } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
+import { colors, radius } from '../constants/design';
 
+const DISTRICTS = ['중구','서구','동구','영도구','부산진구','동래구','남구','북구','해운대구','사하구','금정구','강서구','연제구','수영구','사상구','기장군'];
+const DISTRICT_CODES = {
+  중구: '21010', 서구: '21020', 동구: '21030', 영도구: '21040', 부산진구: '21050',
+  동래구: '21060', 남구: '21070', 북구: '21080', 해운대구: '21090', 사하구: '21100',
+  금정구: '21110', 강서구: '21120', 연제구: '21130', 수영구: '21140', 사상구: '21150', 기장군: '21310',
+};
 export default function GroupCreateScreen({ user, onBack, onCreated }) {
-  const [name, setName] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const create = async () => {
-    if (!name.trim() || !user?.userId || loading) return;
-
-    try {
-      setLoading(true);
-      const data = await groupApi('/api/groups', {
-        method: 'POST',
-        body: JSON.stringify({ name: name.trim(), userId: user.userId }),
-      });
-      Alert.alert('그룹 생성 완료', `${data.groupName} 그룹이 생성되었습니다.`);
-      onCreated?.(data);
-    } catch (error) {
-      Alert.alert('그룹 생성 실패', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.header}>
-        <BackButton onPress={onBack} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>CREATE TEAM</Text>
-          <Text style={styles.title}>그룹 생성</Text>
-        </View>
-      </View>
-
-      <View style={styles.body}>
-        <View style={styles.card}>
-          <Text style={styles.label}>그룹 이름</Text>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="예: 상수도 현장점검 A팀"
-            style={styles.input}
-            maxLength={50}
-          />
-          <Text style={styles.help}>
-            그룹을 생성하면 {user?.name || user?.loginId || '현재 사용자'}님이 자동으로 팀장이 됩니다.
-          </Text>
-        </View>
-
-        <PrimaryButton
-          title={loading ? '생성 중...' : '그룹 만들기'}
-          onPress={create}
-          disabled={!name.trim() || loading}
-        />
-      </View>
-    </KeyboardAvoidingView>
-  );
+  const [name, setName] = useState(''); const [district, setDistrict] = useState('사하구'); const [open, setOpen] = useState(false); const [loading, setLoading] = useState(false);
+  const create = async () => { if (!name.trim() || loading) return; try { setLoading(true); const data = await groupApi('/api/groups', { method: 'POST', body: JSON.stringify({ name: name.trim(), userId: user.userId, regionSido: '부산광역시', regionSigungu: district, regionAdmCode: DISTRICT_CODES[district] || '' }) }); showAlert('그룹 생성 완료', `${data.groupName} 그룹이 생성되었습니다.`); onCreated?.(data); } catch (error) { showAlert('그룹 생성 실패', error.message); } finally { setLoading(false); } };
+  return <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScreenHeader title="새 그룹" subtitle="팀 이름과 활동지역을 설정합니다" onBack={onBack} /><ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled"><View style={styles.card}><Text style={styles.label}>그룹 이름</Text><TextInput value={name} onChangeText={setName} placeholder="예: 사하구 시설점검팀" placeholderTextColor={colors.textFaint} style={styles.input} maxLength={50} /><Text style={styles.label}>활동지역</Text><TouchableOpacity style={styles.regionButton} onPress={() => setOpen(true)}><View><Text style={styles.regionSmall}>부산광역시</Text><Text style={styles.regionValue}>{district}</Text></View><Ionicons name="chevron-down" size={19} color={colors.textSoft} /></TouchableOpacity><Text style={styles.help}>선택한 구·군의 행정동 경계와 공공데이터를 그룹 화면에서 사용합니다.</Text></View><PrimaryButton title={loading ? '생성 중...' : '그룹 만들기'} onPress={create} disabled={!name.trim() || loading} /></ScrollView><Modal visible={open} transparent animationType="fade"><TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => setOpen(false)}><View style={styles.sheet}><Text style={styles.sheetTitle}>활동 구·군 선택</Text><ScrollView style={{ maxHeight: 430 }}>{DISTRICTS.map((item) => <TouchableOpacity key={item} style={styles.option} onPress={() => { setDistrict(item); setOpen(false); }}><Text style={[styles.optionText, district === item && styles.optionActive]}>{item}</Text>{district === item ? <Ionicons name="checkmark-circle" size={21} color={colors.primary} /> : null}</TouchableOpacity>)}</ScrollView></View></TouchableOpacity></Modal></KeyboardAvoidingView>;
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F7FA' },
-  header: {
-  flexDirection: 'row',
-  gap: 12,
-  alignItems: 'center',
-  backgroundColor: '#FFFFFF',
-
-  paddingHorizontal: 14,
-  paddingTop: 30,
-  paddingBottom: 14,
-
-  borderBottomWidth: 1,
-  borderBottomColor: '#D9E1EA',
-},
-  eyebrow: { fontSize: 10, fontWeight: '900', color: '#607086', letterSpacing: 1.6 },
-  title: { fontSize: 17, fontWeight: '900', color: '#1F2D3D' },
-  body: { padding: 16, gap: 14 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 18, borderWidth: 1, borderColor: '#D9E1EA' },
-  label: { fontSize: 12, fontWeight: '900', color: '#1F2D3D', marginBottom: 9 },
-  input: {
-    height: 52, borderWidth: 1, borderColor: '#D9E1EA', borderRadius: 14,
-    paddingHorizontal: 14, backgroundColor: '#FFFFFF', fontSize: 13,
-  },
-  help: { fontSize: 10, color: '#718096', lineHeight: 16, marginTop: 10 },
-});
+const styles = StyleSheet.create({ container: { flex: 1, backgroundColor: colors.background }, body: { padding: 20, gap: 14 }, card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: radius.large, padding: 18, gap: 10 }, label: { color: colors.text, fontSize: 12, fontWeight: '900', marginTop: 4 }, input: { height: 54, borderWidth: 1, borderColor: colors.line, borderRadius: radius.medium, paddingHorizontal: 15, color: colors.text, marginBottom: 8 }, regionButton: { height: 62, borderRadius: radius.medium, backgroundColor: colors.surfaceMuted, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, regionSmall: { color: colors.textSoft, fontSize: 9 }, regionValue: { color: colors.text, fontSize: 15, fontWeight: '900', marginTop: 3 }, help: { color: colors.textSoft, fontSize: 10, lineHeight: 16, marginTop: 4 }, backdrop: { flex: 1, backgroundColor: 'rgba(17,35,28,0.4)', justifyContent: 'center', padding: 24 }, sheet: { backgroundColor: colors.surface, borderRadius: radius.large, padding: 18 }, sheetTitle: { color: colors.text, fontSize: 18, fontWeight: '900', marginBottom: 8 }, option: { height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: colors.line }, optionText: { color: colors.textSoft, fontSize: 13 }, optionActive: { color: colors.primary, fontWeight: '900' } });

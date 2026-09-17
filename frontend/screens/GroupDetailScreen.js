@@ -1,256 +1,32 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BackButton, PrimaryButton } from '../components/ui';
+import { showAlert } from '../components/CustomAlert';
+import { PrimaryButton, ScreenHeader, SectionTitle } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
+import { colors, radius } from '../constants/design';
 
-export default function GroupDetailScreen({
-  user,
-  group,
-  onBack,
-  onAssign,
-  onTeamLocations,
-  onUpdatedGroup,
-}) {
-  const [detail, setDetail] = useState(group || null);
-  const [inviteeLoginId, setInviteeLoginId] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [inviting, setInviting] = useState(false);
-
-  const load = useCallback(async () => {
-    if (!group?.groupId || !user?.userId) return;
-    try {
-      const data = await groupApi(`/api/groups/${group.groupId}?userId=${user.userId}`);
-      setDetail(data);
-      onUpdatedGroup?.(data);
-    } catch (error) {
-      Alert.alert('그룹 조회 실패', error.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [group?.groupId, user?.userId]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const invite = async () => {
-    if (!inviteeLoginId.trim() || inviting) return;
-    try {
-      setInviting(true);
-      await groupApi(`/api/groups/${group.groupId}/invitations`, {
-        method: 'POST',
-        body: JSON.stringify({
-          inviterUserId: user.userId,
-          inviteeLoginId: inviteeLoginId.trim(),
-        }),
-      });
-      Alert.alert('초대 완료', `${inviteeLoginId.trim()} 사용자에게 초대를 보냈습니다.`);
-      setInviteeLoginId('');
-    } catch (error) {
-      Alert.alert('초대 실패', error.message);
-    } finally {
-      setInviting(false);
-    }
-  };
-
-  const members = detail?.members || [];
-  const assignments = detail?.assignments || [];
-  const isLeader = detail?.role === 'LEADER';
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <BackButton onPress={onBack} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>GROUP DETAIL</Text>
-          <Text style={styles.title}>{detail?.groupName || group?.groupName || '그룹'}</Text>
-        </View>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.body}>
-        {loading ? (
-          <View style={styles.loadingBox}><ActivityIndicator color="#12395B" /></View>
-        ) : (
-          <>
-            <View style={styles.summaryCard}>
-              <View>
-                <Text style={styles.summaryLabel}>TEAM LEADER</Text>
-                <Text style={styles.summaryValue}>{detail?.leaderName || detail?.leaderLoginId}</Text>
-              </View>
-              <View style={styles.summaryDivider} />
-              <View>
-                <Text style={styles.summaryLabel}>MEMBERS</Text>
-                <Text style={styles.summaryValue}>{members.length}명</Text>
-              </View>
-              <View style={styles.summaryDivider} />
-              <View>
-                <Text style={styles.summaryLabel}>ASSIGNED</Text>
-                <Text style={styles.summaryValue}>{assignments.length}곳</Text>
-              </View>
-            </View>
-
-            {isLeader && (
-              <View style={styles.card}>
-                <Text style={styles.sectionLabel}>INVITE MEMBER</Text>
-                <Text style={styles.sectionTitle}>조원 초대</Text>
-                <Text style={styles.sectionDesc}>앱 로그인 아이디를 입력해 그룹에 초대합니다.</Text>
-                <TextInput
-                  style={styles.input}
-                  value={inviteeLoginId}
-                  onChangeText={setInviteeLoginId}
-                  placeholder="조원 로그인 아이디"
-                  autoCapitalize="none"
-                />
-                <PrimaryButton
-                  title={inviting ? '초대 중...' : '초대 보내기'}
-                  onPress={invite}
-                  disabled={!inviteeLoginId.trim() || inviting}
-                />
-              </View>
-            )}
-
-            <View style={styles.card}>
-              <View style={styles.sectionRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.sectionLabel}>TEAM LOCATIONS</Text>
-                  <Text style={styles.sectionTitle}>팀 방문지 관리</Text>
-                  <Text style={styles.sectionDesc}>
-                    그룹 방문지를 지도에서 추가하고 경로를 확인합니다.
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.teamLocationButton}
-                  onPress={() => onTeamLocations?.(detail)}
-                >
-                  <Ionicons name="map-outline" size={18} color="#FFFFFF" />
-                  <Text style={styles.teamLocationButtonText}>들어가기</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.card}>
-              <View style={styles.sectionRow}>
-                <View>
-                  <Text style={styles.sectionLabel}>MEMBERS</Text>
-                  <Text style={styles.sectionTitle}>그룹원</Text>
-                </View>
-                <Text style={styles.countText}>{members.length}명</Text>
-              </View>
-
-              {members.map((member) => (
-                <View key={member.userId} style={styles.memberRow}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {(member.name || member.loginId || '?').slice(0, 1)}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.memberName}>{member.name || member.loginId}</Text>
-                    <Text style={styles.memberLogin}>@{member.loginId}</Text>
-                  </View>
-                  <View style={[styles.roleBadge, member.role === 'LEADER' && styles.leaderBadge]}>
-                    <Text style={[styles.roleText, member.role === 'LEADER' && styles.leaderText]}>
-                      {member.role === 'LEADER' ? '팀장' : '팀원'}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-
-            <View style={styles.card}>
-              <View style={styles.sectionRow}>
-                <View>
-                  <Text style={styles.sectionLabel}>VISIT ASSIGNMENT</Text>
-                  <Text style={styles.sectionTitle}>방문지 담당 현황</Text>
-                </View>
-                {isLeader && (
-                  <TouchableOpacity style={styles.smallButton} onPress={() => onAssign?.(detail)}>
-                    <Ionicons name="git-branch-outline" size={16} color="#FFFFFF" />
-                    <Text style={styles.smallButtonText}>담당 지정</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {assignments.length === 0 ? (
-                <Text style={styles.emptyText}>아직 담당자가 지정된 방문지가 없습니다.</Text>
-              ) : (
-                assignments.slice(0, 6).map((item) => (
-                  <View key={item.assignmentId} style={styles.assignmentRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.assignmentPlace} numberOfLines={1}>
-                        {item.detailAddress || item.roadAddress || `방문지 ${item.taskId}`}
-                      </Text>
-                      <Text style={styles.assignmentAddr} numberOfLines={1}>
-                        {item.roadAddress || item.taskCategory || ''}
-                      </Text>
-                    </View>
-                    <Text style={styles.assigneeText}>
-                      {item.assigneeName || item.assigneeLoginId}
-                    </Text>
-                  </View>
-                ))
-              )}
-            </View>
-          </>
-        )}
-      </ScrollView>
-    </View>
-  );
+export default function GroupDetailScreen({ user, group, onBack, onAssign, onTeamLocations, onPublicData, onUpdatedGroup }) {
+  const [detail, setDetail] = useState(group || null); const [inviteId, setInviteId] = useState(''); const [loading, setLoading] = useState(true); const [inviting, setInviting] = useState(false);
+  const load = useCallback(async () => { if (!group?.groupId || !user?.userId) return; try { const data = await groupApi(`/api/groups/${group.groupId}?userId=${user.userId}`); setDetail(data); onUpdatedGroup?.(data); } catch (error) { showAlert('그룹 조회 실패', error.message); } finally { setLoading(false); } }, [group?.groupId, user?.userId]); useEffect(() => { load(); }, [load]);
+  const invite = async () => { if (!inviteId.trim() || inviting) return; try { setInviting(true); await groupApi(`/api/groups/${group.groupId}/invitations`, { method: 'POST', body: JSON.stringify({ inviterUserId: user.userId, inviteeLoginId: inviteId.trim() }) }); showAlert('초대 완료', `${inviteId.trim()} 사용자에게 초대를 보냈습니다.`); setInviteId(''); } catch (error) { showAlert('초대 실패', error.message); } finally { setInviting(false); } };
+  const members = detail?.members || []; const assignments = detail?.assignments || []; const isLeader = detail?.role === 'LEADER'; const region = `${detail?.regionSido || '부산광역시'} ${detail?.regionSigungu || '사하구'}`;
+  return <View style={styles.container}><ScreenHeader title={detail?.groupName || group?.groupName || '그룹'} subtitle={region} onBack={onBack} /><ScrollView contentContainerStyle={styles.body}>{loading ? <ActivityIndicator color={colors.primary} style={{ marginTop: 30 }} /> : <>
+    <View style={styles.summary}><Summary icon="person-outline" label="팀장" value={detail?.leaderName || detail?.leaderLoginId || '-'} /><View style={styles.divider} /><Summary icon="people-outline" label="인원" value={`${members.length}명`} /><View style={styles.divider} /><Summary icon="location-outline" label="배정" value={`${assignments.length}곳`} /></View>
+    <SectionTitle title="업무 관리" />
+    <View style={styles.menuGrid}><Menu icon="map-outline" title="팀 방문지" subtitle="지도·경로 관리" onPress={() => onTeamLocations?.(detail)} /><Menu icon="layers-outline" title="공공데이터 배정" subtitle="행정동·데이터 선택" emphasis onPress={() => onPublicData?.(detail)} />{isLeader ? <Menu icon="person-add-outline" title="담당자 지정" subtitle="방문지 담당 관리" onPress={() => onAssign?.(detail)} /> : null}</View>
+    {isLeader ? <View style={styles.card}><Text style={styles.cardTitle}>팀원 초대</Text><Text style={styles.cardDesc}>상대방의 로그인 아이디를 입력하세요.</Text><View style={styles.inviteRow}><TextInput style={styles.input} value={inviteId} onChangeText={setInviteId} placeholder="로그인 아이디" placeholderTextColor={colors.textFaint} autoCapitalize="none" /><PrimaryButton title={inviting ? '전송 중' : '초대'} onPress={invite} disabled={!inviteId.trim() || inviting} style={styles.inviteButton} /></View></View> : null}
+    <View style={styles.card}><SectionTitle title={`그룹원 ${members.length}명`} />{members.map((member, index) => <View key={member.userId} style={[styles.memberRow, index > 0 && styles.rowBorder]}><View style={styles.avatar}><Text style={styles.avatarText}>{(member.name || member.loginId || '?').slice(0, 1)}</Text></View><View style={{ flex: 1 }}><Text style={styles.memberName}>{member.name || member.loginId}</Text><Text style={styles.memberId}>@{member.loginId}</Text></View><Text style={[styles.role, member.role === 'LEADER' && styles.leader]}>{member.role === 'LEADER' ? '팀장' : '팀원'}</Text></View>)}</View>
+    <View style={styles.card}><SectionTitle title="최근 담당 현황" actionLabel={isLeader ? '전체 관리' : undefined} onAction={() => onAssign?.(detail)} />{!assignments.length ? <Text style={styles.empty}>담당자가 지정된 방문지가 없습니다.</Text> : assignments.slice(0, 5).map((item, index) => <View key={item.assignmentId || index} style={[styles.assignment, index > 0 && styles.rowBorder]}><View style={styles.assignmentNo}><Text style={styles.assignmentNoText}>{index + 1}</Text></View><View style={{ flex: 1 }}><Text style={styles.place} numberOfLines={1}>{item.detailAddress || item.roadAddress || `방문지 ${item.taskId}`}</Text><Text style={styles.address} numberOfLines={1}>{item.roadAddress || item.taskCategory || ''}</Text></View><Text style={styles.assignee}>{item.assigneeName || item.assigneeLoginId}</Text></View>)}</View>
+  </>}</ScrollView></View>;
 }
-
+function Summary({ icon, label, value }) { return <View style={styles.summaryItem}><Ionicons name={icon} size={17} color="#CBE4D9" /><Text style={styles.summaryValue} numberOfLines={1}>{value}</Text><Text style={styles.summaryLabel}>{label}</Text></View>; }
+function Menu({ icon, title, subtitle, onPress, emphasis }) { return <TouchableOpacity style={[styles.menu, emphasis && styles.menuEmphasis]} onPress={onPress}><View style={[styles.menuIcon, emphasis && styles.menuIconEmphasis]}><Ionicons name={icon} size={22} color={emphasis ? '#FFFFFF' : colors.primary} /></View><Text style={styles.menuTitle}>{title}</Text><Text style={styles.menuSub}>{subtitle}</Text><Ionicons name="arrow-forward" size={17} color={colors.textFaint} style={styles.menuArrow} /></TouchableOpacity>; }
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F7FA' },
-  header: {
-    flexDirection: 'row', gap: 12, alignItems: 'center', backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
-  paddingTop: 30,
-  paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#D9E1EA',
-  },
-  eyebrow: { fontSize: 10, fontWeight: '900', color: '#607086', letterSpacing: 1.6 },
-  title: { fontSize: 17, fontWeight: '900', color: '#1F2D3D' },
-  desc: { fontSize: 10, color: '#718096', marginTop: 2 },
-  body: { padding: 16, gap: 14, paddingBottom: 36 },
-  loadingBox: { padding: 40, alignItems: 'center' },
-  summaryCard: {
-    backgroundColor: '#12395B', borderRadius: 18, padding: 17,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-  },
-  summaryLabel: { fontSize: 9, color: '#BFD0DE', fontWeight: '800', letterSpacing: 1 },
-  summaryValue: { color: '#FFFFFF', fontSize: 15, fontWeight: '900', marginTop: 5 },
-  summaryDivider: { width: 1, height: 32, backgroundColor: '#315779' },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, borderWidth: 1, borderColor: '#D9E1EA' },
-  sectionLabel: { fontSize: 9, fontWeight: '900', color: '#607086', letterSpacing: 1.4 },
-  sectionTitle: { fontSize: 15, fontWeight: '900', color: '#1F2D3D', marginTop: 3 },
-  sectionDesc: { fontSize: 10, color: '#718096', marginTop: 5, marginBottom: 12 },
-  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  countText: { fontSize: 11, fontWeight: '900', color: '#607086' },
-  input: { height: 48, borderWidth: 1, borderColor: '#D9E1EA', borderRadius: 13, paddingHorizontal: 13, marginBottom: 10, fontSize: 13 },
-  memberRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#EDF2F7' },
-  avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#EAF1F7', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#12395B', fontWeight: '900', fontSize: 14 },
-  memberName: { fontSize: 13, fontWeight: '900', color: '#1F2D3D' },
-  memberLogin: { fontSize: 10, color: '#718096', marginTop: 2 },
-  roleBadge: { backgroundColor: '#EDF2F7', borderRadius: 11, paddingHorizontal: 8, paddingVertical: 5 },
-  leaderBadge: { backgroundColor: '#EAF1F7' },
-  roleText: { fontSize: 9, fontWeight: '900', color: '#607086' },
-  leaderText: { color: '#12395B' },
-  smallButton: { flexDirection: 'row', gap: 5, alignItems: 'center', backgroundColor: '#12395B', paddingHorizontal: 11, paddingVertical: 8, borderRadius: 11 },
-  smallButtonText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
-  teamLocationButton: { flexDirection: 'row', gap: 6, alignItems: 'center', backgroundColor: '#12395B', paddingHorizontal: 13, paddingVertical: 11, borderRadius: 12, marginLeft: 10 },
-  teamLocationButtonText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },
-  assignmentRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#EDF2F7' },
-  assignmentPlace: { fontSize: 12, fontWeight: '900', color: '#1F2D3D' },
-  assignmentAddr: { fontSize: 9, color: '#718096', marginTop: 3 },
-  assigneeText: { fontSize: 10, fontWeight: '900', color: '#12395B', maxWidth: 100 },
-  emptyText: { fontSize: 10, color: '#718096', paddingVertical: 12 },
+  container: { flex: 1, backgroundColor: colors.background }, body: { padding: 20, paddingBottom: 34 },
+  summary: { backgroundColor: colors.primaryDark, borderRadius: radius.large, paddingVertical: 18, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', marginBottom: 26 }, summaryItem: { flex: 1, alignItems: 'center' }, summaryValue: { color: '#FFFFFF', fontSize: 14, fontWeight: '900', marginTop: 6, maxWidth: 92 }, summaryLabel: { color: '#BFD8CD', fontSize: 9, marginTop: 3 }, divider: { width: 1, height: 44, backgroundColor: 'rgba(255,255,255,0.18)' },
+  menuGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 18 }, menu: { width: '48.5%', minHeight: 142, borderRadius: radius.large, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, padding: 15 }, menuEmphasis: { borderColor: '#A5D4C1', backgroundColor: '#F1F8F5' }, menuIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }, menuIconEmphasis: { backgroundColor: colors.primary }, menuTitle: { color: colors.text, fontSize: 14, fontWeight: '900', marginTop: 13 }, menuSub: { color: colors.textSoft, fontSize: 10, marginTop: 4 }, menuArrow: { position: 'absolute', right: 14, bottom: 14 },
+  card: { backgroundColor: colors.surface, borderRadius: radius.large, borderWidth: 1, borderColor: colors.line, padding: 16, marginBottom: 14 }, cardTitle: { color: colors.text, fontSize: 16, fontWeight: '900' }, cardDesc: { color: colors.textSoft, fontSize: 10, marginTop: 4 }, inviteRow: { flexDirection: 'row', gap: 9, marginTop: 13 }, input: { flex: 1, height: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 13, color: colors.text }, inviteButton: { minHeight: 48, width: 82 },
+  memberRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 11 }, rowBorder: { borderTopWidth: 1, borderTopColor: colors.line }, avatar: { width: 39, height: 39, borderRadius: 13, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: colors.primary, fontSize: 14, fontWeight: '900' }, memberName: { color: colors.text, fontSize: 13, fontWeight: '900' }, memberId: { color: colors.textSoft, fontSize: 10, marginTop: 3 }, role: { color: colors.textSoft, backgroundColor: colors.surfaceMuted, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5, fontSize: 9, fontWeight: '900' }, leader: { color: colors.primary, backgroundColor: colors.primarySoft },
+  assignment: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10 }, assignmentNo: { width: 30, height: 30, borderRadius: 10, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' }, assignmentNoText: { color: colors.primary, fontSize: 11, fontWeight: '900' }, place: { color: colors.text, fontSize: 12, fontWeight: '900' }, address: { color: colors.textSoft, fontSize: 9, marginTop: 3 }, assignee: { color: colors.primary, fontSize: 10, fontWeight: '900', maxWidth: 80 }, empty: { color: colors.textSoft, fontSize: 11, textAlign: 'center', paddingVertical: 20 },
 });
