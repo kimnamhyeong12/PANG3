@@ -156,7 +156,7 @@ function getInteractiveMapHtml(latitude, longitude) {
           }
 
           body {
-            background: #E0F1EA;
+            background: #E8F2FF;
           }
         </style>
 
@@ -1696,7 +1696,7 @@ const styles =
     container: {
       flex: 1,
       backgroundColor:
-        '#F5F7F5',
+        '#F4F8FF',
     },
 
     header: {
@@ -1707,73 +1707,73 @@ const styles =
         'white',
 
       paddingHorizontal: 14,
-      paddingBottom: 14,
-      paddingTop: 30,
+      paddingBottom: 10,
+      paddingTop: 12,
 
 
       borderBottomWidth: 1,
       borderBottomColor:
-        '#DCE5E0',
+        '#DCE7F5',
     },
 
     eyebrow: {
       fontSize: 10,
       fontWeight: '900',
-      color: '#637269',
+      color: '#607195',
       letterSpacing: 1.6,
     },
 
     title: {
-      fontSize: 16,
+      fontSize: 17,
       fontWeight: '900',
-      color: '#15231D',
+      color: '#10285B',
     },
 
     desc: {
       fontSize: 10,
-      color: '#637269',
+      color: '#607195',
     },
 
     body: {
-      padding: 16,
-      gap: 14,
-      paddingBottom: 70,
+      padding: 14,
+      gap: 10,
+      paddingBottom: 58,
     },
 
     card: {
       backgroundColor:
         'white',
 
-      borderRadius: 18,
+      borderRadius: 16,
 
-      padding: 16,
+      padding: 14,
 
       borderWidth: 1,
 
       borderColor:
-        '#DCE5E0',
+        '#DCE7F5',
     },
 
     cardTitle: {
-      fontSize: 12,
+      fontSize: 12.5,
 
       fontWeight: '900',
 
-      color: '#637269',
+      color: '#10285B',
 
-      marginBottom: 10,
+      marginBottom: 8,
     },
 
     typeText: {
-      color: '#0B6B4F',
+      color: '#2477F3',
 
-      fontSize: 16,
+      fontSize: 15,
 
       fontWeight: '900',
     },
 
     mapWrapper: {
-      height: 260,
+      height: 220,
 
       borderRadius: 14,
 
@@ -1782,10 +1782,10 @@ const styles =
       borderWidth: 1,
 
       borderColor:
-        '#DCE5E0',
+        '#DCE7F5',
 
       backgroundColor:
-        '#E0F1EA',
+        '#E8F2FF',
 
       marginBottom: 8,
     },
@@ -1794,13 +1794,13 @@ const styles =
       flex: 1,
 
       backgroundColor:
-        '#E0F1EA',
+        '#E8F2FF',
     },
 
     mapGuide: {
       fontSize: 10,
 
-      color: '#637269',
+      color: '#607195',
 
       marginBottom: 14,
 
@@ -1808,11 +1808,11 @@ const styles =
     },
 
     inputLabel: {
-      fontSize: 11,
+      fontSize: 10.5,
 
       fontWeight: '800',
 
-      color: '#637269',
+      color: '#10285B',
 
       marginBottom: 6,
     },
@@ -1821,17 +1821,17 @@ const styles =
       borderWidth: 1,
 
       borderColor:
-        '#DCE5E0',
+        '#DCE7F5',
 
       borderRadius: 12,
 
-      padding: 12,
+      padding: 10,
 
       fontSize: 13,
 
-      marginBottom: 10,
+      marginBottom: 8,
 
-      color: '#15231D',
+      color: '#10285B',
 
       backgroundColor:
         '#FFFFFF',
@@ -1840,16 +1840,16 @@ const styles =
     photoSlot: {
       paddingTop: 4,
 
-      paddingBottom: 18,
+      paddingBottom: 14,
     },
 
     photoSlotDivider: {
       borderBottomWidth: 1,
 
       borderBottomColor:
-        '#EEF2F6',
+        '#EEF3F9',
 
-      marginBottom: 18,
+      marginBottom: 14,
     },
 
     photoStageTitle: {
@@ -1857,23 +1857,23 @@ const styles =
 
       fontWeight: '900',
 
-      color: '#15231D',
+      color: '#10285B',
 
-      marginBottom: 10,
+      marginBottom: 8,
     },
 
     emptyPhotoSlot: {
-      height: 150,
+      height: 126,
 
       borderRadius: 14,
 
       backgroundColor:
-        '#F8FBFD',
+        '#F6F9FD',
 
       borderWidth: 1,
 
       borderColor:
-        '#DCE5E0',
+        '#DCE7F5',
 
       borderStyle: 'dashed',
 
@@ -1888,7 +1888,7 @@ const styles =
     emptyPhotoPlus: {
       fontSize: 28,
 
-      color: '#0B6B4F',
+      color: '#2477F3',
 
       fontWeight: '900',
 
@@ -1898,20 +1898,20 @@ const styles =
     emptyPhotoText: {
       fontSize: 12,
 
-      color: '#637269',
+      color: '#607195',
 
       fontWeight: '900',
     },
 
     photo: {
-      height: 180,
+      height: 158,
 
       borderRadius: 14,
 
       marginBottom: 8,
 
       backgroundColor:
-        '#E0F1EA',
+        '#E8F2FF',
     },
 
     photoButtonRow: {
@@ -1932,7 +1932,7 @@ const styles =
       flex: 1,
 
       backgroundColor:
-        '#0B6B4F',
+        '#2477F3',
 
       borderRadius: 10,
 
@@ -1962,7 +1962,7 @@ const styles =
       borderWidth: 1,
 
       borderColor:
-        '#DCE5E0',
+        '#DCE7F5',
 
       padding: 10,
 
@@ -1973,14 +1973,14 @@ const styles =
     },
 
     memo: {
-      minHeight: 120,
+      minHeight: 96,
 
       borderRadius: 14,
 
       borderWidth: 1,
 
       borderColor:
-        '#DCE5E0',
+        '#DCE7F5',
 
       padding: 12,
 
@@ -2004,27 +2004,27 @@ const styles =
       borderWidth: 1,
 
       borderColor:
-        '#DCE5E0',
+        '#DCE7F5',
 
-      paddingVertical: 13,
+      paddingVertical: 11,
 
       alignItems: 'center',
     },
 
     statusActive: {
       backgroundColor:
-        '#0B6B4F',
+        '#2477F3',
 
       borderColor:
-        '#0B6B4F',
+        '#2477F3',
     },
 
     statusText: {
-      fontSize: 12,
+      fontSize: 11,
 
       fontWeight: '900',
 
-      color: '#637269',
+      color: '#607195',
     },
 
     statusTextActive: {
@@ -2034,7 +2034,7 @@ const styles =
     guideText: {
       fontSize: 10,
 
-      color: '#637269',
+      color: '#607195',
 
       marginTop: 2,
     },
@@ -2068,7 +2068,7 @@ const styles =
 
       fontWeight: '900',
 
-      color: '#15231D',
+      color: '#10285B',
 
       marginTop: 6,
     },
@@ -2086,7 +2086,7 @@ const styles =
 
       lineHeight: 18,
 
-      color: '#637269',
+      color: '#607195',
 
       marginTop: 8,
     },

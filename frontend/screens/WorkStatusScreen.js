@@ -222,7 +222,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
           onTouchCancel={() => setMapInteracting(false)}
         >
           {loadingBoundary ? (
-            <View style={styles.mapState}><ActivityIndicator color="#084C3A" /><Text style={styles.mapStateText}>행정동 경계를 불러오는 중입니다.</Text></View>
+            <View style={styles.mapState}><ActivityIndicator color="#1551A6" /><Text style={styles.mapStateText}>행정동 경계를 불러오는 중입니다.</Text></View>
           ) : !KAKAO_JAVASCRIPT_KEY ? (
             <View style={styles.mapState}><Text style={styles.errorText}>카카오 JavaScript 키가 설정되지 않았습니다.</Text></View>
           ) : (
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
   desc: { fontSize: 10, color: '#637269', marginTop: 2 },
   screenScroll: { flex: 1 },
   body: { padding: 14, gap: 12, paddingBottom: 32 },
-  summaryCard: { backgroundColor: '#084C3A', borderRadius: 18, paddingVertical: 16, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' },
+  summaryCard: { backgroundColor: '#1551A6', borderRadius: 18, paddingVertical: 16, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' },
   summaryItem: { flex: 1, alignItems: 'center' },
   summaryValue: { fontSize: 22, fontWeight: '900' },
   summaryLabel: { color: '#BFD0DE', fontSize: 9, fontWeight: '800', marginTop: 4 },

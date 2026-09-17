@@ -27,4 +27,10 @@ public class SgisBoundaryController {
             @RequestParam(defaultValue = "21100") String admCode) {
         return sgisBoundaryService.getAdministrativeBoundaries(admCode);
     }
+
+    @GetMapping("/boundaries/by-sido")
+    public JsonNode getAdministrativeDongBoundariesBySido(
+            @RequestParam String sido) {
+        return sgisBoundaryService.getSidoAdministrativeDongBoundaries(sido);
+    }
 }

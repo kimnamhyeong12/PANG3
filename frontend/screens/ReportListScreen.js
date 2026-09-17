@@ -134,7 +134,7 @@ export default function ReportListScreen({
       >
         {loading ? (
           <View style={styles.emptyBox}>
-            <ActivityIndicator size="large" color="#0B6B4F" />
+            <ActivityIndicator size="large" color="#2477F3" />
             <Text style={styles.emptyTitle}>방문지를 불러오는 중입니다</Text>
           </View>
         ) : locations.length === 0 ? (
@@ -261,7 +261,7 @@ export default function ReportListScreen({
                           size={11}
                           color={
                             isTeamLocation
-                              ? '#0B6B4F'
+                              ? '#2477F3'
                               : '#475569'
                           }
                         />
@@ -288,7 +288,7 @@ export default function ReportListScreen({
                           <Ionicons
                             name="calendar-outline"
                             size={11}
-                            color="#0B6B4F"
+                            color="#2477F3"
                           />
                           <Text style={styles.taskDateText}>
                             업무일 {formatShortDate(getWorkDateKey(loc))}
@@ -330,7 +330,7 @@ export default function ReportListScreen({
                         <Ionicons
                           name="person-outline"
                           size={12}
-                          color="#0B6B4F"
+                          color="#2477F3"
                         />
 
                         <Text
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
     marginTop: 5,
     fontSize: 10,
     fontWeight: '800',
-    color: '#0B6B4F',
+    color: '#2477F3',
   },
 
   body: {
@@ -504,14 +504,14 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 7,
     borderWidth: 2,
-    borderColor: '#0B6B4F',
+    borderColor: '#2477F3',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
   },
 
   checkBoxActive: {
-    backgroundColor: '#0B6B4F',
+    backgroundColor: '#2477F3',
   },
 
   checkBoxDisabled: {
@@ -581,7 +581,7 @@ const styles = StyleSheet.create({
   },
 
   teamScopeText: {
-    color: '#0B6B4F',
+    color: '#2477F3',
   },
 
   personalScopeText: {
@@ -607,7 +607,7 @@ const styles = StyleSheet.create({
   },
 
   taskDateText: {
-    color: '#0B6B4F',
+    color: '#2477F3',
     fontSize: 9,
     fontWeight: '900',
   },
@@ -645,7 +645,7 @@ const styles = StyleSheet.create({
   assigneeText: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#0B6B4F',
+    color: '#2477F3',
   },
 
   assigneeEmpty: {
@@ -688,7 +688,7 @@ const styles = StyleSheet.create({
   selectedText: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#0B6B4F',
+    color: '#2477F3',
     marginBottom: 10,
   },
 });

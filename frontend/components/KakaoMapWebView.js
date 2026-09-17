@@ -222,6 +222,20 @@ const buildKakaoMapHtml = (
       0 2px 7px rgba(0, 0, 0, 0.3);
   }
 
+  .boundary-label {
+    padding: 3px 6px;
+    border: 1px solid rgba(36, 119, 243, 0.28);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.92);
+    color: #10285B;
+    font-family: Arial, sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 1px 5px rgba(16, 40, 91, 0.12);
+    pointer-events: none;
+  }
+
   /*
    * ===============================
    * 현재 GPS 위치
@@ -308,6 +322,10 @@ const buildKakaoMapHtml = (
   var locationOverlays = [];
   var selectedOverlay = null;
 
+  var boundaryPolygons = [];
+  var boundaryLabels = [];
+  var selectedBoundaryPolygons = [];
+
   var roadLine = null;
   var activeLine = null;
 
@@ -382,6 +400,127 @@ const buildKakaoMapHtml = (
     if (activeLine) {
       activeLine.setMap(null);
       activeLine = null;
+    }
+  }
+
+  function clearBoundaryData() {
+    boundaryPolygons.forEach(function (polygon) {
+      polygon.setMap(null);
+    });
+    boundaryLabels.forEach(function (label) {
+      label.setMap(null);
+    });
+    boundaryPolygons = [];
+    boundaryLabels = [];
+    selectedBoundaryPolygons = [];
+  }
+
+  function boundaryName(feature, index) {
+    var properties = feature.properties || {};
+    return properties.adm_nm || properties.adm_name || properties.name || ("행정동 " + (index + 1));
+  }
+
+  function geometryPolygons(geometry) {
+    if (!geometry) return [];
+    if (geometry.type === "Polygon") return [geometry.coordinates || []];
+    if (geometry.type === "MultiPolygon") return geometry.coordinates || [];
+    return [];
+  }
+
+  function resetBoundaryStyle() {
+    selectedBoundaryPolygons.forEach(function (polygon) {
+      polygon.setOptions({
+        strokeWeight: 1.5,
+        strokeColor: "#2477F3",
+        strokeOpacity: 0.72,
+        fillColor: "#72B7FF",
+        fillOpacity: 0.12
+      });
+    });
+    selectedBoundaryPolygons = [];
+  }
+
+  function setBoundaryData(featureCollection) {
+    clearBoundaryData();
+    if (!map || !featureCollection || !featureCollection.features) return;
+
+    var allBounds = new window.kakao.maps.LatLngBounds();
+    var hasCoordinates = false;
+
+    featureCollection.features.forEach(function (feature, featureIndex) {
+      var name = boundaryName(feature, featureIndex);
+      var featureBounds = new window.kakao.maps.LatLngBounds();
+      var featurePolygons = [];
+
+      geometryPolygons(feature.geometry).forEach(function (polygonCoordinates) {
+        var path = (polygonCoordinates || []).map(function (ring) {
+          return (ring || []).map(function (point) {
+            var latLng = new window.kakao.maps.LatLng(Number(point[1]), Number(point[0]));
+            featureBounds.extend(latLng);
+            allBounds.extend(latLng);
+            hasCoordinates = true;
+            return latLng;
+          });
+        });
+
+        var polygon = new window.kakao.maps.Polygon({
+          map: map,
+          path: path,
+          strokeWeight: 1.5,
+          strokeColor: "#2477F3",
+          strokeOpacity: 0.72,
+          fillColor: "#72B7FF",
+          fillOpacity: 0.12
+        });
+
+        featurePolygons.push(polygon);
+        boundaryPolygons.push(polygon);
+
+        window.kakao.maps.event.addListener(polygon, "click", function () {
+          resetBoundaryStyle();
+          selectedBoundaryPolygons = featurePolygons;
+          selectedBoundaryPolygons.forEach(function (selectedPolygon) {
+            selectedPolygon.setOptions({
+              strokeWeight: 3,
+              strokeColor: "#0B5CE1",
+              strokeOpacity: 1,
+              fillColor: "#2477F3",
+              fillOpacity: 0.3
+            });
+          });
+
+          map.setBounds(featureBounds, 54, 54, 54, 54);
+          var center = featureBounds.getCenter();
+          post({
+            type: "BOUNDARY_PRESS",
+            name: name,
+            latitude: center.getLat(),
+            longitude: center.getLng(),
+            properties: feature.properties || {}
+          });
+        });
+      });
+
+      if (featurePolygons.length > 0) {
+        var center = featureBounds.getCenter();
+        var shortName = String(name).split(" ").pop();
+        var labelElement = document.createElement("div");
+        labelElement.className = "boundary-label";
+        labelElement.innerText = shortName;
+        var label = new window.kakao.maps.CustomOverlay({
+          map: map,
+          position: center,
+          content: labelElement,
+          xAnchor: 0.5,
+          yAnchor: 0.5,
+          zIndex: 8
+        });
+        boundaryLabels.push(label);
+      }
+    });
+
+    if (hasCoordinates) {
+      map.setBounds(allBounds, 28, 28, 28, 28);
     }
   }
 
@@ -784,6 +923,11 @@ const buildKakaoMapHtml = (
       return;
     }
 
+    if (commandData.type === "BOUNDARIES") {
+      setBoundaryData(commandData.data);
+      return;
+    }
+
     if (
       commandData.type === "MOVE"
     ) {
@@ -935,6 +1079,7 @@ const buildKakaoMapHtml = (
 
 export default function KakaoMapWebView({
   locations = [],
+  boundaries = null,
   roadPath = [],
   panelOpen = true,
   setPanelOpen,
@@ -950,6 +1095,8 @@ export default function KakaoMapWebView({
   onDirectPlaceSelect,
   onCurrentLocationChange,
   onMarkerClick,
+  onBoundaryClick,
+  directMarkerPress = false,
   onLocationsChange,
   onRerouteRequest,
 }) {
@@ -2428,7 +2575,7 @@ export default function KakaoMapWebView({
             ...location,
 
             color:
-              getMarkerColorByStatus(
+              location.markerColor || getMarkerColorByStatus(
                 location.status ||
                   "pending"
               ),
@@ -2478,6 +2625,11 @@ export default function KakaoMapWebView({
     isGuiding,
     pulseTargetKey,
   ]);
+
+  useEffect(() => {
+    if (!boundaries) return;
+    sendMapCommand({ type: "BOUNDARIES", data: boundaries });
+  }, [boundaries]);
 
   /*
    * ===============================
@@ -2604,10 +2756,23 @@ export default function KakaoMapWebView({
             ];
 
           if (location) {
-            focusLocation(
-              location
-            );
+            if (directMarkerPress) {
+              onMarkerClick?.(location, "select");
+            } else {
+              focusLocation(location);
+            }
           }
+
+          return;
+        }
+
+        if (message.type === "BOUNDARY_PRESS") {
+          onBoundaryClick?.({
+            name: message.name,
+            latitude: Number(message.latitude),
+            longitude: Number(message.longitude),
+            properties: message.properties || {},
+          });
         }
       } catch (error) {
         console.log(

@@ -1202,7 +1202,7 @@ const styles =
 
       fontWeight: '900',
 
-      color: '#1F2D3D',
+      color: '#10285B',
     },
 
     headerButton: {
@@ -1210,7 +1210,7 @@ const styles =
 
       fontWeight: '900',
 
-      color: '#12395B',
+      color: '#10285B',
     },
 
     editorArea: {
@@ -1272,7 +1272,7 @@ const styles =
       borderWidth: 4,
 
       borderColor:
-        '#12395B',
+        '#10285B',
 
       zIndex: 20,
     },
@@ -1314,14 +1314,14 @@ const styles =
 
     toolButtonActive: {
       backgroundColor:
-        '#12395B',
+        '#10285B',
 
       borderColor:
-        '#12395B',
+        '#10285B',
     },
 
     toolText: {
-      color: '#12395B',
+      color: '#10285B',
 
       fontSize: 12,
 
@@ -1336,7 +1336,7 @@ const styles =
       textAlign:
         'center',
 
-      color: '#607086',
+      color: '#607195',
 
       fontSize: 11,
 

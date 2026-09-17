@@ -456,7 +456,7 @@ export default function DashboardScreen({
       value / maxHeatCount;
 
     if (p > 0.75) {
-      return '#0B6B4F';
+      return '#2477F3';
     }
 
     if (p > 0.5) {
@@ -562,7 +562,7 @@ export default function DashboardScreen({
         >
           <ActivityIndicator
             size="large"
-            color="#0B6B4F"
+            color="#2477F3"
           />
 
           <Text
@@ -909,7 +909,7 @@ function HeatCell({
           {
             color:
               color ===
-              '#0B6B4F'
+              '#2477F3'
                 ? '#FFFFFF'
                 : '#15231D',
           },
@@ -994,7 +994,7 @@ const styles =
       height: 34,
       borderRadius: 17,
       backgroundColor:
-        '#0B6B4F',
+        '#2477F3',
       alignItems: 'center',
       justifyContent:
         'center',
@@ -1046,7 +1046,7 @@ const styles =
     kpiValue: {
       fontSize: 16,
       fontWeight: '900',
-      color: '#0B6B4F',
+      color: '#2477F3',
     },
 
     kpiLabel: {
@@ -1109,7 +1109,7 @@ const styles =
       minWidth: 35,
       borderRadius: 9,
       backgroundColor:
-        '#0B6B4F',
+        '#2477F3',
       justifyContent:
         'center',
       paddingHorizontal: 8,

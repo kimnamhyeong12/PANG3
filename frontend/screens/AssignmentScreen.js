@@ -279,9 +279,24 @@ export default function AssignmentScreen({
         });
     });
 
-    return Array.from(
-      grouped.values()
-    );
+    return Array.from(grouped.values()).map((area) => {
+      const categoryCounts = new Map();
+      area.locations.forEach((location) => {
+        const category =
+          location.task ||
+          location.taskCategory ||
+          location.task_category ||
+          '일반 방문지';
+        categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+      });
+
+      return {
+        ...area,
+        categorySummary: Array.from(categoryCounts.entries())
+          .map(([name, count]) => `${name} ${count}`)
+          .join(' · '),
+      };
+    });
   }, [locations]);
 
   /*
@@ -514,7 +529,7 @@ export default function AssignmentScreen({
       {loading ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator
-            color="#0B6B4F"
+            color="#2477F3"
           />
 
           <Text style={styles.loadingText}>
@@ -641,6 +656,12 @@ export default function AssignmentScreen({
                         }
                         곳
                       </Text>
+
+                      {area.categorySummary ? (
+                        <Text style={styles.areaCategorySummary}>
+                          {area.categorySummary}
+                        </Text>
+                      ) : null}
                     </View>
 
                     <TouchableOpacity
@@ -792,7 +813,7 @@ export default function AssignmentScreen({
                     <Ionicons
                       name="people-outline"
                       size={14}
-                      color="#0B6B4F"
+                      color="#2477F3"
                     />
 
                     <Text
@@ -883,6 +904,12 @@ export default function AssignmentScreen({
                           '주소 없음'}
                       </Text>
 
+                      {(loc.task || loc.taskCategory || loc.task_category) ? (
+                        <Text style={styles.locationCategory}>
+                          {loc.task || loc.taskCategory || loc.task_category}
+                        </Text>
+                      ) : null}
+
                       <View
                         style={
                           styles.assigneeRow
@@ -891,7 +918,7 @@ export default function AssignmentScreen({
                         <Ionicons
                           name="person-outline"
                           size={13}
-                          color="#0B6B4F"
+                          color="#2477F3"
                         />
 
                         <Text
@@ -1117,7 +1144,7 @@ export default function AssignmentScreen({
               >
                 <ActivityIndicator
                   size="small"
-                  color="#0B6B4F"
+                  color="#2477F3"
                 />
 
                 <Text
@@ -1188,7 +1215,7 @@ const styles = StyleSheet.create({
   },
 
   modeTabActive: {
-    backgroundColor: '#0B6B4F',
+    backgroundColor: '#2477F3',
   },
 
   modeTabText: {
@@ -1253,7 +1280,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#0B6B4F',
+    backgroundColor: '#2477F3',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1286,7 +1313,7 @@ const styles = StyleSheet.create({
   assignee: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#0B6B4F',
+    color: '#2477F3',
   },
 
   unassigned: {
@@ -1298,7 +1325,7 @@ const styles = StyleSheet.create({
   },
 
   assignButton: {
-    backgroundColor: '#0B6B4F',
+    backgroundColor: '#2477F3',
     paddingHorizontal: 11,
     paddingVertical: 8,
     borderRadius: 10,
@@ -1362,6 +1389,26 @@ const styles = StyleSheet.create({
     color: '#637269',
   },
 
+  areaCategorySummary: {
+    marginTop: 3,
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#2477F3',
+  },
+
+  locationCategory: {
+    alignSelf: 'flex-start',
+    marginTop: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: '#E8F2FF',
+    color: '#2477F3',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+
   areaLocationList: {
     marginTop: 12,
     borderTopWidth: 1,
@@ -1387,7 +1434,7 @@ const styles = StyleSheet.create({
   areaNumberText: {
     fontSize: 8,
     fontWeight: '900',
-    color: '#0B6B4F',
+    color: '#2477F3',
   },
 
   areaPlaceName: {
@@ -1415,7 +1462,7 @@ const styles = StyleSheet.create({
   areaVisitAssigneeText: {
     fontSize: 9,
     fontWeight: '900',
-    color: '#0B6B4F',
+    color: '#2477F3',
   },
 
   areaAssignmentRow: {
@@ -1432,7 +1479,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 10,
     fontWeight: '900',
-    color: '#0B6B4F',
+    color: '#2477F3',
   },
 
   /*
@@ -1501,7 +1548,7 @@ const styles = StyleSheet.create({
   },
 
   choiceAvatarText: {
-    color: '#0B6B4F',
+    color: '#2477F3',
     fontWeight: '900',
   },
 

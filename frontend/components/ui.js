@@ -4,76 +4,47 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow } from '../constants/design';
 
 export function BackButton({ onPress }) {
-  return <TouchableOpacity onPress={onPress} style={styles.backButton} activeOpacity={0.75}><Ionicons name="chevron-back" size={22} color={colors.text} /></TouchableOpacity>;
+  return <TouchableOpacity onPress={onPress} style={styles.backButton} activeOpacity={0.72}><Ionicons name="arrow-back" size={25} color={colors.primaryDark} /></TouchableOpacity>;
 }
 
-export function ScreenHeader({ title, subtitle, onBack, right }) {
-  return (
-    <View style={styles.header}>
-      {onBack ? <BackButton onPress={onBack} /> : null}
-      <View style={styles.headerText}>
-        <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
-        {subtitle ? <Text style={styles.headerSubtitle} numberOfLines={1}>{subtitle}</Text> : null}
-      </View>
-      {right || null}
-    </View>
-  );
+export function BrandBar({ compact = false }) {
+  return <View style={[styles.brandBar, compact && styles.brandBarCompact]}><Text style={styles.brand}>외근도우미</Text></View>;
 }
 
-export function PrimaryButton({ title, onPress, disabled, icon, style }) {
-  return (
-    <TouchableOpacity onPress={onPress} disabled={disabled} activeOpacity={0.82} style={[styles.primaryButton, disabled && styles.disabledButton, style]}>
-      {icon ? <Ionicons name={icon} size={18} color="#FFFFFF" /> : null}
-      <Text style={styles.primaryButtonText}>{title}</Text>
-    </TouchableOpacity>
-  );
+export function ScreenHeader({ title, subtitle, onBack, right, compact = false }) {
+  return <View style={[styles.headerWrap, compact && styles.headerWrapCompact]}><View style={styles.headerGlowOne} /><View style={styles.headerGlowTwo} /><BrandBar compact={compact} /><View style={styles.header}>{onBack ? <BackButton onPress={onBack} /> : null}<View style={styles.headerText}><Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>{subtitle ? <Text style={styles.headerSubtitle} numberOfLines={2}>{subtitle}</Text> : null}</View>{right || null}</View></View>;
+}
+
+export function CardTitle({ icon, title, suffix, actionLabel, onAction, tone = 'blue' }) {
+  const teal = tone === 'teal';
+  return <View style={styles.cardTitleRow}><View style={[styles.cardTitleIcon, teal && styles.cardTitleIconTeal]}><Ionicons name={icon} size={20} color="#FFFFFF" /></View><Text style={styles.cardTitle}>{title}</Text>{suffix ? <Text style={styles.cardSuffix}>{suffix}</Text> : null}<View style={{ flex: 1 }} />{actionLabel ? <TouchableOpacity style={styles.outlineAction} onPress={onAction} activeOpacity={0.72}><Ionicons name="add" size={18} color={colors.primary} /><Text style={styles.outlineActionText}>{actionLabel}</Text></TouchableOpacity> : null}</View>;
+}
+
+export function PrimaryButton({ title, onPress, disabled, icon, style, tone = 'blue' }) {
+  return <TouchableOpacity onPress={onPress} disabled={disabled} activeOpacity={0.82} style={[styles.primaryButton, tone === 'teal' && styles.tealButton, disabled && styles.disabledButton, style]}>{icon ? <Ionicons name={icon} size={19} color="#FFFFFF" /> : null}<Text style={styles.primaryButtonText}>{title}</Text></TouchableOpacity>;
 }
 
 export function SecondaryButton({ title, onPress, disabled, icon, style }) {
-  return (
-    <TouchableOpacity onPress={onPress} disabled={disabled} activeOpacity={0.78} style={[styles.secondaryButton, disabled && styles.secondaryDisabled, style]}>
-      {icon ? <Ionicons name={icon} size={17} color={colors.primary} /> : null}
-      <Text style={styles.secondaryButtonText}>{title}</Text>
-    </TouchableOpacity>
-  );
+  return <TouchableOpacity onPress={onPress} disabled={disabled} activeOpacity={0.78} style={[styles.secondaryButton, disabled && styles.secondaryDisabled, style]}>{icon ? <Ionicons name={icon} size={18} color={colors.primary} /> : null}<Text style={styles.secondaryButtonText}>{title}</Text></TouchableOpacity>;
 }
 
 export function SectionTitle({ title, actionLabel, onAction }) {
-  return (
-    <View style={styles.sectionTitleRow}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {actionLabel ? <TouchableOpacity onPress={onAction} activeOpacity={0.7}><Text style={styles.sectionAction}>{actionLabel}</Text></TouchableOpacity> : null}
-    </View>
-  );
+  return <View style={styles.sectionTitleRow}><Text style={styles.sectionTitle}>{title}</Text>{actionLabel ? <TouchableOpacity onPress={onAction} activeOpacity={0.7}><Text style={styles.sectionAction}>{actionLabel}</Text></TouchableOpacity> : null}</View>;
 }
 
 export function EmptyState({ icon = 'file-tray-outline', title, description }) {
-  return (
-    <View style={styles.emptyState}>
-      <View style={styles.emptyIcon}><Ionicons name={icon} size={24} color={colors.primary} /></View>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      {description ? <Text style={styles.emptyDescription}>{description}</Text> : null}
-    </View>
-  );
+  return <View style={styles.emptyState}><View style={styles.emptyIcon}><Ionicons name={icon} size={25} color={colors.primary} /></View><Text style={styles.emptyTitle}>{title}</Text>{description ? <Text style={styles.emptyDescription}>{description}</Text> : null}</View>;
 }
 
 const styles = StyleSheet.create({
-  backButton: { width: 42, height: 42, borderRadius: 14, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
-  header: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.line },
-  headerText: { flex: 1 },
-  headerTitle: { color: colors.text, fontSize: 20, fontWeight: '900' },
-  headerSubtitle: { color: colors.textSoft, fontSize: 11, marginTop: 3 },
-  primaryButton: { minHeight: 52, paddingHorizontal: 18, borderRadius: radius.medium, backgroundColor: colors.primary, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', ...shadow },
-  disabledButton: { backgroundColor: '#BAC6C0', shadowOpacity: 0, elevation: 0 },
-  primaryButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
-  secondaryButton: { minHeight: 48, paddingHorizontal: 16, borderRadius: radius.medium, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, flexDirection: 'row', gap: 7, alignItems: 'center', justifyContent: 'center' },
-  secondaryDisabled: { opacity: 0.45 },
-  secondaryButtonText: { color: colors.primary, fontSize: 13, fontWeight: '900' },
-  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  sectionTitle: { color: colors.text, fontSize: 18, fontWeight: '900' },
-  sectionAction: { color: colors.primary, fontSize: 12, fontWeight: '800' },
-  emptyState: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: radius.large, padding: 24, alignItems: 'center' },
-  emptyIcon: { width: 50, height: 50, borderRadius: 16, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
-  emptyTitle: { color: colors.text, fontSize: 15, fontWeight: '900', marginTop: 12 },
-  emptyDescription: { color: colors.textSoft, fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 5 },
+  headerWrap: { backgroundColor: '#F7FBFF', paddingHorizontal: 16, paddingTop: 3, paddingBottom: 10, overflow: 'hidden' }, headerWrapCompact: { paddingBottom: 7 },
+  headerGlowOne: { position: 'absolute', width: 160, height: 160, borderRadius: 80, right: -50, top: -110, backgroundColor: '#DCEEFF', opacity: 0.58 }, headerGlowTwo: { position: 'absolute', width: 100, height: 100, borderRadius: 50, left: -55, top: -65, backgroundColor: '#E5F7FF', opacity: 0.65 },
+  brandBar: { minHeight: 42, justifyContent: 'center' }, brandBarCompact: { minHeight: 36 }, brand: { color: colors.primaryDark, fontSize: 23, fontWeight: '900', letterSpacing: -1.1 },
+  backButton: { width: 36, height: 36, alignItems: 'flex-start', justifyContent: 'center' }, header: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 5 }, headerText: { flex: 1 }, headerTitle: { color: colors.text, fontSize: 23, fontWeight: '900', letterSpacing: -0.7 }, headerSubtitle: { color: colors.textSoft, fontSize: 11, lineHeight: 16, marginTop: 3, fontWeight: '600' },
+  primaryButton: { minHeight: 46, paddingHorizontal: 15, borderRadius: 14, backgroundColor: colors.primary, flexDirection: 'row', gap: 7, alignItems: 'center', justifyContent: 'center', ...shadow }, tealButton: { backgroundColor: colors.teal }, disabledButton: { backgroundColor: '#B9C8D9', shadowOpacity: 0, elevation: 0 }, primaryButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
+  secondaryButton: { minHeight: 44, paddingHorizontal: 13, borderRadius: 14, borderWidth: 1.3, borderColor: '#BFD6F5', backgroundColor: colors.surface, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center' }, secondaryDisabled: { opacity: 0.45 }, secondaryButtonText: { color: colors.primary, fontSize: 12, fontWeight: '900' },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }, sectionTitle: { color: colors.text, fontSize: 16, fontWeight: '900', letterSpacing: -0.3 }, sectionAction: { color: colors.primary, fontSize: 11, fontWeight: '800' },
+  cardTitleRow: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 8 }, cardTitleIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', shadowColor: colors.primary, shadowOpacity: 0.16, shadowRadius: 7, shadowOffset: { width: 0, height: 3 }, elevation: 2 }, cardTitleIconTeal: { backgroundColor: colors.teal, shadowColor: colors.teal }, cardTitle: { color: colors.text, fontSize: 16, fontWeight: '900' }, cardSuffix: { color: colors.textSoft, fontSize: 13, fontWeight: '800' },
+  outlineAction: { minHeight: 36, borderRadius: 11, borderWidth: 1.3, borderColor: '#B8D3F5', paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#FFFFFF' }, outlineActionText: { color: colors.primary, fontSize: 11, fontWeight: '900' },
+  emptyState: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 18, padding: 18, alignItems: 'center', ...shadow }, emptyIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }, emptyTitle: { color: colors.text, fontSize: 14, fontWeight: '900', marginTop: 9 }, emptyDescription: { color: colors.textSoft, fontSize: 10, lineHeight: 15, textAlign: 'center', marginTop: 4 },
 });

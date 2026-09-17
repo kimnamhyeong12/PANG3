@@ -17,6 +17,7 @@ import {
   View,
 } from 'react-native';
 import KakaoMapWebView from '../components/KakaoMapWebView';
+import PublicDataMapMode from './PublicDataMapMode';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
@@ -75,7 +76,7 @@ const cleanLocation = (loc, fallbackName = '위치') => {
   };
 };
 
-export default function MapScreen({
+function NormalMapScreen({
   user,
   onBack,
   onLocationClick,
@@ -1015,7 +1016,7 @@ export default function MapScreen({
                 searchInputRef.current?.blur();
               }}
             >
-              <Ionicons name="menu" size={18} color="#1F2D3D" />
+              <Ionicons name="menu" size={18} color="#10285B" />
             </TouchableOpacity>
 
             <TextInput
@@ -1049,7 +1050,7 @@ export default function MapScreen({
               }}
               disabled={isSearching}
             >
-              <Ionicons name="search" size={18} color="#111827" />
+              <Ionicons name="search" size={18} color="#10285B" />
             </TouchableOpacity>
           </TouchableOpacity>
 
@@ -1060,7 +1061,7 @@ export default function MapScreen({
             ]}
             onPress={() => setPriorityMode(!priorityMode)}
           >
-            <Ionicons name="list" size={13} color="#0F3A5F" />
+            <Ionicons name="list" size={13} color="#10285B" />
             <Text style={styles.smallTopText}>
               {priorityMode ? '선택중' : '우선순위'}
             </Text>
@@ -1071,7 +1072,7 @@ export default function MapScreen({
             onPress={() => handleOptimizeRoute(transportMode)}
             disabled={optimizing || segmentChanging}
           >
-            <Ionicons name="git-branch-outline" size={13} color="#0F3A5F" />
+            <Ionicons name="git-branch-outline" size={13} color="#10285B" />
             <Text style={styles.smallTopText}>
               {optimizing ? '계산중' : '경로 최적화'}
             </Text>
@@ -1200,7 +1201,7 @@ export default function MapScreen({
             <Ionicons
               name={visitListOpen ? 'chevron-up' : 'chevron-down'}
               size={20}
-              color="#1F2D3D"
+              color="#10285B"
             />
           </TouchableOpacity>
         </View>
@@ -1278,7 +1279,7 @@ export default function MapScreen({
               <Ionicons
                 name="car"
                 size={18}
-                color={transportMode === 'car' ? '#FFFFFF' : '#12395B'}
+                color={transportMode === 'car' ? '#FFFFFF' : '#10285B'}
               />
             </TouchableOpacity>
 
@@ -1293,7 +1294,7 @@ export default function MapScreen({
               <Ionicons
                 name="walk"
                 size={18}
-                color={transportMode === 'walk' ? '#FFFFFF' : '#12395B'}
+                color={transportMode === 'walk' ? '#FFFFFF' : '#10285B'}
               />
             </TouchableOpacity>
 
@@ -1661,6 +1662,13 @@ export default function MapScreen({
   );
 }
 
+export default function MapScreen(props) {
+  if (props.publicDataMode) {
+    return <PublicDataMapMode {...props} />;
+  }
+  return <NormalMapScreen {...props} />;
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1680,7 +1688,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#12395B',
+    backgroundColor: '#10285B',
     borderRadius: 12,
     paddingHorizontal: 11,
     paddingVertical: 8,
@@ -1719,7 +1727,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontWeight: '700',
-    color: '#1F2D3D',
+    color: '#10285B',
     paddingVertical: 0,
   },
 
@@ -1745,7 +1753,7 @@ const styles = StyleSheet.create({
   smallTopText: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#0F3A5F',
+    color: '#10285B',
   },
 
   priorityActive: {
@@ -1813,7 +1821,7 @@ const styles = StyleSheet.create({
 
   chipText: {
     fontSize: 10,
-    color: '#1F2D3D',
+    color: '#10285B',
     fontWeight: '900',
     maxWidth: 130,
   },
@@ -1830,7 +1838,7 @@ const styles = StyleSheet.create({
   emptyChipText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#607086',
+    color: '#607195',
   },
 
   chevronButton: {
@@ -1865,13 +1873,13 @@ const styles = StyleSheet.create({
   visitCount: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#10285B',
   },
 
   foldText: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#12395B',
+    color: '#10285B',
     backgroundColor: '#EAF1F7',
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -1915,13 +1923,13 @@ const styles = StyleSheet.create({
   visitName: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#10285B',
   },
 
   visitTask: {
     marginTop: 2,
     fontSize: 10,
-    color: '#718096',
+    color: '#607195',
   },
 
   deleteText: {
@@ -1940,7 +1948,7 @@ const styles = StyleSheet.create({
 
   doneBar: {
     flex: 1,
-    backgroundColor: '#12395B',
+    backgroundColor: '#10285B',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
@@ -1973,8 +1981,8 @@ const styles = StyleSheet.create({
   },
 
   modeButtonActive: {
-    backgroundColor: '#12395B',
-    borderColor: '#12395B',
+    backgroundColor: '#10285B',
+    borderColor: '#10285B',
   },
 
   stopGuideButton: {
@@ -2048,7 +2056,7 @@ const styles = StyleSheet.create({
   addTitle: {
     fontSize: 17,
     fontWeight: '900',
-    color: '#111827',
+    color: '#10285B',
     marginBottom: 12,
   },
 
@@ -2068,7 +2076,7 @@ const styles = StyleSheet.create({
   addInput: {
     flex: 1,
     fontSize: 13,
-    color: '#1F2D3D',
+    color: '#10285B',
     paddingVertical: 0,
   },
 
@@ -2081,13 +2089,13 @@ const styles = StyleSheet.create({
   },
 
   categoryChipActive: {
-    backgroundColor: '#12395B',
+    backgroundColor: '#10285B',
   },
 
   categoryText: {
     fontSize: 11,
     fontWeight: '900',
-    color: '#607086',
+    color: '#607195',
   },
 
   categoryTextActive: {
@@ -2122,12 +2130,12 @@ const styles = StyleSheet.create({
   loadingTitle: {
     fontSize: 15,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#10285B',
   },
 
   loadingDesc: {
     fontSize: 10,
-    color: '#718096',
+    color: '#607195',
     marginTop: 6,
     textAlign: 'center',
   },
@@ -2181,26 +2189,26 @@ const styles = StyleSheet.create({
   placeName: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#10285B',
   },
 
   assigneeInfo: {
     marginTop: 5,
     fontSize: 10,
     fontWeight: '900',
-    color: '#12395B',
+    color: '#10285B',
   },
 
   placeAddr: {
     fontSize: 10,
-    color: '#718096',
+    color: '#607195',
     marginTop: 3,
   },
 
   routeTitle: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#607086',
+    color: '#607195',
     letterSpacing: 1.6,
   },
 
@@ -2228,7 +2236,7 @@ const styles = StyleSheet.create({
     marginTop: 7,
     fontSize: 12,
     fontWeight: '900',
-    color: '#12395B',
+    color: '#10285B',
   },
 
   searchModalBackdrop: {
@@ -2250,7 +2258,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '900',
     marginBottom: 14,
-    color: '#12395B',
+    color: '#10285B',
   },
 
   searchResultItem: {
@@ -2262,13 +2270,13 @@ const styles = StyleSheet.create({
   searchResultName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1F2D3D',
+    color: '#10285B',
   },
 
   searchResultAddress: {
     marginTop: 4,
     fontSize: 12,
-    color: '#718096',
+    color: '#607195',
   },
 
   pagination: {
@@ -2293,7 +2301,7 @@ const styles = StyleSheet.create({
   },
 
   pageActive: {
-    backgroundColor: '#12395B',
+    backgroundColor: '#10285B',
     color: '#fff',
     borderRadius: 6,
     overflow: 'hidden',
@@ -2301,7 +2309,7 @@ const styles = StyleSheet.create({
 
   closeButton: {
     marginTop: 14,
-    backgroundColor: '#12395B',
+    backgroundColor: '#10285B',
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
@@ -2345,7 +2353,7 @@ const styles = StyleSheet.create({
   addMenuTitle: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#10285B',
   },
 
   addMenuDesc: {
@@ -2367,7 +2375,7 @@ const styles = StyleSheet.create({
   coordLabel: {
     fontSize: 11,
     fontWeight: '900',
-    color: '#1F2D3D',
+    color: '#10285B',
     marginBottom: 6,
   },
 
@@ -2378,7 +2386,7 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     paddingHorizontal: 12,
     fontSize: 13,
-    color: '#1F2D3D',
+    color: '#10285B',
     backgroundColor: '#FFFFFF',
   },
 

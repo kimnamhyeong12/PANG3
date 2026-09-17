@@ -29,7 +29,6 @@ import GroupDetailScreen from './screens/GroupDetailScreen';
 import AssignmentScreen from './screens/AssignmentScreen';
 import WorkStatusScreen from './screens/WorkStatusScreen';
 import SettingsScreen from './screens/SettingsScreen';
-import PublicDataAssignmentScreen from './screens/PublicDataAssignmentScreen';
 import { groupApi } from './utils/groupApi';
 import { CustomAlertHost } from './components/CustomAlert';
 import { colors } from './constants/design';
@@ -524,6 +523,9 @@ export default function App() {
             onSettings={() =>
               go('settings')
             }
+            onPublicData={() =>
+              go('publicDataAssignment')
+            }
             locations={routeLocations}
             setLocations={setRouteLocations}
             onRefreshAssignments={refreshGroupAssignments}
@@ -607,10 +609,15 @@ export default function App() {
           )}
 
         {screen === 'publicDataAssignment' && activeGroup && (
-          <PublicDataAssignmentScreen
+          <MapScreen
             user={user}
-            group={activeGroup}
+            activeGroup={activeGroup}
+            publicDataMode
             onBack={() => goBack('groupDetail')}
+            onDataChanged={() => {
+              refreshGroupAssignments();
+              loadTeamLocations(activeGroup);
+            }}
           />
         )}
 
@@ -979,7 +986,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.line,
     elevation: 12,
-    shadowColor: '#163126',
+    shadowColor: '#1D4F91',
     shadowOpacity: 0.1,
     shadowRadius: 12,
     shadowOffset: {

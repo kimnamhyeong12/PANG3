@@ -17,6 +17,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -40,12 +41,14 @@ public class SgisBoundaryService {
     private volatile long accessTokenExpiresAtEpochSeconds;
     private final Map<String, JsonNode> cachedBoundaries = new ConcurrentHashMap<>();
 
+    private static final Map<String, String> SIDO_CODES = createSidoCodes();
+
     public SgisBoundaryService(
             ObjectMapper objectMapper,
             @Value("${sgis.consumer-key:${sgis.consumerKey:${sgis.service-id:${SGIS_CONSUMER_KEY:}}}}") String consumerKey,
             @Value("${sgis.consumer-secret:${sgis.consumerSecret:${sgis.secret-key:${SGIS_CONSUMER_SECRET:}}}}") String consumerSecret,
             @Value("${sgis.sahagu-code:21100}") String sahaguCode,
-            @Value("${sgis.boundary-year:2021}") String boundaryYear) {
+            @Value("${sgis.boundary-year:2025}") String boundaryYear) {
         this.objectMapper = objectMapper;
         this.consumerKey = consumerKey;
         this.consumerSecret = consumerSecret;
@@ -69,11 +72,26 @@ public class SgisBoundaryService {
 
     public JsonNode getAdministrativeBoundaries(String admCode) {
         String normalized = admCode == null ? "" : admCode.trim();
-        if (!normalized.matches("\\d{5,7}")) {
+        if (!normalized.matches("\\d{2,7}")) {
             throw new IllegalArgumentException("올바른 SGIS 행정구역 코드를 입력해 주세요.");
         }
         return cachedBoundaries.computeIfAbsent(normalized,
-                code -> convertFeatureCollection(requestBoundary(getAccessToken(), code)));
+                code -> convertFeatureCollection(requestBoundary(getAccessToken(), code, 1)));
+    }
+
+    /**
+     * 사용자의 근무 시·도 전체를 행정동 단위로 내려준다.
+     * 시·도(2자리)에서 시군구를 한 단계, 행정동을 두 단계 내려가므로 low_search=2를 사용한다.
+     */
+    public JsonNode getSidoAdministrativeDongBoundaries(String sido) {
+        String normalized = sido == null ? "" : sido.replace(" ", "").trim();
+        String code = SIDO_CODES.get(normalized);
+        if (code == null) {
+            throw new IllegalArgumentException("지원하지 않는 근무 시·도입니다: " + sido);
+        }
+        String cacheKey = "sido-dong-" + code;
+        return cachedBoundaries.computeIfAbsent(cacheKey,
+                ignored -> convertFeatureCollection(requestBoundary(getAccessToken(), code, 2)));
     }
 
     private String getAccessToken() {
@@ -111,14 +129,14 @@ public class SgisBoundaryService {
         return accessToken;
     }
 
-    private JsonNode requestBoundary(String token, String admCode) {
+    private JsonNode requestBoundary(String token, String admCode, int lowSearch) {
         JsonNode response = restClient.get()
                 .uri(URI.create(UriComponentsBuilder
                         .fromUriString(BOUNDARY_URL)
                         .queryParam("accessToken", token)
                         .queryParam("year", boundaryYear)
                         .queryParam("adm_cd", admCode)
-                        .queryParam("low_search", 1)
+                        .queryParam("low_search", lowSearch)
                         .build()
                         .encode()
                         .toUriString()))
@@ -127,6 +145,30 @@ public class SgisBoundaryService {
                 .body(JsonNode.class);
         validateSgisResponse(response, "행정동 경계 조회");
         return response;
+    }
+
+    private static Map<String, String> createSidoCodes() {
+        Map<String, String> codes = new LinkedHashMap<>();
+        codes.put("서울특별시", "11");
+        codes.put("부산광역시", "21");
+        codes.put("대구광역시", "22");
+        codes.put("인천광역시", "23");
+        codes.put("광주광역시", "24");
+        codes.put("대전광역시", "25");
+        codes.put("울산광역시", "26");
+        codes.put("세종특별자치시", "29");
+        codes.put("경기도", "31");
+        codes.put("강원특별자치도", "32");
+        codes.put("강원도", "32");
+        codes.put("충청북도", "33");
+        codes.put("충청남도", "34");
+        codes.put("전북특별자치도", "35");
+        codes.put("전라북도", "35");
+        codes.put("전라남도", "36");
+        codes.put("경상북도", "37");
+        codes.put("경상남도", "38");
+        codes.put("제주특별자치도", "39");
+        return Map.copyOf(codes);
     }
 
     private void validateSgisResponse(JsonNode response, String operation) {
