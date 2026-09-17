@@ -325,6 +325,9 @@ const buildKakaoMapHtml = (
   var boundaryPolygons = [];
   var boundaryLabels = [];
   var selectedBoundaryPolygons = [];
+  var boundaryAllBounds = null;
+  var boundaryHasCoordinates = false;
+  var renderedBoundaryCount = 0;
 
   var roadLine = null;
   var activeLine = null;
@@ -413,6 +416,9 @@ const buildKakaoMapHtml = (
     boundaryPolygons = [];
     boundaryLabels = [];
     selectedBoundaryPolygons = [];
+    boundaryAllBounds = new window.kakao.maps.LatLngBounds();
+    boundaryHasCoordinates = false;
+    renderedBoundaryCount = 0;
   }
 
   function boundaryName(feature, index) {
@@ -440,12 +446,12 @@ const buildKakaoMapHtml = (
     selectedBoundaryPolygons = [];
   }
 
-  function setBoundaryData(featureCollection) {
-    clearBoundaryData();
+  function appendBoundaryData(featureCollection) {
     if (!map || !featureCollection || !featureCollection.features) return;
 
-    var allBounds = new window.kakao.maps.LatLngBounds();
-    var hasCoordinates = false;
+    if (!boundaryAllBounds) {
+      boundaryAllBounds = new window.kakao.maps.LatLngBounds();
+    }
 
     featureCollection.features.forEach(function (feature, featureIndex) {
       var name = boundaryName(feature, featureIndex);
@@ -457,8 +463,8 @@ const buildKakaoMapHtml = (
           return (ring || []).map(function (point) {
             var latLng = new window.kakao.maps.LatLng(Number(point[1]), Number(point[0]));
             featureBounds.extend(latLng);
-            allBounds.extend(latLng);
-            hasCoordinates = true;
+            boundaryAllBounds.extend(latLng);
+            boundaryHasCoordinates = true;
             return latLng;
           });
         });
@@ -502,6 +508,7 @@ const buildKakaoMapHtml = (
       });
 
       if (featurePolygons.length > 0) {
+        renderedBoundaryCount += 1;
         var center = featureBounds.getCenter();
         var shortName = String(name).split(" ").pop();
         var labelElement = document.createElement("div");
@@ -518,10 +525,19 @@ const buildKakaoMapHtml = (
         boundaryLabels.push(label);
       }
     });
+  }
 
-    if (hasCoordinates) {
-      map.setBounds(allBounds, 28, 28, 28, 28);
+  function finishBoundaryData() {
+    if (boundaryHasCoordinates && boundaryAllBounds) {
+      map.setBounds(boundaryAllBounds, 28, 28, 28, 28);
     }
+    post({ type: "BOUNDARIES_RENDERED", count: renderedBoundaryCount });
+  }
+
+  function setBoundaryData(featureCollection) {
+    clearBoundaryData();
+    appendBoundaryData(featureCollection);
+    finishBoundaryData();
   }
 
   /*
@@ -928,6 +944,21 @@ const buildKakaoMapHtml = (
       return;
     }
 
+    if (commandData.type === "BOUNDARIES_RESET") {
+      clearBoundaryData();
+      return;
+    }
+
+    if (commandData.type === "BOUNDARIES_APPEND") {
+      appendBoundaryData(commandData.data);
+      return;
+    }
+
+    if (commandData.type === "BOUNDARIES_FINISH") {
+      finishBoundaryData();
+      return;
+    }
+
     if (
       commandData.type === "MOVE"
     ) {
@@ -1096,6 +1127,7 @@ export default function KakaoMapWebView({
   onCurrentLocationChange,
   onMarkerClick,
   onBoundaryClick,
+  onBoundaryReady,
   directMarkerPress = false,
   onLocationsChange,
   onRerouteRequest,
@@ -2628,7 +2660,16 @@ export default function KakaoMapWebView({
 
   useEffect(() => {
     if (!boundaries) return;
-    sendMapCommand({ type: "BOUNDARIES", data: boundaries });
+    const features = Array.isArray(boundaries.features) ? boundaries.features : [];
+    sendMapCommand({ type: "BOUNDARIES_RESET" });
+    const chunkSize = 6;
+    for (let index = 0; index < features.length; index += chunkSize) {
+      sendMapCommand({
+        type: "BOUNDARIES_APPEND",
+        data: { type: "FeatureCollection", features: features.slice(index, index + chunkSize) },
+      });
+    }
+    sendMapCommand({ type: "BOUNDARIES_FINISH" });
   }, [boundaries]);
 
   /*
@@ -2773,6 +2814,11 @@ export default function KakaoMapWebView({
             longitude: Number(message.longitude),
             properties: message.properties || {},
           });
+          return;
+        }
+
+        if (message.type === "BOUNDARIES_RENDERED") {
+          onBoundaryReady?.(Number(message.count) || 0);
         }
       } catch (error) {
         console.log(

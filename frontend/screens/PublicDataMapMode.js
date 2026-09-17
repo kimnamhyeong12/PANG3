@@ -74,6 +74,7 @@ export default function PublicDataMapMode({
   const [boundaries, setBoundaries] = useState(null);
   const [boundaryLoading, setBoundaryLoading] = useState(true);
   const [boundaryError, setBoundaryError] = useState('');
+  const [renderedBoundaryCount, setRenderedBoundaryCount] = useState(null);
   const [selectedBoundary, setSelectedBoundary] = useState(null);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [category, setCategory] = useState('');
@@ -98,7 +99,14 @@ export default function PublicDataMapMode({
         );
         const text = await response.text();
         if (!response.ok) throw new Error(text || 'SGIS 행정동 경계 조회 실패');
-        if (!cancelled) setBoundaries(JSON.parse(text));
+        const parsed = JSON.parse(text);
+        if (!Array.isArray(parsed?.features) || parsed.features.length === 0) {
+          throw new Error(`${workSido} 행정동 경계 데이터가 비어 있습니다.`);
+        }
+        if (!cancelled) {
+          setRenderedBoundaryCount(null);
+          setBoundaries(parsed);
+        }
       } catch (error) {
         if (!cancelled) {
           setBoundaryError(error.message || '행정동 경계를 불러오지 못했습니다.');
@@ -238,6 +246,7 @@ export default function PublicDataMapMode({
         setPanelOpen={() => {}}
         directMarkerPress
         onBoundaryClick={setSelectedBoundary}
+        onBoundaryReady={setRenderedBoundaryCount}
         onMarkerClick={toggleItem}
         onLocationsChange={() => {}}
       />
@@ -306,20 +315,20 @@ export default function PublicDataMapMode({
           </View>
         ) : null}
 
-        {boundaryLoading ? (
+        {boundaryLoading || (boundaries && renderedBoundaryCount === null) ? (
           <View style={styles.notice}>
             <ActivityIndicator size="small" color="#2477F3" />
-            <Text style={styles.noticeText}>{workSido} 행정동 경계를 불러오는 중...</Text>
+            <Text style={styles.noticeText}>{workSido} 행정동 경계를 지도에 표시하는 중...</Text>
           </View>
-        ) : boundaryError ? (
+        ) : boundaryError || renderedBoundaryCount === 0 ? (
           <View style={[styles.notice, styles.errorNotice]}>
             <Ionicons name="alert-circle-outline" size={16} color="#C43D4B" />
-            <Text style={styles.errorText}>{boundaryError}</Text>
+            <Text style={styles.errorText}>{boundaryError || '행정동 경계를 지도에 표시하지 못했습니다.'}</Text>
           </View>
         ) : !selectedBoundary ? (
           <View style={styles.notice}>
             <Ionicons name="map-outline" size={16} color="#2477F3" />
-            <Text style={styles.noticeText}>경계를 누르면 해당 행정동으로 확대됩니다.</Text>
+            <Text style={styles.noticeText}>{renderedBoundaryCount}개 행정동 · 경계를 누르면 확대됩니다.</Text>
           </View>
         ) : null}
       </View>
