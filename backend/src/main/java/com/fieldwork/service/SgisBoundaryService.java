@@ -214,12 +214,18 @@ public class SgisBoundaryService {
                         new ProjCoordinate(point.get(0).asDouble(), point.get(1).asDouble()),
                         target);
                 ArrayNode convertedPoint = objectMapper.createArrayNode();
-                convertedPoint.add(target.x);
-                convertedPoint.add(target.y);
+                // 모바일 WebView로 시·도 전체 경계를 전달하므로 불필요한 소수 자릿수를 줄인다.
+                // 6자리 정밀도는 지도 경계 표시에 충분하면서 GeoJSON 크기를 크게 낮춘다.
+                convertedPoint.add(roundCoordinate(target.x));
+                convertedPoint.add(roundCoordinate(target.y));
                 convertedRing.add(convertedPoint);
             });
             rings.add(convertedRing);
         });
         return rings;
+    }
+
+    private double roundCoordinate(double value) {
+        return Math.round(value * 1_000_000d) / 1_000_000d;
     }
 }
