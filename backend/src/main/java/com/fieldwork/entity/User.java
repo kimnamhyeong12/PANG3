@@ -20,6 +20,12 @@ public class User {
 
     private String role;
 
+    @Column(name = "work_sido")
+    private String workSido;
+
+    @Column(name = "work_sigungu")
+    private String workSigungu;
+
     public User() {}
 
     public Long getUserId() {
@@ -60,5 +66,21 @@ public class User {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public String getWorkSido() {
+        return workSido;
+    }
+
+    public void setWorkSido(String workSido) {
+        this.workSido = workSido;
+    }
+
+    public String getWorkSigungu() {
+        return workSigungu;
+    }
+
+    public void setWorkSigungu(String workSigungu) {
+        this.workSigungu = workSigungu;
     }
 }

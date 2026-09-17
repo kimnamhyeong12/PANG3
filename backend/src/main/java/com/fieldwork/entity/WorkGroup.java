@@ -28,6 +28,15 @@ public class WorkGroup {
     @Column(name = "is_personal", nullable = false, columnDefinition = "boolean default false")
     private Boolean personal = false;
 
+    @Column(name = "region_sido")
+    private String regionSido;
+
+    @Column(name = "region_sigungu")
+    private String regionSigungu;
+
+    @Column(name = "region_adm_code")
+    private String regionAdmCode;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -72,6 +81,30 @@ public class WorkGroup {
 
     public void setPersonal(boolean personal) {
         this.personal = personal;
+    }
+
+    public String getRegionSido() {
+        return regionSido;
+    }
+
+    public void setRegionSido(String regionSido) {
+        this.regionSido = regionSido;
+    }
+
+    public String getRegionSigungu() {
+        return regionSigungu;
+    }
+
+    public void setRegionSigungu(String regionSigungu) {
+        this.regionSigungu = regionSigungu;
+    }
+
+    public String getRegionAdmCode() {
+        return regionAdmCode;
+    }
+
+    public void setRegionAdmCode(String regionAdmCode) {
+        this.regionAdmCode = regionAdmCode;
     }
 
     public LocalDateTime getCreatedAt() {
