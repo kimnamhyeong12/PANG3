@@ -34,3 +34,4 @@ backend/src/main/resources/application-local-backup.yml
 
 # OS
 .DS_Store
+ai/__pycache__/
