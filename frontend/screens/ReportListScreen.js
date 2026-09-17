@@ -23,6 +23,18 @@ const getStatusColor = (status) => {
   return '#E74C3C';
 };
 
+const getWorkDateKey = (item) => {
+  const value = item?.workDate ?? item?.work_date ?? item?.createdAt ?? item?.created_at;
+  return value ? String(value).slice(0, 10) : '';
+};
+
+const formatShortDate = (value) => {
+  const key = value ? String(value).slice(0, 10) : '';
+  const parts = key.split('-');
+  if (parts.length !== 3) return '';
+  return `${parts[1]}.${parts[2]}`;
+};
+
 const getTaskId = (loc) =>
   loc?.id ??
   loc?.taskId ??
@@ -114,13 +126,6 @@ export default function ReportListScreen({
             보고서 작성
           </Text>
 
-          <Text style={styles.desc}>
-            작업 중 또는 작업 후 방문지만 보고서에 포함할 수 있습니다
-          </Text>
-
-          <Text style={styles.scopeSummary}>
-            현재 업무공간 · {workspaceName}
-          </Text>
         </View>
       </View>
 
@@ -277,6 +282,39 @@ export default function ReportListScreen({
                       </View>
                     </View>
 
+                    <View style={styles.taskMetaRow}>
+                      {formatShortDate(getWorkDateKey(loc)) ? (
+                        <View style={styles.taskDateBadge}>
+                          <Ionicons
+                            name="calendar-outline"
+                            size={11}
+                            color="#173A5E"
+                          />
+                          <Text style={styles.taskDateText}>
+                            업무일 {formatShortDate(getWorkDateKey(loc))}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      {String(
+                        loc.task ||
+                          loc.taskCategory ||
+                          loc.task_category ||
+                          ''
+                      ).trim() ? (
+                        <View style={styles.taskCategoryRow}>
+                          <Ionicons
+                            name="pricetag-outline"
+                            size={11}
+                            color="#536477"
+                          />
+                          <Text style={styles.taskCategoryText}>
+                            {loc.task || loc.taskCategory || loc.task_category}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+
                     <Text
                       style={styles.itemAddr}
                       numberOfLines={1}
@@ -385,7 +423,7 @@ const styles = StyleSheet.create({
 
     paddingHorizontal: 14,
     paddingBottom: 14,
-    paddingTop: 34,
+    paddingTop: 30,
 
     borderBottomWidth: 1,
     borderBottomColor: '#D9E1EA',
@@ -550,6 +588,47 @@ const styles = StyleSheet.create({
     color: '#475569',
   },
 
+  taskMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 5,
+  },
+
+  taskDateBadge: {
+    minHeight: 22,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EAF1F7',
+  },
+
+  taskDateText: {
+    color: '#173A5E',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+
+  taskCategoryRow: {
+    alignSelf: 'flex-start',
+    minHeight: 22,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F1F5F9',
+  },
+
+  taskCategoryText: {
+    color: '#536477',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+
   itemAddr: {
     marginTop: 5,
     fontSize: 11,
@@ -600,7 +679,7 @@ const styles = StyleSheet.create({
 
     paddingHorizontal: 14,
     paddingTop: 14,
-    paddingBottom: 60,
+    paddingBottom: 14,
 
     borderTopWidth: 1,
     borderTopColor: '#D9E1EA',

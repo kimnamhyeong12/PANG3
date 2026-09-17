@@ -74,9 +74,18 @@ export default function GroupCreateScreen({ user, onBack, onCreated }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F7FA' },
   header: {
-    flexDirection: 'row', gap: 12, alignItems: 'center', backgroundColor: '#FFFFFF',
-    padding: 14, borderBottomWidth: 1, borderBottomColor: '#D9E1EA',
-  },
+  flexDirection: 'row',
+  gap: 12,
+  alignItems: 'center',
+  backgroundColor: '#FFFFFF',
+
+  paddingHorizontal: 14,
+  paddingTop: 30,
+  paddingBottom: 14,
+
+  borderBottomWidth: 1,
+  borderBottomColor: '#D9E1EA',
+},
   eyebrow: { fontSize: 10, fontWeight: '900', color: '#607086', letterSpacing: 1.6 },
   title: { fontSize: 17, fontWeight: '900', color: '#1F2D3D' },
   body: { padding: 16, gap: 14 },

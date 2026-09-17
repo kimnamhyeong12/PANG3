@@ -503,12 +503,6 @@ export default function DashboardScreen({
           <Text style={styles.title}>
             외근 분석 대시보드
           </Text>
-
-          <Text style={styles.desc}>
-            {activeGroup?.groupName
-              ? `${activeGroup.groupName} · ${today} 기준`
-              : `${today} 기준`}
-          </Text>
         </View>
 
         {/* 로그아웃 + 이름 + 원 */}
@@ -939,7 +933,7 @@ const styles =
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      padding: 14,
+      paddingHorizontal: 14, paddingTop: 30, paddingBottom: 14,
       backgroundColor:
         '#FFFFFF',
       borderBottomWidth: 1,

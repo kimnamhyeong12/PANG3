@@ -73,7 +73,6 @@ export default function ReportScreen({
         <View style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>AUTO REPORT</Text>
           <Text style={styles.title}>외근 보고서</Text>
-          <Text style={styles.desc}>task_progress + AI 생성 결과</Text>
         </View>
       </View>
 
@@ -139,7 +138,9 @@ const styles = StyleSheet.create({
     gap: 12,
     alignItems: 'center',
     backgroundColor: 'white',
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    paddingTop: 30,
     borderBottomWidth: 1,
     borderBottomColor: '#D9E1EA',
   },

@@ -65,7 +65,6 @@ export default function GroupInvitationsScreen({ user, onBack, onAccepted }) {
         <View style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>GROUP INVITATIONS</Text>
           <Text style={styles.title}>초대받기</Text>
-          <Text style={styles.desc}>팀장이 보낸 그룹 초대를 확인합니다.</Text>
         </View>
       </View>
 
@@ -123,7 +122,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F7FA' },
   header: {
     flexDirection: 'row', gap: 12, alignItems: 'center', backgroundColor: '#FFFFFF',
-    padding: 14, borderBottomWidth: 1, borderBottomColor: '#D9E1EA',
+    paddingHorizontal: 14, paddingTop: 30, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#D9E1EA',
   },
   eyebrow: { fontSize: 10, fontWeight: '900', color: '#607086', letterSpacing: 1.6 },
   title: { fontSize: 17, fontWeight: '900', color: '#1F2D3D' },

@@ -38,8 +38,31 @@ const isPersonalGroup = (group) =>
     group?.workspaceType === 'PERSONAL'
   );
 
+const getLocalDateKey = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getScheduledDateKey = (item) => {
+  const value =
+    item?.scheduledDate ??
+    item?.scheduled_date ??
+    item?.workDate ??
+    item?.work_date;
+  return value ? String(value).slice(0, 10) : '';
+};
+
+const isTodayWork = (item) => {
+  const scheduledDate = getScheduledDateKey(item);
+  // scheduledDate 도입 전 데이터는 기존 workDate를 배치일로 사용한다.
+  return !scheduledDate || scheduledDate === getLocalDateKey();
+};
+
 export default function App() {
   const [screen, setScreen] = useState('login');
+  const [calendarDayKey, setCalendarDayKey] = useState(getLocalDateKey());
   const [user, setUser] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [actionType, setActionType] = useState(null);
@@ -61,6 +84,16 @@ export default function App() {
   const workspaceLoadIdRef = useRef(0);
 
   const [todayLocationsLoaded, setTodayLocationsLoaded] = useState(false);
+
+  // 앱을 자정 넘겨 계속 켜둔 경우에도 오늘 업무/미처리 업무 기준을 자동 갱신한다.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const nextDayKey = getLocalDateKey();
+      setCalendarDayKey((prev) => (prev === nextDayKey ? prev : nextDayKey));
+    }, 60 * 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   const WORKSPACE_LOCATIONS_KEY_PREFIX = 'pang3_workspace_locations';
 
@@ -175,16 +208,25 @@ export default function App() {
       const rows = (Array.isArray(data) ? data : []).map((item) => ({
         ...item,
         id: item.id ?? item.taskId ?? item.locationId ?? item.task_id,
-        task: item.task ?? item.taskCategory ?? item.task_category ?? '현장 확인',
+        task: item.task ?? item.taskCategory ?? item.task_category ?? '',
         status: item.status ?? item.taskStatus ?? item.task_status ?? 'pending',
         lat: item.lat ?? item.latitude,
         lng: item.lng ?? item.longitude,
+        createdAt: item.createdAt ?? item.created_at ?? null,
+        workDate: item.workDate ?? item.work_date ?? null,
+        scheduledDate:
+          item.scheduledDate ??
+          item.scheduled_date ??
+          item.workDate ??
+          item.work_date ??
+          null,
       }));
+      const todayRows = rows.filter(isTodayWork);
       if (requestId !== workspaceLoadIdRef.current) return;
-      setRouteLocations(rows);
+      setRouteLocations(todayRows);
 
       if (cacheKey) {
-        await AsyncStorage.setItem(cacheKey, JSON.stringify(rows));
+        await AsyncStorage.setItem(cacheKey, JSON.stringify(todayRows));
       }
     } catch (error) {
       console.log('현재 작업공간 방문지 조회 실패:', error);
@@ -194,7 +236,9 @@ export default function App() {
         const cached = cacheKey ? await AsyncStorage.getItem(cacheKey) : null;
         const parsed = cached ? JSON.parse(cached) : [];
         if (requestId !== workspaceLoadIdRef.current) return;
-        setRouteLocations(Array.isArray(parsed) ? parsed : []);
+        setRouteLocations(
+          Array.isArray(parsed) ? parsed.filter(isTodayWork) : []
+        );
       } catch {
         if (requestId !== workspaceLoadIdRef.current) return;
         setRouteLocations([]);
@@ -204,7 +248,7 @@ export default function App() {
         setTodayLocationsLoaded(true);
       }
     }
-  }, [activeGroup?.groupId, user?.userId, workspaceCacheKey]);
+  }, [activeGroup?.groupId, user?.userId, workspaceCacheKey, calendarDayKey]);
 
   useEffect(() => {
     loadWorkspaceLocations();
@@ -412,7 +456,7 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={['bottom']}>
       <View
         style={styles.app}
         {...swipeBackResponder.panHandlers}
@@ -476,6 +520,7 @@ export default function App() {
             }
             locations={routeLocations}
             setLocations={setRouteLocations}
+            onRefreshAssignments={refreshGroupAssignments}
           />
         )}
 
