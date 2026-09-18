@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import KakaoMapWebView from '../components/KakaoMapWebView';
 import { showAlert } from '../components/CustomAlert';
-import { groupApi } from '../utils/groupApi';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
@@ -45,6 +44,7 @@ const BUSAN_DISTRICT_CODES = {
   사상구: '21150',
   기장군: '21310',
 };
+const BUSAN_DISTRICTS = Object.keys(BUSAN_DISTRICT_CODES);
 
 const OFFSETS = [
   [0.0002, 0.0001],
@@ -261,17 +261,25 @@ export default function PublicDataMapMode({
   onBack,
   onDataChanged,
 }) {
+  const personalWorkspace = Boolean(
+    activeGroup?.personalWorkspace ||
+    activeGroup?.personal ||
+    activeGroup?.workspaceType === 'PERSONAL'
+  );
   const workSido =
-    activeGroup?.regionSido ||
+    (!personalWorkspace && activeGroup?.regionSido) ||
     user?.workSido ||
     '부산광역시';
 
+  const [personalDistrict, setPersonalDistrict] = useState('');
+
   const regionSigungu =
-    activeGroup?.regionSigungu ||
-    '사하구';
+    personalWorkspace
+      ? personalDistrict
+      : (activeGroup?.regionSigungu || '');
 
   const activityAdmCode =
-    activeGroup?.regionAdmCode ||
+    (!personalWorkspace && activeGroup?.regionAdmCode) ||
     (
       workSido === '부산광역시'
         ? BUSAN_DISTRICT_CODES[regionSigungu]
@@ -300,31 +308,21 @@ export default function PublicDataMapMode({
 
   const [category, setCategory] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
-  const [members, setMembers] = useState([]);
-  const [assigneeId, setAssigneeId] = useState('');
   const [saving, setSaving] = useState(false);
 
   const sheetTranslateY = useRef(
     new Animated.Value(0)
   ).current;
 
-  const isLeader =
-    activeGroup?.role === 'LEADER' ||
-    members.some(
-      (member) =>
-        Number(member.userId) === Number(user?.userId) &&
-        member.role === 'LEADER'
-    );
-
-  const assignableMembers = isLeader
-    ? members
-    : members.filter(
-        (member) =>
-          Number(member.userId) === Number(user?.userId)
-      );
-
   useEffect(() => {
     let cancelled = false;
+
+    if (personalWorkspace && !personalDistrict) {
+      setDongOptions([]);
+      setBoundaryLoading(false);
+      setBoundaryError('');
+      return undefined;
+    }
 
     (async () => {
       try {
@@ -390,44 +388,11 @@ export default function PublicDataMapMode({
     return () => {
       cancelled = true;
     };
-  }, [activityAdmCode, regionSigungu]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!activeGroup?.groupId || !user?.userId) {
-      return undefined;
-    }
-
-    groupApi(
-      `/api/groups/${activeGroup.groupId}/members` +
-      `?userId=${user.userId}`
-    )
-      .then((data) => {
-        if (!cancelled) {
-          setMembers(
-            Array.isArray(data) ? data : []
-          );
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          showAlert(
-            '팀원 조회 실패',
-            error.message
-          );
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeGroup?.groupId, user?.userId]);
+  }, [activityAdmCode, regionSigungu, personalWorkspace, personalDistrict]);
 
   useEffect(() => {
     setCategory('');
     setSelectedIds([]);
-    setAssigneeId('');
     setCategoryMenuOpen(false);
     setRenderedBoundaryCount(null);
     sheetTranslateY.setValue(0);
@@ -445,7 +410,6 @@ export default function PublicDataMapMode({
     }).start(() => {
       setCategory('');
       setSelectedIds([]);
-      setAssigneeId('');
       sheetTranslateY.setValue(0);
     });
   }, [sheetTranslateY]);
@@ -465,13 +429,24 @@ export default function PublicDataMapMode({
       return true;
     }
 
-    // 열린 메뉴와 목록이 없을 때만
-    // 이전 화면으로 이동한다.
+    if (selectedBoundary) {
+      setSelectedBoundary(null);
+      return true;
+    }
+
+    if (personalWorkspace && personalDistrict) {
+      setPersonalDistrict('');
+      return true;
+    }
+
     onBack?.();
     return true;
   }, [
     categoryMenuOpen,
     category,
+    selectedBoundary,
+    personalWorkspace,
+    personalDistrict,
     closeBottomSheet,
     onBack,
   ]);
@@ -590,11 +565,11 @@ export default function PublicDataMapMode({
     );
   };
 
-  const assignSelectedItems = async () => {
+  const registerSelectedItems = async () => {
     if (!activeGroup?.groupId) {
       showAlert(
-        '그룹 선택 필요',
-        '공공업무를 등록할 그룹을 먼저 선택하세요.'
+        '업무공간 선택 필요',
+        '공공업무를 등록할 업무공간을 먼저 선택하세요.'
       );
 
       return;
@@ -604,15 +579,6 @@ export default function PublicDataMapMode({
       showAlert(
         '시설 선택 필요',
         '지도나 목록에서 시설을 선택하세요.'
-      );
-
-      return;
-    }
-
-    if (!assigneeId) {
-      showAlert(
-        '담당자 선택 필요',
-        '업무를 배정할 팀원을 선택하세요.'
       );
 
       return;
@@ -651,6 +617,7 @@ export default function PublicDataMapMode({
 
               createdByUserId: user.userId,
               groupId: activeGroup.groupId,
+              deferAssignment: !personalWorkspace,
             }),
           }
         );
@@ -665,49 +632,22 @@ export default function PublicDataMapMode({
           );
         }
 
-        const saved = JSON.parse(createText);
-
-        const taskId =
-          saved.id ??
-          saved.taskId ??
-          saved.task_id;
-
-        if (isLeader) {
-          await groupApi(
-            `/api/groups/${activeGroup.groupId}` +
-            `/assignments/${taskId}`,
-            {
-              method: 'PUT',
-
-              body: JSON.stringify({
-                leaderUserId: user.userId,
-                assigneeUserId: Number(assigneeId),
-              }),
-            }
-          );
-        }
+        JSON.parse(createText);
       }
 
-      const assignee = members.find(
-        (member) =>
-          String(member.userId) === assigneeId
-      );
-
       showAlert(
-        '공공업무 배정 완료',
+        '방문지 등록 완료',
         `${selectedBoundary?.dongName} ` +
         `${selected.length}건을 ` +
-        `${assignee?.name || assignee?.loginId || '담당자'}` +
-        '에게 배정했습니다.'
+        `${personalWorkspace ? '내 방문지' : '팀 미배정 방문지'}로 등록했습니다.`
       );
 
       setSelectedIds([]);
-      setAssigneeId('');
 
       onDataChanged?.();
     } catch (error) {
       showAlert(
-        '공공업무 배정 실패',
+        '방문지 등록 실패',
         error.message ||
         '등록 중 문제가 발생했습니다.'
       );
@@ -715,6 +655,40 @@ export default function PublicDataMapMode({
       setSaving(false);
     }
   };
+
+  if (personalWorkspace && !personalDistrict) {
+    return (
+      <View style={styles.selectionScreen}>
+        <View style={styles.selectionHeader}>
+          <TouchableOpacity style={styles.plainBackButton} onPress={handleBack}>
+            <Ionicons name="arrow-back" size={25} color="#10285B" />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.selectionTitle}>활동 구·군 선택</Text>
+            <Text style={styles.selectionSubtitle}>{workSido} · 개인 업무공간</Text>
+          </View>
+        </View>
+
+        <View style={styles.regionCard}>
+          <View style={styles.regionIcon}><Ionicons name="map-outline" size={22} color="#2477F3" /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.regionTitle}>공공업무를 확인할 구·군</Text>
+            <Text style={styles.regionDescription}>구·군을 고른 다음 해당 지역의 행정동을 선택합니다.</Text>
+          </View>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.dongGrid} showsVerticalScrollIndicator={false}>
+          {BUSAN_DISTRICTS.map((district) => (
+            <TouchableOpacity key={district} style={styles.dongCard} activeOpacity={0.76} onPress={() => setPersonalDistrict(district)}>
+              <View style={styles.dongIcon}><Ionicons name="business-outline" size={18} color="#2477F3" /></View>
+              <Text style={styles.dongName}>{district}</Text>
+              <Ionicons name="chevron-forward" size={17} color="#8A98A8" />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  }
 
   if (!selectedBoundary) {
     return (
@@ -1110,67 +1084,28 @@ export default function PublicDataMapMode({
             })}
           </ScrollView>
 
-          <Text style={styles.memberLabel}>
-            담당자 선택
-          </Text>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.memberRow}
-          >
-            {assignableMembers.map((member) => {
-              const active =
-                assigneeId === String(member.userId);
-
-              return (
-                <TouchableOpacity
-                  key={member.userId}
-                  style={[
-                    styles.memberChip,
-
-                    active &&
-                      styles.memberChipActive,
-                  ]}
-                  onPress={() =>
-                    setAssigneeId(
-                      String(member.userId)
-                    )
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.memberText,
-
-                      active &&
-                        styles.memberTextActive,
-                    ]}
-                  >
-                    {member.name ||
-                      member.loginId}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+          <View style={styles.registrationHint}>
+            <Ionicons name={personalWorkspace ? 'person-outline' : 'people-outline'} size={17} color="#2477F3" />
+            <Text style={styles.registrationHintText}>
+              {personalWorkspace
+                ? '선택한 시설은 내 방문지로 등록됩니다.'
+                : '선택한 시설은 팀의 미배정 방문지로 등록됩니다.'}
+            </Text>
+          </View>
 
           <TouchableOpacity
             style={[
               styles.assignButton,
 
               (
-                !selectedIds.length ||
-                !assigneeId ||
-                saving
+                !selectedIds.length || saving
               ) &&
                 styles.disabledButton,
             ]}
             disabled={
-              !selectedIds.length ||
-              !assigneeId ||
-              saving
+              !selectedIds.length || saving
             }
-            onPress={assignSelectedItems}
+            onPress={registerSelectedItems}
           >
             {saving ? (
               <ActivityIndicator
@@ -1179,7 +1114,7 @@ export default function PublicDataMapMode({
               />
             ) : (
               <Ionicons
-                name="person-add-outline"
+                name="add-circle-outline"
                 size={18}
                 color="#FFFFFF"
               />
@@ -1188,7 +1123,7 @@ export default function PublicDataMapMode({
             <Text style={styles.assignText}>
               {saving
                 ? '등록 중...'
-                : `선택한 ${selectedIds.length}건 업무로 배정`}
+                : `선택한 ${selectedIds.length}건 방문지 등록`}
             </Text>
           </TouchableOpacity>
         </Animated.View>
@@ -1591,37 +1526,22 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  memberLabel: {
-    color: '#10285B',
-    fontSize: 11,
-    fontWeight: '900',
-    marginTop: 8,
+  registrationHint: {
+    minHeight: 38,
+    marginVertical: 8,
+    paddingHorizontal: 11,
+    borderRadius: 11,
+    backgroundColor: '#EEF5FF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
   },
 
-  memberRow: {
-    gap: 6,
-    paddingVertical: 7,
-  },
-
-  memberChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: '#EEF3F8',
-  },
-
-  memberChipActive: {
-    backgroundColor: '#2477F3',
-  },
-
-  memberText: {
+  registrationHintText: {
+    flex: 1,
     color: '#50627A',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-
-  memberTextActive: {
-    color: '#FFFFFF',
+    fontSize: 9.5,
+    fontWeight: '700',
   },
 
   assignButton: {

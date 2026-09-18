@@ -53,8 +53,8 @@ export default function MainScreen({
   const workspaceName = activeGroup?.groupName || displayName;
   const roleLabel = !activeGroup || isPersonalGroup(activeGroup) ? '개인' : activeGroup?.role === 'LEADER' ? '팀장' : '팀원';
   const openPublicData = () => {
-    if (!activeGroup || isPersonalGroup(activeGroup)) {
-      showAlert('팀 그룹 전용', '공공업무는 활동지역이 설정된 팀 그룹에서 사용할 수 있습니다.');
+    if (!activeGroup) {
+      showAlert('업무공간 선택 필요', '공공업무를 등록할 업무공간을 먼저 선택하세요.');
       return;
     }
     onPublicData?.(activeGroup);

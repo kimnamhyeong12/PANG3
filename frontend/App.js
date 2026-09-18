@@ -589,9 +589,10 @@ export default function App() {
               onBack={() =>
                 go('groupHome')
               }
-              onUpdatedGroup={(group) =>
-                selectActiveGroup(group)
-              }
+              onUpdatedGroup={(group) => {
+                rememberAvailableGroup(group);
+                selectActiveGroup(group);
+              }}
               onAssign={(group) => {
                 selectActiveGroup(group);
                 go('assignment');
@@ -616,7 +617,11 @@ export default function App() {
             onBack={() => goBack('groupDetail')}
             onDataChanged={() => {
               refreshGroupAssignments();
-              loadTeamLocations(activeGroup);
+              if (isPersonalGroup(activeGroup)) {
+                loadWorkspaceLocations();
+              } else {
+                loadTeamLocations(activeGroup);
+              }
             }}
           />
         )}

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { showAlert } from '../components/CustomAlert';
 import { CardTitle, PrimaryButton, ScreenHeader, SecondaryButton } from '../components/ui';
@@ -7,6 +7,12 @@ import { groupApi } from '../utils/groupApi';
 import { colors, radius, shadow } from '../constants/design';
 
 const AVATAR_COLORS = ['#DDEEFF', '#E4F8F3', '#FFF0D8', '#FCE7EF'];
+const DISTRICTS = ['중구','서구','동구','영도구','부산진구','동래구','남구','북구','해운대구','사하구','금정구','강서구','연제구','수영구','사상구','기장군'];
+const DISTRICT_CODES = {
+  중구: '21010', 서구: '21020', 동구: '21030', 영도구: '21040', 부산진구: '21050',
+  동래구: '21060', 남구: '21070', 북구: '21080', 해운대구: '21090', 사하구: '21100',
+  금정구: '21110', 강서구: '21120', 연제구: '21130', 수영구: '21140', 사상구: '21150', 기장군: '21310',
+};
 
 export default function GroupDetailScreen({ user, group, onBack, onAssign, onTeamLocations, onPublicData, onUpdatedGroup }) {
   const [detail, setDetail] = useState(group || null);
@@ -16,6 +22,9 @@ export default function GroupDetailScreen({ user, group, onBack, onAssign, onTea
   const [inviteOpen, setInviteOpen] = useState(false);
   const [teamAlerts, setTeamAlerts] = useState(true);
   const [activityAlerts, setActivityAlerts] = useState(true);
+  const [regionOpen, setRegionOpen] = useState(false);
+  const [regionSaving, setRegionSaving] = useState(false);
+  const [draftDistrict, setDraftDistrict] = useState(group?.regionSigungu || '');
 
   const load = useCallback(async () => {
     if (!group?.groupId || !user?.userId) return;
@@ -50,14 +59,51 @@ export default function GroupDetailScreen({ user, group, onBack, onAssign, onTea
     }
   };
 
+  const saveRegion = async () => {
+    if (!draftDistrict || regionSaving) return;
+    try {
+      setRegionSaving(true);
+      const data = await groupApi(`/api/groups/${group.groupId}/region`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          leaderUserId: user.userId,
+          regionSido: '부산광역시',
+          regionSigungu: draftDistrict,
+          regionAdmCode: DISTRICT_CODES[draftDistrict],
+        }),
+      });
+      const next = { ...detail, ...data };
+      setDetail(next);
+      onUpdatedGroup?.(next);
+      setRegionOpen(false);
+      showAlert('활동지역 변경 완료', `부산광역시 ${draftDistrict}로 변경했습니다.`);
+    } catch (error) {
+      showAlert('활동지역 변경 실패', error.message);
+    } finally {
+      setRegionSaving(false);
+    }
+  };
+
   const members = detail?.members || [];
   const assignments = detail?.assignments || [];
   const isLeader = detail?.role === 'LEADER';
   const groupName = detail?.groupName || group?.groupName || '그룹';
   const regionSido = detail?.regionSido || '부산광역시';
-  const regionSigungu = detail?.regionSigungu || '사하구';
+  const regionSigungu = detail?.regionSigungu || '';
   const leaderName = detail?.leaderName || detail?.leaderLoginId || members.find((member) => member.role === 'LEADER')?.name || '-';
   const dongs = useMemo(() => [...new Set(assignments.map((item) => item.adminDong || item.admin_dong || item.admDong || '').filter(Boolean))], [assignments]);
+  const openPublicData = () => {
+    if (regionSigungu && (detail?.regionAdmCode || DISTRICT_CODES[regionSigungu])) {
+      onPublicData?.(detail);
+      return;
+    }
+    if (isLeader) {
+      setDraftDistrict('');
+      setRegionOpen(true);
+      return;
+    }
+    showAlert('활동지역 미설정', '그룹장에게 활동 구·군 설정을 요청하세요.');
+  };
 
   if (loading) return <View style={styles.container}><ScreenHeader title="그룹 설정" subtitle="팀원과 지역 업무를 효율적으로 관리하세요." onBack={onBack} /><View style={styles.loading}><ActivityIndicator size="large" color={colors.primary} /><Text style={styles.loadingText}>그룹 정보를 불러오는 중입니다.</Text></View></View>;
 
@@ -68,7 +114,8 @@ export default function GroupDetailScreen({ user, group, onBack, onAssign, onTea
         <CardTitle icon="people" title="기본 정보" />
         <InfoRow icon="pricetag" label="그룹명" value={groupName} />
         <InfoRow icon="ribbon" label="그룹장" value={leaderName} />
-        <InfoRow icon="location" label="활동 지역" value={`${regionSido} · ${regionSigungu}`} last />
+        <InfoRow icon="location" label="활동 지역" value={regionSigungu ? `${regionSido} · ${regionSigungu}` : '활동지역 미설정'} last />
+        {isLeader ? <SecondaryButton title={regionSigungu ? '활동지역 변경' : '활동지역 설정'} icon="location-outline" onPress={() => { setDraftDistrict(regionSigungu); setRegionOpen(true); }} style={styles.fullButton} /> : null}
         <SecondaryButton title="팀 방문지 지도 열기" icon="map-outline" onPress={() => onTeamLocations?.(detail)} style={styles.fullButton} />
       </View>
 
@@ -86,14 +133,14 @@ export default function GroupDetailScreen({ user, group, onBack, onAssign, onTea
         <TouchableOpacity style={styles.managementCard} activeOpacity={0.76} onPress={() => onAssign?.(detail)}>
           <View style={styles.managementIcon}><Ionicons name="map" size={22} color="#FFFFFF" /></View>
           <Text style={styles.managementTitle}>담당구역 관리</Text>
-          <Text style={styles.managementDescription} numberOfLines={2}>{dongs.length ? `${dongs.length}개 행정동 담당 현황` : `${regionSigungu} 담당구역 설정`}</Text>
+          <Text style={styles.managementDescription} numberOfLines={2}>{dongs.length ? `${dongs.length}개 행정동 담당 현황` : regionSigungu ? `${regionSigungu} 담당구역 설정` : '활동지역을 먼저 설정하세요'}</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.primary} style={styles.managementArrow} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.managementCard, styles.publicManagementCard]} activeOpacity={0.76} onPress={() => onPublicData?.(detail)}>
+        <TouchableOpacity style={[styles.managementCard, styles.publicManagementCard]} activeOpacity={0.76} onPress={openPublicData}>
           <View style={[styles.managementIcon, styles.managementIconTeal]}><Ionicons name="business" size={22} color="#FFFFFF" /></View>
           <Text style={styles.managementTitle}>지역 공공업무</Text>
-          <Text style={styles.managementDescription} numberOfLines={2}>행정동 선택·공공데이터 배정</Text>
+          <Text style={styles.managementDescription} numberOfLines={2}>행정동·카테고리 선택 후 방문지 등록</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.teal} style={styles.managementArrow} />
         </TouchableOpacity>
       </View>
@@ -104,6 +151,20 @@ export default function GroupDetailScreen({ user, group, onBack, onAssign, onTea
         <SettingRow icon="people" title="팀원 활동 알림" description="팀원의 업무 시작과 완료 상태를 확인합니다." value={activityAlerts} onValueChange={setActivityAlerts} last />
       </View> : null}
     </ScrollView>
+    <Modal visible={regionOpen} transparent animationType="fade" onRequestClose={() => setRegionOpen(false)}>
+      <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setRegionOpen(false)}>
+        <View style={styles.regionSheet} onStartShouldSetResponder={() => true}>
+          <View style={styles.regionSheetHeader}>
+            <View><Text style={styles.regionSheetTitle}>활동 구·군 선택</Text><Text style={styles.regionSheetSub}>부산광역시의 담당 구·군을 선택하세요.</Text></View>
+            <TouchableOpacity onPress={() => setRegionOpen(false)}><Ionicons name="close" size={22} color={colors.textSoft} /></TouchableOpacity>
+          </View>
+          <ScrollView style={styles.regionList}>
+            {DISTRICTS.map((item) => <TouchableOpacity key={item} style={[styles.regionOption, draftDistrict === item && styles.regionOptionActive]} onPress={() => setDraftDistrict(item)}><Text style={[styles.regionOptionText, draftDistrict === item && styles.regionOptionTextActive]}>{item}</Text>{draftDistrict === item ? <Ionicons name="checkmark-circle" size={21} color={colors.primary} /> : null}</TouchableOpacity>)}
+          </ScrollView>
+          <PrimaryButton title={regionSaving ? '저장 중...' : '활동지역 저장'} onPress={saveRegion} disabled={!draftDistrict || regionSaving} />
+        </View>
+      </TouchableOpacity>
+    </Modal>
   </View>;
 }
 
@@ -119,4 +180,5 @@ const styles = StyleSheet.create({
   statusBadge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 5 }, statusGreen: { backgroundColor: colors.successSoft }, statusBlue: { backgroundColor: colors.primarySoft }, statusGray: { backgroundColor: '#F1F3F7' }, statusDot: { width: 7, height: 7, borderRadius: 4 }, dotGreen: { backgroundColor: colors.success }, dotBlue: { backgroundColor: colors.primary }, dotGray: { backgroundColor: '#98A4B8' }, statusText: { fontSize: 10, fontWeight: '800' }, textGreen: { color: '#07805D' }, textBlue: { color: colors.primary }, textGray: { color: colors.textSoft },
   managementGrid: { flexDirection: 'row', gap: 10 }, managementCard: { flex: 1, minHeight: 132, borderRadius: 18, padding: 14, backgroundColor: colors.surface, borderWidth: 1.3, borderColor: '#CFE0F6', ...shadow }, publicManagementCard: { borderColor: '#C9ECE9' }, managementIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }, managementIconTeal: { backgroundColor: colors.teal }, managementTitle: { color: colors.text, fontSize: 14, fontWeight: '900', marginTop: 10 }, managementDescription: { color: colors.textSoft, fontSize: 9.5, lineHeight: 14, marginTop: 4, paddingRight: 14 }, managementArrow: { position: 'absolute', right: 12, bottom: 12 },
   settingRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 2 }, settingTitle: { color: colors.text, fontSize: 12, fontWeight: '900' }, settingDescription: { color: colors.textSoft, fontSize: 9, lineHeight: 13, marginTop: 2 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(15, 35, 72, 0.34)', justifyContent: 'flex-end' }, regionSheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, paddingBottom: 28, maxHeight: '78%' }, regionSheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }, regionSheetTitle: { color: colors.text, fontSize: 18, fontWeight: '900' }, regionSheetSub: { color: colors.textSoft, fontSize: 11, marginTop: 4 }, regionList: { maxHeight: 410, marginBottom: 14 }, regionOption: { minHeight: 48, borderBottomWidth: 1, borderBottomColor: colors.line, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, regionOptionActive: { backgroundColor: colors.primarySoft }, regionOptionText: { color: colors.text, fontSize: 13, fontWeight: '700' }, regionOptionTextActive: { color: colors.primary, fontWeight: '900' },
 });

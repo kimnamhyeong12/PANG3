@@ -99,8 +99,15 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
     setLoadingBoundary(true);
     setBoundaryError('');
     try {
+      if (!group?.regionAdmCode) {
+        setBoundaries({ type: 'FeatureCollection', features: [] });
+        if (!personalWorkspace) {
+          setBoundaryError('그룹 활동 구·군을 먼저 설정해주세요.');
+        }
+        return;
+      }
       const data = await groupApi(
-        `/api/sgis/boundaries?admCode=${encodeURIComponent(group?.regionAdmCode || '21100')}`
+        `/api/sgis/boundaries?admCode=${encodeURIComponent(group.regionAdmCode)}`
       );
       setBoundaries(data?.type === 'FeatureCollection' ? data : { type: 'FeatureCollection', features: [] });
     } catch (error) {
@@ -108,7 +115,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
     } finally {
       setLoadingBoundary(false);
     }
-  }, [group?.regionAdmCode]);
+  }, [group?.regionAdmCode, personalWorkspace]);
 
   useEffect(() => { onRefresh?.(); loadBoundaries(); }, [loadBoundaries, onRefresh]);
 
