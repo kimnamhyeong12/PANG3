@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -531,6 +532,7 @@ export default function GroupDetailScreen({
         visible={regionOpen}
         transparent
         animationType="fade"
+        navigationBarTranslucent={false}
         onRequestClose={() =>
           setRegionOpen(false)
         }
@@ -543,7 +545,15 @@ export default function GroupDetailScreen({
           }
         >
           <View
-            style={styles.regionSheet}
+            style={[
+              styles.regionSheet,
+              {
+                paddingBottom:
+                  Platform.OS === 'android'
+                    ? 64
+                    : 34,
+              },
+            ]}
             onStartShouldSetResponder={() =>
               true
             }
