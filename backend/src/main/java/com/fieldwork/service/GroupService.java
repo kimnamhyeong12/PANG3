@@ -69,7 +69,7 @@ public class GroupService {
         group.setLeader(leader);
         group.setPersonal(false);
         group.setRegionSido(regionSido == null || regionSido.isBlank() ? "부산광역시" : regionSido.trim());
-        group.setRegionSigungu(regionSigungu == null || regionSigungu.isBlank() ? "사하구" : regionSigungu.trim());
+        group.setRegionSigungu(regionSigungu == null ? "" : regionSigungu.trim());
         group.setRegionAdmCode(regionAdmCode == null ? "" : regionAdmCode.trim());
         WorkGroup savedGroup = workGroupRepository.save(group);
 
@@ -81,6 +81,36 @@ public class GroupService {
 
         Map<String, Object> result = groupSummary(savedGroup, ROLE_LEADER);
         result.put("message", "그룹이 생성되었습니다.");
+        return result;
+    }
+
+    @Transactional
+    public Map<String, Object> updateGroupRegion(
+            Long groupId,
+            Long leaderUserId,
+            String regionSido,
+            String regionSigungu,
+            String regionAdmCode) {
+        WorkGroup group = getGroup(groupId);
+        requireLeader(group, leaderUserId);
+
+        if (group.isPersonal()) {
+            throw new RuntimeException("개인 업무공간은 공공업무 화면에서 구·군을 선택합니다.");
+        }
+        if (regionSigungu == null || regionSigungu.isBlank()
+                || regionAdmCode == null || regionAdmCode.isBlank()) {
+            throw new RuntimeException("활동 구·군을 선택해주세요.");
+        }
+
+        group.setRegionSido(regionSido == null || regionSido.isBlank()
+                ? "부산광역시"
+                : regionSido.trim());
+        group.setRegionSigungu(regionSigungu.trim());
+        group.setRegionAdmCode(regionAdmCode.trim());
+
+        WorkGroup saved = workGroupRepository.save(group);
+        Map<String, Object> result = groupSummary(saved, ROLE_LEADER);
+        result.put("message", "활동지역이 변경되었습니다.");
         return result;
     }
 

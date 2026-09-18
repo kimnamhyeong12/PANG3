@@ -39,6 +39,18 @@ public class GroupController {
         return groupService.getGroupDetail(groupId, userId);
     }
 
+    @PatchMapping("/{groupId}/region")
+    public Map<String, Object> updateGroupRegion(
+            @PathVariable Long groupId,
+            @RequestBody Map<String, Object> body) {
+        return groupService.updateGroupRegion(
+                groupId,
+                longValue(body.get("leaderUserId")),
+                stringValue(body.get("regionSido")),
+                stringValue(body.get("regionSigungu")),
+                stringValue(body.get("regionAdmCode")));
+    }
+
     @GetMapping("/{groupId}/members")
     public List<Map<String, Object>> getMembers(
             @PathVariable Long groupId,

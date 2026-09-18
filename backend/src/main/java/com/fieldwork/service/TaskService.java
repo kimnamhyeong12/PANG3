@@ -198,10 +198,12 @@ public class TaskService {
 
         // 1인 그룹과 일반 팀원은 등록 즉시 본인 담당으로 연결한다.
         // 다인 그룹의 팀장이 추가한 방문지는 담당자 지정 화면에서 배정한다.
+        boolean deferAssignment = booleanValue(body.get("deferAssignment"));
         if (taskGroup != null
                 && creatorMembership != null
                 && (taskGroup.isPersonal()
-                    || "MEMBER".equalsIgnoreCase(creatorMembership.getRole()))) {
+                    || (!deferAssignment
+                        && "MEMBER".equalsIgnoreCase(creatorMembership.getRole())))) {
             LocationAssignment assignment = new LocationAssignment();
             assignment.setGroup(taskGroup);
             assignment.setTask(savedTask);
@@ -211,6 +213,13 @@ public class TaskService {
         }
 
         return toFrontendMap(savedTask);
+    }
+
+    private boolean booleanValue(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return value != null && Boolean.parseBoolean(value.toString());
     }
 
     @Transactional
