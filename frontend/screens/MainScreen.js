@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, BackHandler, Modal, ScrollView, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
+import { Alert, BackHandler, Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { showAlert } from '../components/CustomAlert';
-import { BrandBar, EmptyState, SectionTitle } from '../components/ui';
+import { EmptyState, SectionTitle } from '../components/ui';
 import { colors, radius, shadow } from '../constants/design';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
@@ -116,10 +116,6 @@ export default function MainScreen({
   return (
     <>
       <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.topBar}>
-          <BrandBar />
-        </View>
-
         <View style={styles.userRow}>
           <View><Text style={styles.date}>{new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}</Text><Text style={styles.userName}>{displayName}</Text><Text style={styles.region}><Ionicons name="location" size={12} color={colors.primary} /> {user?.workSido || '부산광역시'}</Text></View>
           <View style={styles.avatar}><Text style={styles.avatarText}>{displayName.slice(0, 1)}</Text></View>
@@ -164,9 +160,8 @@ function QuickAction({ icon, label, onPress }) { return <TouchableOpacity style=
 function WorkspacePicker({ visible, groups, activeGroup, user, onSelect, onManage, onClose }) { return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}><View style={styles.modalCard}><View style={styles.modalHeader}><Text style={styles.modalTitle}>업무공간 선택</Text><TouchableOpacity onPress={onClose}><Ionicons name="close" size={22} color={colors.textSoft} /></TouchableOpacity></View>{groups.map((group) => { const selected = Number(group.groupId) === Number(activeGroup?.groupId); const personal = isPersonalGroup(group); return <TouchableOpacity key={group.groupId} style={[styles.workspaceOption, selected && styles.workspaceOptionActive]} onPress={() => onSelect(group)}><View style={styles.workspaceIcon}><Ionicons name={personal ? 'person-outline' : 'people-outline'} size={19} color={colors.primary} /></View><View style={{ flex: 1 }}><Text style={styles.optionName}>{personal ? `나 · ${group.groupName}` : group.groupName}</Text><Text style={styles.rowSub}>{personal ? `개인 · ${user?.name || user?.loginId}` : `${group.memberCount || 1}명 · ${group.role === 'LEADER' ? '팀장' : '팀원'}`}</Text></View>{selected ? <Ionicons name="checkmark-circle" size={22} color={colors.primary} /> : null}</TouchableOpacity>; })}<TouchableOpacity style={styles.manageButton} onPress={onManage}><Ionicons name="settings-outline" size={17} color={colors.primary} /><Text style={styles.manageText}>그룹 관리</Text></TouchableOpacity></View></TouchableOpacity></Modal>; }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background }, content: { padding: 16, paddingBottom: 30 },
-  topBar: { marginTop: -5 },
-  userRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }, date: { color: colors.textSoft, fontSize: 11, fontWeight: '700' }, userName: { color: colors.text, fontSize: 25, fontWeight: '900', marginTop: 3 }, region: { color: colors.primary, fontSize: 10, marginTop: 4, fontWeight: '800' },
+  container: { flex: 1, backgroundColor: colors.background }, content: { paddingHorizontal: 16, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 14 : 18, paddingBottom: 30 },
+  userRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, date: { color: colors.textSoft, fontSize: 11, fontWeight: '700' }, userName: { color: colors.text, fontSize: 25, fontWeight: '900', marginTop: 3 }, region: { color: colors.primary, fontSize: 10, marginTop: 4, fontWeight: '800' },
   avatar: { width: 46, height: 46, borderRadius: 15, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: colors.primary, fontSize: 18, fontWeight: '900' },
   workspace: { marginTop: 14, borderRadius: 18, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, padding: 11, flexDirection: 'row', alignItems: 'center', gap: 9 }, workspaceIcon: { width: 36, height: 36, borderRadius: 11, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }, workspaceLabel: { color: colors.textSoft, fontSize: 8.5 }, workspaceName: { color: colors.text, fontSize: 13, fontWeight: '900', marginTop: 2 }, roleBadge: { backgroundColor: colors.surfaceMuted, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 }, roleText: { color: colors.primary, fontSize: 9, fontWeight: '900' },
   summaryCard: { marginTop: 11, borderRadius: 18, backgroundColor: colors.primaryDark, padding: 15, ...shadow }, summaryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, summaryTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' }, summarySub: { color: '#D5E6FF', fontSize: 10, marginTop: 3 }, progressText: { color: '#FFFFFF', fontSize: 23, fontWeight: '900' }, progressTrack: { height: 6, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 999, overflow: 'hidden', marginTop: 12 }, progressFill: { height: '100%', backgroundColor: '#5CD5CE', borderRadius: 999 }, metrics: { flexDirection: 'row', marginTop: 14 }, metric: { flex: 1, alignItems: 'center' }, metricValue: { fontSize: 19, fontWeight: '900' }, metricLabel: { color: '#D5E6FF', fontSize: 9, marginTop: 2 },

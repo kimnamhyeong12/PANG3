@@ -440,7 +440,7 @@ const buildKakaoMapHtml = (
         strokeColor: "#2477F3",
         strokeOpacity: 0.72,
         fillColor: "#72B7FF",
-        fillOpacity: 0.12
+        fillOpacity: 0.2
       });
     });
     selectedBoundaryPolygons = [];
@@ -476,7 +476,7 @@ const buildKakaoMapHtml = (
           strokeColor: "#2477F3",
           strokeOpacity: 0.72,
           fillColor: "#72B7FF",
-          fillOpacity: 0.12
+          fillOpacity: 0.2
         });
 
         featurePolygons.push(polygon);
@@ -509,20 +509,6 @@ const buildKakaoMapHtml = (
 
       if (featurePolygons.length > 0) {
         renderedBoundaryCount += 1;
-        var center = featureBounds.getCenter();
-        var shortName = String(name).split(" ").pop();
-        var labelElement = document.createElement("div");
-        labelElement.className = "boundary-label";
-        labelElement.innerText = shortName;
-        var label = new window.kakao.maps.CustomOverlay({
-          map: map,
-          position: center,
-          content: labelElement,
-          xAnchor: 0.5,
-          yAnchor: 0.5,
-          zIndex: 8
-        });
-        boundaryLabels.push(label);
       }
     });
   }
@@ -951,6 +937,12 @@ const buildKakaoMapHtml = (
 
     if (commandData.type === "BOUNDARIES_APPEND") {
       appendBoundaryData(commandData.data);
+      post({
+        type: "BOUNDARY_CHUNK_DONE",
+        chunkIndex: Number(commandData.chunkIndex),
+        transferId: commandData.transferId,
+        renderedCount: renderedBoundaryCount
+      });
       return;
     }
 
@@ -1146,6 +1138,9 @@ export default function KakaoMapWebView({
 
   const pendingMapCommandsRef =
     useRef([]);
+
+  const boundaryChunksRef = useRef([]);
+  const boundaryTransferIdRef = useRef(0);
 
   /*
    * 처음 GPS 좌표.
@@ -2661,15 +2656,26 @@ export default function KakaoMapWebView({
   useEffect(() => {
     if (!boundaries) return;
     const features = Array.isArray(boundaries.features) ? boundaries.features : [];
+    const transferId = boundaryTransferIdRef.current + 1;
+    boundaryTransferIdRef.current = transferId;
     sendMapCommand({ type: "BOUNDARIES_RESET" });
-    const chunkSize = 6;
+    const chunkSize = 30;
+    boundaryChunksRef.current = [];
     for (let index = 0; index < features.length; index += chunkSize) {
-      sendMapCommand({
-        type: "BOUNDARIES_APPEND",
-        data: { type: "FeatureCollection", features: features.slice(index, index + chunkSize) },
-      });
+      boundaryChunksRef.current.push(features.slice(index, index + chunkSize));
     }
-    sendMapCommand({ type: "BOUNDARIES_FINISH" });
+
+    if (boundaryChunksRef.current.length === 0) {
+      sendMapCommand({ type: "BOUNDARIES_FINISH" });
+      return;
+    }
+
+    sendMapCommand({
+      type: "BOUNDARIES_APPEND",
+      transferId,
+      chunkIndex: 0,
+      data: { type: "FeatureCollection", features: boundaryChunksRef.current[0] },
+    });
   }, [boundaries]);
 
   /*
@@ -2819,6 +2825,25 @@ export default function KakaoMapWebView({
 
         if (message.type === "BOUNDARIES_RENDERED") {
           onBoundaryReady?.(Number(message.count) || 0);
+          return;
+        }
+
+        if (message.type === "BOUNDARY_CHUNK_DONE") {
+          const transferId = Number(message.transferId);
+          if (transferId !== boundaryTransferIdRef.current) return;
+
+          const nextIndex = Number(message.chunkIndex) + 1;
+          const nextChunk = boundaryChunksRef.current[nextIndex];
+          if (nextChunk) {
+            sendMapCommand({
+              type: "BOUNDARIES_APPEND",
+              transferId,
+              chunkIndex: nextIndex,
+              data: { type: "FeatureCollection", features: nextChunk },
+            });
+          } else {
+            sendMapCommand({ type: "BOUNDARIES_FINISH" });
+          }
         }
       } catch (error) {
         console.log(
