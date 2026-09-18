@@ -7,7 +7,6 @@ import React, {
 
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -96,7 +95,6 @@ export default function DashboardScreen({
   user,
   activeGroup,
   onBack,
-  onLogout,
 }) {
   const today = new Date().toLocaleDateString(
     'ko-KR',
@@ -470,25 +468,6 @@ export default function DashboardScreen({
     return '#BFD4E3';
   };
 
-  const handleLogoutPress = () => {
-    Alert.alert(
-      '로그아웃',
-      '로그아웃하시겠습니까?',
-      [
-        {
-          text: '취소',
-          style: 'cancel',
-        },
-        {
-          text: '로그아웃',
-          style: 'destructive',
-          onPress: () =>
-            onLogout?.(),
-        },
-      ]
-    );
-  };
-
   return (
     <View style={styles.container}>
       {/* HEADER */}
@@ -505,26 +484,8 @@ export default function DashboardScreen({
           </Text>
         </View>
 
-        {/* 로그아웃 + 이름 + 원 */}
+        {/* 사용자 정보 */}
         <View style={styles.userArea}>
-          <TouchableOpacity
-            style={
-              styles.logoutButton
-            }
-            onPress={
-              handleLogoutPress
-            }
-            activeOpacity={0.8}
-          >
-            <Text
-              style={
-                styles.logoutText
-              }
-            >
-              로그아웃
-            </Text>
-          </TouchableOpacity>
-
           <Text
             style={styles.userName}
             numberOfLines={1}
@@ -966,20 +927,6 @@ const styles =
       alignItems: 'center',
       gap: 7,
       maxWidth: 170,
-    },
-
-    logoutButton: {
-      paddingHorizontal: 7,
-      paddingVertical: 5,
-      borderRadius: 8,
-      backgroundColor:
-        '#FDECEC',
-    },
-
-    logoutText: {
-      fontSize: 9,
-      fontWeight: '900',
-      color: '#D94C4C',
     },
 
     userName: {

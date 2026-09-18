@@ -9,7 +9,8 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BackButton, PrimaryButton } from '../components/ui';
+import { PrimaryButton, ScreenHeader } from '../components/ui';
+import { colors } from '../constants/design';
 
 const getStatusLabel = (status) => {
   if (status === 'complete') return '작업 후';
@@ -114,20 +115,7 @@ export default function ReportListScreen({
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <BackButton onPress={onBack} />
-
-        <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>
-            보고서
-          </Text>
-
-          <Text style={styles.title}>
-            보고서 작성
-          </Text>
-
-        </View>
-      </View>
+      <ScreenHeader title="보고서 작성" onBack={onBack} />
 
       <ScrollView
         contentContainerStyle={styles.body}
@@ -412,46 +400,8 @@ export default function ReportListScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7F5',
-  },
-
-  header: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
-    backgroundColor: 'white',
-
-    paddingHorizontal: 14,
-    paddingBottom: 14,
-    paddingTop: 30,
-
-    borderBottomWidth: 1,
-    borderBottomColor: '#DCE5E0',
-  },
-
-  eyebrow: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#637269',
-    letterSpacing: 1.6,
-  },
-
-  title: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#15231D',
-  },
-
-  desc: {
-    fontSize: 10,
-    color: '#637269',
-  },
-
-  scopeSummary: {
-    marginTop: 5,
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#2477F3',
+    backgroundColor: colors.background,
+    transform: [{ translateY: -15 }],
   },
 
   body: {
@@ -466,20 +416,20 @@ const styles = StyleSheet.create({
     padding: 28,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#DCE5E0',
+    borderColor: '#DCE7F5',
   },
 
   emptyTitle: {
     marginTop: 12,
     fontSize: 15,
     fontWeight: '900',
-    color: '#15231D',
+    color: colors.text,
   },
 
   emptyDesc: {
     marginTop: 6,
     fontSize: 11,
-    color: '#637269',
+    color: colors.textSoft,
   },
 
   item: {
@@ -487,7 +437,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#DCE5E0',
+    borderColor: '#DCE7F5',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -516,7 +466,7 @@ const styles = StyleSheet.create({
 
   checkBoxDisabled: {
     borderColor: '#A0AEC0',
-    backgroundColor: '#EEF3F0',
+    backgroundColor: '#EEF4FC',
   },
 
   itemMain: {
@@ -543,7 +493,7 @@ const styles = StyleSheet.create({
   itemTitle: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#15231D',
+    color: colors.text,
   },
 
   scopeRow: {
@@ -565,7 +515,7 @@ const styles = StyleSheet.create({
   },
 
   teamScopeBadge: {
-    backgroundColor: '#E0F1EA',
+    backgroundColor: '#E8F2FF',
     borderColor: '#C7D7E6',
   },
 
@@ -603,7 +553,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#E0F1EA',
+    backgroundColor: '#E8F2FF',
   },
 
   taskDateText: {
@@ -632,7 +582,7 @@ const styles = StyleSheet.create({
   itemAddr: {
     marginTop: 5,
     fontSize: 11,
-    color: '#637269',
+    color: colors.textSoft,
   },
 
   assigneeRow: {
@@ -674,7 +624,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
+    bottom: -15,
     backgroundColor: '#FFFFFF',
 
     paddingHorizontal: 14,
@@ -682,7 +632,7 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
 
     borderTopWidth: 1,
-    borderTopColor: '#DCE5E0',
+    borderTopColor: '#DCE7F5',
   },
 
   selectedText: {

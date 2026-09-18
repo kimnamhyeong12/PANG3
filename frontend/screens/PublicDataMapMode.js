@@ -44,8 +44,6 @@ const BUSAN_DISTRICT_CODES = {
   사상구: '21150',
   기장군: '21310',
 };
-const BUSAN_DISTRICTS = Object.keys(BUSAN_DISTRICT_CODES);
-
 const OFFSETS = [
   [0.0002, 0.0001],
   [0.0012, 0.0011],
@@ -260,6 +258,8 @@ export default function PublicDataMapMode({
   activeGroup,
   onBack,
   onDataChanged,
+  onSwitchToNormal,
+  onLocationsRegistered,
 }) {
   const personalWorkspace = Boolean(
     activeGroup?.personalWorkspace ||
@@ -271,7 +271,7 @@ export default function PublicDataMapMode({
     user?.workSido ||
     '부산광역시';
 
-  const [personalDistrict, setPersonalDistrict] = useState('');
+  const personalDistrict = user?.workSigungu || '';
 
   const regionSigungu =
     personalWorkspace
@@ -305,6 +305,9 @@ export default function PublicDataMapMode({
     categoryMenuOpen,
     setCategoryMenuOpen,
   ] = useState(false);
+
+  const [dongMenuOpen, setDongMenuOpen] =
+    useState(false);
 
   const [category, setCategory] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
@@ -394,6 +397,7 @@ export default function PublicDataMapMode({
     setCategory('');
     setSelectedIds([]);
     setCategoryMenuOpen(false);
+    setDongMenuOpen(false);
     setRenderedBoundaryCount(null);
     sheetTranslateY.setValue(0);
   }, [selectedBoundary?.id, sheetTranslateY]);
@@ -415,6 +419,11 @@ export default function PublicDataMapMode({
   }, [sheetTranslateY]);
 
   const handleBack = useCallback(() => {
+    if (dongMenuOpen) {
+      setDongMenuOpen(false);
+      return true;
+    }
+
     // 카테고리 선택 메뉴가 열려 있으면
     // 메뉴만 먼저 닫는다.
     if (categoryMenuOpen) {
@@ -429,24 +438,12 @@ export default function PublicDataMapMode({
       return true;
     }
 
-    if (selectedBoundary) {
-      setSelectedBoundary(null);
-      return true;
-    }
-
-    if (personalWorkspace && personalDistrict) {
-      setPersonalDistrict('');
-      return true;
-    }
-
     onBack?.();
     return true;
   }, [
+    dongMenuOpen,
     categoryMenuOpen,
     category,
-    selectedBoundary,
-    personalWorkspace,
-    personalDistrict,
     closeBottomSheet,
     onBack,
   ]);
@@ -586,6 +583,7 @@ export default function PublicDataMapMode({
 
     try {
       setSaving(true);
+      const registered = [];
 
       const selected = publicItems.filter((item) =>
         selectedIds.includes(item.id)
@@ -632,7 +630,20 @@ export default function PublicDataMapMode({
           );
         }
 
-        JSON.parse(createText);
+        const saved = JSON.parse(createText);
+        registered.push({
+          ...saved,
+          id: saved.id ?? saved.taskId ?? saved.task_id,
+          detailAddress: saved.detailAddress || item.detailAddress,
+          roadAddress: saved.roadAddress || item.roadAddress,
+          lat: saved.lat ?? item.lat,
+          lng: saved.lng ?? item.lng,
+          status: saved.status || saved.taskStatus || 'pending',
+          task: saved.taskCategory || saved.task || item.task,
+          sido: saved.sido || item.sido,
+          sigungu: saved.sigungu || item.sigungu,
+          adminDong: saved.adminDong || item.adminDong,
+        });
       }
 
       showAlert(
@@ -644,7 +655,8 @@ export default function PublicDataMapMode({
 
       setSelectedIds([]);
 
-      onDataChanged?.();
+      await onDataChanged?.();
+      onLocationsRegistered?.(registered);
     } catch (error) {
       showAlert(
         '방문지 등록 실패',
@@ -664,7 +676,7 @@ export default function PublicDataMapMode({
             <Ionicons name="arrow-back" size={25} color="#10285B" />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.selectionTitle}>활동 구·군 선택</Text>
+            <Text style={styles.selectionTitle}>구·군 설정 필요</Text>
             <Text style={styles.selectionSubtitle}>{workSido} · 개인 업무공간</Text>
           </View>
         </View>
@@ -672,130 +684,16 @@ export default function PublicDataMapMode({
         <View style={styles.regionCard}>
           <View style={styles.regionIcon}><Ionicons name="map-outline" size={22} color="#2477F3" /></View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.regionTitle}>공공업무를 확인할 구·군</Text>
-            <Text style={styles.regionDescription}>구·군을 고른 다음 해당 지역의 행정동을 선택합니다.</Text>
+            <Text style={styles.regionTitle}>설정에서 구·군을 선택해주세요</Text>
+            <Text style={styles.regionDescription}>한 번 저장하면 다음부터 해당 구·군의 행정동을 바로 불러옵니다.</Text>
           </View>
         </View>
-
-        <ScrollView contentContainerStyle={styles.dongGrid} showsVerticalScrollIndicator={false}>
-          {BUSAN_DISTRICTS.map((district) => (
-            <TouchableOpacity key={district} style={styles.dongCard} activeOpacity={0.76} onPress={() => setPersonalDistrict(district)}>
-              <View style={styles.dongIcon}><Ionicons name="business-outline" size={18} color="#2477F3" /></View>
-              <Text style={styles.dongName}>{district}</Text>
-              <Ionicons name="chevron-forward" size={17} color="#8A98A8" />
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    );
-  }
-
-  if (!selectedBoundary) {
-    return (
-      <View style={styles.selectionScreen}>
-        <View style={styles.selectionHeader}>
-          <TouchableOpacity
-            style={styles.plainBackButton}
-            onPress={handleBack}
-          >
-            <Ionicons
-              name="arrow-back"
-              size={25}
-              color="#10285B"
-            />
+        <View style={styles.missingRegionActions}>
+          <TouchableOpacity style={styles.normalModeButton} onPress={onSwitchToNormal}>
+            <Ionicons name="map-outline" size={18} color="#2477F3" />
+            <Text style={styles.normalModeButtonText}>일반 방문지로 돌아가기</Text>
           </TouchableOpacity>
-
-          <View style={{ flex: 1 }}>
-            <Text style={styles.selectionTitle}>
-              행정동 선택
-            </Text>
-
-            <Text style={styles.selectionSubtitle}>
-              {workSido} · {regionSigungu}
-            </Text>
-          </View>
         </View>
-
-        <View style={styles.regionCard}>
-          <View style={styles.regionIcon}>
-            <Ionicons
-              name="map-outline"
-              size={22}
-              color="#2477F3"
-            />
-          </View>
-
-          <View style={{ flex: 1 }}>
-            <Text style={styles.regionTitle}>
-              공공업무를 확인할 행정동
-            </Text>
-
-            <Text style={styles.regionDescription}>
-              선택한 행정동 경계 하나만 지도에 표시합니다.
-            </Text>
-          </View>
-        </View>
-
-        {boundaryLoading ? (
-          <View style={styles.selectionState}>
-            <ActivityIndicator color="#2477F3" />
-
-            <Text style={styles.stateText}>
-              {regionSigungu} 행정동을 불러오는 중...
-            </Text>
-          </View>
-        ) : boundaryError ? (
-          <View
-            style={[
-              styles.selectionState,
-              styles.errorCard,
-            ]}
-          >
-            <Ionicons
-              name="alert-circle-outline"
-              size={24}
-              color="#C43D4B"
-            />
-
-            <Text style={styles.errorStateText}>
-              {boundaryError}
-            </Text>
-          </View>
-        ) : (
-          <ScrollView
-            contentContainerStyle={styles.dongGrid}
-            showsVerticalScrollIndicator={false}
-          >
-            {dongOptions.map((option) => (
-              <TouchableOpacity
-                key={option.id}
-                style={styles.dongCard}
-                activeOpacity={0.76}
-                onPress={() =>
-                  setSelectedBoundary(option)
-                }
-              >
-                <View style={styles.dongIcon}>
-                  <Ionicons
-                    name="location-outline"
-                    size={18}
-                    color="#2477F3"
-                  />
-                </View>
-
-                <Text style={styles.dongName}>
-                  {option.dongName}
-                </Text>
-
-                <Ionicons
-                  name="chevron-forward"
-                  size={17}
-                  color="#8A98A8"
-                />
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
       </View>
     );
   }
@@ -832,9 +730,10 @@ export default function PublicDataMapMode({
 
           <TouchableOpacity
             style={styles.dongSelector}
-            onPress={() =>
-              setSelectedBoundary(null)
-            }
+            onPress={() => {
+              setDongMenuOpen((value) => !value);
+              setCategoryMenuOpen(false);
+            }}
           >
             <Ionicons
               name="location-outline"
@@ -846,11 +745,16 @@ export default function PublicDataMapMode({
               style={styles.dongSelectorText}
               numberOfLines={1}
             >
-              {selectedBoundary.dongName}
+              {selectedBoundary?.dongName ||
+                '행정동 선택'}
             </Text>
 
             <Ionicons
-              name="chevron-down"
+              name={
+                dongMenuOpen
+                  ? 'chevron-up'
+                  : 'chevron-down'
+              }
               size={16}
               color="#10285B"
             />
@@ -859,11 +763,18 @@ export default function PublicDataMapMode({
           <TouchableOpacity
             style={styles.selector}
             activeOpacity={0.9}
-            onPress={() =>
+            onPress={() => {
+              if (!selectedBoundary) {
+                setDongMenuOpen(true);
+                setCategoryMenuOpen(false);
+                return;
+              }
+
               setCategoryMenuOpen(
                 (value) => !value
-              )
-            }
+              );
+              setDongMenuOpen(false);
+            }}
           >
             <Ionicons
               name={
@@ -893,6 +804,99 @@ export default function PublicDataMapMode({
             />
           </TouchableOpacity>
         </View>
+
+        {dongMenuOpen ? (
+          <View style={styles.dongMenu}>
+            <View style={styles.dongMenuHeader}>
+              <Text style={styles.dongMenuHeaderText}>
+                {regionSigungu} 행정동
+              </Text>
+
+              <Text style={styles.dongMenuCount}>
+                {dongOptions.length}개
+              </Text>
+            </View>
+
+            {boundaryLoading ? (
+              <View style={styles.dongMenuState}>
+                <ActivityIndicator
+                  size="small"
+                  color="#2477F3"
+                />
+
+                <Text style={styles.dongMenuStateText}>
+                  행정동을 불러오는 중...
+                </Text>
+              </View>
+            ) : boundaryError ? (
+              <View style={styles.dongMenuState}>
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={18}
+                  color="#C43D4B"
+                />
+
+                <Text style={styles.dongMenuErrorText}>
+                  {boundaryError}
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.dongMenuScroll}
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled
+              >
+                {dongOptions.map((option, index) => {
+                  const selected =
+                    selectedBoundary?.id === option.id;
+
+                  return (
+                    <TouchableOpacity
+                      key={option.id}
+                      style={[
+                        styles.dongMenuRow,
+                        selected &&
+                          styles.dongMenuRowSelected,
+                        index === dongOptions.length - 1 &&
+                          styles.dongMenuRowLast,
+                      ]}
+                      onPress={() => {
+                        setSelectedBoundary(option);
+                        setDongMenuOpen(false);
+                      }}
+                    >
+                      <View style={styles.dongMenuIcon}>
+                        <Ionicons
+                          name="location-outline"
+                          size={18}
+                          color="#2477F3"
+                        />
+                      </View>
+
+                      <Text
+                        style={[
+                          styles.dongMenuText,
+                          selected &&
+                            styles.dongMenuTextSelected,
+                        ]}
+                      >
+                        {option.dongName}
+                      </Text>
+
+                      {selected ? (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={19}
+                          color="#2477F3"
+                        />
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        ) : null}
 
         {categoryMenuOpen ? (
           <View style={styles.categoryMenu}>
@@ -924,7 +928,7 @@ export default function PublicDataMapMode({
                   </Text>
 
                   <Text style={styles.categoryDesc}>
-                    {selectedBoundary.dongName}의{' '}
+                    {selectedBoundary?.dongName}의{' '}
                     {item.label}만 표시
                   </Text>
                 </View>
@@ -939,7 +943,42 @@ export default function PublicDataMapMode({
           </View>
         ) : null}
 
-        {renderedBoundaryCount === null ? (
+        {boundaryLoading ? (
+          <View style={styles.notice}>
+            <ActivityIndicator
+              size="small"
+              color="#2477F3"
+            />
+
+            <Text style={styles.noticeText}>
+              {regionSigungu} 행정동을 불러오는 중...
+            </Text>
+          </View>
+        ) : boundaryError ? (
+          <View style={[styles.notice, styles.errorNotice]}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={16}
+              color="#C43D4B"
+            />
+
+            <Text style={styles.errorText}>
+              {boundaryError}
+            </Text>
+          </View>
+        ) : !selectedBoundary ? (
+          <View style={styles.notice}>
+            <Ionicons
+              name="location-outline"
+              size={16}
+              color="#2477F3"
+            />
+
+            <Text style={styles.noticeText}>
+              먼저 행정동을 선택하세요.
+            </Text>
+          </View>
+        ) : renderedBoundaryCount === null ? (
           <View style={styles.notice}>
             <ActivityIndicator
               size="small"
@@ -981,6 +1020,22 @@ export default function PublicDataMapMode({
           </View>
         ) : null}
       </View>
+
+      <TouchableOpacity
+        style={styles.floatingModeButton}
+        activeOpacity={0.88}
+        onPress={onSwitchToNormal}
+      >
+        <Ionicons
+          name="map-outline"
+          size={20}
+          color="#FFFFFF"
+        />
+
+        <Text style={styles.floatingModeButtonText}>
+          일반 방문지
+        </Text>
+      </TouchableOpacity>
 
       {category ? (
         <Animated.View
@@ -1149,6 +1204,76 @@ const styles = StyleSheet.create({
     paddingTop: androidTop,
   },
 
+  selectionModeWrap: {
+    paddingHorizontal: 18,
+    paddingTop: 12,
+  },
+
+  modeSwitch: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 3,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D7E4F4',
+    shadowColor: '#10285B',
+    shadowOpacity: 0.08,
+    shadowRadius: 7,
+    elevation: 3,
+  },
+
+  modeSwitchInactive: {
+    minHeight: 32,
+    paddingHorizontal: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  modeSwitchInactiveText: {
+    color: '#718096',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+
+  modeSwitchActive: {
+    minHeight: 32,
+    paddingHorizontal: 13,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2477F3',
+  },
+
+  modeSwitchActiveText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+
+  missingRegionActions: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+  },
+
+  normalModeButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CFE0F6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+
+  normalModeButtonText: {
+    color: '#2477F3',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+
   selectionHeader: {
     minHeight: 78,
     paddingHorizontal: 18,
@@ -1287,6 +1412,7 @@ const styles = StyleSheet.create({
     left: 12,
     right: 12,
     gap: 8,
+    zIndex: 30,
   },
 
   topRow: {
@@ -1350,6 +1476,105 @@ const styles = StyleSheet.create({
     color: '#10285B',
     fontSize: 10.5,
     fontWeight: '800',
+  },
+
+  dongMenu: {
+    marginLeft: 49,
+    width: '46%',
+    maxHeight: 330,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    shadowColor: '#10285B',
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 7,
+  },
+
+  dongMenuHeader: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E4EBF3',
+  },
+
+  dongMenuHeaderText: {
+    color: '#10285B',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+
+  dongMenuCount: {
+    color: '#2477F3',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+
+  dongMenuScroll: {
+    maxHeight: 276,
+  },
+
+  dongMenuState: {
+    minHeight: 72,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+
+  dongMenuStateText: {
+    color: '#718096',
+    fontSize: 9.5,
+    fontWeight: '700',
+  },
+
+  dongMenuErrorText: {
+    color: '#C43D4B',
+    fontSize: 9,
+    lineHeight: 13,
+    textAlign: 'center',
+    fontWeight: '700',
+  },
+
+  dongMenuRow: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E4EBF3',
+  },
+
+  dongMenuRowSelected: {
+    backgroundColor: '#F3F8FF',
+  },
+
+  dongMenuRowLast: {
+    borderBottomWidth: 0,
+  },
+
+  dongMenuIcon: {
+    width: 29,
+    height: 29,
+    borderRadius: 9,
+    backgroundColor: '#EAF3FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  dongMenuText: {
+    flex: 1,
+    color: '#50627A',
+    fontSize: 10.5,
+    fontWeight: '800',
+  },
+
+  dongMenuTextSelected: {
+    color: '#2477F3',
+    fontWeight: '900',
   },
 
   categoryMenu: {
@@ -1428,6 +1653,31 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     flexShrink: 1,
+  },
+
+  floatingModeButton: {
+    position: 'absolute',
+    right: 14,
+    bottom: 24,
+    zIndex: 18,
+    minHeight: 48,
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    backgroundColor: '#2477F3',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    shadowColor: '#10285B',
+    shadowOpacity: 0.24,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+
+  floatingModeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
   },
 
   bottomSheet: {

@@ -16,8 +16,8 @@ import { WebView } from 'react-native-webview';
 import { captureRef } from 'react-native-view-shot';
 
 import {
-  BackButton,
   PrimaryButton,
+  ScreenHeader,
 } from '../components/ui';
 
 import VoiceTextInput from '../components/VoiceTextInput';
@@ -1105,30 +1105,7 @@ export default function FieldActionScreen({
         styles.container
       }
     >
-      <View
-        style={styles.header}
-      >
-        <BackButton
-          onPress={onBack}
-        />
-
-        <View
-          style={{ flex: 1 }}
-        >
-          <Text
-            style={
-              styles.eyebrow
-            }
-          >
-            현장 기록
-          </Text>
-
-          <Text style={styles.title}>
-            보고서 양식 작성
-          </Text>
-
-        </View>
-      </View>
+      <ScreenHeader title="보고서 양식 작성" onBack={onBack} />
 
       <ScrollView
         contentContainerStyle={
@@ -1697,41 +1674,7 @@ const styles =
       flex: 1,
       backgroundColor:
         '#F4F8FF',
-    },
-
-    header: {
-      flexDirection: 'row',
-      gap: 12,
-      alignItems: 'center',
-      backgroundColor:
-        'white',
-
-      paddingHorizontal: 14,
-      paddingBottom: 10,
-      paddingTop: 12,
-
-
-      borderBottomWidth: 1,
-      borderBottomColor:
-        '#DCE7F5',
-    },
-
-    eyebrow: {
-      fontSize: 10,
-      fontWeight: '900',
-      color: '#607195',
-      letterSpacing: 1.6,
-    },
-
-    title: {
-      fontSize: 17,
-      fontWeight: '900',
-      color: '#10285B',
-    },
-
-    desc: {
-      fontSize: 10,
-      color: '#607195',
+      transform: [{ translateY: -15 }],
     },
 
     body: {

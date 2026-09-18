@@ -100,6 +100,7 @@ function NormalMapScreen({
   setTotalDuration,
   panelOpen,
   setPanelOpen,
+  onSwitchToPublic,
 }) {
   const [selected, setSelected] = useState(null);
   const [optimizing, setOptimizing] = useState(false);
@@ -998,7 +999,6 @@ function NormalMapScreen({
       />
 
       <View style={styles.topOverlay}>
-        
         <View style={styles.searchControlRow}>
           <TouchableOpacity
             style={styles.searchBox}
@@ -1007,7 +1007,7 @@ function NormalMapScreen({
               if (!addressSearchMode) setAddMenuOpen(true);
             }}
           >
-            
+
             <TouchableOpacity
               onPress={() => {
                 resetAddModes();
@@ -1355,6 +1355,22 @@ function NormalMapScreen({
         )}
       </View>
 
+      <TouchableOpacity
+        style={styles.floatingModeButton}
+        activeOpacity={0.88}
+        onPress={onSwitchToPublic}
+      >
+        <Ionicons
+          name="layers-outline"
+          size={20}
+          color="#FFFFFF"
+        />
+
+        <Text style={styles.floatingModeButtonText}>
+          공공데이터
+        </Text>
+      </TouchableOpacity>
+
       {coordSheetOpen && (
         <Animated.View
           style={[
@@ -1663,10 +1679,28 @@ function NormalMapScreen({
 }
 
 export default function MapScreen(props) {
-  if (props.publicDataMode) {
-    return <PublicDataMapMode {...props} />;
+  const [mode, setMode] = useState(props.publicDataMode ? 'public' : 'normal');
+
+  const mergeRegisteredLocations = (registered = []) => {
+    if (!registered.length) return;
+    props.setLocations?.((previous) => {
+      const source = Array.isArray(previous) ? previous : (props.locations || []);
+      const byId = new Map(source.map((item) => [String(item.id ?? item.taskId ?? item.task_id), item]));
+      registered.forEach((item) => byId.set(String(item.id ?? item.taskId ?? item.task_id), item));
+      return Array.from(byId.values());
+    });
+  };
+
+  if (mode === 'public') {
+    return (
+      <PublicDataMapMode
+        {...props}
+        onSwitchToNormal={() => setMode('normal')}
+        onLocationsRegistered={mergeRegisteredLocations}
+      />
+    );
   }
-  return <NormalMapScreen {...props} />;
+  return <NormalMapScreen {...props} onSwitchToPublic={() => setMode('public')} />;
 }
 
 const styles = StyleSheet.create({
@@ -1681,6 +1715,31 @@ const styles = StyleSheet.create({
     left: 10,
     right: 10,
     zIndex: 20,
+  },
+
+  floatingModeButton: {
+    position: 'absolute',
+    right: 14,
+    bottom: 24,
+    zIndex: 18,
+    minHeight: 48,
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    backgroundColor: '#2477F3',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    shadowColor: '#10285B',
+    shadowOpacity: 0.24,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+
+  floatingModeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
   },
 
   teamModeBadge: {

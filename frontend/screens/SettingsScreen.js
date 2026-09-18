@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { showAlert } from '../components/CustomAlert';
@@ -7,18 +7,130 @@ import { colors, radius } from '../constants/design';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 const REGIONS = ['부산광역시', '서울특별시', '대구광역시', '인천광역시', '광주광역시', '대전광역시', '울산광역시', '제주특별자치도'];
+const DISTRICTS_BY_REGION = {
+  부산광역시: ['중구', '서구', '동구', '영도구', '부산진구', '동래구', '남구', '북구', '해운대구', '사하구', '금정구', '강서구', '연제구', '수영구', '사상구', '기장군'],
+  서울특별시: ['종로구', '중구', '용산구', '성동구', '광진구', '동대문구', '중랑구', '성북구', '강북구', '도봉구', '노원구', '은평구', '서대문구', '마포구', '양천구', '강서구', '구로구', '금천구', '영등포구', '동작구', '관악구', '서초구', '강남구', '송파구', '강동구'],
+  대구광역시: ['중구', '동구', '서구', '남구', '북구', '수성구', '달서구', '달성군', '군위군'],
+  인천광역시: ['중구', '동구', '미추홀구', '연수구', '남동구', '부평구', '계양구', '서구', '강화군', '옹진군'],
+  광주광역시: ['동구', '서구', '남구', '북구', '광산구'],
+  대전광역시: ['동구', '중구', '서구', '유성구', '대덕구'],
+  울산광역시: ['중구', '남구', '동구', '북구', '울주군'],
+  제주특별자치도: ['제주시', '서귀포시'],
+};
 
 export default function SettingsScreen({ user, activeGroup, onBack, onUpdatedUser, onDashboard, onLogout }) {
-  const [workSido, setWorkSido] = useState(user?.workSido || '부산광역시'); const [open, setOpen] = useState(false); const [saving, setSaving] = useState(false);
-  const save = async () => { try { setSaving(true); const response = await fetch(`${API_BASE_URL}/api/users/${user.userId}/work-region`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workSido }) }); const text = await response.text(); if (!response.ok) throw new Error(text || '저장 실패'); const saved = text ? JSON.parse(text) : {}; onUpdatedUser?.({ ...user, ...saved, workSido }); showAlert('저장 완료', '근무지역을 변경했습니다.'); } catch (error) { showAlert('저장 실패', error.message || '근무지역을 저장하지 못했습니다.'); } finally { setSaving(false); } };
-  const logout = () => Alert.alert('로그아웃', '현재 계정에서 로그아웃하시겠습니까?', [{ text: '취소', style: 'cancel' }, { text: '로그아웃', style: 'destructive', onPress: onLogout }]);
-  return <View style={styles.container}><ScreenHeader title="설정" subtitle="계정과 근무지역을 관리합니다" onBack={onBack} /><ScrollView contentContainerStyle={styles.body}>
-    <View style={styles.profile}><View style={styles.avatar}><Text style={styles.avatarText}>{String(user?.name || user?.loginId || '?').slice(0, 1)}</Text></View><View style={{ flex: 1 }}><Text style={styles.name}>{user?.name || user?.loginId}</Text><Text style={styles.loginId}>@{user?.loginId}</Text></View></View>
-    <SectionTitle title="근무지역" />
-    <View style={styles.card}><TouchableOpacity style={styles.regionRow} onPress={() => setOpen(true)}><View style={styles.itemIcon}><Ionicons name="location-outline" size={21} color={colors.primary} /></View><View style={{ flex: 1 }}><Text style={styles.itemLabel}>기본 시·도</Text><Text style={styles.itemValue}>{workSido}</Text></View><Ionicons name="chevron-forward" size={18} color={colors.textFaint} /></TouchableOpacity><Text style={styles.help}>그룹의 실제 활동 구·군은 각 그룹 설정을 따릅니다.</Text><PrimaryButton title={saving ? '저장 중...' : '변경사항 저장'} onPress={save} disabled={saving || workSido === (user?.workSido || '부산광역시')} /></View>
-    <SectionTitle title="업무 도구" />
-    <TouchableOpacity style={styles.menuRow} onPress={onDashboard}><View style={styles.itemIcon}><Ionicons name="stats-chart-outline" size={21} color={colors.primary} /></View><View style={{ flex: 1 }}><Text style={styles.itemValue}>외근 분석</Text><Text style={styles.itemLabel}>{activeGroup?.groupName || '현재 업무공간'} 현황 보기</Text></View><Ionicons name="chevron-forward" size={18} color={colors.textFaint} /></TouchableOpacity>
-    <TouchableOpacity style={[styles.menuRow, styles.logoutRow]} onPress={logout}><View style={[styles.itemIcon, styles.logoutIcon]}><Ionicons name="log-out-outline" size={21} color={colors.danger} /></View><Text style={styles.logoutText}>로그아웃</Text></TouchableOpacity>
-  </ScrollView><Modal visible={open} transparent animationType="fade"><TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => setOpen(false)}><View style={styles.sheet}><Text style={styles.sheetTitle}>근무지역 선택</Text>{REGIONS.map((region) => <TouchableOpacity key={region} style={styles.option} onPress={() => { setWorkSido(region); setOpen(false); }}><Text style={[styles.optionText, workSido === region && styles.optionActive]}>{region}</Text>{workSido === region ? <Ionicons name="checkmark-circle" size={21} color={colors.primary} /> : null}</TouchableOpacity>)}</View></TouchableOpacity></Modal></View>;
+  const [workSido, setWorkSido] = useState(user?.workSido || '부산광역시');
+  const [workSigungu, setWorkSigungu] = useState(user?.workSigungu || '');
+  const [picker, setPicker] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const districts = useMemo(() => DISTRICTS_BY_REGION[workSido] || [], [workSido]);
+  const changed = workSido !== (user?.workSido || '부산광역시') || workSigungu !== (user?.workSigungu || '');
+
+  const selectSido = (region) => {
+    setWorkSido(region);
+    if (!(DISTRICTS_BY_REGION[region] || []).includes(workSigungu)) setWorkSigungu('');
+    setPicker(null);
+  };
+
+  const save = async () => {
+    if (!workSigungu) {
+      showAlert('구·군 선택 필요', '개인 공공업무에 사용할 구·군을 선택하세요.');
+      return;
+    }
+    try {
+      setSaving(true);
+      const response = await fetch(`${API_BASE_URL}/api/users/${user.userId}/work-region`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workSido, workSigungu }),
+      });
+      const text = await response.text();
+      if (!response.ok) throw new Error(text || '저장 실패');
+      const saved = text ? JSON.parse(text) : {};
+      onUpdatedUser?.({ ...user, ...saved, workSido, workSigungu });
+      showAlert('저장 완료', `${workSido} ${workSigungu}로 근무지역을 변경했습니다.`);
+    } catch (error) {
+      showAlert('저장 실패', error.message || '근무지역을 저장하지 못했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const logout = () => Alert.alert('로그아웃', '현재 계정에서 로그아웃하시겠습니까?', [
+    { text: '취소', style: 'cancel' },
+    { text: '로그아웃', style: 'destructive', onPress: onLogout },
+  ]);
+
+  const options = picker === 'sido' ? REGIONS : districts;
+  const selected = picker === 'sido' ? workSido : workSigungu;
+
+  return (
+    <View style={styles.container}>
+      <ScreenHeader title="설정" subtitle="계정과 근무지역을 관리합니다" onBack={onBack} />
+      <ScrollView contentContainerStyle={styles.body}>
+        <View style={styles.profile}>
+          <View style={styles.avatar}><Text style={styles.avatarText}>{String(user?.name || user?.loginId || '?').slice(0, 1)}</Text></View>
+          <View style={{ flex: 1 }}><Text style={styles.name}>{user?.name || user?.loginId}</Text><Text style={styles.loginId}>@{user?.loginId}</Text></View>
+        </View>
+
+        <SectionTitle title="근무지역" />
+        <View style={styles.card}>
+          <RegionRow label="시·도" value={workSido} icon="map-outline" onPress={() => setPicker('sido')} />
+          <View style={styles.divider} />
+          <RegionRow label="구·군" value={workSigungu || '구·군을 선택하세요'} icon="location-outline" muted={!workSigungu} onPress={() => setPicker('sigungu')} />
+          <Text style={styles.help}>개인 공공업무는 이 구·군의 행정동을 사용하며, 팀 업무는 각 그룹의 활동지역을 따릅니다.</Text>
+          <PrimaryButton title={saving ? '저장 중...' : '변경사항 저장'} onPress={save} disabled={saving || !changed || !workSigungu} />
+        </View>
+
+        <SectionTitle title="업무 도구" />
+        <TouchableOpacity style={styles.menuRow} onPress={onDashboard}>
+          <View style={styles.itemIcon}><Ionicons name="stats-chart-outline" size={21} color={colors.primary} /></View>
+          <View style={{ flex: 1 }}><Text style={styles.itemValue}>외근 분석</Text><Text style={styles.itemLabel}>{activeGroup?.groupName || '현재 업무공간'} 현황 보기</Text></View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.menuRow, styles.logoutRow]} onPress={logout}>
+          <View style={[styles.itemIcon, styles.logoutIcon]}><Ionicons name="log-out-outline" size={21} color={colors.danger} /></View>
+          <Text style={styles.logoutText}>로그아웃</Text>
+        </TouchableOpacity>
+      </ScrollView>
+
+      <Modal visible={Boolean(picker)} transparent animationType="fade" onRequestClose={() => setPicker(null)}>
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => setPicker(null)}>
+          <View style={styles.sheet} onStartShouldSetResponder={() => true}>
+            <Text style={styles.sheetTitle}>{picker === 'sido' ? '시·도 선택' : `${workSido} 구·군 선택`}</Text>
+            <ScrollView style={styles.optionList}>
+              {options.map((option) => (
+                <TouchableOpacity key={option} style={styles.option} onPress={() => picker === 'sido' ? selectSido(option) : (setWorkSigungu(option), setPicker(null))}>
+                  <Text style={[styles.optionText, selected === option && styles.optionActive]}>{option}</Text>
+                  {selected === option ? <Ionicons name="checkmark-circle" size={21} color={colors.primary} /> : null}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  );
 }
-const styles = StyleSheet.create({ container: { flex: 1, backgroundColor: colors.background }, body: { padding: 20, paddingBottom: 34 }, profile: { backgroundColor: colors.primaryDark, borderRadius: radius.large, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 26 }, avatar: { width: 52, height: 52, borderRadius: 17, backgroundColor: '#DCEBFF', alignItems: 'center', justifyContent: 'center' }, avatarText: { color: colors.primaryDark, fontSize: 20, fontWeight: '900' }, name: { color: '#FFFFFF', fontSize: 18, fontWeight: '900' }, loginId: { color: '#DCEBFF', fontSize: 11, marginTop: 4 }, card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: radius.large, padding: 16, marginBottom: 26, gap: 13 }, regionRow: { flexDirection: 'row', alignItems: 'center', gap: 11 }, itemIcon: { width: 42, height: 42, borderRadius: 13, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }, itemLabel: { color: colors.textSoft, fontSize: 10 }, itemValue: { color: colors.text, fontSize: 14, fontWeight: '900', marginTop: 3 }, help: { color: colors.textSoft, fontSize: 10, lineHeight: 16 }, menuRow: { minHeight: 68, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: radius.medium, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 11, marginBottom: 10 }, logoutRow: { marginTop: 12 }, logoutIcon: { backgroundColor: colors.dangerSoft }, logoutText: { color: colors.danger, fontSize: 13, fontWeight: '900' }, backdrop: { flex: 1, backgroundColor: 'rgba(16,40,91,0.38)', justifyContent: 'center', padding: 24 }, sheet: { backgroundColor: colors.surface, borderRadius: radius.large, padding: 18 }, sheetTitle: { color: colors.text, fontSize: 18, fontWeight: '900', marginBottom: 8 }, option: { height: 48, borderTopWidth: 1, borderTopColor: colors.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, optionText: { color: colors.textSoft, fontSize: 13 }, optionActive: { color: colors.primary, fontWeight: '900' } });
+
+function RegionRow({ label, value, icon, onPress, muted }) {
+  return (
+    <TouchableOpacity style={styles.regionRow} onPress={onPress}>
+      <View style={styles.itemIcon}><Ionicons name={icon} size={21} color={colors.primary} /></View>
+      <View style={{ flex: 1 }}><Text style={styles.itemLabel}>{label}</Text><Text style={[styles.itemValue, muted && styles.muted]}>{value}</Text></View>
+      <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+    </TouchableOpacity>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background }, body: { padding: 20, paddingBottom: 34 },
+  profile: { backgroundColor: colors.primaryDark, borderRadius: radius.large, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 26 },
+  avatar: { width: 52, height: 52, borderRadius: 17, backgroundColor: '#DCEBFF', alignItems: 'center', justifyContent: 'center' }, avatarText: { color: colors.primaryDark, fontSize: 20, fontWeight: '900' }, name: { color: '#FFFFFF', fontSize: 18, fontWeight: '900' }, loginId: { color: '#DCEBFF', fontSize: 11, marginTop: 4 },
+  card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: radius.large, padding: 16, marginBottom: 26, gap: 13 },
+  regionRow: { minHeight: 55, flexDirection: 'row', alignItems: 'center', gap: 11 }, divider: { height: 1, backgroundColor: colors.line },
+  itemIcon: { width: 42, height: 42, borderRadius: 13, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }, itemLabel: { color: colors.textSoft, fontSize: 10 }, itemValue: { color: colors.text, fontSize: 14, fontWeight: '900', marginTop: 3 }, muted: { color: colors.textFaint }, help: { color: colors.textSoft, fontSize: 10, lineHeight: 16 },
+  menuRow: { minHeight: 68, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: radius.medium, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 11, marginBottom: 10 }, logoutRow: { marginTop: 12 }, logoutIcon: { backgroundColor: colors.dangerSoft }, logoutText: { color: colors.danger, fontSize: 13, fontWeight: '900' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(16,40,91,0.38)', justifyContent: 'center', padding: 24 }, sheet: { backgroundColor: colors.surface, borderRadius: radius.large, padding: 18, maxHeight: '78%' }, sheetTitle: { color: colors.text, fontSize: 18, fontWeight: '900', marginBottom: 8 }, optionList: { maxHeight: 490 }, option: { minHeight: 48, borderTopWidth: 1, borderTopColor: colors.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, optionText: { color: colors.textSoft, fontSize: 13 }, optionActive: { color: colors.primary, fontWeight: '900' },
+});

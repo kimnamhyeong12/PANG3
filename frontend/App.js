@@ -394,6 +394,16 @@ export default function App() {
     }
   }, [activeGroup, user?.userId]);
 
+  const refreshCurrentWorkspace = useCallback(async () => {
+    await Promise.all([
+      refreshGroupAssignments(),
+      loadWorkspaceLocations(),
+      activeGroup && !isPersonalGroup(activeGroup)
+        ? loadTeamLocations(activeGroup)
+        : Promise.resolve(),
+    ]);
+  }, [activeGroup, loadTeamLocations, loadWorkspaceLocations, refreshGroupAssignments]);
+
   useEffect(() => {
     refreshGroupAssignments();
   }, [refreshGroupAssignments]);
@@ -528,7 +538,7 @@ export default function App() {
             }
             locations={routeLocations}
             setLocations={setRouteLocations}
-            onRefreshAssignments={refreshGroupAssignments}
+            onRefreshAssignments={refreshCurrentWorkspace}
           />
         )}
 
@@ -614,15 +624,27 @@ export default function App() {
             user={user}
             activeGroup={activeGroup}
             publicDataMode
+            locations={routeLocations}
+            setLocations={setRouteLocations}
+            locationScope={isPersonalGroup(activeGroup) ? 'personal' : 'team'}
+            groupAssignments={groupAssignments}
             onBack={() => goBack('groupDetail')}
-            onDataChanged={() => {
-              refreshGroupAssignments();
-              if (isPersonalGroup(activeGroup)) {
-                loadWorkspaceLocations();
-              } else {
-                loadTeamLocations(activeGroup);
-              }
-            }}
+            onDataChanged={refreshCurrentWorkspace}
+            onLocationClick={onLocationClick}
+            roadPath={roadPath}
+            setRoadPath={setRoadPath}
+            routeSegments={routeSegments}
+            setRouteSegments={setRouteSegments}
+            currentSegmentIndex={currentSegmentIndex}
+            setCurrentSegmentIndex={setCurrentSegmentIndex}
+            optimized={optimized}
+            setOptimized={setOptimized}
+            isGuiding={isGuiding}
+            setIsGuiding={setIsGuiding}
+            totalDuration={totalDuration}
+            setTotalDuration={setTotalDuration}
+            panelOpen={panelOpen}
+            setPanelOpen={setPanelOpen}
           />
         )}
 
@@ -635,11 +657,11 @@ export default function App() {
             locationScope="team"
             groupAssignments={groupAssignments}
             onBack={() => {
-              refreshGroupAssignments();
+              refreshCurrentWorkspace();
               go('groupDetail');
             }}
             onLocationClick={onLocationClick}
-            onDataChanged={refreshGroupAssignments}
+            onDataChanged={refreshCurrentWorkspace}
             roadPath={teamRoadPath}
             setRoadPath={setTeamRoadPath}
             routeSegments={teamRouteSegments}
@@ -663,12 +685,10 @@ export default function App() {
               user={user}
               group={activeGroup}
               onBack={() => {
-                refreshGroupAssignments();
+                refreshCurrentWorkspace();
                 go('groupDetail');
               }}
-              onChanged={
-                refreshGroupAssignments
-              }
+              onChanged={refreshCurrentWorkspace}
             />
           )}
 
@@ -679,7 +699,7 @@ export default function App() {
               group={activeGroup}
               assignments={groupAssignments}
               onBack={() => goBack('main')}
-              onRefresh={refreshGroupAssignments}
+              onRefresh={refreshCurrentWorkspace}
             />
           )}
 
@@ -688,7 +708,6 @@ export default function App() {
             user={user}
             activeGroup={activeGroup}
             onBack={() => goBack('main')}
-            onLogout={handleLogout}
           />
         )}
 
@@ -720,8 +739,7 @@ export default function App() {
               onLocationClick
             }
             onDataChanged={() => {
-              refreshGroupAssignments();
-              loadWorkspaceLocations();
+              refreshCurrentWorkspace();
             }}
             roadPath={roadPath}
             setRoadPath={setRoadPath}
@@ -773,7 +791,7 @@ export default function App() {
 
               setRouteLocations(applySavedStatus);
               setTeamLocations(applySavedStatus);
-              refreshGroupAssignments();
+              refreshCurrentWorkspace();
 
               goBack('reportList');
             }}
@@ -838,7 +856,7 @@ export default function App() {
         </View>
 
         {user &&
-          !['login', 'register', 'dashboard', 'settings', 'publicDataAssignment'].includes(screen) && (
+          !['login', 'register', 'dashboard', 'settings'].includes(screen) && (
             <BottomNavigation
               screen={screen}
               onHome={() => go('main')}
@@ -865,7 +883,8 @@ function BottomNavigation({
 }) {
   const activeTab =
     screen === 'mapDirect' ||
-    screen === 'teamLocations'
+    screen === 'teamLocations' ||
+    screen === 'publicDataAssignment'
       ? 'map'
       : [
           'reportList',
@@ -880,7 +899,6 @@ function BottomNavigation({
           'groupInvitations',
           'groupDetail',
           'assignment',
-          'publicDataAssignment',
         ].includes(screen)
       ? 'group'
       : 'home';
