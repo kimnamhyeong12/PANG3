@@ -7,7 +7,6 @@ import React, {
 
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -96,7 +95,6 @@ export default function DashboardScreen({
   user,
   activeGroup,
   onBack,
-  onLogout,
 }) {
   const today = new Date().toLocaleDateString(
     'ko-KR',
@@ -449,14 +447,14 @@ export default function DashboardScreen({
 
   const heatColor = (value) => {
     if (value === 0) {
-      return '#EAF1F7';
+      return '#E0F1EA';
     }
 
     const p =
       value / maxHeatCount;
 
     if (p > 0.75) {
-      return '#12395B';
+      return '#2477F3';
     }
 
     if (p > 0.5) {
@@ -470,25 +468,6 @@ export default function DashboardScreen({
     return '#BFD4E3';
   };
 
-  const handleLogoutPress = () => {
-    Alert.alert(
-      '로그아웃',
-      '로그아웃하시겠습니까?',
-      [
-        {
-          text: '취소',
-          style: 'cancel',
-        },
-        {
-          text: '로그아웃',
-          style: 'destructive',
-          onPress: () =>
-            onLogout?.(),
-        },
-      ]
-    );
-  };
-
   return (
     <View style={styles.container}>
       {/* HEADER */}
@@ -497,7 +476,7 @@ export default function DashboardScreen({
 
         <View style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>
-            SAHA-GU OFFICE
+            업무 통계
           </Text>
 
           <Text style={styles.title}>
@@ -505,26 +484,8 @@ export default function DashboardScreen({
           </Text>
         </View>
 
-        {/* 로그아웃 + 이름 + 원 */}
+        {/* 사용자 정보 */}
         <View style={styles.userArea}>
-          <TouchableOpacity
-            style={
-              styles.logoutButton
-            }
-            onPress={
-              handleLogoutPress
-            }
-            activeOpacity={0.8}
-          >
-            <Text
-              style={
-                styles.logoutText
-              }
-            >
-              로그아웃
-            </Text>
-          </TouchableOpacity>
-
           <Text
             style={styles.userName}
             numberOfLines={1}
@@ -562,7 +523,7 @@ export default function DashboardScreen({
         >
           <ActivityIndicator
             size="large"
-            color="#12395B"
+            color="#2477F3"
           />
 
           <Text
@@ -652,7 +613,7 @@ export default function DashboardScreen({
                     styles.cardEyebrow
                   }
                 >
-                  AREA ANALYSIS
+                  행정동별 현황
                 </Text>
 
                 <Text
@@ -743,7 +704,7 @@ export default function DashboardScreen({
                     styles.cardEyebrow
                   }
                 >
-                  FIELDWORK HEATMAP
+                  상태 분포
                 </Text>
 
                 <Text
@@ -909,9 +870,9 @@ function HeatCell({
           {
             color:
               color ===
-              '#12395B'
+              '#2477F3'
                 ? '#FFFFFF'
-                : '#1F2D3D',
+                : '#15231D',
           },
         ]}
       >
@@ -926,7 +887,7 @@ const styles =
     container: {
       flex: 1,
       backgroundColor:
-        '#F4F7FA',
+        '#F5F7F5',
     },
 
     header: {
@@ -938,26 +899,26 @@ const styles =
         '#FFFFFF',
       borderBottomWidth: 1,
       borderBottomColor:
-        '#D9E1EA',
+        '#DCE5E0',
     },
 
     eyebrow: {
       fontSize: 10,
       fontWeight: '900',
       letterSpacing: 1.8,
-      color: '#607086',
+      color: '#637269',
     },
 
     title: {
       fontSize: 17,
       fontWeight: '900',
-      color: '#1F2D3D',
+      color: '#15231D',
       marginTop: 2,
     },
 
     desc: {
       fontSize: 10,
-      color: '#718096',
+      color: '#637269',
       marginTop: 2,
     },
 
@@ -968,25 +929,11 @@ const styles =
       maxWidth: 170,
     },
 
-    logoutButton: {
-      paddingHorizontal: 7,
-      paddingVertical: 5,
-      borderRadius: 8,
-      backgroundColor:
-        '#FDECEC',
-    },
-
-    logoutText: {
-      fontSize: 9,
-      fontWeight: '900',
-      color: '#D94C4C',
-    },
-
     userName: {
       maxWidth: 60,
       fontSize: 10,
       fontWeight: '900',
-      color: '#1F2D3D',
+      color: '#15231D',
     },
 
     userCircle: {
@@ -994,7 +941,7 @@ const styles =
       height: 34,
       borderRadius: 17,
       backgroundColor:
-        '#12395B',
+        '#2477F3',
       alignItems: 'center',
       justifyContent:
         'center',
@@ -1022,7 +969,7 @@ const styles =
       marginTop: 10,
       fontSize: 11,
       fontWeight: '800',
-      color: '#607086',
+      color: '#637269',
     },
 
     kpiRow: {
@@ -1039,20 +986,20 @@ const styles =
       paddingHorizontal: 4,
       borderWidth: 1,
       borderColor:
-        '#D9E1EA',
+        '#DCE5E0',
       alignItems: 'center',
     },
 
     kpiValue: {
       fontSize: 16,
       fontWeight: '900',
-      color: '#12395B',
+      color: '#2477F3',
     },
 
     kpiLabel: {
       fontSize: 9,
       fontWeight: '800',
-      color: '#607086',
+      color: '#637269',
       marginTop: 5,
     },
 
@@ -1063,20 +1010,20 @@ const styles =
       padding: 16,
       borderWidth: 1,
       borderColor:
-        '#D9E1EA',
+        '#DCE5E0',
     },
 
     cardEyebrow: {
       fontSize: 11,
       fontWeight: '900',
       letterSpacing: 1.6,
-      color: '#607086',
+      color: '#637269',
     },
 
     cardTitle: {
       fontSize: 15,
       fontWeight: '900',
-      color: '#1F2D3D',
+      color: '#15231D',
       marginTop: 4,
       marginBottom: 14,
     },
@@ -1091,7 +1038,7 @@ const styles =
     region: {
       width: 70,
       fontSize: 10,
-      color: '#607086',
+      color: '#637269',
       fontWeight: '800',
     },
 
@@ -1109,7 +1056,7 @@ const styles =
       minWidth: 35,
       borderRadius: 9,
       backgroundColor:
-        '#12395B',
+        '#2477F3',
       justifyContent:
         'center',
       paddingHorizontal: 8,
@@ -1132,7 +1079,7 @@ const styles =
       flex: 1,
       textAlign: 'center',
       fontSize: 9,
-      color: '#718096',
+      color: '#637269',
       fontWeight: '800',
     },
 
@@ -1146,7 +1093,7 @@ const styles =
     week: {
       width: 70,
       fontSize: 9,
-      color: '#718096',
+      color: '#637269',
       fontWeight: '800',
     },
 
@@ -1166,7 +1113,7 @@ const styles =
 
     emptyText: {
       fontSize: 11,
-      color: '#718096',
+      color: '#637269',
     },
 
     errorText: {

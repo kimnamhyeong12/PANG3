@@ -222,6 +222,20 @@ const buildKakaoMapHtml = (
       0 2px 7px rgba(0, 0, 0, 0.3);
   }
 
+  .boundary-label {
+    padding: 3px 6px;
+    border: 1px solid rgba(36, 119, 243, 0.28);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.92);
+    color: #10285B;
+    font-family: Arial, sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 1px 5px rgba(16, 40, 91, 0.12);
+    pointer-events: none;
+  }
+
   /*
    * ===============================
    * 현재 GPS 위치
@@ -308,6 +322,13 @@ const buildKakaoMapHtml = (
   var locationOverlays = [];
   var selectedOverlay = null;
 
+  var boundaryPolygons = [];
+  var boundaryLabels = [];
+  var selectedBoundaryPolygons = [];
+  var boundaryAllBounds = null;
+  var boundaryHasCoordinates = false;
+  var renderedBoundaryCount = 0;
+
   var roadLine = null;
   var activeLine = null;
 
@@ -383,6 +404,126 @@ const buildKakaoMapHtml = (
       activeLine.setMap(null);
       activeLine = null;
     }
+  }
+
+  function clearBoundaryData() {
+    boundaryPolygons.forEach(function (polygon) {
+      polygon.setMap(null);
+    });
+    boundaryLabels.forEach(function (label) {
+      label.setMap(null);
+    });
+    boundaryPolygons = [];
+    boundaryLabels = [];
+    selectedBoundaryPolygons = [];
+    boundaryAllBounds = new window.kakao.maps.LatLngBounds();
+    boundaryHasCoordinates = false;
+    renderedBoundaryCount = 0;
+  }
+
+  function boundaryName(feature, index) {
+    var properties = feature.properties || {};
+    return properties.adm_nm || properties.adm_name || properties.name || ("행정동 " + (index + 1));
+  }
+
+  function geometryPolygons(geometry) {
+    if (!geometry) return [];
+    if (geometry.type === "Polygon") return [geometry.coordinates || []];
+    if (geometry.type === "MultiPolygon") return geometry.coordinates || [];
+    return [];
+  }
+
+  function resetBoundaryStyle() {
+    selectedBoundaryPolygons.forEach(function (polygon) {
+      polygon.setOptions({
+        strokeWeight: 1.5,
+        strokeColor: "#2477F3",
+        strokeOpacity: 0.72,
+        fillColor: "#72B7FF",
+        fillOpacity: 0.2
+      });
+    });
+    selectedBoundaryPolygons = [];
+  }
+
+  function appendBoundaryData(featureCollection) {
+    if (!map || !featureCollection || !featureCollection.features) return;
+
+    if (!boundaryAllBounds) {
+      boundaryAllBounds = new window.kakao.maps.LatLngBounds();
+    }
+
+    featureCollection.features.forEach(function (feature, featureIndex) {
+      var name = boundaryName(feature, featureIndex);
+      var featureBounds = new window.kakao.maps.LatLngBounds();
+      var featurePolygons = [];
+
+      geometryPolygons(feature.geometry).forEach(function (polygonCoordinates) {
+        var path = (polygonCoordinates || []).map(function (ring) {
+          return (ring || []).map(function (point) {
+            var latLng = new window.kakao.maps.LatLng(Number(point[1]), Number(point[0]));
+            featureBounds.extend(latLng);
+            boundaryAllBounds.extend(latLng);
+            boundaryHasCoordinates = true;
+            return latLng;
+          });
+        });
+
+        var polygon = new window.kakao.maps.Polygon({
+          map: map,
+          path: path,
+          strokeWeight: 1.5,
+          strokeColor: "#2477F3",
+          strokeOpacity: 0.72,
+          fillColor: "#72B7FF",
+          fillOpacity: 0.2
+        });
+
+        featurePolygons.push(polygon);
+        boundaryPolygons.push(polygon);
+
+        window.kakao.maps.event.addListener(polygon, "click", function () {
+          resetBoundaryStyle();
+          selectedBoundaryPolygons = featurePolygons;
+          selectedBoundaryPolygons.forEach(function (selectedPolygon) {
+            selectedPolygon.setOptions({
+              strokeWeight: 3,
+              strokeColor: "#0B5CE1",
+              strokeOpacity: 1,
+              fillColor: "#2477F3",
+              fillOpacity: 0.3
+            });
+          });
+
+          map.setBounds(featureBounds, 54, 54, 54, 54);
+          var center = featureBounds.getCenter();
+          post({
+            type: "BOUNDARY_PRESS",
+            name: name,
+            latitude: center.getLat(),
+            longitude: center.getLng(),
+            properties: feature.properties || {}
+          });
+        });
+      });
+
+      if (featurePolygons.length > 0) {
+        renderedBoundaryCount += 1;
+      }
+    });
+  }
+
+  function finishBoundaryData() {
+    if (boundaryHasCoordinates && boundaryAllBounds) {
+      map.setBounds(boundaryAllBounds, 28, 28, 28, 28);
+    }
+    post({ type: "BOUNDARIES_RENDERED", count: renderedBoundaryCount });
+  }
+
+  function setBoundaryData(featureCollection) {
+    clearBoundaryData();
+    appendBoundaryData(featureCollection);
+    finishBoundaryData();
   }
 
   /*
@@ -784,6 +925,32 @@ const buildKakaoMapHtml = (
       return;
     }
 
+    if (commandData.type === "BOUNDARIES") {
+      setBoundaryData(commandData.data);
+      return;
+    }
+
+    if (commandData.type === "BOUNDARIES_RESET") {
+      clearBoundaryData();
+      return;
+    }
+
+    if (commandData.type === "BOUNDARIES_APPEND") {
+      appendBoundaryData(commandData.data);
+      post({
+        type: "BOUNDARY_CHUNK_DONE",
+        chunkIndex: Number(commandData.chunkIndex),
+        transferId: commandData.transferId,
+        renderedCount: renderedBoundaryCount
+      });
+      return;
+    }
+
+    if (commandData.type === "BOUNDARIES_FINISH") {
+      finishBoundaryData();
+      return;
+    }
+
     if (
       commandData.type === "MOVE"
     ) {
@@ -935,6 +1102,7 @@ const buildKakaoMapHtml = (
 
 export default function KakaoMapWebView({
   locations = [],
+  boundaries = null,
   roadPath = [],
   panelOpen = true,
   setPanelOpen,
@@ -950,6 +1118,9 @@ export default function KakaoMapWebView({
   onDirectPlaceSelect,
   onCurrentLocationChange,
   onMarkerClick,
+  onBoundaryClick,
+  onBoundaryReady,
+  directMarkerPress = false,
   onLocationsChange,
   onRerouteRequest,
 }) {
@@ -967,6 +1138,9 @@ export default function KakaoMapWebView({
 
   const pendingMapCommandsRef =
     useRef([]);
+
+  const boundaryChunksRef = useRef([]);
+  const boundaryTransferIdRef = useRef(0);
 
   /*
    * 처음 GPS 좌표.
@@ -2428,7 +2602,7 @@ export default function KakaoMapWebView({
             ...location,
 
             color:
-              getMarkerColorByStatus(
+              location.markerColor || getMarkerColorByStatus(
                 location.status ||
                   "pending"
               ),
@@ -2478,6 +2652,31 @@ export default function KakaoMapWebView({
     isGuiding,
     pulseTargetKey,
   ]);
+
+  useEffect(() => {
+    if (!boundaries) return;
+    const features = Array.isArray(boundaries.features) ? boundaries.features : [];
+    const transferId = boundaryTransferIdRef.current + 1;
+    boundaryTransferIdRef.current = transferId;
+    sendMapCommand({ type: "BOUNDARIES_RESET" });
+    const chunkSize = 30;
+    boundaryChunksRef.current = [];
+    for (let index = 0; index < features.length; index += chunkSize) {
+      boundaryChunksRef.current.push(features.slice(index, index + chunkSize));
+    }
+
+    if (boundaryChunksRef.current.length === 0) {
+      sendMapCommand({ type: "BOUNDARIES_FINISH" });
+      return;
+    }
+
+    sendMapCommand({
+      type: "BOUNDARIES_APPEND",
+      transferId,
+      chunkIndex: 0,
+      data: { type: "FeatureCollection", features: boundaryChunksRef.current[0] },
+    });
+  }, [boundaries]);
 
   /*
    * ===============================
@@ -2604,9 +2803,46 @@ export default function KakaoMapWebView({
             ];
 
           if (location) {
-            focusLocation(
-              location
-            );
+            if (directMarkerPress) {
+              onMarkerClick?.(location, "select");
+            } else {
+              focusLocation(location);
+            }
+          }
+
+          return;
+        }
+
+        if (message.type === "BOUNDARY_PRESS") {
+          onBoundaryClick?.({
+            name: message.name,
+            latitude: Number(message.latitude),
+            longitude: Number(message.longitude),
+            properties: message.properties || {},
+          });
+          return;
+        }
+
+        if (message.type === "BOUNDARIES_RENDERED") {
+          onBoundaryReady?.(Number(message.count) || 0);
+          return;
+        }
+
+        if (message.type === "BOUNDARY_CHUNK_DONE") {
+          const transferId = Number(message.transferId);
+          if (transferId !== boundaryTransferIdRef.current) return;
+
+          const nextIndex = Number(message.chunkIndex) + 1;
+          const nextChunk = boundaryChunksRef.current[nextIndex];
+          if (nextChunk) {
+            sendMapCommand({
+              type: "BOUNDARIES_APPEND",
+              transferId,
+              chunkIndex: nextIndex,
+              data: { type: "FeatureCollection", features: nextChunk },
+            });
+          } else {
+            sendMapCommand({ type: "BOUNDARIES_FINISH" });
           }
         }
       } catch (error) {

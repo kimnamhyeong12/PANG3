@@ -233,7 +233,7 @@ export default function VoiceTextInput({
           <Ionicons
             name={recording ? 'stop' : 'mic-outline'}
             size={20}
-            color={recording ? '#FFFFFF' : '#12395B'}
+            color={recording ? '#FFFFFF' : '#10285B'}
           />
         </TouchableOpacity>
       </View>
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
   },
 
   recordingGuide: {
-    color: '#718096',
+    color: '#607195',
     fontSize: 10,
     fontWeight: '700',
   },
