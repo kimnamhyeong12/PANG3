@@ -72,7 +72,8 @@ public class SgisBoundaryService {
 
     public JsonNode getAdministrativeBoundaries(String admCode) {
         String normalized = admCode == null ? "" : admCode.trim();
-        if (!normalized.matches("\\d{2,7}")) {
+        // 기존 2,7 -> 2,8 로 수정했음 오류 나면 확인
+        if (!normalized.matches("\\d{2,8}")) {
             throw new IllegalArgumentException("올바른 SGIS 행정구역 코드를 입력해 주세요.");
         }
         return cachedBoundaries.computeIfAbsent(normalized,

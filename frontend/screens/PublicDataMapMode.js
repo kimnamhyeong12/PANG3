@@ -13,8 +13,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import KakaoMapWebView from '../components/KakaoMapWebView';
 import { showAlert } from '../components/CustomAlert';
+import KakaoMapWebView from '../components/KakaoMapWebView';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
@@ -313,6 +313,10 @@ export default function PublicDataMapMode({
   const [selectedIds, setSelectedIds] = useState([]);
   const [saving, setSaving] = useState(false);
 
+  const [publicItems, setPublicItems] = useState([]);
+  const [publicDataLoading, setPublicDataLoading] = useState(false);
+  const [publicDataError, setPublicDataError] = useState('');
+
   const sheetTranslateY = useRef(
     new Animated.Value(0)
   ).current;
@@ -405,6 +409,57 @@ export default function PublicDataMapMode({
   useEffect(() => {
     setSelectedIds([]);
   }, [category]);
+
+  // 작업 2 useEffect 추가 시작
+  useEffect(() => {
+  if (!selectedBoundary || !category) {
+    setPublicItems([]);
+    setPublicDataError('');
+    return;
+  }
+
+  const loadPublicData = async () => {
+    try {
+      setPublicDataLoading(true);
+      setPublicDataError('');
+
+      const admCode = selectedBoundary.properties?.adm_cd;
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/public-data` +
+        `?category=${encodeURIComponent(category)}` +
+        `&admCode=${encodeURIComponent(admCode)}`
+      );
+
+      const text = await response.text();
+
+      if(!response.ok) {
+        throw new Error(
+          text || '공공데이터 조회 실패'
+        );
+      }
+
+      const data = JSON.parse(text);
+
+      setPublicItems(
+        Array.isArray(data?.items)
+          ? data.items
+          : []
+      );
+    } catch (error) {
+      setPublicItems([]);
+      
+      setPublicDataError(
+        error.message || '공공데이터를 불러오지 못했습니다.'
+      );
+    } finally {
+      setPublicDataLoading(false);
+    }
+  };
+  
+  loadPublicData();
+  }, [selectedBoundary, category]);
+  // 작업 2 끝
 
   const closeBottomSheet = useCallback(() => {
     Animated.timing(sheetTranslateY, {
@@ -524,21 +579,22 @@ export default function PublicDataMapMode({
     };
   }, [selectedBoundary]);
 
-  const publicItems = useMemo(
-    () =>
-      createMockItems(
-        selectedBoundary,
-        category,
-        workSido,
-        regionSigungu
-      ),
-    [
-      selectedBoundary,
-      category,
-      workSido,
-      regionSigungu,
-    ]
-  );
+  // 작업 1 삭제 
+  // const publicItems = useMemo(
+  //   () =>
+  //     createMockItems(
+  //       selectedBoundary,
+  //       category,
+  //       workSido,
+  //       regionSigungu
+  //     ),
+  //   [
+  //     selectedBoundary,
+  //     category,
+  //     workSido,
+  //     regionSigungu,
+  //   ]
+  // );
 
   const mapItems = useMemo(
     () =>

@@ -1,4 +1,3 @@
-import { showAlert } from './CustomAlert';
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -13,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { WebView } from "react-native-webview";
+import { showAlert } from './CustomAlert';
 
 const KAKAO_REST_API_KEY =
   process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
@@ -24,6 +24,7 @@ const KAKAO_JAVASCRIPT_KEY =
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL;
 
+  
 /*
  * 목적지 접근 판정 거리
  * 100m 이내에 들어오면
@@ -306,15 +307,14 @@ const buildKakaoMapHtml = (
     z-index: 3;
   }
 </style>
-
 <script
   src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JAVASCRIPT_KEY}&autoload=false">
 </script>
+
 </head>
 
 <body>
 <div id="map"></div>
-
 <script>
 (function () {
   var map = null;
@@ -1009,13 +1009,14 @@ const buildKakaoMapHtml = (
    * DEFAULT_REGION이 아니라
    * 최초 GPS 좌표다.
    */
+
   window.kakao.maps.load(
     function () {
       var initialPosition =
         new window.kakao.maps.LatLng(
           ${Number(initialLatitude)},
           ${Number(initialLongitude)}
-        );
+        ); 
 
       map =
         new window.kakao.maps.Map(
@@ -1907,9 +1908,8 @@ export default function KakaoMapWebView({
                   pos.latitude,
                   pos.longitude
                 ),
-
-              baseUrl:
-                "https://localhost/",
+                baseUrl:"https://localhost/",
+              
             };
         }
 
@@ -2686,6 +2686,8 @@ export default function KakaoMapWebView({
 
   const handleWebViewMessage =
     (event) => {
+      // console.log("WEBVIEW MESSAGE:", event.nativeEvent.data);
+
       try {
         const message =
           JSON.parse(
@@ -3025,6 +3027,7 @@ export default function KakaoMapWebView({
             event.nativeEvent
           );
         }}
+        
       />
 
       {currentPos && (
