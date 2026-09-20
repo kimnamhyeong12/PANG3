@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -174,7 +175,7 @@ public class TaskService {
                 requestedScheduledDate != null ? requestedScheduledDate : originalWorkDate
         );
 
-        task.setTaskStatus(firstNonBlank(
+        applyStatusTransition(task, firstNonBlank(
                 str(body.get("taskStatus")),
                 str(body.get("status")),
                 str(body.get("task_status")),
@@ -225,8 +226,13 @@ public class TaskService {
     @Transactional
     public Map<String, Object> updateStatus(Long taskId, String status) {
         Task task = getById(taskId);
-        task.setTaskStatus(status);
-        return toFrontendMap(taskRepository.save(task));
+        return toFrontendMap(updateStatusEntity(task, status));
+    }
+
+    @Transactional
+    public Task updateStatusEntity(Task task, String status) {
+        applyStatusTransition(task, status);
+        return taskRepository.save(task);
     }
 
     /**
@@ -299,10 +305,6 @@ public class TaskService {
         return result;
     }
 
-    public Task saveEntity(Task task) {
-        return taskRepository.save(task);
-    }
-
     public Map<String, Object> toFrontendMap(Task task) {
         Map<String, Object> map = new HashMap<>();
 
@@ -334,6 +336,8 @@ public class TaskService {
 
         map.put("createdAt", task.getCreatedAt());
         map.put("created_at", task.getCreatedAt());
+        map.put("completedAt", task.getCompletedAt());
+        map.put("completed_at", task.getCompletedAt());
         map.put("workDate", task.getWorkDate());
         map.put("work_date", task.getWorkDate());
         map.put("scheduledDate", task.getScheduledDate());
@@ -411,5 +415,28 @@ public class TaskService {
             }
         }
         return null;
+    }
+
+    private void applyStatusTransition(Task task, String status) {
+        boolean wasComplete = isCompleteStatus(task.getTaskStatus());
+        boolean willBeComplete = isCompleteStatus(status);
+
+        if (!wasComplete && willBeComplete) {
+            task.setCompletedAt(LocalDateTime.now());
+        } else if (wasComplete && !willBeComplete) {
+            task.setCompletedAt(null);
+        }
+
+        task.setTaskStatus(status);
+    }
+
+    private boolean isCompleteStatus(String status) {
+        if (status == null) {
+            return false;
+        }
+        String normalized = status.trim().toLowerCase();
+        return "complete".equals(normalized)
+                || "completed".equals(normalized)
+                || "done".equals(normalized);
     }
 }

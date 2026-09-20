@@ -35,3 +35,7 @@ backend/src/main/resources/application-local-backup.yml
 # OS
 .DS_Store
 ai/__pycache__/
+
+# goal, plan
+GOAL.md
+PLAN.md
