@@ -9,12 +9,14 @@ CREATE TABLE IF NOT EXISTS task (
     task_category VARCHAR(255),
     task_status VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP,
     work_date DATE,
     scheduled_date DATE
 );
 
 -- 기존 DB에도 안전하게 날짜 컬럼을 추가한다.
 ALTER TABLE task ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE task ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP;
 ALTER TABLE task ADD COLUMN IF NOT EXISTS work_date DATE;
 ALTER TABLE task ADD COLUMN IF NOT EXISTS scheduled_date DATE;
 

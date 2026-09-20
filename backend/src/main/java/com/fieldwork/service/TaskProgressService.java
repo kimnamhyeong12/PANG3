@@ -147,8 +147,7 @@ public class TaskProgressService {
 
     private void syncTaskStatus(Task task, String progressStatus) {
         if (progressStatus != null && !progressStatus.isBlank()) {
-            task.setTaskStatus(progressStatus);
-            taskService.saveEntity(task);
+            taskService.updateStatusEntity(task, progressStatus);
         }
     }
 
