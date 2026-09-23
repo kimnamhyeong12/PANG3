@@ -19,8 +19,8 @@ import KakaoMapWebView from '../components/KakaoMapWebView';
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 const CATEGORIES = [
-  { key: 'tree', label: '가로수', icon: 'leaf-outline' },
-  { key: 'manhole', label: '맨홀뚜껑', icon: 'disc-outline' },
+  // { key: 'tree', label: '가로수', icon: 'leaf-outline' },
+  { key: 'aed', label: '심폐제세동기', icon: 'medkit-outline' },
   { key: 'bus', label: '버스정류장', icon: 'bus-outline' },
 ];
 
