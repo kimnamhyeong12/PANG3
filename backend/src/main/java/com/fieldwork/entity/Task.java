@@ -42,6 +42,10 @@ public class Task {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    /** 업무 상태가 complete로 전환된 실제 시각. 기존 완료 데이터는 null일 수 있다. */
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
     /** 방문지를 최초 등록한 날짜. 한 번 생성되면 변경하지 않는다. */
     @Column(name = "work_date", updatable = false)
     private LocalDate workDate;
@@ -129,6 +133,14 @@ public class Task {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt;
     }
 
     public LocalDate getWorkDate() {
