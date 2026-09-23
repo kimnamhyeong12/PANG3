@@ -254,6 +254,7 @@ const createMockItems = (
 };
 
 export default function PublicDataMapMode({
+  isActive = true,
   user,
   activeGroup,
   onBack,
@@ -504,6 +505,10 @@ export default function PublicDataMapMode({
   ]);
 
   useEffect(() => {
+    if (!isActive) {
+      return undefined;
+    }
+
     const subscription = BackHandler.addEventListener(
       'hardwareBackPress',
       handleBack
@@ -512,7 +517,7 @@ export default function PublicDataMapMode({
     return () => {
       subscription.remove();
     };
-  }, [handleBack]);
+  }, [handleBack, isActive]);
 
   const sheetPanResponder = useMemo(
     () =>

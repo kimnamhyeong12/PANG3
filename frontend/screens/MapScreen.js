@@ -77,6 +77,7 @@ const cleanLocation = (loc, fallbackName = '위치') => {
 };
 
 function NormalMapScreen({
+  isActive = true,
   user,
   onBack,
   onLocationClick,
@@ -220,6 +221,10 @@ function NormalMapScreen({
   };
 
   useEffect(() => {
+    if (!isActive) {
+      return undefined;
+    }
+
     const backAction = () => {
       if (coordSheetOpen) {
         setCoordSheetOpen(false);
@@ -269,6 +274,7 @@ function NormalMapScreen({
 
     return () => subscription.remove();
   }, [
+    isActive,
     coordSheetOpen,
     mapSelectMode,
     addMenuOpen,
@@ -1681,6 +1687,12 @@ function NormalMapScreen({
 export default function MapScreen(props) {
   const [mode, setMode] = useState(props.publicDataMode ? 'public' : 'normal');
 
+  useEffect(() => {
+    if (props.persistNormalMap && !props.isActive && mode !== 'normal') {
+      setMode('normal');
+    }
+  }, [mode, props.isActive, props.persistNormalMap]);
+
   const mergeRegisteredLocations = (registered = []) => {
     if (!registered.length) return;
     props.setLocations?.((previous) => {
@@ -1691,22 +1703,68 @@ export default function MapScreen(props) {
     });
   };
 
-  if (mode === 'public') {
+  if (!props.persistNormalMap && mode === 'public') {
     return (
       <PublicDataMapMode
         {...props}
+        isActive={props.isActive}
         onSwitchToNormal={() => setMode('normal')}
         onLocationsRegistered={mergeRegisteredLocations}
       />
     );
   }
-  return <NormalMapScreen {...props} onSwitchToPublic={() => setMode('public')} />;
+
+  if (!props.persistNormalMap) {
+    return <NormalMapScreen {...props} onSwitchToPublic={() => setMode('public')} />;
+  }
+
+  return (
+    <View style={styles.container}>
+      <View
+        style={[
+          styles.persistentModeLayer,
+          mode !== 'normal' && styles.hiddenModeLayer,
+        ]}
+        pointerEvents={props.isActive && mode === 'normal' ? 'auto' : 'none'}
+      >
+        <NormalMapScreen
+          {...props}
+          isActive={props.isActive && mode === 'normal'}
+          onSwitchToPublic={() => setMode('public')}
+        />
+      </View>
+
+      {mode === 'public' && (
+        <View style={styles.persistentModeLayer}>
+          <PublicDataMapMode
+            {...props}
+            isActive={props.isActive}
+            onSwitchToNormal={() => setMode('normal')}
+            onLocationsRegistered={mergeRegisteredLocations}
+          />
+        </View>
+      )}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F4F7FA',
+    overflow: 'hidden',
+  },
+
+  persistentModeLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+  },
+
+  hiddenModeLayer: {
+    left: '100%',
   },
 
   topOverlay: {

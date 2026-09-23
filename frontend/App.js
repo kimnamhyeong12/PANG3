@@ -64,6 +64,7 @@ const isTodayWork = (item) => {
 
 export default function App() {
   const [screen, setScreen] = useState('login');
+  const [mapInitialized, setMapInitialized] = useState(false);
   const [calendarDayKey, setCalendarDayKey] = useState(getLocalDateKey());
   const [user, setUser] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
@@ -163,6 +164,10 @@ export default function App() {
 
   const go = (next, options = {}) => {
     if (next === screenRef.current) return;
+
+    if (next === 'mapDirect') {
+      setMapInitialized(true);
+    }
 
     if (!options.replace) {
       historyRef.current.push(screen);
@@ -409,6 +414,7 @@ export default function App() {
   }, [refreshGroupAssignments]);
 
   const handleLogout = () => {
+    setMapInitialized(false);
     setUser(null);
     setActiveGroup(null);
     setAvailableGroups([]);
@@ -722,52 +728,66 @@ export default function App() {
           />
         )}
 
-        {screen === 'mapDirect' && (
-          <MapScreen
-            user={user}
-            locations={routeLocations}
-            setLocations={
-              setRouteLocations
+        {mapInitialized && (
+          <View
+            style={[
+              styles.persistentMapLayer,
+              screen !== 'mapDirect' && styles.hiddenMapLayer,
+            ]}
+            pointerEvents={screen === 'mapDirect' ? 'auto' : 'none'}
+            accessibilityElementsHidden={screen !== 'mapDirect'}
+            importantForAccessibility={
+              screen === 'mapDirect' ? 'auto' : 'no-hide-descendants'
             }
-            activeGroup={activeGroup}
-            locationScope={!activeGroup || isPersonalGroup(activeGroup) ? 'personal' : 'team'}
-            groupAssignments={activeGroup?.groupId ? groupAssignments : []}
-            onBack={() =>
-              goBack('main')
-            }
-            onLocationClick={
-              onLocationClick
-            }
-            onDataChanged={() => {
-              refreshCurrentWorkspace();
-            }}
-            roadPath={roadPath}
-            setRoadPath={setRoadPath}
-            routeSegments={
-              routeSegments
-            }
-            setRouteSegments={
-              setRouteSegments
-            }
-            currentSegmentIndex={
-              currentSegmentIndex
-            }
-            setCurrentSegmentIndex={
-              setCurrentSegmentIndex
-            }
-            optimized={optimized}
-            setOptimized={setOptimized}
-            isGuiding={isGuiding}
-            setIsGuiding={setIsGuiding}
-            totalDuration={
-              totalDuration
-            }
-            setTotalDuration={
-              setTotalDuration
-            }
-            panelOpen={panelOpen}
-            setPanelOpen={setPanelOpen}
-          />
+          >
+            <MapScreen
+              user={user}
+              locations={routeLocations}
+              setLocations={
+                setRouteLocations
+              }
+              activeGroup={activeGroup}
+              locationScope={!activeGroup || isPersonalGroup(activeGroup) ? 'personal' : 'team'}
+              groupAssignments={activeGroup?.groupId ? groupAssignments : []}
+              onBack={() =>
+                goBack('main')
+              }
+              onLocationClick={
+                onLocationClick
+              }
+              onDataChanged={() => {
+                refreshCurrentWorkspace();
+              }}
+              roadPath={roadPath}
+              setRoadPath={setRoadPath}
+              routeSegments={
+                routeSegments
+              }
+              setRouteSegments={
+                setRouteSegments
+              }
+              currentSegmentIndex={
+                currentSegmentIndex
+              }
+              setCurrentSegmentIndex={
+                setCurrentSegmentIndex
+              }
+              optimized={optimized}
+              setOptimized={setOptimized}
+              isGuiding={isGuiding}
+              setIsGuiding={setIsGuiding}
+              totalDuration={
+                totalDuration
+              }
+              setTotalDuration={
+                setTotalDuration
+              }
+              panelOpen={panelOpen}
+              setPanelOpen={setPanelOpen}
+              isActive={screen === 'mapDirect'}
+              persistNormalMap
+            />
+          </View>
         )}
 
         {screen === 'fieldAction' && (
@@ -999,6 +1019,19 @@ const styles = StyleSheet.create({
 
   screenHost: {
     flex: 1,
+    overflow: 'hidden',
+  },
+
+  persistentMapLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+  },
+
+  hiddenMapLayer: {
+    left: '100%',
   },
 
   bottomNav: {
