@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,6 +32,7 @@ public class TaskService {
     private final WorkGroupRepository workGroupRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final GroupService groupService;
+    private final PushNotificationService pushNotificationService;
 
     public TaskService(
             TaskRepository taskRepository,
@@ -39,7 +41,8 @@ public class TaskService {
             UserRepository userRepository,
             WorkGroupRepository workGroupRepository,
             GroupMemberRepository groupMemberRepository,
-            GroupService groupService
+            GroupService groupService,
+            PushNotificationService pushNotificationService
     ) {
         this.taskRepository = taskRepository;
         this.taskProgressRepository = taskProgressRepository;
@@ -48,6 +51,7 @@ public class TaskService {
         this.workGroupRepository = workGroupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.groupService = groupService;
+        this.pushNotificationService = pushNotificationService;
     }
 
     @Transactional(readOnly = true)
@@ -67,7 +71,7 @@ public class TaskService {
 
         WorkGroup group = getGroup(groupId);
         GroupMember member = groupMemberRepository.findByGroupAndUser(group, user)
-                .orElseThrow(() -> new RuntimeException("해당 그룹의 멤버가 아닙니다."));
+                .orElseThrow(() -> new RuntimeException("?대떦 洹몃９??硫ㅻ쾭媛 ?꾨떃?덈떎."));
 
         if ("LEADER".equalsIgnoreCase(member.getRole())) {
             return taskRepository.findByGroupOrderByTaskIdDesc(group).stream()
@@ -88,7 +92,7 @@ public class TaskService {
         WorkGroup group = getGroup(groupId);
 
         if (!groupMemberRepository.existsByGroupAndUser(group, user)) {
-            throw new RuntimeException("해당 그룹의 멤버가 아닙니다.");
+            throw new RuntimeException("?대떦 洹몃９??硫ㅻ쾭媛 ?꾨떃?덈떎.");
         }
 
         return taskRepository.findByGroupOrderByTaskIdDesc(group)
@@ -108,7 +112,7 @@ public class TaskService {
 
         Long createdByUserId = toLong(body.get("createdByUserId"), body.get("userId"));
         if (createdByUserId == null) {
-            throw new RuntimeException("방문지 생성 사용자 ID가 필요합니다.");
+            throw new RuntimeException("諛⑸Ц吏 ?앹꽦 ?ъ슜??ID媛 ?꾩슂?⑸땲??");
         }
 
         User creator = getUser(createdByUserId);
@@ -122,7 +126,7 @@ public class TaskService {
         WorkGroup taskGroup = null;
         WorkGroup group = getGroup(groupId);
         creatorMembership = groupMemberRepository.findByGroupAndUser(group, creator)
-                .orElseThrow(() -> new RuntimeException("해당 그룹의 멤버만 방문지를 만들 수 있습니다."));
+                .orElseThrow(() -> new RuntimeException("?대떦 洹몃９??硫ㅻ쾭留?諛⑸Ц吏瑜?留뚮뱾 ???덉뒿?덈떎."));
         task.setGroup(group);
         taskGroup = group;
 
@@ -148,15 +152,19 @@ public class TaskService {
                 body.get("longitude")
         ));
 
-        // 카테고리는 선택 사항이다. 선택하지 않은 경우 빈 값(null)을 그대로 유지한다.
+        // 移댄뀒怨좊━???좏깮 ?ы빆?대떎. ?좏깮?섏? ?딆? 寃쎌슦 鍮?媛?null)??洹몃?濡??좎??쒕떎.
         task.setTaskCategory(firstNonBlank(
                 str(body.get("taskCategory")),
                 str(body.get("task")),
                 str(body.get("task_category"))
         ));
 
-        // workDate는 최초 등록일로 한 번만 저장한다.
-        // 프론트가 보낸 한국 로컬 날짜가 있으면 그 값을 사용하고 이후에는 변경하지 않는다.
+        task.setPriority(toInteger(
+                body.get("priority")
+        ));
+
+        // workDate??理쒖큹 ?깅줉?쇰줈 ??踰덈쭔 ??ν븳??
+        // ?꾨줎?멸? 蹂대궦 ?쒓뎅 濡쒖뺄 ?좎쭨媛 ?덉쑝硫?洹?媛믪쓣 ?ъ슜?섍퀬 ?댄썑?먮뒗 蹂寃쏀븯吏 ?딅뒗??
         LocalDate requestedWorkDate = toLocalDate(
                 body.get("workDate"),
                 body.get("work_date")
@@ -166,7 +174,7 @@ public class TaskService {
                 : LocalDate.now();
         task.setWorkDate(originalWorkDate);
 
-        // scheduledDate는 현재 어느 날짜의 업무 목록에 들어가 있는지를 나타낸다.
+        // scheduledDate???꾩옱 ?대뒓 ?좎쭨???낅Т 紐⑸줉???ㅼ뼱媛 ?덈뒗吏瑜??섑??몃떎.
         LocalDate requestedScheduledDate = toLocalDate(
                 body.get("scheduledDate"),
                 body.get("scheduled_date")
@@ -197,8 +205,8 @@ public class TaskService {
 
         Task savedTask = taskRepository.save(task);
 
-        // 1인 그룹과 일반 팀원은 등록 즉시 본인 담당으로 연결한다.
-        // 다인 그룹의 팀장이 추가한 방문지는 담당자 지정 화면에서 배정한다.
+        // 1??洹몃９怨??쇰컲 ??먯? ?깅줉 利됱떆 蹂몄씤 ?대떦?쇰줈 ?곌껐?쒕떎.
+        // ?ㅼ씤 洹몃９????μ씠 異붽???諛⑸Ц吏???대떦??吏???붾㈃?먯꽌 諛곗젙?쒕떎.
         boolean deferAssignment = booleanValue(body.get("deferAssignment"));
         if (taskGroup != null
                 && creatorMembership != null
@@ -236,8 +244,8 @@ public class TaskService {
     }
 
     /**
-     * 미처리 업무를 오늘 업무로 다시 가져올 때 배치 날짜만 갱신한다.
-     * work_date/created_at은 최초 등록 시점 정보이므로 절대 변경하지 않는다.
+     * 誘몄쿂由??낅Т瑜??ㅻ뒛 ?낅Т濡??ㅼ떆 媛?몄삱 ??諛곗튂 ?좎쭨留?媛깆떊?쒕떎.
+     * work_date/created_at? 理쒖큹 ?깅줉 ?쒖젏 ?뺣낫?대?濡??덈? 蹂寃쏀븯吏 ?딅뒗??
      */
     @Transactional
     public Map<String, Object> updateScheduledDate(Long taskId, String scheduledDate) {
@@ -249,13 +257,108 @@ public class TaskService {
         return toFrontendMap(taskRepository.save(task));
     }
 
+    @Transactional
+    public Map<String, Object> updatePriority(
+            Long taskId,
+            Integer priority,
+            Long userId,
+            Long groupId
+    ) {
+        Task task = getById(taskId);
+
+        WorkGroup group = task.getGroup();
+
+        if (groupId != null) {
+            if (group == null
+                    || !groupId.equals(group.getGroupId())) {
+                throw new RuntimeException(
+                        "현재 업무공간의 방문지가 아닙니다."
+                );
+            }
+        }
+
+        if (userId != null && group != null) {
+            User requester = getUser(userId);
+
+            if (!groupMemberRepository.existsByGroupAndUser(
+                    group,
+                    requester
+            )) {
+                throw new RuntimeException(
+                        "해당 업무공간의 멤버만 우선순위를 변경할 수 있습니다."
+                );
+            }
+        }
+
+        Integer previousPriority = task.getPriority();
+
+        if (Objects.equals(previousPriority, priority)) {
+            return toFrontendMap(task);
+        }
+
+        task.setPriority(priority);
+        Task saved = taskRepository.save(task);
+
+        LocationAssignment assignment = null;
+
+        if (group != null) {
+            assignment = locationAssignmentRepository
+                    .findByGroupAndTask(group, task)
+                    .orElse(null);
+        }
+
+        if (assignment == null) {
+            List<LocationAssignment> assignments =
+                    locationAssignmentRepository
+                            .findByTaskOrderByAssignedAtAsc(task);
+
+            if (!assignments.isEmpty()) {
+                assignment = assignments.get(0);
+            }
+        }
+
+        if (assignment != null
+                && assignment.getAssignee() != null) {
+            Map<String, Object> data = new HashMap<>();
+            data.put(
+                    "type",
+                    PushNotificationService.TYPE_PRIORITY_CHANGED
+            );
+            data.put("taskId", task.getTaskId());
+
+            if (group != null) {
+                data.put("groupId", group.getGroupId());
+            }
+
+            if (priority != null) {
+                data.put("priority", priority);
+            }
+
+            String body = priority == null
+                    ? taskDisplayName(task)
+                        + " 업무의 우선순위가 해제되었습니다."
+                    : taskDisplayName(task)
+                        + " 업무가 " + priority
+                        + "순위로 변경되었습니다.";
+
+            pushNotificationService.sendToUserAfterCommit(
+                    assignment.getAssignee().getUserId(),
+                    "업무 우선순위가 변경되었습니다",
+                    body,
+                    data
+            );
+        }
+
+        return toFrontendMap(saved);
+    }
+
     /*
-     * 미처리 방문지 삭제
+     * 誘몄쿂由?諛⑸Ц吏 ??젣
      *
-     * task를 바로 삭제하면
-     * task_progress / task_assignments에서
-     * 해당 task_id를 참조하고 있을 수 있으므로
-     * 관련 데이터를 먼저 삭제한다.
+     * task瑜?諛붾줈 ??젣?섎㈃
+     * task_progress / task_assignments?먯꽌
+     * ?대떦 task_id瑜?李몄“?섍퀬 ?덉쓣 ???덉쑝誘濡?
+     * 愿???곗씠?곕? 癒쇱? ??젣?쒕떎.
      */
     @Transactional
     public Map<String, Object> deletePendingTask(Long taskId) {
@@ -263,44 +366,44 @@ public class TaskService {
         Task task = taskRepository.findById(taskId).orElse(null);
 
         /*
-         * DB에는 이미 없는데
-         * 휴대폰에 예전 데이터가 남은 경우도
-         * 삭제 성공으로 처리
+         * DB?먮뒗 ?대? ?녿뒗??
+         * ?대??곗뿉 ?덉쟾 ?곗씠?곌? ?⑥? 寃쎌슦??
+         * ??젣 ?깃났?쇰줈 泥섎━
          */
         if (task == null) {
             Map<String, Object> result = new HashMap<>();
             result.put("taskId", taskId);
-            result.put("message", "이미 삭제된 방문지입니다.");
+            result.put("message", "?대? ??젣??諛⑸Ц吏?낅땲??");
             return result;
         }
 
         String status = task.getTaskStatus();
 
         /*
-         * 완료되었거나 작업 중인 방문지는
-         * 실수로 삭제하지 못하게 보호
+         * ?꾨즺?섏뿀嫄곕굹 ?묒뾽 以묒씤 諛⑸Ц吏??
+         * ?ㅼ닔濡???젣?섏? 紐삵븯寃?蹂댄샇
          */
         if (status != null
                 && !status.isBlank()
                 && !"pending".equalsIgnoreCase(status)) {
 
             throw new RuntimeException(
-                    "미처리 방문지만 삭제할 수 있습니다."
+                    "誘몄쿂由?諛⑸Ц吏留???젣?????덉뒿?덈떎."
             );
         }
 
-        // 담당자 배정 삭제
+        // ?대떦??諛곗젙 ??젣
         locationAssignmentRepository.deleteByTask_TaskId(taskId);
 
-        // 진행 기록 삭제
+        // 吏꾪뻾 湲곕줉 ??젣
         taskProgressRepository.deleteByTask_TaskId(taskId);
 
-        // 실제 방문지 삭제
+        // ?ㅼ젣 諛⑸Ц吏 ??젣
         taskRepository.delete(task);
 
         Map<String, Object> result = new HashMap<>();
         result.put("taskId", taskId);
-        result.put("message", "방문지가 삭제되었습니다.");
+        result.put("message", "諛⑸Ц吏媛 ??젣?섏뿀?듬땲??");
 
         return result;
     }
@@ -333,6 +436,7 @@ public class TaskService {
         map.put("status", task.getTaskStatus());
         map.put("taskStatus", task.getTaskStatus());
         map.put("task_status", task.getTaskStatus());
+        map.put("priority", task.getPriority());
 
         map.put("createdAt", task.getCreatedAt());
         map.put("created_at", task.getCreatedAt());
@@ -389,6 +493,15 @@ public class TaskService {
         return null;
     }
 
+    private Integer toInteger(Object... values) {
+        for (Object value : values) {
+            if (value != null && !value.toString().isBlank()) {
+                return Integer.valueOf(value.toString());
+            }
+        }
+        return null;
+    }
+
     private LocalDate toLocalDate(Object... values) {
         for (Object value : values) {
             if (value != null && !value.toString().isBlank()) {
@@ -400,12 +513,30 @@ public class TaskService {
 
     private User getUser(Long userId) {
         return userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+                .orElseThrow(() -> new RuntimeException("?ъ슜?먮? 李얠쓣 ???놁뒿?덈떎."));
     }
 
     private WorkGroup getGroup(Long groupId) {
         return workGroupRepository.findById(groupId)
-                .orElseThrow(() -> new RuntimeException("그룹을 찾을 수 없습니다."));
+                .orElseThrow(() -> new RuntimeException("洹몃９??李얠쓣 ???놁뒿?덈떎."));
+    }
+
+    private String taskDisplayName(Task task) {
+        if (task == null) {
+            return "방문지";
+        }
+
+        if (task.getDetailAddress() != null
+                && !task.getDetailAddress().isBlank()) {
+            return task.getDetailAddress();
+        }
+
+        if (task.getTaskCategory() != null
+                && !task.getTaskCategory().isBlank()) {
+            return task.getTaskCategory();
+        }
+
+        return "방문지";
     }
 
     private String firstNonBlank(String... values) {

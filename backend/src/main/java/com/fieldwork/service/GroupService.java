@@ -35,6 +35,7 @@ public class GroupService {
     private final LocationAssignmentRepository locationAssignmentRepository;
     private final UserRepository userRepository;
     private final TaskRepository taskRepository;
+    private final PushNotificationService pushNotificationService;
 
     public GroupService(
             WorkGroupRepository workGroupRepository,
@@ -42,13 +43,15 @@ public class GroupService {
             GroupInvitationRepository groupInvitationRepository,
             LocationAssignmentRepository locationAssignmentRepository,
             UserRepository userRepository,
-            TaskRepository taskRepository) {
+            TaskRepository taskRepository,
+            PushNotificationService pushNotificationService) {
         this.workGroupRepository = workGroupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.groupInvitationRepository = groupInvitationRepository;
         this.locationAssignmentRepository = locationAssignmentRepository;
         this.userRepository = userRepository;
         this.taskRepository = taskRepository;
+        this.pushNotificationService = pushNotificationService;
     }
 
     @Transactional
@@ -59,7 +62,7 @@ public class GroupService {
             String regionSigungu,
             String regionAdmCode) {
         if (groupName == null || groupName.trim().isEmpty()) {
-            throw new RuntimeException("그룹 이름을 입력해주세요.");
+            throw new RuntimeException("洹몃９ ?대쫫???낅젰?댁＜?몄슂.");
         }
 
         User leader = getUser(leaderUserId);
@@ -68,7 +71,7 @@ public class GroupService {
         group.setName(groupName.trim());
         group.setLeader(leader);
         group.setPersonal(false);
-        group.setRegionSido(regionSido == null || regionSido.isBlank() ? "부산광역시" : regionSido.trim());
+        group.setRegionSido(regionSido == null || regionSido.isBlank() ? "遺?곌킅??떆" : regionSido.trim());
         group.setRegionSigungu(regionSigungu == null ? "" : regionSigungu.trim());
         group.setRegionAdmCode(regionAdmCode == null ? "" : regionAdmCode.trim());
         WorkGroup savedGroup = workGroupRepository.save(group);
@@ -80,7 +83,7 @@ public class GroupService {
         groupMemberRepository.save(leaderMember);
 
         Map<String, Object> result = groupSummary(savedGroup, ROLE_LEADER);
-        result.put("message", "그룹이 생성되었습니다.");
+        result.put("message", "洹몃９???앹꽦?섏뿀?듬땲??");
         return result;
     }
 
@@ -95,33 +98,33 @@ public class GroupService {
         requireLeader(group, leaderUserId);
 
         if (group.isPersonal()) {
-            throw new RuntimeException("개인 업무공간은 공공업무 화면에서 구·군을 선택합니다.");
+            throw new RuntimeException("媛쒖씤 ?낅Т怨듦컙? 怨듦났?낅Т ?붾㈃?먯꽌 援?룰뎔???좏깮?⑸땲??");
         }
         if (regionSigungu == null || regionSigungu.isBlank()
                 || regionAdmCode == null || regionAdmCode.isBlank()) {
-            throw new RuntimeException("활동 구·군을 선택해주세요.");
+            throw new RuntimeException("?쒕룞 援?룰뎔???좏깮?댁＜?몄슂.");
         }
 
         group.setRegionSido(regionSido == null || regionSido.isBlank()
-                ? "부산광역시"
+                ? "遺?곌킅??떆"
                 : regionSido.trim());
         group.setRegionSigungu(regionSigungu.trim());
         group.setRegionAdmCode(regionAdmCode.trim());
 
         WorkGroup saved = workGroupRepository.save(group);
         Map<String, Object> result = groupSummary(saved, ROLE_LEADER);
-        result.put("message", "활동지역이 변경되었습니다.");
+        result.put("message", "?쒕룞吏??씠 蹂寃쎈릺?덉뒿?덈떎.");
         return result;
     }
 
     /**
-     * 모든 계정은 로그인 아이디를 이름으로 사용하는 실제 1인 그룹을 하나 가진다.
-     * 기존 사용자의 group_id가 없던 방문지도 최초 로그인/그룹 조회 때 이곳으로 이전한다.
+     * 紐⑤뱺 怨꾩젙? 濡쒓렇???꾩씠?붾? ?대쫫?쇰줈 ?ъ슜?섎뒗 ?ㅼ젣 1??洹몃９???섎굹 媛吏꾨떎.
+     * 湲곗〈 ?ъ슜?먯쓽 group_id媛 ?녿뜕 諛⑸Ц吏??理쒖큹 濡쒓렇??洹몃９ 議고쉶 ???닿납?쇰줈 ?댁쟾?쒕떎.
      */
     @Transactional
     public WorkGroup ensurePersonalGroup(User user) {
         if (user == null || user.getUserId() == null) {
-            throw new RuntimeException("사용자 정보가 없습니다.");
+            throw new RuntimeException("?ъ슜???뺣낫媛 ?놁뒿?덈떎.");
         }
 
         WorkGroup personalGroup = workGroupRepository
@@ -131,7 +134,7 @@ public class GroupService {
                     created.setName(user.getLoginId());
                     created.setLeader(user);
                     created.setPersonal(true);
-                    created.setRegionSido(user.getWorkSido() == null ? "부산광역시" : user.getWorkSido());
+                    created.setRegionSido(user.getWorkSido() == null ? "遺?곌킅??떆" : user.getWorkSido());
                     return workGroupRepository.save(created);
                 });
 
@@ -161,8 +164,8 @@ public class GroupService {
         List<GroupMember> memberships =
                 groupMemberRepository.findByUserOrderByJoinedAtDesc(user);
 
-        // 예전 데이터는 담당 배정만 있고 task.group_id가 비어 있을 수 있다.
-        // 해당 팀의 누구든 그룹 목록을 조회하면 소유 그룹을 자동 복구한다.
+        // ?덉쟾 ?곗씠?곕뒗 ?대떦 諛곗젙留??덇퀬 task.group_id媛 鍮꾩뼱 ?덉쓣 ???덈떎.
+        // ?대떦 ????꾧뎄??洹몃９ 紐⑸줉??議고쉶?섎㈃ ?뚯쑀 洹몃９???먮룞 蹂듦뎄?쒕떎.
         memberships.forEach(member ->
                 synchronizeAssignedTaskGroups(member.getGroup()));
 
@@ -213,29 +216,29 @@ public class GroupService {
         User inviter = requireLeader(group, inviterUserId);
 
         if (group.isPersonal()) {
-            throw new RuntimeException("자동 1인 그룹에는 팀원을 초대할 수 없습니다. 새 그룹을 만들어주세요.");
+            throw new RuntimeException("?먮룞 1??洹몃９?먮뒗 ??먯쓣 珥덈??????놁뒿?덈떎. ??洹몃９??留뚮뱾?댁＜?몄슂.");
         }
 
         if (inviteeLoginId == null || inviteeLoginId.trim().isEmpty()) {
-            throw new RuntimeException("초대할 사용자 아이디를 입력해주세요.");
+            throw new RuntimeException("珥덈????ъ슜???꾩씠?붾? ?낅젰?댁＜?몄슂.");
         }
 
         User invitee = userRepository.findByLoginId(inviteeLoginId.trim())
-                .orElseThrow(() -> new RuntimeException("해당 아이디의 사용자를 찾을 수 없습니다."));
+                .orElseThrow(() -> new RuntimeException("?대떦 ?꾩씠?붿쓽 ?ъ슜?먮? 李얠쓣 ???놁뒿?덈떎."));
 
         if (invitee.getUserId().equals(inviter.getUserId())) {
-            throw new RuntimeException("자기 자신은 초대할 수 없습니다.");
+            throw new RuntimeException("?먭린 ?먯떊? 珥덈??????놁뒿?덈떎.");
         }
 
         if (groupMemberRepository.existsByGroupAndUser(group, invitee)) {
-            throw new RuntimeException("이미 그룹에 가입된 사용자입니다.");
+            throw new RuntimeException("?대? 洹몃９??媛?낅맂 ?ъ슜?먯엯?덈떎.");
         }
 
         if (groupInvitationRepository.existsByGroupAndInviteeAndStatus(
                 group,
                 invitee,
                 INVITE_PENDING)) {
-            throw new RuntimeException("이미 대기 중인 초대가 있습니다.");
+            throw new RuntimeException("?대? ?湲?以묒씤 珥덈?媛 ?덉뒿?덈떎.");
         }
 
         GroupInvitation invitation = new GroupInvitation();
@@ -246,7 +249,7 @@ public class GroupService {
 
         GroupInvitation saved = groupInvitationRepository.save(invitation);
         Map<String, Object> result = invitationMap(saved);
-        result.put("message", "초대를 보냈습니다.");
+        result.put("message", "珥덈?瑜?蹂대깉?듬땲??");
         return result;
     }
 
@@ -284,7 +287,7 @@ public class GroupService {
 
         Map<String, Object> result = groupSummary(group, ROLE_MEMBER);
         result.put("invitationId", invitation.getInvitationId());
-        result.put("message", "그룹 초대를 수락했습니다.");
+        result.put("message", "洹몃９ 珥덈?瑜??섎씫?덉뒿?덈떎.");
         return result;
     }
 
@@ -298,7 +301,7 @@ public class GroupService {
         groupInvitationRepository.save(invitation);
 
         Map<String, Object> result = invitationMap(invitation);
-        result.put("message", "그룹 초대를 거절했습니다.");
+        result.put("message", "洹몃９ 珥덈?瑜?嫄곗젅?덉뒿?덈떎.");
         return result;
     }
 
@@ -313,25 +316,25 @@ public class GroupService {
         User assignee = getUser(assigneeUserId);
 
         if (group.isPersonal() && !assignee.getUserId().equals(group.getLeader().getUserId())) {
-            throw new RuntimeException("1인 그룹의 담당자는 본인만 선택할 수 있습니다.");
+            throw new RuntimeException("1??洹몃９???대떦?먮뒗 蹂몄씤留??좏깮?????덉뒿?덈떎.");
         }
 
         if (!groupMemberRepository.existsByGroupAndUser(group, assignee)) {
-            throw new RuntimeException("담당자는 해당 그룹의 멤버여야 합니다.");
+            throw new RuntimeException("?대떦?먮뒗 ?대떦 洹몃９??硫ㅻ쾭?ъ빞 ?⑸땲??");
         }
 
         Task task = taskRepository.findById(taskId)
-                .orElseThrow(() -> new RuntimeException("방문지를 찾을 수 없습니다."));
+                .orElseThrow(() -> new RuntimeException("諛⑸Ц吏瑜?李얠쓣 ???놁뒿?덈떎."));
 
         if (task.getGroup() != null
                 && !task.getGroup().getGroupId().equals(group.getGroupId())) {
-            throw new RuntimeException("다른 그룹의 방문지는 배정할 수 없습니다.");
+            throw new RuntimeException("?ㅻⅨ 洹몃９??諛⑸Ц吏??諛곗젙?????놁뒿?덈떎.");
         }
 
         if (task.getGroup() == null
                 && task.getCreatedBy() != null
                 && !task.getCreatedBy().getUserId().equals(leader.getUserId())) {
-            throw new RuntimeException("다른 사용자의 개인 방문지는 배정할 수 없습니다.");
+            throw new RuntimeException("?ㅻⅨ ?ъ슜?먯쓽 媛쒖씤 諛⑸Ц吏??諛곗젙?????놁뒿?덈떎.");
         }
 
         if (task.getGroup() == null) {
@@ -344,9 +347,19 @@ public class GroupService {
 
         taskRepository.save(task);
 
-        LocationAssignment assignment = locationAssignmentRepository
+        LocationAssignment existingAssignment = locationAssignmentRepository
                 .findByGroupAndTask(group, task)
-                .orElseGet(LocationAssignment::new);
+                .orElse(null);
+
+        User previousAssignee =
+                existingAssignment != null
+                        ? existingAssignment.getAssignee()
+                        : null;
+
+        LocationAssignment assignment =
+                existingAssignment != null
+                        ? existingAssignment
+                        : new LocationAssignment();
 
         assignment.setGroup(group);
         assignment.setTask(task);
@@ -354,8 +367,61 @@ public class GroupService {
         assignment.setAssignedBy(leader);
 
         LocationAssignment saved = locationAssignmentRepository.save(assignment);
+
+        boolean isNewAssignment = previousAssignee == null;
+        boolean assigneeChanged =
+                previousAssignee != null
+                        && !previousAssignee.getUserId()
+                        .equals(assignee.getUserId());
+
+        if (isNewAssignment) {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("type", PushNotificationService.TYPE_TASK_ASSIGNED);
+            data.put("taskId", task.getTaskId());
+            data.put("groupId", group.getGroupId());
+
+            pushNotificationService.sendToUserAfterCommit(
+                    assignee.getUserId(),
+                    "새 업무가 배정되었습니다",
+                    taskDisplayName(task) + " 업무가 배정되었습니다.",
+                    data
+            );
+        } else if (assigneeChanged) {
+            Map<String, Object> oldAssigneeData = new LinkedHashMap<>();
+            oldAssigneeData.put(
+                    "type",
+                    PushNotificationService.TYPE_ASSIGNEE_CHANGED
+            );
+            oldAssigneeData.put("taskId", task.getTaskId());
+            oldAssigneeData.put("groupId", group.getGroupId());
+
+            pushNotificationService.sendToUserAfterCommit(
+                    previousAssignee.getUserId(),
+                    "담당 업무가 변경되었습니다",
+                    taskDisplayName(task)
+                            + " 업무의 담당자가 변경되었습니다.",
+                    oldAssigneeData
+            );
+
+            Map<String, Object> newAssigneeData = new LinkedHashMap<>();
+            newAssigneeData.put(
+                    "type",
+                    PushNotificationService.TYPE_ASSIGNEE_CHANGED
+            );
+            newAssigneeData.put("taskId", task.getTaskId());
+            newAssigneeData.put("groupId", group.getGroupId());
+
+            pushNotificationService.sendToUserAfterCommit(
+                    assignee.getUserId(),
+                    "담당 업무가 변경되었습니다",
+                    taskDisplayName(task)
+                            + " 업무가 새로 배정되었습니다.",
+                    newAssigneeData
+            );
+        }
+
         Map<String, Object> result = assignmentMap(saved);
-        result.put("message", "담당자가 지정되었습니다.");
+        result.put("message", "?대떦?먭? 吏?뺣릺?덉뒿?덈떎.");
 
         return result;
     }
@@ -367,7 +433,7 @@ public class GroupService {
             Long leaderUserId,
             Long assigneeUserId) {
         if (taskIds == null || taskIds.isEmpty()) {
-            throw new RuntimeException("배정할 방문지가 없습니다.");
+            throw new RuntimeException("諛곗젙??諛⑸Ц吏媛 ?놁뒿?덈떎.");
         }
 
         List<Map<String, Object>> result = new ArrayList<>();
@@ -394,20 +460,40 @@ public class GroupService {
         requireLeader(group, leaderUserId);
 
         if (group.isPersonal()) {
-            throw new RuntimeException("1인 그룹의 본인 담당 배정은 해제할 수 없습니다.");
+            throw new RuntimeException("1??洹몃９??蹂몄씤 ?대떦 諛곗젙? ?댁젣?????놁뒿?덈떎.");
         }
 
         Task task = taskRepository.findById(taskId)
-                .orElseThrow(() -> new RuntimeException("방문지를 찾을 수 없습니다."));
+                .orElseThrow(() -> new RuntimeException("諛⑸Ц吏瑜?李얠쓣 ???놁뒿?덈떎."));
 
         LocationAssignment assignment = locationAssignmentRepository
                 .findByGroupAndTask(group, task)
-                .orElseThrow(() -> new RuntimeException("지정된 담당자가 없습니다."));
+                .orElseThrow(() -> new RuntimeException("吏?뺣맂 ?대떦?먭? ?놁뒿?덈떎."));
+
+        User previousAssignee = assignment.getAssignee();
 
         locationAssignmentRepository.delete(assignment);
 
+        if (previousAssignee != null) {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put(
+                    "type",
+                    PushNotificationService.TYPE_ASSIGNEE_CHANGED
+            );
+            data.put("taskId", task.getTaskId());
+            data.put("groupId", group.getGroupId());
+
+            pushNotificationService.sendToUserAfterCommit(
+                    previousAssignee.getUserId(),
+                    "담당 업무가 변경되었습니다",
+                    taskDisplayName(task)
+                            + " 업무의 담당이 해제되었습니다.",
+                    data
+            );
+        }
+
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("message", "담당자 배정을 해제했습니다.");
+        result.put("message", "?대떦??諛곗젙???댁젣?덉뒿?덈떎.");
         result.put("groupId", groupId);
         result.put("taskId", taskId);
         return result;
@@ -440,31 +526,31 @@ public class GroupService {
 
     private User getUser(Long userId) {
         if (userId == null) {
-            throw new RuntimeException("사용자 정보가 없습니다.");
+            throw new RuntimeException("?ъ슜???뺣낫媛 ?놁뒿?덈떎.");
         }
 
         return userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+                .orElseThrow(() -> new RuntimeException("?ъ슜?먮? 李얠쓣 ???놁뒿?덈떎."));
     }
 
     private WorkGroup getGroup(Long groupId) {
         if (groupId == null) {
-            throw new RuntimeException("그룹 정보가 없습니다.");
+            throw new RuntimeException("洹몃９ ?뺣낫媛 ?놁뒿?덈떎.");
         }
 
         return workGroupRepository.findById(groupId)
-                .orElseThrow(() -> new RuntimeException("그룹을 찾을 수 없습니다."));
+                .orElseThrow(() -> new RuntimeException("洹몃９??李얠쓣 ???놁뒿?덈떎."));
     }
 
     private GroupInvitation getInvitation(Long invitationId) {
         return groupInvitationRepository.findById(invitationId)
-                .orElseThrow(() -> new RuntimeException("초대를 찾을 수 없습니다."));
+                .orElseThrow(() -> new RuntimeException("珥덈?瑜?李얠쓣 ???놁뒿?덈떎."));
     }
 
     private GroupMember requireMember(WorkGroup group, Long userId) {
         User user = getUser(userId);
         return groupMemberRepository.findByGroupAndUser(group, user)
-                .orElseThrow(() -> new RuntimeException("그룹에 가입된 사용자만 접근할 수 있습니다."));
+                .orElseThrow(() -> new RuntimeException("洹몃９??媛?낅맂 ?ъ슜?먮쭔 ?묎렐?????덉뒿?덈떎."));
     }
 
     private User requireLeader(WorkGroup group, Long userId) {
@@ -472,7 +558,7 @@ public class GroupService {
 
         if (!ROLE_LEADER.equals(member.getRole()) ||
                 !group.getLeader().getUserId().equals(member.getUser().getUserId())) {
-            throw new RuntimeException("팀장만 수행할 수 있는 작업입니다.");
+            throw new RuntimeException("??λ쭔 ?섑뻾?????덈뒗 ?묒뾽?낅땲??");
         }
 
         return member.getUser();
@@ -480,13 +566,13 @@ public class GroupService {
 
     private void validateInvitationOwner(GroupInvitation invitation, Long userId) {
         if (userId == null || !invitation.getInvitee().getUserId().equals(userId)) {
-            throw new RuntimeException("본인에게 온 초대만 처리할 수 있습니다.");
+            throw new RuntimeException("蹂몄씤?먭쾶 ??珥덈?留?泥섎━?????덉뒿?덈떎.");
         }
     }
 
     private void requirePending(GroupInvitation invitation) {
         if (!INVITE_PENDING.equals(invitation.getStatus())) {
-            throw new RuntimeException("이미 처리된 초대입니다.");
+            throw new RuntimeException("?대? 泥섎━??珥덈??낅땲??");
         }
     }
 
@@ -497,7 +583,7 @@ public class GroupService {
 
         String normalized = status.trim().toUpperCase();
         if (!List.of(INVITE_PENDING, INVITE_ACCEPTED, INVITE_REJECTED).contains(normalized)) {
-            throw new RuntimeException("올바르지 않은 초대 상태입니다.");
+            throw new RuntimeException("?щ컮瑜댁? ?딆? 珥덈? ?곹깭?낅땲??");
         }
         return normalized;
     }
@@ -510,7 +596,7 @@ public class GroupService {
             List<LocationAssignment> existingAssignments =
                     locationAssignmentRepository.findByTaskOrderByAssignedAtAsc(task);
 
-            // 예전 팀 배정이 이미 존재하면 그 팀 소유 방문지로 복구한다.
+            // ?덉쟾 ? 諛곗젙???대? 議댁옱?섎㈃ 洹?? ?뚯쑀 諛⑸Ц吏濡?蹂듦뎄?쒕떎.
             if (!existingAssignments.isEmpty()) {
                 task.setGroup(existingAssignments.get(0).getGroup());
                 taskRepository.save(task);
@@ -605,6 +691,24 @@ public class GroupService {
         return map;
     }
 
+    private String taskDisplayName(Task task) {
+        if (task == null) {
+            return "방문지";
+        }
+
+        if (task.getDetailAddress() != null
+                && !task.getDetailAddress().isBlank()) {
+            return task.getDetailAddress();
+        }
+
+        if (task.getTaskCategory() != null
+                && !task.getTaskCategory().isBlank()) {
+            return task.getTaskCategory();
+        }
+
+        return "방문지";
+    }
+
     private Map<String, Object> assignmentMap(LocationAssignment assignment) {
         Task task = assignment.getTask();
         User assignee = assignment.getAssignee();
@@ -624,6 +728,7 @@ public class GroupService {
         map.put("taskCategory", task.getTaskCategory());
         map.put("task", task.getTaskCategory());
         map.put("status", task.getTaskStatus());
+        map.put("priority", task.getPriority());
         map.put("createdAt", task.getCreatedAt());
         map.put("created_at", task.getCreatedAt());
         map.put("workDate", task.getWorkDate());
