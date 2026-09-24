@@ -38,19 +38,22 @@ public class Task {
     @Column(name = "task_status")
     private String taskStatus;
 
-    /** 최초 등록 시각. 중복 방문지를 날짜로 구분할 때 사용한다. */
+    @Column(name = "priority")
+    private Integer priority;
+
+    /** 理쒖큹 ?깅줉 ?쒓컖. 以묐났 諛⑸Ц吏瑜??좎쭨濡?援щ텇?????ъ슜?쒕떎. */
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
-    /** 업무 상태가 complete로 전환된 실제 시각. 기존 완료 데이터는 null일 수 있다. */
+    /** ?낅Т ?곹깭媛 complete濡??꾪솚???ㅼ젣 ?쒓컖. 湲곗〈 ?꾨즺 ?곗씠?곕뒗 null?????덈떎. */
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
-    /** 방문지를 최초 등록한 날짜. 한 번 생성되면 변경하지 않는다. */
+    /** 諛⑸Ц吏瑜?理쒖큹 ?깅줉???좎쭨. ??踰??앹꽦?섎㈃ 蹂寃쏀븯吏 ?딅뒗?? */
     @Column(name = "work_date", updatable = false)
     private LocalDate workDate;
 
-    /** 현재 어느 날짜의 업무 목록에 배치되어 있는지 나타낸다. */
+    /** ?꾩옱 ?대뒓 ?좎쭨???낅Т 紐⑸줉??諛곗튂?섏뼱 ?덈뒗吏 ?섑??몃떎. */
     @Column(name = "scheduled_date")
     private LocalDate scheduledDate;
 
@@ -125,6 +128,14 @@ public class Task {
 
     public void setTaskStatus(String taskStatus) {
         this.taskStatus = taskStatus;
+    }
+
+    public Integer getPriority() {
+        return priority;
+    }
+
+    public void setPriority(Integer priority) {
+        this.priority = priority;
     }
 
     public LocalDateTime getCreatedAt() {
