@@ -53,7 +53,8 @@
         "expo-build-properties",
         {
           "android": {
-            "usesCleartextTraffic": true
+            "usesCleartextTraffic": true,
+            "googleServicesFile": "./google-services.json"
           }
         }
       ]

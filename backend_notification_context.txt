@@ -1,0 +1,2843 @@
+﻿
+
+[FILE NOT FOUND] backend\build.gradle
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\FieldworkApplication.java
+============================================================
+
+package com.fieldwork;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class FieldworkApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(FieldworkApplication.class, args);
+    }
+
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\entity\User.java
+============================================================
+
+package com.fieldwork.entity;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "users")
+public class User {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "user_id")
+    private Long userId;
+
+    @Column(name = "login_id", unique = true)
+    private String loginId;
+
+    private String password;
+
+    private String name;
+
+    private String role;
+
+    @Column(name = "work_sido")
+    private String workSido;
+
+    @Column(name = "work_sigungu")
+    private String workSigungu;
+
+    public User() {}
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
+    public String getLoginId() {
+        return loginId;
+    }
+
+    public void setLoginId(String loginId) {
+        this.loginId = loginId;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
+    }
+
+    public String getWorkSido() {
+        return workSido;
+    }
+
+    public void setWorkSido(String workSido) {
+        this.workSido = workSido;
+    }
+
+    public String getWorkSigungu() {
+        return workSigungu;
+    }
+
+    public void setWorkSigungu(String workSigungu) {
+        this.workSigungu = workSigungu;
+    }
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\entity\Task.java
+============================================================
+
+package com.fieldwork.entity;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.PrePersist;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "task")
+public class Task {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "task_id")
+    private Long taskId;
+
+    @Column(name = "road_address")
+    private String roadAddress;
+
+    @Column(name = "detail_address")
+    private String detailAddress;
+
+    private Double lat;
+    private Double lng;
+
+    @Column(name = "task_category")
+    private String taskCategory;
+
+    @Column(name = "task_status")
+    private String taskStatus;
+
+    /** 理쒖큹 ?깅줉 ?쒓컖. 以묐났 諛⑸Ц吏瑜??좎쭨濡?援щ텇?????ъ슜?쒕떎. */
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+
+    /** ?낅Т ?곹깭媛 complete濡??꾪솚???ㅼ젣 ?쒓컖. 湲곗〈 ?꾨즺 ?곗씠?곕뒗 null?????덈떎. */
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
+    /** 諛⑸Ц吏瑜?理쒖큹 ?깅줉???좎쭨. ??踰??앹꽦?섎㈃ 蹂寃쏀븯吏 ?딅뒗?? */
+    @Column(name = "work_date", updatable = false)
+    private LocalDate workDate;
+
+    /** ?꾩옱 ?대뒓 ?좎쭨???낅Т 紐⑸줉??諛곗튂?섏뼱 ?덈뒗吏 ?섑??몃떎. */
+    @Column(name = "scheduled_date")
+    private LocalDate scheduledDate;
+
+    @Column(name = "sido")
+    private String sido;
+
+    @Column(name = "sigungu")
+    private String sigungu;
+
+    @Column(name = "admin_dong")
+    private String adminDong;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by_user_id")
+    private User createdBy;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_id")
+    private WorkGroup group;
+
+    public Long getTaskId() {
+        return taskId;
+    }
+
+    public void setTaskId(Long taskId) {
+        this.taskId = taskId;
+    }
+
+    public String getRoadAddress() {
+        return roadAddress;
+    }
+
+    public void setRoadAddress(String roadAddress) {
+        this.roadAddress = roadAddress;
+    }
+
+    public String getDetailAddress() {
+        return detailAddress;
+    }
+
+    public void setDetailAddress(String detailAddress) {
+        this.detailAddress = detailAddress;
+    }
+
+    public Double getLat() {
+        return lat;
+    }
+
+    public void setLat(Double lat) {
+        this.lat = lat;
+    }
+
+    public Double getLng() {
+        return lng;
+    }
+
+    public void setLng(Double lng) {
+        this.lng = lng;
+    }
+
+    public String getTaskCategory() {
+        return taskCategory;
+    }
+
+    public void setTaskCategory(String taskCategory) {
+        this.taskCategory = taskCategory;
+    }
+
+    public String getTaskStatus() {
+        return taskStatus;
+    }
+
+    public void setTaskStatus(String taskStatus) {
+        this.taskStatus = taskStatus;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt;
+    }
+
+    public LocalDate getWorkDate() {
+        return workDate;
+    }
+
+    public void setWorkDate(LocalDate workDate) {
+        this.workDate = workDate;
+    }
+
+    public LocalDate getScheduledDate() {
+        return scheduledDate;
+    }
+
+    public void setScheduledDate(LocalDate scheduledDate) {
+        this.scheduledDate = scheduledDate;
+    }
+
+    @PrePersist
+    public void initializeWorkDates() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+        if (workDate == null) {
+            workDate = createdAt.toLocalDate();
+        }
+        if (scheduledDate == null) {
+            scheduledDate = workDate;
+        }
+    }
+
+    public String getSido() {
+        return sido;
+    }
+
+    public void setSido(String sido) {
+        this.sido = sido;
+    }
+
+    public String getSigungu() {
+        return sigungu;
+    }
+
+    public void setSigungu(String sigungu) {
+        this.sigungu = sigungu;
+    }
+
+    public String getAdminDong() {
+        return adminDong;
+    }
+
+    public void setAdminDong(String adminDong) {
+        this.adminDong = adminDong;
+    }
+
+    public User getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(User createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public WorkGroup getGroup() {
+        return group;
+    }
+
+    public void setGroup(WorkGroup group) {
+        this.group = group;
+    }
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\entity\Location.java
+============================================================
+
+package com.fieldwork.entity;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name="locations")
+public class Location {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String name;
+    private String address;
+    private String status;
+
+    private Double lat;
+    private Double lng;
+
+    // [?명봽???뚯씠?꾨씪???곕룞???꾪븳 ?듭떖 ?꾨뱶 2媛?異붽?]
+    private String fieldMemo; // ?꾩옣 ?대떦?먯쓽 ?좉쾬??硫붾え
+
+    @Column(columnDefinition = "TEXT") // AI媛 以 湲?蹂닿퀬??蹂몃Ц???닿린 ?꾪빐 TEXT ??낆쑝濡??명똿
+    private String aiRefinedContent; // ?쒕??섏씠媛 ?뺤젣?댁? 理쒖쥌 怨듬Ц?쒖슜 ?댁슜
+
+    public Location(){}
+
+    public Long getId(){ return id; }
+    public void setId(Long id){ this.id=id; }
+
+    public String getName(){ return name; }
+    public void setName(String name){ this.name=name; }
+
+    public String getAddress(){ return address; }
+    public void setAddress(String address){ this.address=address; }
+
+    public String getStatus(){ return status; }
+    public void setStatus(String status){ this.status=status; }
+
+    public Double getLat(){ return lat; }
+    public void setLat(Double lat){ this.lat=lat; }
+
+    public Double getLng(){ return lng; }
+    public void setLng(Double lng){ this.lng=lng; }
+
+    //  [異붽????꾨뱶?ㅼ쓽 Getter / Setter 遺]
+    public String getFieldMemo() { return fieldMemo; }
+    public void setFieldMemo(String fieldMemo) { this.fieldMemo = fieldMemo; }
+
+    public String getAiRefinedContent() { return aiRefinedContent; }
+    public void setAiRefinedContent(String aiRefinedContent) { this.aiRefinedContent = aiRefinedContent; }
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\entity\LocationAssignment.java
+============================================================
+
+package com.fieldwork.entity;
+
+import jakarta.persistence.*;
+
+import java.time.LocalDateTime;
+
+/**
+ * 諛⑸Ц吏 ?대떦??諛곗젙.
+ *
+ * ?꾩옱 ?꾨줎?몄쓽 /api/locations ???ㅼ젣濡?task ?뚯씠釉붿쓣 ?ъ슜?섎?濡?
+ * 諛⑸Ц吏 ?앸퀎?먮뒗 Task(task_id)瑜?湲곗??쇰줈 ?곌껐?쒕떎.
+ */
+@Entity
+@Table(
+        name = "task_assignments",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_group_task",
+                        columnNames = {"group_id", "task_id"}
+                )
+        }
+)
+public class LocationAssignment {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "assignment_id")
+    private Long assignmentId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_id", nullable = false)
+    private WorkGroup group;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "task_id", nullable = false)
+    private Task task;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assignee_id", nullable = false)
+    private User assignee;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_by", nullable = false)
+    private User assignedBy;
+
+    @Column(name = "assigned_at", nullable = false)
+    private LocalDateTime assignedAt;
+
+    public LocationAssignment() {
+    }
+
+    @PrePersist
+    @PreUpdate
+    public void updateAssignedAt() {
+        this.assignedAt = LocalDateTime.now();
+    }
+
+    public Long getAssignmentId() {
+        return assignmentId;
+    }
+
+    public void setAssignmentId(Long assignmentId) {
+        this.assignmentId = assignmentId;
+    }
+
+    public WorkGroup getGroup() {
+        return group;
+    }
+
+    public void setGroup(WorkGroup group) {
+        this.group = group;
+    }
+
+    public Task getTask() {
+        return task;
+    }
+
+    public void setTask(Task task) {
+        this.task = task;
+    }
+
+    public User getAssignee() {
+        return assignee;
+    }
+
+    public void setAssignee(User assignee) {
+        this.assignee = assignee;
+    }
+
+    public User getAssignedBy() {
+        return assignedBy;
+    }
+
+    public void setAssignedBy(User assignedBy) {
+        this.assignedBy = assignedBy;
+    }
+
+    public LocalDateTime getAssignedAt() {
+        return assignedAt;
+    }
+
+    public void setAssignedAt(LocalDateTime assignedAt) {
+        this.assignedAt = assignedAt;
+    }
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\entity\TaskProgress.java
+============================================================
+
+package com.fieldwork.entity;
+
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+
+@Entity
+@Table(name = "task_progress")
+public class TaskProgress {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "progress_id")
+    private Long progressId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "task_id", nullable = false)
+    private Task task;
+
+    private Double latitude;
+    private Double longitude;
+
+    @Column(name = "location_map_image")
+    private String locationMapImage;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "field_photos", columnDefinition = "jsonb")
+    private List<Map<String, Object>> fieldPhotos;
+
+    @Column(name = "main_comment", columnDefinition = "TEXT")
+    private String mainComment;
+
+    @Column(name = "field_memo", columnDefinition = "TEXT")
+    private String fieldMemo;
+
+    @Column(name = "progress_status")
+    private String progressStatus;
+
+    @Column(name = "ai_refined_content", columnDefinition = "TEXT")
+    private String aiRefinedContent;
+
+    @Column(name = "report_file_path", columnDefinition = "TEXT")
+    private String reportFilePath;
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+
+    public Long getProgressId() { return progressId; }
+
+    public Task getTask() { return task; }
+    public void setTask(Task task) { this.task = task; }
+
+    public Double getLatitude() { return latitude; }
+    public void setLatitude(Double latitude) { this.latitude = latitude; }
+
+    public Double getLongitude() { return longitude; }
+    public void setLongitude(Double longitude) { this.longitude = longitude; }
+
+    public String getLocationMapImage() { return locationMapImage; }
+    public void setLocationMapImage(String locationMapImage) { this.locationMapImage = locationMapImage; }
+
+    public List<Map<String, Object>> getFieldPhotos() { return fieldPhotos; }
+    public void setFieldPhotos(List<Map<String, Object>> fieldPhotos) { this.fieldPhotos = fieldPhotos; }
+
+    public String getMainComment() { return mainComment; }
+    public void setMainComment(String mainComment) { this.mainComment = mainComment; }
+
+    public String getFieldMemo() { return fieldMemo; }
+    public void setFieldMemo(String fieldMemo) { this.fieldMemo = fieldMemo; }
+
+    public String getProgressStatus() { return progressStatus; }
+    public void setProgressStatus(String progressStatus) { this.progressStatus = progressStatus; }
+
+    public String getAiRefinedContent() { return aiRefinedContent; }
+    public void setAiRefinedContent(String aiRefinedContent) { this.aiRefinedContent = aiRefinedContent; }
+
+    public String getReportFilePath() { return reportFilePath; }
+    public void setReportFilePath(String reportFilePath) { this.reportFilePath = reportFilePath; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\entity\GroupMember.java
+============================================================
+
+package com.fieldwork.entity;
+
+import jakarta.persistence.*;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(
+        name = "group_members",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_group_member",
+                        columnNames = {"group_id", "user_id"}
+                )
+        }
+)
+public class GroupMember {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "group_member_id")
+    private Long groupMemberId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_id", nullable = false)
+    private WorkGroup group;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    // LEADER / MEMBER
+    @Column(nullable = false)
+    private String role;
+
+    @Column(name = "joined_at", nullable = false)
+    private LocalDateTime joinedAt;
+
+    public GroupMember() {
+    }
+
+    @PrePersist
+    public void prePersist() {
+        this.joinedAt = LocalDateTime.now();
+    }
+
+    public Long getGroupMemberId() {
+        return groupMemberId;
+    }
+
+    public void setGroupMemberId(Long groupMemberId) {
+        this.groupMemberId = groupMemberId;
+    }
+
+    public WorkGroup getGroup() {
+        return group;
+    }
+
+    public void setGroup(WorkGroup group) {
+        this.group = group;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
+    }
+
+    public LocalDateTime getJoinedAt() {
+        return joinedAt;
+    }
+
+    public void setJoinedAt(LocalDateTime joinedAt) {
+        this.joinedAt = joinedAt;
+    }
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\entity\WorkGroup.java
+============================================================
+
+package com.fieldwork.entity;
+
+import jakarta.persistence.*;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "work_groups")
+public class WorkGroup {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "group_id")
+    private Long groupId;
+
+    @Column(nullable = false)
+    private String name;
+
+    // 洹몃９??留뚮뱺 ???
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "leader_id", nullable = false)
+    private User leader;
+
+    /**
+     * true硫??뚯썝媛?????먮룞 ?앹꽦?섎뒗 1???낅Т怨듦컙?대떎.
+     * 諛⑸Ц吏/?대떦??援ъ“???쇰컲 ?怨??숈씪?섍퀬, 珥덈? 媛숈? 愿由?湲곕뒫留??쒗븳?쒕떎.
+     */
+    @Column(name = "is_personal", nullable = false, columnDefinition = "boolean default false")
+    private Boolean personal = false;
+
+    @Column(name = "region_sido")
+    private String regionSido;
+
+    @Column(name = "region_sigungu")
+    private String regionSigungu;
+
+    @Column(name = "region_adm_code")
+    private String regionAdmCode;
+
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt;
+
+    public WorkGroup() {
+    }
+
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+        if (this.personal == null) {
+            this.personal = false;
+        }
+    }
+
+    public Long getGroupId() {
+        return groupId;
+    }
+
+    public void setGroupId(Long groupId) {
+        this.groupId = groupId;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public User getLeader() {
+        return leader;
+    }
+
+    public void setLeader(User leader) {
+        this.leader = leader;
+    }
+
+    public boolean isPersonal() {
+        return Boolean.TRUE.equals(personal);
+    }
+
+    public void setPersonal(boolean personal) {
+        this.personal = personal;
+    }
+
+    public String getRegionSido() {
+        return regionSido;
+    }
+
+    public void setRegionSido(String regionSido) {
+        this.regionSido = regionSido;
+    }
+
+    public String getRegionSigungu() {
+        return regionSigungu;
+    }
+
+    public void setRegionSigungu(String regionSigungu) {
+        this.regionSigungu = regionSigungu;
+    }
+
+    public String getRegionAdmCode() {
+        return regionAdmCode;
+    }
+
+    public void setRegionAdmCode(String regionAdmCode) {
+        this.regionAdmCode = regionAdmCode;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\repository\UserRepository.java
+============================================================
+
+package com.fieldwork.repository;
+
+import com.fieldwork.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+
+    Optional<User> findByLoginId(String loginId);
+
+    boolean existsByLoginId(String loginId);
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\repository\TaskRepository.java
+============================================================
+
+package com.fieldwork.repository;
+
+import com.fieldwork.entity.Task;
+import com.fieldwork.entity.User;
+import com.fieldwork.entity.WorkGroup;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+public interface TaskRepository extends JpaRepository<Task, Long> {
+    List<Task> findByCreatedByAndGroupIsNullOrderByTaskIdDesc(User createdBy);
+
+    List<Task> findByGroupOrderByTaskIdDesc(WorkGroup group);
+
+    List<Task> findByCreatedByIsNullAndGroupIsNullOrderByTaskIdDesc();
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\repository\LocationRepository.java
+============================================================
+
+package com.fieldwork.repository;
+
+import com.fieldwork.entity.Location;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface LocationRepository
+extends JpaRepository<Location,Long> {
+
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\repository\LocationAssignmentRepository.java
+============================================================
+
+package com.fieldwork.repository;
+
+import com.fieldwork.entity.LocationAssignment;
+import com.fieldwork.entity.Task;
+import com.fieldwork.entity.User;
+import com.fieldwork.entity.WorkGroup;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface LocationAssignmentRepository
+        extends JpaRepository<LocationAssignment, Long> {
+
+    List<LocationAssignment> findByGroupOrderByAssignedAtDesc(WorkGroup group);
+
+    List<LocationAssignment> findByGroupAndAssigneeOrderByAssignedAtDesc(
+            WorkGroup group,
+            User assignee
+    );
+
+    Optional<LocationAssignment> findByGroupAndTask(
+            WorkGroup group,
+            Task task
+    );
+
+    List<LocationAssignment> findByTaskOrderByAssignedAtAsc(Task task);
+
+    void deleteByTask_TaskId(Long taskId);
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\repository\TaskProgressRepository.java
+============================================================
+
+package com.fieldwork.repository;
+
+import com.fieldwork.entity.TaskProgress;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
+public interface TaskProgressRepository
+        extends JpaRepository<TaskProgress, Long> {
+
+    Optional<TaskProgress> findTopByTask_TaskIdOrderByCreatedAtDesc(Long taskId);
+
+    void deleteByTask_TaskId(Long taskId);
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\repository\GroupMemberRepository.java
+============================================================
+
+package com.fieldwork.repository;
+
+import com.fieldwork.entity.GroupMember;
+import com.fieldwork.entity.User;
+import com.fieldwork.entity.WorkGroup;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> {
+
+    List<GroupMember> findByGroupOrderByJoinedAtAsc(WorkGroup group);
+
+    List<GroupMember> findByUserOrderByJoinedAtDesc(User user);
+
+    Optional<GroupMember> findByGroupAndUser(
+            WorkGroup group,
+            User user
+    );
+
+    boolean existsByGroupAndUser(
+            WorkGroup group,
+            User user
+    );
+
+    long countByGroup(WorkGroup group);
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\repository\WorkGroupRepository.java
+============================================================
+
+package com.fieldwork.repository;
+
+import com.fieldwork.entity.User;
+import com.fieldwork.entity.WorkGroup;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface WorkGroupRepository extends JpaRepository<WorkGroup, Long> {
+
+    List<WorkGroup> findByLeader(User leader);
+
+    Optional<WorkGroup> findFirstByLeaderAndPersonalTrue(User leader);
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\service\GroupService.java
+============================================================
+
+package com.fieldwork.service;
+
+import com.fieldwork.entity.GroupInvitation;
+import com.fieldwork.entity.GroupMember;
+import com.fieldwork.entity.LocationAssignment;
+import com.fieldwork.entity.Task;
+import com.fieldwork.entity.User;
+import com.fieldwork.entity.WorkGroup;
+import com.fieldwork.repository.GroupInvitationRepository;
+import com.fieldwork.repository.GroupMemberRepository;
+import com.fieldwork.repository.LocationAssignmentRepository;
+import com.fieldwork.repository.TaskRepository;
+import com.fieldwork.repository.UserRepository;
+import com.fieldwork.repository.WorkGroupRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class GroupService {
+
+    private static final String ROLE_LEADER = "LEADER";
+    private static final String ROLE_MEMBER = "MEMBER";
+    private static final String INVITE_PENDING = "PENDING";
+    private static final String INVITE_ACCEPTED = "ACCEPTED";
+    private static final String INVITE_REJECTED = "REJECTED";
+
+    private final WorkGroupRepository workGroupRepository;
+    private final GroupMemberRepository groupMemberRepository;
+    private final GroupInvitationRepository groupInvitationRepository;
+    private final LocationAssignmentRepository locationAssignmentRepository;
+    private final UserRepository userRepository;
+    private final TaskRepository taskRepository;
+
+    public GroupService(
+            WorkGroupRepository workGroupRepository,
+            GroupMemberRepository groupMemberRepository,
+            GroupInvitationRepository groupInvitationRepository,
+            LocationAssignmentRepository locationAssignmentRepository,
+            UserRepository userRepository,
+            TaskRepository taskRepository) {
+        this.workGroupRepository = workGroupRepository;
+        this.groupMemberRepository = groupMemberRepository;
+        this.groupInvitationRepository = groupInvitationRepository;
+        this.locationAssignmentRepository = locationAssignmentRepository;
+        this.userRepository = userRepository;
+        this.taskRepository = taskRepository;
+    }
+
+    @Transactional
+    public Map<String, Object> createGroup(
+            String groupName,
+            Long leaderUserId,
+            String regionSido,
+            String regionSigungu,
+            String regionAdmCode) {
+        if (groupName == null || groupName.trim().isEmpty()) {
+            throw new RuntimeException("洹몃９ ?대쫫???낅젰?댁＜?몄슂.");
+        }
+
+        User leader = getUser(leaderUserId);
+
+        WorkGroup group = new WorkGroup();
+        group.setName(groupName.trim());
+        group.setLeader(leader);
+        group.setPersonal(false);
+        group.setRegionSido(regionSido == null || regionSido.isBlank() ? "遺?곌킅??떆" : regionSido.trim());
+        group.setRegionSigungu(regionSigungu == null ? "" : regionSigungu.trim());
+        group.setRegionAdmCode(regionAdmCode == null ? "" : regionAdmCode.trim());
+        WorkGroup savedGroup = workGroupRepository.save(group);
+
+        GroupMember leaderMember = new GroupMember();
+        leaderMember.setGroup(savedGroup);
+        leaderMember.setUser(leader);
+        leaderMember.setRole(ROLE_LEADER);
+        groupMemberRepository.save(leaderMember);
+
+        Map<String, Object> result = groupSummary(savedGroup, ROLE_LEADER);
+        result.put("message", "洹몃９???앹꽦?섏뿀?듬땲??");
+        return result;
+    }
+
+    @Transactional
+    public Map<String, Object> updateGroupRegion(
+            Long groupId,
+            Long leaderUserId,
+            String regionSido,
+            String regionSigungu,
+            String regionAdmCode) {
+        WorkGroup group = getGroup(groupId);
+        requireLeader(group, leaderUserId);
+
+        if (group.isPersonal()) {
+            throw new RuntimeException("媛쒖씤 ?낅Т怨듦컙? 怨듦났?낅Т ?붾㈃?먯꽌 援?룰뎔???좏깮?⑸땲??");
+        }
+        if (regionSigungu == null || regionSigungu.isBlank()
+                || regionAdmCode == null || regionAdmCode.isBlank()) {
+            throw new RuntimeException("?쒕룞 援?룰뎔???좏깮?댁＜?몄슂.");
+        }
+
+        group.setRegionSido(regionSido == null || regionSido.isBlank()
+                ? "遺?곌킅??떆"
+                : regionSido.trim());
+        group.setRegionSigungu(regionSigungu.trim());
+        group.setRegionAdmCode(regionAdmCode.trim());
+
+        WorkGroup saved = workGroupRepository.save(group);
+        Map<String, Object> result = groupSummary(saved, ROLE_LEADER);
+        result.put("message", "?쒕룞吏??씠 蹂寃쎈릺?덉뒿?덈떎.");
+        return result;
+    }
+
+    /**
+     * 紐⑤뱺 怨꾩젙? 濡쒓렇???꾩씠?붾? ?대쫫?쇰줈 ?ъ슜?섎뒗 ?ㅼ젣 1??洹몃９???섎굹 媛吏꾨떎.
+     * 湲곗〈 ?ъ슜?먯쓽 group_id媛 ?녿뜕 諛⑸Ц吏??理쒖큹 濡쒓렇??洹몃９ 議고쉶 ???닿납?쇰줈 ?댁쟾?쒕떎.
+     */
+    @Transactional
+    public WorkGroup ensurePersonalGroup(User user) {
+        if (user == null || user.getUserId() == null) {
+            throw new RuntimeException("?ъ슜???뺣낫媛 ?놁뒿?덈떎.");
+        }
+
+        WorkGroup personalGroup = workGroupRepository
+                .findFirstByLeaderAndPersonalTrue(user)
+                .orElseGet(() -> {
+                    WorkGroup created = new WorkGroup();
+                    created.setName(user.getLoginId());
+                    created.setLeader(user);
+                    created.setPersonal(true);
+                    created.setRegionSido(user.getWorkSido() == null ? "遺?곌킅??떆" : user.getWorkSido());
+                    return workGroupRepository.save(created);
+                });
+
+        if (!user.getLoginId().equals(personalGroup.getName())) {
+            personalGroup.setName(user.getLoginId());
+            personalGroup = workGroupRepository.save(personalGroup);
+        }
+
+        if (!groupMemberRepository.existsByGroupAndUser(personalGroup, user)) {
+            GroupMember member = new GroupMember();
+            member.setGroup(personalGroup);
+            member.setUser(user);
+            member.setRole(ROLE_LEADER);
+            groupMemberRepository.save(member);
+        }
+
+        migrateLegacyPersonalTasks(user, personalGroup);
+        ensurePersonalAssignments(user, personalGroup);
+        return personalGroup;
+    }
+
+    @Transactional
+    public List<Map<String, Object>> getUserGroups(Long userId) {
+        User user = getUser(userId);
+        ensurePersonalGroup(user);
+
+        List<GroupMember> memberships =
+                groupMemberRepository.findByUserOrderByJoinedAtDesc(user);
+
+        // ?덉쟾 ?곗씠?곕뒗 ?대떦 諛곗젙留??덇퀬 task.group_id媛 鍮꾩뼱 ?덉쓣 ???덈떎.
+        // ?대떦 ????꾧뎄??洹몃９ 紐⑸줉??議고쉶?섎㈃ ?뚯쑀 洹몃９???먮룞 蹂듦뎄?쒕떎.
+        memberships.forEach(member ->
+                synchronizeAssignedTaskGroups(member.getGroup()));
+
+        return memberships
+                .stream()
+                .sorted((left, right) -> Boolean.compare(
+                        right.getGroup().isPersonal(),
+                        left.getGroup().isPersonal()))
+                .map(member -> groupSummary(member.getGroup(), member.getRole()))
+                .toList();
+    }
+
+    @Transactional
+    public Map<String, Object> getGroupDetail(Long groupId, Long userId) {
+        WorkGroup group = getGroup(groupId);
+        GroupMember requester = requireMember(group, userId);
+        synchronizeAssignedTaskGroups(group);
+
+        Map<String, Object> result = groupSummary(group, requester.getRole());
+        result.put("members", groupMemberRepository.findByGroupOrderByJoinedAtAsc(group)
+                .stream()
+                .map(this::memberMap)
+                .toList());
+        result.put("assignments", locationAssignmentRepository.findByGroupOrderByAssignedAtDesc(group)
+                .stream()
+                .map(this::assignmentMap)
+                .toList());
+        return result;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getMembers(Long groupId, Long requesterUserId) {
+        WorkGroup group = getGroup(groupId);
+        requireMember(group, requesterUserId);
+
+        return groupMemberRepository.findByGroupOrderByJoinedAtAsc(group)
+                .stream()
+                .map(this::memberMap)
+                .toList();
+    }
+
+    @Transactional
+    public Map<String, Object> inviteMember(
+            Long groupId,
+            Long inviterUserId,
+            String inviteeLoginId) {
+        WorkGroup group = getGroup(groupId);
+        User inviter = requireLeader(group, inviterUserId);
+
+        if (group.isPersonal()) {
+            throw new RuntimeException("?먮룞 1??洹몃９?먮뒗 ??먯쓣 珥덈??????놁뒿?덈떎. ??洹몃９??留뚮뱾?댁＜?몄슂.");
+        }
+
+        if (inviteeLoginId == null || inviteeLoginId.trim().isEmpty()) {
+            throw new RuntimeException("珥덈????ъ슜???꾩씠?붾? ?낅젰?댁＜?몄슂.");
+        }
+
+        User invitee = userRepository.findByLoginId(inviteeLoginId.trim())
+                .orElseThrow(() -> new RuntimeException("?대떦 ?꾩씠?붿쓽 ?ъ슜?먮? 李얠쓣 ???놁뒿?덈떎."));
+
+        if (invitee.getUserId().equals(inviter.getUserId())) {
+            throw new RuntimeException("?먭린 ?먯떊? 珥덈??????놁뒿?덈떎.");
+        }
+
+        if (groupMemberRepository.existsByGroupAndUser(group, invitee)) {
+            throw new RuntimeException("?대? 洹몃９??媛?낅맂 ?ъ슜?먯엯?덈떎.");
+        }
+
+        if (groupInvitationRepository.existsByGroupAndInviteeAndStatus(
+                group,
+                invitee,
+                INVITE_PENDING)) {
+            throw new RuntimeException("?대? ?湲?以묒씤 珥덈?媛 ?덉뒿?덈떎.");
+        }
+
+        GroupInvitation invitation = new GroupInvitation();
+        invitation.setGroup(group);
+        invitation.setInviter(inviter);
+        invitation.setInvitee(invitee);
+        invitation.setStatus(INVITE_PENDING);
+
+        GroupInvitation saved = groupInvitationRepository.save(invitation);
+        Map<String, Object> result = invitationMap(saved);
+        result.put("message", "珥덈?瑜?蹂대깉?듬땲??");
+        return result;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getInvitations(Long userId, String status) {
+        User invitee = getUser(userId);
+        String normalizedStatus = normalizeInvitationStatus(status);
+
+        return groupInvitationRepository
+                .findByInviteeAndStatusOrderByCreatedAtDesc(invitee, normalizedStatus)
+                .stream()
+                .map(this::invitationMap)
+                .toList();
+    }
+
+    @Transactional
+    public Map<String, Object> acceptInvitation(Long invitationId, Long userId) {
+        GroupInvitation invitation = getInvitation(invitationId);
+        validateInvitationOwner(invitation, userId);
+        requirePending(invitation);
+
+        WorkGroup group = invitation.getGroup();
+        User invitee = invitation.getInvitee();
+
+        if (!groupMemberRepository.existsByGroupAndUser(group, invitee)) {
+            GroupMember member = new GroupMember();
+            member.setGroup(group);
+            member.setUser(invitee);
+            member.setRole(ROLE_MEMBER);
+            groupMemberRepository.save(member);
+        }
+
+        invitation.setStatus(INVITE_ACCEPTED);
+        groupInvitationRepository.save(invitation);
+
+        Map<String, Object> result = groupSummary(group, ROLE_MEMBER);
+        result.put("invitationId", invitation.getInvitationId());
+        result.put("message", "洹몃９ 珥덈?瑜??섎씫?덉뒿?덈떎.");
+        return result;
+    }
+
+    @Transactional
+    public Map<String, Object> rejectInvitation(Long invitationId, Long userId) {
+        GroupInvitation invitation = getInvitation(invitationId);
+        validateInvitationOwner(invitation, userId);
+        requirePending(invitation);
+
+        invitation.setStatus(INVITE_REJECTED);
+        groupInvitationRepository.save(invitation);
+
+        Map<String, Object> result = invitationMap(invitation);
+        result.put("message", "洹몃９ 珥덈?瑜?嫄곗젅?덉뒿?덈떎.");
+        return result;
+    }
+
+    @Transactional
+    public Map<String, Object> assignTask(
+            Long groupId,
+            Long taskId,
+            Long leaderUserId,
+            Long assigneeUserId) {
+        WorkGroup group = getGroup(groupId);
+        User leader = requireLeader(group, leaderUserId);
+        User assignee = getUser(assigneeUserId);
+
+        if (group.isPersonal() && !assignee.getUserId().equals(group.getLeader().getUserId())) {
+            throw new RuntimeException("1??洹몃９???대떦?먮뒗 蹂몄씤留??좏깮?????덉뒿?덈떎.");
+        }
+
+        if (!groupMemberRepository.existsByGroupAndUser(group, assignee)) {
+            throw new RuntimeException("?대떦?먮뒗 ?대떦 洹몃９??硫ㅻ쾭?ъ빞 ?⑸땲??");
+        }
+
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new RuntimeException("諛⑸Ц吏瑜?李얠쓣 ???놁뒿?덈떎."));
+
+        if (task.getGroup() != null
+                && !task.getGroup().getGroupId().equals(group.getGroupId())) {
+            throw new RuntimeException("?ㅻⅨ 洹몃９??諛⑸Ц吏??諛곗젙?????놁뒿?덈떎.");
+        }
+
+        if (task.getGroup() == null
+                && task.getCreatedBy() != null
+                && !task.getCreatedBy().getUserId().equals(leader.getUserId())) {
+            throw new RuntimeException("?ㅻⅨ ?ъ슜?먯쓽 媛쒖씤 諛⑸Ц吏??諛곗젙?????놁뒿?덈떎.");
+        }
+
+        if (task.getGroup() == null) {
+            task.setGroup(group);
+        }
+
+        if (task.getCreatedBy() == null) {
+            task.setCreatedBy(leader);
+        }
+
+        taskRepository.save(task);
+
+        LocationAssignment assignment = locationAssignmentRepository
+                .findByGroupAndTask(group, task)
+                .orElseGet(LocationAssignment::new);
+
+        assignment.setGroup(group);
+        assignment.setTask(task);
+        assignment.setAssignee(assignee);
+        assignment.setAssignedBy(leader);
+
+        LocationAssignment saved = locationAssignmentRepository.save(assignment);
+        Map<String, Object> result = assignmentMap(saved);
+        result.put("message", "?대떦?먭? 吏?뺣릺?덉뒿?덈떎.");
+
+        return result;
+    }
+
+    @Transactional
+    public List<Map<String, Object>> assignTasksBulk(
+            Long groupId,
+            List<Long> taskIds,
+            Long leaderUserId,
+            Long assigneeUserId) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            throw new RuntimeException("諛곗젙??諛⑸Ц吏媛 ?놁뒿?덈떎.");
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        for (Long taskId : taskIds) {
+            Map<String, Object> assigned = assignTask(
+                    groupId,
+                    taskId,
+                    leaderUserId,
+                    assigneeUserId);
+
+            result.add(assigned);
+        }
+
+        return result;
+    }
+
+    @Transactional
+    public Map<String, Object> unassignTask(
+            Long groupId,
+            Long taskId,
+            Long leaderUserId) {
+        WorkGroup group = getGroup(groupId);
+        requireLeader(group, leaderUserId);
+
+        if (group.isPersonal()) {
+            throw new RuntimeException("1??洹몃９??蹂몄씤 ?대떦 諛곗젙? ?댁젣?????놁뒿?덈떎.");
+        }
+
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new RuntimeException("諛⑸Ц吏瑜?李얠쓣 ???놁뒿?덈떎."));
+
+        LocationAssignment assignment = locationAssignmentRepository
+                .findByGroupAndTask(group, task)
+                .orElseThrow(() -> new RuntimeException("吏?뺣맂 ?대떦?먭? ?놁뒿?덈떎."));
+
+        locationAssignmentRepository.delete(assignment);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("message", "?대떦??諛곗젙???댁젣?덉뒿?덈떎.");
+        result.put("groupId", groupId);
+        result.put("taskId", taskId);
+        return result;
+    }
+
+    @Transactional
+    public List<Map<String, Object>> getAssignments(Long groupId, Long requesterUserId) {
+        WorkGroup group = getGroup(groupId);
+        requireMember(group, requesterUserId);
+        synchronizeAssignedTaskGroups(group);
+
+        return locationAssignmentRepository.findByGroupOrderByAssignedAtDesc(group)
+                .stream()
+                .map(this::assignmentMap)
+                .toList();
+    }
+
+    @Transactional
+    public List<Map<String, Object>> getMyAssignments(Long groupId, Long userId) {
+        WorkGroup group = getGroup(groupId);
+        GroupMember member = requireMember(group, userId);
+        synchronizeAssignedTaskGroups(group);
+
+        return locationAssignmentRepository
+                .findByGroupAndAssigneeOrderByAssignedAtDesc(group, member.getUser())
+                .stream()
+                .map(this::assignmentMap)
+                .toList();
+    }
+
+    private User getUser(Long userId) {
+        if (userId == null) {
+            throw new RuntimeException("?ъ슜???뺣낫媛 ?놁뒿?덈떎.");
+        }
+
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("?ъ슜?먮? 李얠쓣 ???놁뒿?덈떎."));
+    }
+
+    private WorkGroup getGroup(Long groupId) {
+        if (groupId == null) {
+            throw new RuntimeException("洹몃９ ?뺣낫媛 ?놁뒿?덈떎.");
+        }
+
+        return workGroupRepository.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("洹몃９??李얠쓣 ???놁뒿?덈떎."));
+    }
+
+    private GroupInvitation getInvitation(Long invitationId) {
+        return groupInvitationRepository.findById(invitationId)
+                .orElseThrow(() -> new RuntimeException("珥덈?瑜?李얠쓣 ???놁뒿?덈떎."));
+    }
+
+    private GroupMember requireMember(WorkGroup group, Long userId) {
+        User user = getUser(userId);
+        return groupMemberRepository.findByGroupAndUser(group, user)
+                .orElseThrow(() -> new RuntimeException("洹몃９??媛?낅맂 ?ъ슜?먮쭔 ?묎렐?????덉뒿?덈떎."));
+    }
+
+    private User requireLeader(WorkGroup group, Long userId) {
+        GroupMember member = requireMember(group, userId);
+
+        if (!ROLE_LEADER.equals(member.getRole()) ||
+                !group.getLeader().getUserId().equals(member.getUser().getUserId())) {
+            throw new RuntimeException("??λ쭔 ?섑뻾?????덈뒗 ?묒뾽?낅땲??");
+        }
+
+        return member.getUser();
+    }
+
+    private void validateInvitationOwner(GroupInvitation invitation, Long userId) {
+        if (userId == null || !invitation.getInvitee().getUserId().equals(userId)) {
+            throw new RuntimeException("蹂몄씤?먭쾶 ??珥덈?留?泥섎━?????덉뒿?덈떎.");
+        }
+    }
+
+    private void requirePending(GroupInvitation invitation) {
+        if (!INVITE_PENDING.equals(invitation.getStatus())) {
+            throw new RuntimeException("?대? 泥섎━??珥덈??낅땲??");
+        }
+    }
+
+    private String normalizeInvitationStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return INVITE_PENDING;
+        }
+
+        String normalized = status.trim().toUpperCase();
+        if (!List.of(INVITE_PENDING, INVITE_ACCEPTED, INVITE_REJECTED).contains(normalized)) {
+            throw new RuntimeException("?щ컮瑜댁? ?딆? 珥덈? ?곹깭?낅땲??");
+        }
+        return normalized;
+    }
+
+    private void migrateLegacyPersonalTasks(User user, WorkGroup personalGroup) {
+        List<Task> legacyTasks = taskRepository
+                .findByCreatedByAndGroupIsNullOrderByTaskIdDesc(user);
+
+        for (Task task : legacyTasks) {
+            List<LocationAssignment> existingAssignments =
+                    locationAssignmentRepository.findByTaskOrderByAssignedAtAsc(task);
+
+            // ?덉쟾 ? 諛곗젙???대? 議댁옱?섎㈃ 洹?? ?뚯쑀 諛⑸Ц吏濡?蹂듦뎄?쒕떎.
+            if (!existingAssignments.isEmpty()) {
+                task.setGroup(existingAssignments.get(0).getGroup());
+                taskRepository.save(task);
+                continue;
+            }
+
+            task.setGroup(personalGroup);
+            taskRepository.save(task);
+        }
+    }
+
+    private void ensurePersonalAssignments(User user, WorkGroup personalGroup) {
+        for (Task task : taskRepository.findByGroupOrderByTaskIdDesc(personalGroup)) {
+            LocationAssignment assignment = locationAssignmentRepository
+                    .findByGroupAndTask(personalGroup, task)
+                    .orElse(null);
+
+            if (assignment != null
+                    && assignment.getAssignee().getUserId().equals(user.getUserId())
+                    && assignment.getAssignedBy().getUserId().equals(user.getUserId())) {
+                continue;
+            }
+
+            if (assignment == null) {
+                assignment = new LocationAssignment();
+            }
+
+            assignment.setGroup(personalGroup);
+            assignment.setTask(task);
+            assignment.setAssignee(user);
+            assignment.setAssignedBy(user);
+            locationAssignmentRepository.save(assignment);
+        }
+    }
+
+    private void synchronizeAssignedTaskGroups(WorkGroup group) {
+        for (LocationAssignment assignment :
+                locationAssignmentRepository.findByGroupOrderByAssignedAtDesc(group)) {
+            Task task = assignment.getTask();
+
+            if (task.getGroup() == null) {
+                task.setGroup(group);
+                taskRepository.save(task);
+            }
+        }
+    }
+
+    private Map<String, Object> groupSummary(WorkGroup group, String role) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("groupId", group.getGroupId());
+        map.put("groupName", group.getName());
+        map.put("leaderUserId", group.getLeader().getUserId());
+        map.put("leaderLoginId", group.getLeader().getLoginId());
+        map.put("leaderName", group.getLeader().getName());
+        map.put("role", role);
+        map.put("personal", group.isPersonal());
+        map.put("personalWorkspace", group.isPersonal());
+        map.put("workspaceType", group.isPersonal() ? "PERSONAL" : "TEAM");
+        map.put("regionSido", group.getRegionSido());
+        map.put("regionSigungu", group.getRegionSigungu());
+        map.put("regionAdmCode", group.getRegionAdmCode());
+        map.put("memberCount", groupMemberRepository.countByGroup(group));
+        map.put("createdAt", group.getCreatedAt());
+        return map;
+    }
+
+    private Map<String, Object> memberMap(GroupMember member) {
+        User user = member.getUser();
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("groupMemberId", member.getGroupMemberId());
+        map.put("userId", user.getUserId());
+        map.put("loginId", user.getLoginId());
+        map.put("name", user.getName());
+        map.put("role", member.getRole());
+        map.put("joinedAt", member.getJoinedAt());
+        return map;
+    }
+
+    private Map<String, Object> invitationMap(GroupInvitation invitation) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("invitationId", invitation.getInvitationId());
+        map.put("status", invitation.getStatus());
+        map.put("createdAt", invitation.getCreatedAt());
+        map.put("groupId", invitation.getGroup().getGroupId());
+        map.put("groupName", invitation.getGroup().getName());
+        map.put("inviterUserId", invitation.getInviter().getUserId());
+        map.put("inviterLoginId", invitation.getInviter().getLoginId());
+        map.put("inviterName", invitation.getInviter().getName());
+        map.put("inviteeUserId", invitation.getInvitee().getUserId());
+        map.put("inviteeLoginId", invitation.getInvitee().getLoginId());
+        map.put("inviteeName", invitation.getInvitee().getName());
+        return map;
+    }
+
+    private Map<String, Object> assignmentMap(LocationAssignment assignment) {
+        Task task = assignment.getTask();
+        User assignee = assignment.getAssignee();
+        User assignedBy = assignment.getAssignedBy();
+
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("assignmentId", assignment.getAssignmentId());
+        map.put("groupId", assignment.getGroup().getGroupId());
+        map.put("groupName", assignment.getGroup().getName());
+        map.put("personalWorkspace", assignment.getGroup().isPersonal());
+        map.put("workspaceType", assignment.getGroup().isPersonal() ? "PERSONAL" : "TEAM");
+        map.put("taskId", task.getTaskId());
+        map.put("locationId", task.getTaskId());
+        map.put("id", task.getTaskId());
+        map.put("detailAddress", task.getDetailAddress());
+        map.put("roadAddress", task.getRoadAddress());
+        map.put("taskCategory", task.getTaskCategory());
+        map.put("task", task.getTaskCategory());
+        map.put("status", task.getTaskStatus());
+        map.put("createdAt", task.getCreatedAt());
+        map.put("created_at", task.getCreatedAt());
+        map.put("workDate", task.getWorkDate());
+        map.put("work_date", task.getWorkDate());
+        map.put("scheduledDate", task.getScheduledDate());
+        map.put("scheduled_date", task.getScheduledDate());
+        map.put("adminDong", task.getAdminDong());
+        map.put("sido", task.getSido());
+        map.put("sigungu", task.getSigungu());
+        map.put("lat", task.getLat());
+        map.put("lng", task.getLng());
+        map.put("assigneeUserId", assignee.getUserId());
+        map.put("assigneeLoginId", assignee.getLoginId());
+        map.put("assigneeName", assignee.getName());
+        map.put("assignedByUserId", assignedBy.getUserId());
+        map.put("assignedByLoginId", assignedBy.getLoginId());
+        map.put("assignedByName", assignedBy.getName());
+        map.put("assignedAt", assignment.getAssignedAt());
+        return map;
+    }
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\service\LocationService.java
+============================================================
+
+package com.fieldwork.service;
+
+import com.fieldwork.entity.Location;
+import com.fieldwork.repository.LocationRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * ?덇굅??locations API ?명솚??
+ * ?ㅼ젣 ?곗씠?곕뒗 task ?뚯씠釉붿쓣 ?ъ슜?⑸땲??
+ */
+@Service
+public class LocationService {
+
+    private final LocationRepository repo;
+    private final TaskService taskService;
+
+    public LocationService(LocationRepository repo, TaskService taskService) {
+        this.repo = repo;
+        this.taskService = taskService;
+    }
+
+    public List<Location> getAllLocations() {
+        return repo.findAll();
+    }
+
+    public Map<String, Object> saveLocationAsTask(Map<String, Object> body) {
+        return taskService.createFromFrontendBody(body);
+    }
+
+    public Location saveLocation(Location location) {
+        location.setStatus(location.getStatus() != null ? location.getStatus() : "pending");
+
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("detailAddress", location.getName());
+        body.put("roadAddress", location.getAddress());
+        body.put("lat", location.getLat());
+        body.put("lng", location.getLng());
+        body.put("taskCategory", location.getName());
+        body.put("status", location.getStatus());
+
+        taskService.createFromFrontendBody(body);
+        return location;
+    }
+
+    public Location updateStatus(Long id, String status) {
+        taskService.updateStatus(id, status);
+
+        return repo.findById(id).map(loc -> {
+            loc.setStatus(status);
+            return repo.save(loc);
+        }).orElseGet(() -> {
+            Location loc = new Location();
+            loc.setId(id);
+            loc.setStatus(status);
+            return loc;
+        });
+    }
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\service\TaskService.java
+============================================================
+
+package com.fieldwork.service;
+
+import com.fieldwork.entity.Task;
+import com.fieldwork.entity.GroupMember;
+import com.fieldwork.entity.LocationAssignment;
+import com.fieldwork.entity.User;
+import com.fieldwork.entity.WorkGroup;
+import com.fieldwork.repository.GroupMemberRepository;
+import com.fieldwork.repository.LocationAssignmentRepository;
+import com.fieldwork.repository.TaskProgressRepository;
+import com.fieldwork.repository.TaskRepository;
+import com.fieldwork.repository.UserRepository;
+import com.fieldwork.repository.WorkGroupRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+public class TaskService {
+
+    private final TaskRepository taskRepository;
+    private final TaskProgressRepository taskProgressRepository;
+    private final LocationAssignmentRepository locationAssignmentRepository;
+    private final UserRepository userRepository;
+    private final WorkGroupRepository workGroupRepository;
+    private final GroupMemberRepository groupMemberRepository;
+    private final GroupService groupService;
+
+    public TaskService(
+            TaskRepository taskRepository,
+            TaskProgressRepository taskProgressRepository,
+            LocationAssignmentRepository locationAssignmentRepository,
+            UserRepository userRepository,
+            WorkGroupRepository workGroupRepository,
+            GroupMemberRepository groupMemberRepository,
+            GroupService groupService
+    ) {
+        this.taskRepository = taskRepository;
+        this.taskProgressRepository = taskProgressRepository;
+        this.locationAssignmentRepository = locationAssignmentRepository;
+        this.userRepository = userRepository;
+        this.workGroupRepository = workGroupRepository;
+        this.groupMemberRepository = groupMemberRepository;
+        this.groupService = groupService;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getAllForFrontend() {
+        return taskRepository.findAll().stream()
+                .map(this::toFrontendMap)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public List<Map<String, Object>> getForFrontend(Long userId, Long groupId) {
+        User user = getUser(userId);
+
+        if (groupId == null) {
+            groupId = groupService.ensurePersonalGroup(user).getGroupId();
+        }
+
+        WorkGroup group = getGroup(groupId);
+        GroupMember member = groupMemberRepository.findByGroupAndUser(group, user)
+                .orElseThrow(() -> new RuntimeException("?대떦 洹몃９??硫ㅻ쾭媛 ?꾨떃?덈떎."));
+
+        if ("LEADER".equalsIgnoreCase(member.getRole())) {
+            return taskRepository.findByGroupOrderByTaskIdDesc(group).stream()
+                    .map(this::toFrontendMap)
+                    .collect(Collectors.toList());
+        }
+
+        return locationAssignmentRepository
+                .findByGroupAndAssigneeOrderByAssignedAtDesc(group, user)
+                .stream()
+                .map(assignment -> toFrontendMap(assignment.getTask()))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getGroupLocations(Long groupId, Long userId) {
+        User user = getUser(userId);
+        WorkGroup group = getGroup(groupId);
+
+        if (!groupMemberRepository.existsByGroupAndUser(group, user)) {
+            throw new RuntimeException("?대떦 洹몃９??硫ㅻ쾭媛 ?꾨떃?덈떎.");
+        }
+
+        return taskRepository.findByGroupOrderByTaskIdDesc(group)
+                .stream()
+                .map(this::toFrontendMap)
+                .collect(Collectors.toList());
+    }
+
+    public Task getById(Long taskId) {
+        return taskRepository.findById(taskId)
+                .orElseThrow(() -> new RuntimeException("Task not found: " + taskId));
+    }
+
+    @Transactional
+    public Map<String, Object> createFromFrontendBody(Map<String, Object> body) {
+        Task task = new Task();
+
+        Long createdByUserId = toLong(body.get("createdByUserId"), body.get("userId"));
+        if (createdByUserId == null) {
+            throw new RuntimeException("諛⑸Ц吏 ?앹꽦 ?ъ슜??ID媛 ?꾩슂?⑸땲??");
+        }
+
+        User creator = getUser(createdByUserId);
+        task.setCreatedBy(creator);
+
+        Long groupId = toLong(body.get("groupId"));
+        if (groupId == null) {
+            groupId = groupService.ensurePersonalGroup(creator).getGroupId();
+        }
+        GroupMember creatorMembership = null;
+        WorkGroup taskGroup = null;
+        WorkGroup group = getGroup(groupId);
+        creatorMembership = groupMemberRepository.findByGroupAndUser(group, creator)
+                .orElseThrow(() -> new RuntimeException("?대떦 洹몃９??硫ㅻ쾭留?諛⑸Ц吏瑜?留뚮뱾 ???덉뒿?덈떎."));
+        task.setGroup(group);
+        taskGroup = group;
+
+        task.setDetailAddress(firstNonBlank(
+                str(body.get("detailAddress")),
+                str(body.get("name")),
+                str(body.get("detail_address"))
+        ));
+
+        task.setRoadAddress(firstNonBlank(
+                str(body.get("roadAddress")),
+                str(body.get("address")),
+                str(body.get("road_address"))
+        ));
+
+        task.setLat(toDouble(
+                body.get("lat"),
+                body.get("latitude")
+        ));
+
+        task.setLng(toDouble(
+                body.get("lng"),
+                body.get("longitude")
+        ));
+
+        // 移댄뀒怨좊━???좏깮 ?ы빆?대떎. ?좏깮?섏? ?딆? 寃쎌슦 鍮?媛?null)??洹몃?濡??좎??쒕떎.
+        task.setTaskCategory(firstNonBlank(
+                str(body.get("taskCategory")),
+                str(body.get("task")),
+                str(body.get("task_category"))
+        ));
+
+        // workDate??理쒖큹 ?깅줉?쇰줈 ??踰덈쭔 ??ν븳??
+        // ?꾨줎?멸? 蹂대궦 ?쒓뎅 濡쒖뺄 ?좎쭨媛 ?덉쑝硫?洹?媛믪쓣 ?ъ슜?섍퀬 ?댄썑?먮뒗 蹂寃쏀븯吏 ?딅뒗??
+        LocalDate requestedWorkDate = toLocalDate(
+                body.get("workDate"),
+                body.get("work_date")
+        );
+        LocalDate originalWorkDate = requestedWorkDate != null
+                ? requestedWorkDate
+                : LocalDate.now();
+        task.setWorkDate(originalWorkDate);
+
+        // scheduledDate???꾩옱 ?대뒓 ?좎쭨???낅Т 紐⑸줉???ㅼ뼱媛 ?덈뒗吏瑜??섑??몃떎.
+        LocalDate requestedScheduledDate = toLocalDate(
+                body.get("scheduledDate"),
+                body.get("scheduled_date")
+        );
+        task.setScheduledDate(
+                requestedScheduledDate != null ? requestedScheduledDate : originalWorkDate
+        );
+
+        applyStatusTransition(task, firstNonBlank(
+                str(body.get("taskStatus")),
+                str(body.get("status")),
+                str(body.get("task_status")),
+                "pending"
+        ));
+
+        task.setSido(firstNonBlank(
+                str(body.get("sido"))
+        ));
+
+        task.setSigungu(firstNonBlank(
+                str(body.get("sigungu"))
+        ));
+
+        task.setAdminDong(firstNonBlank(
+                str(body.get("adminDong")),
+                str(body.get("admin_dong"))
+        ));
+
+        Task savedTask = taskRepository.save(task);
+
+        // 1??洹몃９怨??쇰컲 ??먯? ?깅줉 利됱떆 蹂몄씤 ?대떦?쇰줈 ?곌껐?쒕떎.
+        // ?ㅼ씤 洹몃９????μ씠 異붽???諛⑸Ц吏???대떦??吏???붾㈃?먯꽌 諛곗젙?쒕떎.
+        boolean deferAssignment = booleanValue(body.get("deferAssignment"));
+        if (taskGroup != null
+                && creatorMembership != null
+                && (taskGroup.isPersonal()
+                    || (!deferAssignment
+                        && "MEMBER".equalsIgnoreCase(creatorMembership.getRole())))) {
+            LocationAssignment assignment = new LocationAssignment();
+            assignment.setGroup(taskGroup);
+            assignment.setTask(savedTask);
+            assignment.setAssignee(creator);
+            assignment.setAssignedBy(creator);
+            locationAssignmentRepository.save(assignment);
+        }
+
+        return toFrontendMap(savedTask);
+    }
+
+    private boolean booleanValue(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return value != null && Boolean.parseBoolean(value.toString());
+    }
+
+    @Transactional
+    public Map<String, Object> updateStatus(Long taskId, String status) {
+        Task task = getById(taskId);
+        return toFrontendMap(updateStatusEntity(task, status));
+    }
+
+    @Transactional
+    public Task updateStatusEntity(Task task, String status) {
+        applyStatusTransition(task, status);
+        return taskRepository.save(task);
+    }
+
+    /**
+     * 誘몄쿂由??낅Т瑜??ㅻ뒛 ?낅Т濡??ㅼ떆 媛?몄삱 ??諛곗튂 ?좎쭨留?媛깆떊?쒕떎.
+     * work_date/created_at? 理쒖큹 ?깅줉 ?쒖젏 ?뺣낫?대?濡??덈? 蹂寃쏀븯吏 ?딅뒗??
+     */
+    @Transactional
+    public Map<String, Object> updateScheduledDate(Long taskId, String scheduledDate) {
+        Task task = getById(taskId);
+        LocalDate parsed = (scheduledDate == null || scheduledDate.isBlank())
+                ? LocalDate.now()
+                : LocalDate.parse(scheduledDate.trim());
+        task.setScheduledDate(parsed);
+        return toFrontendMap(taskRepository.save(task));
+    }
+
+    /*
+     * 誘몄쿂由?諛⑸Ц吏 ??젣
+     *
+     * task瑜?諛붾줈 ??젣?섎㈃
+     * task_progress / task_assignments?먯꽌
+     * ?대떦 task_id瑜?李몄“?섍퀬 ?덉쓣 ???덉쑝誘濡?
+     * 愿???곗씠?곕? 癒쇱? ??젣?쒕떎.
+     */
+    @Transactional
+    public Map<String, Object> deletePendingTask(Long taskId) {
+
+        Task task = taskRepository.findById(taskId).orElse(null);
+
+        /*
+         * DB?먮뒗 ?대? ?녿뒗??
+         * ?대??곗뿉 ?덉쟾 ?곗씠?곌? ?⑥? 寃쎌슦??
+         * ??젣 ?깃났?쇰줈 泥섎━
+         */
+        if (task == null) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("taskId", taskId);
+            result.put("message", "?대? ??젣??諛⑸Ц吏?낅땲??");
+            return result;
+        }
+
+        String status = task.getTaskStatus();
+
+        /*
+         * ?꾨즺?섏뿀嫄곕굹 ?묒뾽 以묒씤 諛⑸Ц吏??
+         * ?ㅼ닔濡???젣?섏? 紐삵븯寃?蹂댄샇
+         */
+        if (status != null
+                && !status.isBlank()
+                && !"pending".equalsIgnoreCase(status)) {
+
+            throw new RuntimeException(
+                    "誘몄쿂由?諛⑸Ц吏留???젣?????덉뒿?덈떎."
+            );
+        }
+
+        // ?대떦??諛곗젙 ??젣
+        locationAssignmentRepository.deleteByTask_TaskId(taskId);
+
+        // 吏꾪뻾 湲곕줉 ??젣
+        taskProgressRepository.deleteByTask_TaskId(taskId);
+
+        // ?ㅼ젣 諛⑸Ц吏 ??젣
+        taskRepository.delete(task);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("taskId", taskId);
+        result.put("message", "諛⑸Ц吏媛 ??젣?섏뿀?듬땲??");
+
+        return result;
+    }
+
+    public Map<String, Object> toFrontendMap(Task task) {
+        Map<String, Object> map = new HashMap<>();
+
+        map.put("id", task.getTaskId());
+        map.put("taskId", task.getTaskId());
+        map.put("task_id", task.getTaskId());
+
+        map.put("detailAddress", task.getDetailAddress());
+        map.put("detail_address", task.getDetailAddress());
+
+        map.put("roadAddress", task.getRoadAddress());
+        map.put("road_address", task.getRoadAddress());
+
+        map.put("name", task.getDetailAddress());
+        map.put("address", task.getRoadAddress());
+
+        map.put("lat", task.getLat());
+        map.put("lng", task.getLng());
+        map.put("latitude", task.getLat());
+        map.put("longitude", task.getLng());
+
+        map.put("taskCategory", task.getTaskCategory());
+        map.put("task_category", task.getTaskCategory());
+        map.put("task", task.getTaskCategory());
+
+        map.put("status", task.getTaskStatus());
+        map.put("taskStatus", task.getTaskStatus());
+        map.put("task_status", task.getTaskStatus());
+
+        map.put("createdAt", task.getCreatedAt());
+        map.put("created_at", task.getCreatedAt());
+        map.put("completedAt", task.getCompletedAt());
+        map.put("completed_at", task.getCompletedAt());
+        map.put("workDate", task.getWorkDate());
+        map.put("work_date", task.getWorkDate());
+        map.put("scheduledDate", task.getScheduledDate());
+        map.put("scheduled_date", task.getScheduledDate());
+
+        map.put("sido", task.getSido());
+        map.put("sigungu", task.getSigungu());
+        map.put("adminDong", task.getAdminDong());
+        map.put("admin_dong", task.getAdminDong());
+
+        map.put("createdByUserId", task.getCreatedBy() != null
+                ? task.getCreatedBy().getUserId()
+                : null);
+        map.put("groupId", task.getGroup() != null
+                ? task.getGroup().getGroupId()
+                : null);
+        map.put("groupName", task.getGroup() != null
+                ? task.getGroup().getName()
+                : null);
+        map.put("personalWorkspace", task.getGroup() != null
+                && task.getGroup().isPersonal());
+        map.put("workspaceType", task.getGroup() != null
+                && task.getGroup().isPersonal()
+                ? "PERSONAL"
+                : "TEAM");
+
+        return map;
+    }
+
+    private String str(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    private Double toDouble(Object... values) {
+        for (Object value : values) {
+            if (value != null) {
+                return Double.valueOf(value.toString());
+            }
+        }
+        return null;
+    }
+
+    private Long toLong(Object... values) {
+        for (Object value : values) {
+            if (value != null && !value.toString().isBlank()) {
+                return Long.valueOf(value.toString());
+            }
+        }
+        return null;
+    }
+
+    private LocalDate toLocalDate(Object... values) {
+        for (Object value : values) {
+            if (value != null && !value.toString().isBlank()) {
+                return LocalDate.parse(value.toString().trim().substring(0, 10));
+            }
+        }
+        return null;
+    }
+
+    private User getUser(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("?ъ슜?먮? 李얠쓣 ???놁뒿?덈떎."));
+    }
+
+    private WorkGroup getGroup(Long groupId) {
+        return workGroupRepository.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("洹몃９??李얠쓣 ???놁뒿?덈떎."));
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private void applyStatusTransition(Task task, String status) {
+        boolean wasComplete = isCompleteStatus(task.getTaskStatus());
+        boolean willBeComplete = isCompleteStatus(status);
+
+        if (!wasComplete && willBeComplete) {
+            task.setCompletedAt(LocalDateTime.now());
+        } else if (wasComplete && !willBeComplete) {
+            task.setCompletedAt(null);
+        }
+
+        task.setTaskStatus(status);
+    }
+
+    private boolean isCompleteStatus(String status) {
+        if (status == null) {
+            return false;
+        }
+        String normalized = status.trim().toLowerCase();
+        return "complete".equals(normalized)
+                || "completed".equals(normalized)
+                || "done".equals(normalized);
+    }
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\service\TaskProgressService.java
+============================================================
+
+package com.fieldwork.service;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fieldwork.entity.Task;
+import com.fieldwork.entity.TaskProgress;
+import com.fieldwork.repository.TaskProgressRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.multipart.MultipartHttpServletRequest;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class TaskProgressService {
+
+    private final TaskProgressRepository taskProgressRepository;
+    private final TaskService taskService;
+    private final FileStorageService fileStorageService;
+    private final AiReportService aiReportService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public TaskProgressService(
+            TaskProgressRepository taskProgressRepository,
+            TaskService taskService,
+            FileStorageService fileStorageService,
+            AiReportService aiReportService
+    ) {
+        this.taskProgressRepository = taskProgressRepository;
+        this.taskService = taskService;
+        this.fileStorageService = fileStorageService;
+        this.aiReportService = aiReportService;
+    }
+
+    public Map<String, Object> saveFromMultipart(MultipartHttpServletRequest request) throws Exception {
+        Long taskId = Long.valueOf(request.getParameter("taskId"));
+        Task task = taskService.getById(taskId);
+
+        TaskProgress progress = new TaskProgress();
+        progress.setTask(task);
+        progress.setLatitude(parseDouble(request.getParameter("latitude")));
+        progress.setLongitude(parseDouble(request.getParameter("longitude")));
+        progress.setMainComment(request.getParameter("mainComment"));
+        progress.setFieldMemo(request.getParameter("fieldMemo"));
+        progress.setProgressStatus(request.getParameter("progressStatus"));
+
+        MultipartFile mapImage = request.getFile("mapImage");
+        if (mapImage != null && !mapImage.isEmpty()) {
+            progress.setLocationMapImage(fileStorageService.saveMultipart(taskId, "map", mapImage));
+        }
+
+        List<String> comments = parsePhotoComments(request.getParameter("photoComments"));
+        List<Map<String, Object>> fieldPhotos = new ArrayList<>();
+        List<MultipartFile> photoFiles = request.getFiles("fieldPhotos");
+
+        for (int i = 0; i < photoFiles.size(); i++) {
+            MultipartFile photo = photoFiles.get(i);
+            if (photo == null || photo.isEmpty()) {
+                continue;
+            }
+            String savedPath = fileStorageService.saveMultipart(taskId, "photo" + i, photo);
+            Map<String, Object> item = new HashMap<>();
+            item.put("path", savedPath);
+            item.put("comment", i < comments.size() ? comments.get(i) : "");
+            fieldPhotos.add(item);
+        }
+
+        progress.setFieldPhotos(fieldPhotos);
+        syncTaskStatus(task, progress.getProgressStatus());
+
+        progress = taskProgressRepository.save(progress);
+        runAiIfPossible(task, progress);
+
+        return toResponseMap(progress, task);
+    }
+
+    public Map<String, Object> saveFromJson(Map<String, Object> body) throws Exception {
+        Long taskId = Long.valueOf(body.get("taskId").toString());
+        Task task = taskService.getById(taskId);
+
+        TaskProgress progress = new TaskProgress();
+        progress.setTask(task);
+        progress.setLatitude(parseDoubleObj(body.get("latitude")));
+        progress.setLongitude(parseDoubleObj(body.get("longitude")));
+        progress.setMainComment(str(body.get("mainComment")));
+        progress.setFieldMemo(str(body.get("fieldMemo")));
+        progress.setProgressStatus(str(body.get("progressStatus")));
+
+        Object mapObj = body.get("locationMapImage");
+        if (mapObj != null) {
+            progress.setLocationMapImage(mapObj.toString());
+        }
+
+        List<Map<String, Object>> normalizedPhotos = new ArrayList<>();
+        Object photosObj = body.get("fieldPhotos");
+        if (photosObj instanceof List<?> list) {
+            for (Object item : list) {
+                if (item instanceof Map<?, ?> photoMap) {
+                    Map<String, Object> normalized = new HashMap<>();
+                    Object uri = photoMap.get("uri");
+                    Object path = photoMap.get("path");
+                    normalized.put("path", path != null ? path.toString() : (uri != null ? uri.toString() : null));
+                    normalized.put("comment", photoMap.get("comment"));
+                    normalizedPhotos.add(normalized);
+                }
+            }
+        }
+        progress.setFieldPhotos(normalizedPhotos);
+
+        syncTaskStatus(task, progress.getProgressStatus());
+        progress = taskProgressRepository.save(progress);
+
+        boolean hasLocalPhoto = normalizedPhotos.stream()
+                .anyMatch(p -> isLocalPath(str(p.get("path"))));
+        if (hasLocalPhoto || fileStorageService.exists(progress.getLocationMapImage())) {
+            runAiIfPossible(task, progress);
+        }
+
+        return toResponseMap(progress, task);
+    }
+
+    public Map<String, Object> getLatestByTaskId(Long taskId) {
+        return taskProgressRepository
+                .findTopByTask_TaskIdOrderByCreatedAtDesc(taskId)
+                .map(p -> toResponseMap(p, p.getTask()))
+                .orElse(null);
+    }
+
+    public TaskProgress getById(Long progressId) {
+        return taskProgressRepository.findById(progressId)
+                .orElseThrow(() -> new RuntimeException("Progress not found: " + progressId));
+    }
+
+    private void runAiIfPossible(Task task, TaskProgress progress) {
+        try {
+            aiReportService.generateReport(task, progress);
+            taskProgressRepository.save(progress);
+        } catch (Exception e) {
+            System.out.println("[TaskProgress] AI ?앹꽦 ?ㅽ뙣: " + e.getMessage());
+            progress.setAiRefinedContent("AI 蹂닿퀬???앹꽦 以??ㅻ쪟: " + e.getMessage());
+            taskProgressRepository.save(progress);
+        }
+    }
+
+    private void syncTaskStatus(Task task, String progressStatus) {
+        if (progressStatus != null && !progressStatus.isBlank()) {
+            taskService.updateStatusEntity(task, progressStatus);
+        }
+    }
+
+    public Map<String, Object> toResponseMap(TaskProgress progress, Task task) {
+        Map<String, Object> result = new HashMap<>();
+
+        result.put("progressId", progress.getProgressId());
+        result.put("taskId", task.getTaskId());
+        result.put("latitude", progress.getLatitude());
+        result.put("longitude", progress.getLongitude());
+        result.put("locationMapImage", toPublicFileUrl(task.getTaskId(), progress.getLocationMapImage()));
+        result.put("fieldPhotos", toPublicPhotoList(task.getTaskId(), progress.getFieldPhotos()));
+        result.put("mainComment", progress.getMainComment());
+        result.put("fieldMemo", progress.getFieldMemo());
+        result.put("progressStatus", progress.getProgressStatus());
+        result.put("aiRefinedContent", progress.getAiRefinedContent());
+        result.put("reportFilePath", progress.getReportFilePath());
+        result.put("createdAt", progress.getCreatedAt());
+
+        result.put("detailAddress", task.getDetailAddress());
+        result.put("roadAddress", task.getRoadAddress());
+        result.put("taskCategory", task.getTaskCategory());
+
+        if (progress.getReportFilePath() != null) {
+            result.put("reportDownloadUrl",
+                    "/api/task-progress/" + progress.getProgressId() + "/report/download");
+        }
+
+        return result;
+    }
+
+    private List<String> parsePhotoComments(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(raw, new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return List.of(raw);
+        }
+    }
+
+    private boolean isLocalPath(String path) {
+        if (path == null) {
+            return false;
+        }
+        return path.startsWith("file:") || path.startsWith("/") || path.contains("uploads");
+    }
+
+    private Double parseDouble(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return Double.valueOf(value);
+    }
+
+    private Double parseDoubleObj(Object value) {
+        if (value == null) {
+            return null;
+        }
+        return Double.valueOf(value.toString());
+    }
+
+    private String str(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    private String toPublicFileUrl(Long taskId, String absolutePath) {
+        if (absolutePath == null || absolutePath.isBlank()) {
+            return null;
+        }
+        if (absolutePath.startsWith("http://") || absolutePath.startsWith("https://")) {
+            return absolutePath;
+        }
+        java.nio.file.Path path = java.nio.file.Paths.get(absolutePath);
+        return "/api/files/" + taskId + "/" + path.getFileName().toString();
+    }
+
+    private List<Map<String, Object>> toPublicPhotoList(Long taskId, List<Map<String, Object>> photos) {
+        if (photos == null) {
+            return List.of();
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map<String, Object> photo : photos) {
+            Map<String, Object> item = new HashMap<>(photo);
+            Object path = photo.get("path");
+            if (path != null) {
+                item.put("uri", toPublicFileUrl(taskId, path.toString()));
+            }
+            result.add(item);
+        }
+        return result;
+    }
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\controller\GroupController.java
+============================================================
+
+package com.fieldwork.controller;
+
+import com.fieldwork.service.GroupService;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/groups")
+@CrossOrigin("*")
+public class GroupController {
+
+    private final GroupService groupService;
+
+    public GroupController(GroupService groupService) {
+        this.groupService = groupService;
+    }
+
+    @PostMapping
+    public Map<String, Object> createGroup(@RequestBody Map<String, Object> body) {
+        return groupService.createGroup(
+                stringValue(body.get("name")),
+                longValue(body.get("userId")),
+                stringValue(body.get("regionSido")),
+                stringValue(body.get("regionSigungu")),
+                stringValue(body.get("regionAdmCode")));
+    }
+
+    @GetMapping("/user/{userId}")
+    public List<Map<String, Object>> getUserGroups(@PathVariable Long userId) {
+        return groupService.getUserGroups(userId);
+    }
+
+    @GetMapping("/{groupId}")
+    public Map<String, Object> getGroupDetail(
+            @PathVariable Long groupId,
+            @RequestParam Long userId) {
+        return groupService.getGroupDetail(groupId, userId);
+    }
+
+    @PatchMapping("/{groupId}/region")
+    public Map<String, Object> updateGroupRegion(
+            @PathVariable Long groupId,
+            @RequestBody Map<String, Object> body) {
+        return groupService.updateGroupRegion(
+                groupId,
+                longValue(body.get("leaderUserId")),
+                stringValue(body.get("regionSido")),
+                stringValue(body.get("regionSigungu")),
+                stringValue(body.get("regionAdmCode")));
+    }
+
+    @GetMapping("/{groupId}/members")
+    public List<Map<String, Object>> getMembers(
+            @PathVariable Long groupId,
+            @RequestParam Long userId) {
+        return groupService.getMembers(groupId, userId);
+    }
+
+    @PostMapping("/{groupId}/invitations")
+    public Map<String, Object> inviteMember(
+            @PathVariable Long groupId,
+            @RequestBody Map<String, Object> body) {
+        return groupService.inviteMember(
+                groupId,
+                longValue(body.get("inviterUserId")),
+                stringValue(body.get("inviteeLoginId")));
+    }
+
+    @GetMapping("/invitations")
+    public List<Map<String, Object>> getInvitations(
+            @RequestParam Long userId,
+            @RequestParam(defaultValue = "PENDING") String status) {
+        return groupService.getInvitations(userId, status);
+    }
+
+    @PostMapping("/invitations/{invitationId}/accept")
+    public Map<String, Object> acceptInvitation(
+            @PathVariable Long invitationId,
+            @RequestBody Map<String, Object> body) {
+        return groupService.acceptInvitation(
+                invitationId,
+                longValue(body.get("userId")));
+    }
+
+    @PostMapping("/invitations/{invitationId}/reject")
+    public Map<String, Object> rejectInvitation(
+            @PathVariable Long invitationId,
+            @RequestBody Map<String, Object> body) {
+        return groupService.rejectInvitation(
+                invitationId,
+                longValue(body.get("userId")));
+    }
+
+    @PutMapping("/{groupId}/bulk-assignments")
+public List<Map<String, Object>> assignTasksBulk(
+        @PathVariable Long groupId,
+        @RequestBody Map<String, Object> body
+) {
+    Long leaderUserId = longValue(body.get("leaderUserId"));
+    Long assigneeUserId = longValue(body.get("assigneeUserId"));
+
+    Object taskIdsValue = body.get("taskIds");
+
+    if (!(taskIdsValue instanceof List<?> rawTaskIds)) {
+        throw new RuntimeException("諛⑸Ц吏 紐⑸줉???щ컮瑜댁? ?딆뒿?덈떎.");
+    }
+
+    List<Long> taskIds = rawTaskIds.stream()
+            .map(this::longValue)
+            .toList();
+
+    return groupService.assignTasksBulk(
+            groupId,
+            taskIds,
+            leaderUserId,
+            assigneeUserId
+    );
+}
+    @PutMapping("/{groupId}/assignments/{taskId}")
+    public Map<String, Object> assignTask(
+            @PathVariable Long groupId,
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body) {
+        return groupService.assignTask(
+                groupId,
+                taskId,
+                longValue(body.get("leaderUserId")),
+                longValue(body.get("assigneeUserId")));
+    }
+
+    @DeleteMapping("/{groupId}/assignments/{taskId}")
+    public Map<String, Object> unassignTask(
+            @PathVariable Long groupId,
+            @PathVariable Long taskId,
+            @RequestParam Long leaderUserId) {
+        return groupService.unassignTask(groupId, taskId, leaderUserId);
+    }
+
+    @GetMapping("/{groupId}/assignments")
+    public List<Map<String, Object>> getAssignments(
+            @PathVariable Long groupId,
+            @RequestParam Long userId) {
+        return groupService.getAssignments(groupId, userId);
+    }
+
+    @GetMapping("/{groupId}/assignments/mine")
+    public List<Map<String, Object>> getMyAssignments(
+            @PathVariable Long groupId,
+            @RequestParam Long userId) {
+        return groupService.getMyAssignments(groupId, userId);
+    }
+
+    private Long longValue(Object value) {
+        if (value == null) {
+            throw new RuntimeException("?꾩닔 媛믪씠 ?꾨씫?섏뿀?듬땲??");
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.parseLong(value.toString());
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : value.toString();
+    }
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\controller\LocationController.java
+============================================================
+
+package com.fieldwork.controller;
+
+import com.fieldwork.service.TaskService;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/locations")
+@CrossOrigin(origins = "*")
+public class LocationController {
+
+    private final TaskService taskService;
+
+    public LocationController(TaskService taskService) {
+        this.taskService = taskService;
+    }
+
+    /**
+     * 濡쒓렇???ъ슜?먯? ?꾩옱 洹몃９??湲곗??쇰줈 諛⑸Ц吏 議고쉶
+     */
+    @GetMapping
+    public List<Map<String, Object>> getLocations(
+            @RequestParam Long userId,
+            @RequestParam(required = false) Long groupId
+    ) {
+        return taskService.getForFrontend(userId, groupId);
+    }
+
+    /** 洹몃９???깅줉???꾩껜 ? 諛⑸Ц吏 議고쉶 */
+    @GetMapping("/group/{groupId}")
+    public List<Map<String, Object>> getGroupLocations(
+            @PathVariable Long groupId,
+            @RequestParam Long userId
+    ) {
+        return taskService.getGroupLocations(groupId, userId);
+    }
+
+    /**
+     * ?좉퇋 諛⑸Ц吏瑜?task ?뚯씠釉붿뿉 ???
+     */
+    @PostMapping
+    public Map<String, Object> createLocation(
+            @RequestBody Map<String, Object> body
+    ) {
+        if (body.containsKey("name") || body.containsKey("address")) {
+            if (!body.containsKey("detailAddress")
+                    && body.get("name") != null) {
+                body.put("detailAddress", body.get("name"));
+            }
+
+            if (!body.containsKey("roadAddress")
+                    && body.get("address") != null) {
+                body.put("roadAddress", body.get("address"));
+            }
+        }
+
+        return taskService.createFromFrontendBody(body);
+    }
+
+    /**
+     * 諛⑸Ц吏 ?묒뾽 ?곹깭 蹂寃?
+     */
+    @PatchMapping("/{id}/status")
+    public Map<String, Object> updateStatus(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body
+    ) {
+        String status = body.get("status") != null
+                ? body.get("status").toString()
+                : null;
+
+        if (status == null && body.get("taskStatus") != null) {
+            status = body.get("taskStatus").toString();
+        }
+
+        return taskService.updateStatus(id, status);
+    }
+
+    /**
+     * 誘몄쿂由??낅Т瑜??뱀젙 ?좎쭨(湲곕낯: ?ㅻ뒛)???낅Т 紐⑸줉?쇰줈 ?ㅼ떆 諛곗튂?쒕떎.
+     * 理쒖큹 ?낅Т??workDate)? ?좎??섍퀬 scheduledDate留?諛붽씔??
+     */
+    @PatchMapping("/{id}/scheduled-date")
+    public Map<String, Object> updateScheduledDate(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, Object> body
+    ) {
+        String scheduledDate = body != null && body.get("scheduledDate") != null
+                ? body.get("scheduledDate").toString()
+                : null;
+        return taskService.updateScheduledDate(id, scheduledDate);
+    }
+
+    /**
+     * 誘몄쿂由?諛⑸Ц吏 ??젣
+     */
+    @DeleteMapping("/{id}")
+    public Map<String, Object> deleteLocation(
+            @PathVariable Long id
+    ) {
+        return taskService.deletePendingTask(id);
+    }
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\controller\TaskController.java
+============================================================
+
+package com.fieldwork.controller;
+
+import com.fieldwork.service.TaskService;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/tasks")
+@CrossOrigin(origins = "*")
+public class TaskController {
+
+    private final TaskService taskService;
+
+    public TaskController(TaskService taskService) {
+        this.taskService = taskService;
+    }
+
+    @GetMapping
+    public List<Map<String, Object>> getTasks(
+            @RequestParam Long userId,
+            @RequestParam(required = false) Long groupId
+    ) {
+        return taskService.getForFrontend(userId, groupId);
+    }
+
+    @PostMapping
+    public Map<String, Object> createTask(@RequestBody Map<String, Object> body) {
+        return taskService.createFromFrontendBody(body);
+    }
+
+    @PatchMapping("/{taskId}/status")
+    public Map<String, Object> updateStatus(
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body
+    ) {
+        String status = body.get("status") != null
+                ? body.get("status").toString()
+                : body.get("taskStatus").toString();
+        return taskService.updateStatus(taskId, status);
+    }
+}
+
+
+============================================================
+FILE: backend\src\main\java\com\fieldwork\controller\TaskProgressController.java
+============================================================
+
+package com.fieldwork.controller;
+
+import com.fieldwork.entity.TaskProgress;
+import com.fieldwork.service.TaskProgressService;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartHttpServletRequest;
+
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/task-progress")
+@CrossOrigin(origins = "*")
+public class TaskProgressController {
+
+    private final TaskProgressService taskProgressService;
+
+    public TaskProgressController(TaskProgressService taskProgressService) {
+        this.taskProgressService = taskProgressService;
+    }
+
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> saveProgressMultipart(MultipartHttpServletRequest request) throws Exception {
+        return taskProgressService.saveFromMultipart(request);
+    }
+
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> saveProgressJson(@RequestBody Map<String, Object> body) throws Exception {
+        return taskProgressService.saveFromJson(body);
+    }
+
+    @GetMapping("/task/{taskId}")
+    public Map<String, Object> getProgressByTaskId(@PathVariable Long taskId) {
+        return taskProgressService.getLatestByTaskId(taskId);
+    }
+
+    @GetMapping("/{progressId}/report/download")
+    public ResponseEntity<Resource> downloadReport(@PathVariable Long progressId) {
+        TaskProgress progress = taskProgressService.getById(progressId);
+        String reportPath = progress.getReportFilePath();
+
+        if (reportPath == null || reportPath.isBlank()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Path file = Paths.get(reportPath);
+        if (!file.toFile().exists()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        String filename = file.getFileName().toString();
+        FileSystemResource resource = new FileSystemResource(file);
+
+        // ?뚯씪紐낆뿉 ?쒓????ㅼ뼱媛硫?Content-Disposition ?ㅻ뜑媛 ?쒖닔 UTF-8 諛붿씠?몃줈
+        // ?꾩넚?섎뒗?? HTTP ?ㅻ뜑???먮옒 ASCII留??덉슜?섎뒗 媛믪씠???쇰? 紐⑤컮??
+        // 釉뚮씪?곗?(?뱁엳 iOS Safari ??媛 ???ㅻ뜑瑜?紐??쎄퀬 ?뺤옣???녿뒗
+        // "download" 媛숈? ?대쫫?쇰줈 ??ν빐踰꾨┛?? 洹몃옒????긽 ".hwpx"濡??앸굹??
+        // ASCII ?泥??뚯씪紐낆쓣 湲곕낯?쇰줈 二쇨퀬, RFC 5987 ?몄퐫?⑸맂 ?먮옒 ?쒓?
+        // ?뚯씪紐낆? filename*= 濡?媛숈씠 蹂대궡??吏?먰븯??釉뚮씪?곗??먯꽌??洹멸구 ?곌쾶 ?쒕떎.
+        String extension = filename.contains(".")
+                ? filename.substring(filename.lastIndexOf('.'))
+                : ".hwpx";
+        String asciiFallback = "report_" + progressId + extension;
+        String encodedFilename = encodeRfc5987(filename);
+
+        String contentDisposition = "attachment; filename=\"" + asciiFallback + "\""
+                + "; filename*=UTF-8''" + encodedFilename;
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(resource);
+    }
+
+    private static String encodeRfc5987(String value) {
+        try {
+            return URLEncoder.encode(value, StandardCharsets.UTF_8.name())
+                    .replace("+", "%20");
+        } catch (UnsupportedEncodingException e) {
+            return "report.hwpx";
+        }
+    }
+}

@@ -419,25 +419,45 @@ export default function App() {
   }, [activeGroup, loadTeamLocations, loadWorkspaceLocations, refreshGroupAssignments]);
 
   /*
-   * 로그인한 사용자가 있고 알림 권한이 이미 허용돼 있으면
-   * Expo Push Token을 백엔드에 등록한다.
-   * Settings 화면을 열지 않아도 로그인 후 자동 동기화된다.
-   */
+ * 로그인한 사용자가 있고 알림 권한이 이미 허용돼 있으면
+ * Expo Push Token을 백엔드에 등록한다.
+ */
   useEffect(() => {
+    console.log('[Notification DEBUG] user =', user);
+
     if (!user?.userId) {
+      console.log('[Notification DEBUG] userId 없음');
       return undefined;
     }
 
     let cancelled = false;
 
     const syncToken = async () => {
+      console.log(
+        '[Notification DEBUG] 토큰 동기화 시작 userId =',
+        user.userId
+      );
+
       const granted = await checkNotificationPermission();
 
+      console.log(
+        '[Notification DEBUG] permission =',
+        granted
+      );
+
       if (!granted || cancelled) {
+        console.log(
+          '[Notification DEBUG] 권한 없음 또는 취소됨'
+        );
         return;
       }
 
-      await syncPushTokenForUser(user);
+      const result = await syncPushTokenForUser(user);
+
+      console.log(
+        '[Notification DEBUG] 토큰 등록 결과 =',
+        result
+      );
     };
 
     syncToken();
@@ -446,7 +466,6 @@ export default function App() {
       cancelled = true;
     };
   }, [user?.userId]);
-
   /*
    * 앱이 실행 중일 때 업무 푸시를 받으면
    * 현재 업무/담당자 데이터를 바로 새로고침한다.
@@ -577,399 +596,399 @@ export default function App() {
         <StatusBar barStyle="dark-content" />
 
         <View style={styles.screenHost}>
-        {screen === 'login' && (
-          <LoginScreen
-            onLogin={(loginUser) => {
-              setRouteLocations([]);
-              setReportTargets([]);
-              setTodayLocationsLoaded(false);
-              setUser(loginUser);
-              setGroupAssignments([]);
-              restoreActiveGroup(loginUser);
+          {screen === 'login' && (
+            <LoginScreen
+              onLogin={(loginUser) => {
+                setRouteLocations([]);
+                setReportTargets([]);
+                setTodayLocationsLoaded(false);
+                setUser(loginUser);
+                setGroupAssignments([]);
+                restoreActiveGroup(loginUser);
 
-              historyRef.current = [];
+                historyRef.current = [];
 
-              go(
-                'main',
-                {
-                  replace: true,
-                }
-              );
-            }}
-            onRegister={() =>
-              go('register')
-            }
-          />
-        )}
+                go(
+                  'main',
+                  {
+                    replace: true,
+                  }
+                );
+              }}
+              onRegister={() =>
+                go('register')
+              }
+            />
+          )}
 
-        {screen === 'register' && (
-          <RegisterScreen
-            onBack={() =>
-              goBack('login')
-            }
-          />
-        )}
+          {screen === 'register' && (
+            <RegisterScreen
+              onBack={() =>
+                goBack('login')
+              }
+            />
+          )}
 
-        {screen === 'main' && (
-          <MainScreen
-            user={user}
-            activeGroup={activeGroup}
-            availableGroups={availableGroups}
-            groupAssignments={groupAssignments}
-            onRoute={openWorkspaceMap}
-            onReport={() =>
-              go('reportList')
-            }
-            onGroup={() =>
-              go('groupHome')
-            }
-            onSelectWorkspace={(group) => selectActiveGroup(group)}
-            onRefreshWorkspaces={refreshAvailableGroups}
-            onWorkStatus={() =>
-              go('workStatus')
-            }
-            onDashboard={() =>
-              go('dashboard')
-            }
-            onSettings={() =>
-              go('settings')
-            }
-            onPublicData={() =>
-              go('publicDataAssignment')
-            }
-            locations={routeLocations}
-            setLocations={setRouteLocations}
-            onRefreshAssignments={refreshCurrentWorkspace}
-          />
-        )}
-
-        {screen === 'groupHome' && (
-          <GroupScreen
-            user={user}
-            activeGroup={activeGroup}
-            onBack={() =>
-              go('main')
-            }
-            onCreate={() =>
-              go('groupCreate')
-            }
-            onInvitations={() =>
-              go('groupInvitations')
-            }
-            onOpenGroup={(group) => {
-              rememberAvailableGroup(group);
-              selectActiveGroup(group);
-              go(isPersonalGroup(group) ? 'main' : 'groupDetail');
-            }}
-          />
-        )}
-
-        {screen === 'groupCreate' && (
-          <GroupCreateScreen
-            user={user}
-            onBack={() =>
-              go('groupHome')
-            }
-            onCreated={(group) => {
-              rememberAvailableGroup(group);
-              selectActiveGroup(group);
-              go('groupDetail');
-            }}
-          />
-        )}
-
-        {screen === 'groupInvitations' && (
-          <GroupInvitationsScreen
-            user={user}
-            onBack={() =>
-              go('groupHome')
-            }
-            onAccepted={(group) => {
-              rememberAvailableGroup(group);
-              selectActiveGroup(group);
-              go('groupDetail');
-            }}
-          />
-        )}
-
-        {screen === 'groupDetail' &&
-          activeGroup && (
-            <GroupDetailScreen
+          {screen === 'main' && (
+            <MainScreen
               user={user}
-              group={activeGroup}
+              activeGroup={activeGroup}
+              availableGroups={availableGroups}
+              groupAssignments={groupAssignments}
+              onRoute={openWorkspaceMap}
+              onReport={() =>
+                go('reportList')
+              }
+              onGroup={() =>
+                go('groupHome')
+              }
+              onSelectWorkspace={(group) => selectActiveGroup(group)}
+              onRefreshWorkspaces={refreshAvailableGroups}
+              onWorkStatus={() =>
+                go('workStatus')
+              }
+              onDashboard={() =>
+                go('dashboard')
+              }
+              onSettings={() =>
+                go('settings')
+              }
+              onPublicData={() =>
+                go('publicDataAssignment')
+              }
+              locations={routeLocations}
+              setLocations={setRouteLocations}
+              onRefreshAssignments={refreshCurrentWorkspace}
+            />
+          )}
+
+          {screen === 'groupHome' && (
+            <GroupScreen
+              user={user}
+              activeGroup={activeGroup}
+              onBack={() =>
+                go('main')
+              }
+              onCreate={() =>
+                go('groupCreate')
+              }
+              onInvitations={() =>
+                go('groupInvitations')
+              }
+              onOpenGroup={(group) => {
+                rememberAvailableGroup(group);
+                selectActiveGroup(group);
+                go(isPersonalGroup(group) ? 'main' : 'groupDetail');
+              }}
+            />
+          )}
+
+          {screen === 'groupCreate' && (
+            <GroupCreateScreen
+              user={user}
               onBack={() =>
                 go('groupHome')
               }
-              onUpdatedGroup={(group) => {
+              onCreated={(group) => {
                 rememberAvailableGroup(group);
                 selectActiveGroup(group);
-              }}
-              onAssign={(group) => {
-                selectActiveGroup(group);
-                go('assignment');
-              }}
-              onTeamLocations={(group) => {
-                selectActiveGroup(group);
-                loadTeamLocations(group);
-                go('teamLocations');
-              }}
-              onPublicData={(group) => {
-                selectActiveGroup(group);
-                go('publicDataAssignment');
-              }}
-            />
-          )}
-
-        {screen === 'publicDataAssignment' && activeGroup && (
-          <MapScreen
-            user={user}
-            activeGroup={activeGroup}
-            publicDataMode
-            locations={routeLocations}
-            setLocations={setRouteLocations}
-            locationScope={isPersonalGroup(activeGroup) ? 'personal' : 'team'}
-            groupAssignments={groupAssignments}
-            onBack={() => goBack('groupDetail')}
-            onDataChanged={refreshCurrentWorkspace}
-            onLocationClick={onLocationClick}
-            roadPath={roadPath}
-            setRoadPath={setRoadPath}
-            routeSegments={routeSegments}
-            setRouteSegments={setRouteSegments}
-            currentSegmentIndex={currentSegmentIndex}
-            setCurrentSegmentIndex={setCurrentSegmentIndex}
-            optimized={optimized}
-            setOptimized={setOptimized}
-            isGuiding={isGuiding}
-            setIsGuiding={setIsGuiding}
-            totalDuration={totalDuration}
-            setTotalDuration={setTotalDuration}
-            panelOpen={panelOpen}
-            setPanelOpen={setPanelOpen}
-          />
-        )}
-
-        {screen === 'teamLocations' && activeGroup && (
-          <MapScreen
-            user={user}
-            locations={teamLocations}
-            setLocations={setTeamLocations}
-            activeGroup={activeGroup}
-            locationScope="team"
-            groupAssignments={groupAssignments}
-            onBack={() => {
-              refreshCurrentWorkspace();
-              go('groupDetail');
-            }}
-            onLocationClick={onLocationClick}
-            onDataChanged={refreshCurrentWorkspace}
-            roadPath={teamRoadPath}
-            setRoadPath={setTeamRoadPath}
-            routeSegments={teamRouteSegments}
-            setRouteSegments={setTeamRouteSegments}
-            currentSegmentIndex={teamCurrentSegmentIndex}
-            setCurrentSegmentIndex={setTeamCurrentSegmentIndex}
-            optimized={teamOptimized}
-            setOptimized={setTeamOptimized}
-            isGuiding={teamIsGuiding}
-            setIsGuiding={setTeamIsGuiding}
-            totalDuration={teamTotalDuration}
-            setTotalDuration={setTeamTotalDuration}
-            panelOpen={teamPanelOpen}
-            setPanelOpen={setTeamPanelOpen}
-          />
-        )}
-
-        {screen === 'assignment' &&
-          activeGroup && (
-            <AssignmentScreen
-              user={user}
-              group={activeGroup}
-              onBack={() => {
-                refreshCurrentWorkspace();
                 go('groupDetail');
               }}
-              onChanged={refreshCurrentWorkspace}
             />
           )}
 
-        {screen === 'workStatus' &&
-          activeGroup && (
-            <WorkStatusScreen
+          {screen === 'groupInvitations' && (
+            <GroupInvitationsScreen
               user={user}
-              group={activeGroup}
-              assignments={groupAssignments}
-              onBack={() => goBack('main')}
-              onRefresh={refreshCurrentWorkspace}
+              onBack={() =>
+                go('groupHome')
+              }
+              onAccepted={(group) => {
+                rememberAvailableGroup(group);
+                selectActiveGroup(group);
+                go('groupDetail');
+              }}
             />
           )}
 
-        {screen === 'dashboard' && (
-          <DashboardScreen
-            user={user}
-            activeGroup={activeGroup}
-            onBack={() => goBack('main')}
-          />
-        )}
+          {screen === 'groupDetail' &&
+            activeGroup && (
+              <GroupDetailScreen
+                user={user}
+                group={activeGroup}
+                onBack={() =>
+                  go('groupHome')
+                }
+                onUpdatedGroup={(group) => {
+                  rememberAvailableGroup(group);
+                  selectActiveGroup(group);
+                }}
+                onAssign={(group) => {
+                  selectActiveGroup(group);
+                  go('assignment');
+                }}
+                onTeamLocations={(group) => {
+                  selectActiveGroup(group);
+                  loadTeamLocations(group);
+                  go('teamLocations');
+                }}
+                onPublicData={(group) => {
+                  selectActiveGroup(group);
+                  go('publicDataAssignment');
+                }}
+              />
+            )}
 
-        {screen === 'settings' && (
-          <SettingsScreen
-            user={user}
-            activeGroup={activeGroup}
-            onBack={() => goBack('main')}
-            onUpdatedUser={setUser}
-            onDashboard={() => go('dashboard')}
-            onLogout={handleLogout}
-          />
-        )}
-
-        {mapInitialized && (
-          <View
-            style={[
-              styles.persistentMapLayer,
-              screen !== 'mapDirect' && styles.hiddenMapLayer,
-            ]}
-            pointerEvents={screen === 'mapDirect' ? 'auto' : 'none'}
-            accessibilityElementsHidden={screen !== 'mapDirect'}
-            importantForAccessibility={
-              screen === 'mapDirect' ? 'auto' : 'no-hide-descendants'
-            }
-          >
+          {screen === 'publicDataAssignment' && activeGroup && (
             <MapScreen
               user={user}
-              locations={routeLocations}
-              setLocations={
-                setRouteLocations
-              }
               activeGroup={activeGroup}
-              locationScope={!activeGroup || isPersonalGroup(activeGroup) ? 'personal' : 'team'}
-              groupAssignments={activeGroup?.groupId ? groupAssignments : []}
-              onBack={() =>
-                goBack('main')
-              }
-              onLocationClick={
-                onLocationClick
-              }
-              onDataChanged={() => {
-                refreshCurrentWorkspace();
-              }}
+              publicDataMode
+              locations={routeLocations}
+              setLocations={setRouteLocations}
+              locationScope={isPersonalGroup(activeGroup) ? 'personal' : 'team'}
+              groupAssignments={groupAssignments}
+              onBack={() => goBack('groupDetail')}
+              onDataChanged={refreshCurrentWorkspace}
+              onLocationClick={onLocationClick}
               roadPath={roadPath}
               setRoadPath={setRoadPath}
-              routeSegments={
-                routeSegments
-              }
-              setRouteSegments={
-                setRouteSegments
-              }
-              currentSegmentIndex={
-                currentSegmentIndex
-              }
-              setCurrentSegmentIndex={
-                setCurrentSegmentIndex
-              }
+              routeSegments={routeSegments}
+              setRouteSegments={setRouteSegments}
+              currentSegmentIndex={currentSegmentIndex}
+              setCurrentSegmentIndex={setCurrentSegmentIndex}
               optimized={optimized}
               setOptimized={setOptimized}
               isGuiding={isGuiding}
               setIsGuiding={setIsGuiding}
-              totalDuration={
-                totalDuration
-              }
-              setTotalDuration={
-                setTotalDuration
-              }
+              totalDuration={totalDuration}
+              setTotalDuration={setTotalDuration}
               panelOpen={panelOpen}
               setPanelOpen={setPanelOpen}
-              isActive={screen === 'mapDirect'}
-              persistNormalMap
             />
-          </View>
-        )}
+          )}
 
-        {screen === 'fieldAction' && (
-          <FieldActionScreen
-            location={selectedLocation}
-            actionType={actionType}
-            onBack={() =>
-              goBack('reportList')
-            }
-            onSave={(savedReport) => {
-              const applySavedStatus = (items) =>
-                items.map((loc) =>
-                  Number(loc.id ?? loc.taskId) ===
-                    Number(selectedLocation?.id ?? selectedLocation?.taskId)
-                    ? {
+          {screen === 'teamLocations' && activeGroup && (
+            <MapScreen
+              user={user}
+              locations={teamLocations}
+              setLocations={setTeamLocations}
+              activeGroup={activeGroup}
+              locationScope="team"
+              groupAssignments={groupAssignments}
+              onBack={() => {
+                refreshCurrentWorkspace();
+                go('groupDetail');
+              }}
+              onLocationClick={onLocationClick}
+              onDataChanged={refreshCurrentWorkspace}
+              roadPath={teamRoadPath}
+              setRoadPath={setTeamRoadPath}
+              routeSegments={teamRouteSegments}
+              setRouteSegments={setTeamRouteSegments}
+              currentSegmentIndex={teamCurrentSegmentIndex}
+              setCurrentSegmentIndex={setTeamCurrentSegmentIndex}
+              optimized={teamOptimized}
+              setOptimized={setTeamOptimized}
+              isGuiding={teamIsGuiding}
+              setIsGuiding={setTeamIsGuiding}
+              totalDuration={teamTotalDuration}
+              setTotalDuration={setTeamTotalDuration}
+              panelOpen={teamPanelOpen}
+              setPanelOpen={setTeamPanelOpen}
+            />
+          )}
+
+          {screen === 'assignment' &&
+            activeGroup && (
+              <AssignmentScreen
+                user={user}
+                group={activeGroup}
+                onBack={() => {
+                  refreshCurrentWorkspace();
+                  go('groupDetail');
+                }}
+                onChanged={refreshCurrentWorkspace}
+              />
+            )}
+
+          {screen === 'workStatus' &&
+            activeGroup && (
+              <WorkStatusScreen
+                user={user}
+                group={activeGroup}
+                assignments={groupAssignments}
+                onBack={() => goBack('main')}
+                onRefresh={refreshCurrentWorkspace}
+              />
+            )}
+
+          {screen === 'dashboard' && (
+            <DashboardScreen
+              user={user}
+              activeGroup={activeGroup}
+              onBack={() => goBack('main')}
+            />
+          )}
+
+          {screen === 'settings' && (
+            <SettingsScreen
+              user={user}
+              activeGroup={activeGroup}
+              onBack={() => goBack('main')}
+              onUpdatedUser={setUser}
+              onDashboard={() => go('dashboard')}
+              onLogout={handleLogout}
+            />
+          )}
+
+          {mapInitialized && (
+            <View
+              style={[
+                styles.persistentMapLayer,
+                screen !== 'mapDirect' && styles.hiddenMapLayer,
+              ]}
+              pointerEvents={screen === 'mapDirect' ? 'auto' : 'none'}
+              accessibilityElementsHidden={screen !== 'mapDirect'}
+              importantForAccessibility={
+                screen === 'mapDirect' ? 'auto' : 'no-hide-descendants'
+              }
+            >
+              <MapScreen
+                user={user}
+                locations={routeLocations}
+                setLocations={
+                  setRouteLocations
+                }
+                activeGroup={activeGroup}
+                locationScope={!activeGroup || isPersonalGroup(activeGroup) ? 'personal' : 'team'}
+                groupAssignments={activeGroup?.groupId ? groupAssignments : []}
+                onBack={() =>
+                  goBack('main')
+                }
+                onLocationClick={
+                  onLocationClick
+                }
+                onDataChanged={() => {
+                  refreshCurrentWorkspace();
+                }}
+                roadPath={roadPath}
+                setRoadPath={setRoadPath}
+                routeSegments={
+                  routeSegments
+                }
+                setRouteSegments={
+                  setRouteSegments
+                }
+                currentSegmentIndex={
+                  currentSegmentIndex
+                }
+                setCurrentSegmentIndex={
+                  setCurrentSegmentIndex
+                }
+                optimized={optimized}
+                setOptimized={setOptimized}
+                isGuiding={isGuiding}
+                setIsGuiding={setIsGuiding}
+                totalDuration={
+                  totalDuration
+                }
+                setTotalDuration={
+                  setTotalDuration
+                }
+                panelOpen={panelOpen}
+                setPanelOpen={setPanelOpen}
+                isActive={screen === 'mapDirect'}
+                persistNormalMap
+              />
+            </View>
+          )}
+
+          {screen === 'fieldAction' && (
+            <FieldActionScreen
+              location={selectedLocation}
+              actionType={actionType}
+              onBack={() =>
+                goBack('reportList')
+              }
+              onSave={(savedReport) => {
+                const applySavedStatus = (items) =>
+                  items.map((loc) =>
+                    Number(loc.id ?? loc.taskId) ===
+                      Number(selectedLocation?.id ?? selectedLocation?.taskId)
+                      ? {
                         ...loc,
                         status:
                           savedReport.progressStatus ||
                           savedReport.status ||
                           loc.status,
                       }
-                    : loc
+                      : loc
+                  );
+
+                setRouteLocations(applySavedStatus);
+                setTeamLocations(applySavedStatus);
+                refreshCurrentWorkspace();
+
+                goBack('reportList');
+              }}
+            />
+          )}
+
+          {screen === 'reportList' && (
+            <ReportListScreen
+              locations={routeLocations}
+              loading={!todayLocationsLoaded}
+              user={user}
+              activeGroup={activeGroup}
+              groupAssignments={
+                groupAssignments
+              }
+              onBack={() =>
+                goBack('mapDirect')
+              }
+              onSelectLocation={(loc) => {
+                setSelectedLocation(loc);
+                setActionType('report');
+                go('fieldAction');
+              }}
+              onCreateReport={(
+                selectedLocations
+              ) => {
+                setReportTargets(
+                  selectedLocations
                 );
 
-              setRouteLocations(applySavedStatus);
-              setTeamLocations(applySavedStatus);
-              refreshCurrentWorkspace();
+                go('report');
+              }}
+            />
+          )}
 
-              goBack('reportList');
-            }}
-          />
-        )}
+          {screen === 'report' && (
+            <ReportScreen
+              locations={reportTargets}
+              user={user}
+              activeGroup={activeGroup}
+              onBack={() =>
+                goBack('reportList')
+              }
+              onDownload={(info) => {
+                setDownloadInfo(info);
+                go('download');
+              }}
+            />
+          )}
 
-        {screen === 'reportList' && (
-          <ReportListScreen
-            locations={routeLocations}
-            loading={!todayLocationsLoaded}
-            user={user}
-            activeGroup={activeGroup}
-            groupAssignments={
-              groupAssignments
-            }
-            onBack={() =>
-              goBack('mapDirect')
-            }
-            onSelectLocation={(loc) => {
-              setSelectedLocation(loc);
-              setActionType('report');
-              go('fieldAction');
-            }}
-            onCreateReport={(
-              selectedLocations
-            ) => {
-              setReportTargets(
-                selectedLocations
-              );
-
-              go('report');
-            }}
-          />
-        )}
-
-        {screen === 'report' && (
-          <ReportScreen
-            locations={reportTargets}
-            user={user}
-            activeGroup={activeGroup}
-            onBack={() =>
-              goBack('reportList')
-            }
-            onDownload={(info) => {
-              setDownloadInfo(info);
-              go('download');
-            }}
-          />
-        )}
-
-        {screen === 'download' && (
-          <DownloadScreen
-            onBack={() =>
-              goBack('main')
-            }
-            downloadInfo={
-              downloadInfo
-            }
-          />
-        )}
+          {screen === 'download' && (
+            <DownloadScreen
+              onBack={() =>
+                goBack('main')
+              }
+              downloadInfo={
+                downloadInfo
+              }
+            />
+          )}
 
         </View>
 
@@ -1001,25 +1020,25 @@ function BottomNavigation({
 }) {
   const activeTab =
     screen === 'mapDirect' ||
-    screen === 'teamLocations' ||
-    screen === 'publicDataAssignment'
+      screen === 'teamLocations' ||
+      screen === 'publicDataAssignment'
       ? 'map'
       : [
-          'reportList',
-          'fieldAction',
-          'report',
-          'download',
-        ].includes(screen)
-      ? 'report'
-      : [
+        'reportList',
+        'fieldAction',
+        'report',
+        'download',
+      ].includes(screen)
+        ? 'report'
+        : [
           'groupHome',
           'groupCreate',
           'groupInvitations',
           'groupDetail',
           'assignment',
         ].includes(screen)
-      ? 'group'
-      : 'home';
+          ? 'group'
+          : 'home';
 
   return (
     <View style={styles.bottomNav}>
@@ -1096,7 +1115,7 @@ function BottomNavItem({
         style={[
           styles.bottomNavLabel,
           active &&
-            styles.bottomNavLabelActive,
+          styles.bottomNavLabelActive,
         ]}
       >
         {label}

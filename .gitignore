@@ -39,3 +39,5 @@ ai/__pycache__/
 # goal, plan
 GOAL.md
 PLAN.md
+
+.env

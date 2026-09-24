@@ -25,3 +25,4 @@ services:
       - SPRING_DATASOURCE_USERNAME=sahagu_admin
       - SPRING_DATASOURCE_PASSWORD=sahagu_local_pw
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - KOREA_HOLIDAY_API_KEY=${KOREA_HOLIDAY_API_KEY}
