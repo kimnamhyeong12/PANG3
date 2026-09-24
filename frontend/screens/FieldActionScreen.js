@@ -1072,9 +1072,19 @@ export default function FieldActionScreen({
         );
       }
 
-      onSave?.(
-        savedReport
-      );
+      onSave?.({
+        ...savedReport,
+        taskId,
+        id: savedReport?.id ?? taskId,
+        progressStatus:
+          status ||
+          savedReport?.progressStatus ||
+          'pending',
+        status:
+          status ||
+          savedReport?.progressStatus ||
+          'pending',
+      });
 
       showAlert(
         '보고서가 저장되었고 AI 분석이 완료되었습니다.'

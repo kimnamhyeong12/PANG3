@@ -32,6 +32,15 @@ import SettingsScreen from './screens/SettingsScreen';
 import { groupApi } from './utils/groupApi';
 import { CustomAlertHost } from './components/CustomAlert';
 import { colors } from './constants/design';
+import {
+  NOTIFICATION_TYPES,
+  addNotificationReceivedListener,
+  addNotificationResponseListener,
+  checkNotificationPermission,
+  stopRouteNotification,
+  syncPushTokenForUser,
+  unregisterPushTokenForUser,
+} from './services/notificationService';
 
 const isPersonalGroup = (group) =>
   Boolean(
@@ -409,11 +418,97 @@ export default function App() {
     ]);
   }, [activeGroup, loadTeamLocations, loadWorkspaceLocations, refreshGroupAssignments]);
 
+  /*
+   * 로그인한 사용자가 있고 알림 권한이 이미 허용돼 있으면
+   * Expo Push Token을 백엔드에 등록한다.
+   * Settings 화면을 열지 않아도 로그인 후 자동 동기화된다.
+   */
+  useEffect(() => {
+    if (!user?.userId) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const syncToken = async () => {
+      const granted = await checkNotificationPermission();
+
+      if (!granted || cancelled) {
+        return;
+      }
+
+      await syncPushTokenForUser(user);
+    };
+
+    syncToken();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.userId]);
+
+  /*
+   * 앱이 실행 중일 때 업무 푸시를 받으면
+   * 현재 업무/담당자 데이터를 바로 새로고침한다.
+   * 아침/퇴근 요약 알림은 데이터 재조회가 필요하지 않아 제외한다.
+   */
+  useEffect(() => {
+    if (!user?.userId) {
+      return undefined;
+    }
+
+    const refreshTypes = new Set([
+      NOTIFICATION_TYPES.TASK_ASSIGNED,
+      NOTIFICATION_TYPES.ASSIGNEE_CHANGED,
+      NOTIFICATION_TYPES.PRIORITY_CHANGED,
+    ]);
+
+    const receivedSubscription =
+      addNotificationReceivedListener((notification) => {
+        const type =
+          notification?.request?.content?.data?.type;
+
+        if (refreshTypes.has(type)) {
+          refreshCurrentWorkspace();
+        }
+      });
+
+    const responseSubscription =
+      addNotificationResponseListener((response) => {
+        const type =
+          response?.notification?.request?.content?.data?.type;
+
+        if (refreshTypes.has(type)) {
+          refreshCurrentWorkspace();
+
+          // 알림을 눌렀을 때 현재 업무공간 홈으로 이동한다.
+          historyRef.current = [];
+          go('main', { replace: true });
+        }
+      });
+
+    return () => {
+      receivedSubscription?.remove?.();
+      responseSubscription?.remove?.();
+    };
+  }, [
+    user?.userId,
+    refreshCurrentWorkspace,
+  ]);
+
   useEffect(() => {
     refreshGroupAssignments();
   }, [refreshGroupAssignments]);
 
   const handleLogout = () => {
+    // 로그아웃 시 현재 사용자와 기기 Push Token 연결을 해제한다.
+    // 서버가 아직 해당 API를 제공하지 않아도 로그아웃 자체는 계속 진행된다.
+    if (user?.userId) {
+      unregisterPushTokenForUser(user);
+    }
+
+    stopRouteNotification();
+
     setMapInitialized(false);
     setUser(null);
     setActiveGroup(null);
@@ -804,7 +899,10 @@ export default function App() {
                     Number(selectedLocation?.id ?? selectedLocation?.taskId)
                     ? {
                         ...loc,
-                        status: savedReport.progressStatus || loc.status,
+                        status:
+                          savedReport.progressStatus ||
+                          savedReport.status ||
+                          loc.status,
                       }
                     : loc
                 );

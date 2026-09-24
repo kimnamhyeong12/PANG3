@@ -18,6 +18,10 @@ import {
 } from 'react-native';
 import KakaoMapWebView from '../components/KakaoMapWebView';
 import PublicDataMapMode from './PublicDataMapMode';
+import {
+  stopRouteNotification,
+  updateRouteNotification,
+} from '../services/notificationService';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
@@ -132,6 +136,7 @@ function NormalMapScreen({
 
   const sheetY = useRef(new Animated.Value(0)).current;
   const searchInputRef = useRef(null);
+  const guideAdvanceRef = useRef(false);
 
   const markers = locations?.length ? locations : [];
   const orderedMarkers = useMemo(() => markers, [markers]);
@@ -305,17 +310,71 @@ function NormalMapScreen({
     })
   ).current;
 
-  const handleSetPriority = (targetLocation) => {
+  const persistPriorityChange = async (targetLocation, priority) => {
+    const taskId =
+      targetLocation?.id ??
+      targetLocation?.taskId ??
+      targetLocation?.task_id;
+
+    if (!API_BASE_URL || !taskId) {
+      return false;
+    }
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/locations/${taskId}/priority`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            priority,
+            userId: user?.userId ?? null,
+            groupId: activeGroup?.groupId ?? null,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        // 백엔드 알림/우선순위 API가 아직 main에 배포되지 않은 동안에는
+        // 기존 프론트 우선순위 기능을 막지 않는다.
+        if (response.status === 404 || response.status === 405) {
+          console.log(
+            '[Priority] 서버 우선순위 API가 아직 배포되지 않았습니다.'
+          );
+          return false;
+        }
+
+        const text = await response.text();
+        throw new Error(
+          text || `우선순위 저장 실패: ${response.status}`
+        );
+      }
+
+      return true;
+    } catch (error) {
+      console.log(
+        '[Priority] 서버 우선순위 저장 실패:',
+        error?.message || error
+      );
+      return false;
+    }
+  };
+
+  const handleSetPriority = async (targetLocation) => {
     if (!priorityMode) {
       onLocationClick?.(targetLocation, 'report');
       return;
     }
 
+    const nextPriority = priorityCount;
+
     const updatedLocations = markers.map((loc) => {
       if (loc.id === targetLocation.id) {
         return {
           ...loc,
-          priority: priorityCount,
+          priority: nextPriority,
         };
       }
 
@@ -323,10 +382,21 @@ function NormalMapScreen({
     });
 
     setLocations?.(updatedLocations);
-    setPriorityCount(priorityCount + 1);
+    setPriorityCount(nextPriority + 1);
+
+    await persistPriorityChange(
+      targetLocation,
+      nextPriority
+    );
+
+    onDataChanged?.();
   };
 
-  const resetPriority = () => {
+  const resetPriority = async () => {
+    const targetsToReset = markers.filter(
+      (loc) => loc.priority !== null && loc.priority !== undefined
+    );
+
     const updatedLocations = markers.map((loc) => ({
       ...loc,
       priority: null,
@@ -335,6 +405,14 @@ function NormalMapScreen({
     setLocations?.(updatedLocations);
     setPriorityCount(1);
     setPriorityMode(false);
+
+    await Promise.allSettled(
+      targetsToReset.map((loc) =>
+        persistPriorityChange(loc, null)
+      )
+    );
+
+    onDataChanged?.();
   };
 
   const searchPlace = async (targetPage = 1) => {
@@ -718,6 +796,7 @@ function NormalMapScreen({
     setTotalDuration(null);
     setOptimized(false);
     setIsGuiding(false);
+    stopRouteNotification();
 
     if (!API_BASE_URL) {
       showAlert('오류', '.env의 EXPO_PUBLIC_API_BASE_URL을 확인하세요.');
@@ -973,6 +1052,163 @@ function NormalMapScreen({
 
     updateGuideTargetSegment(nextIndex);
   };
+
+  const getNextIncompleteIndex = (startIndex = 0) => {
+    for (
+      let index = Math.max(0, startIndex);
+      index < orderedMarkers.length;
+      index += 1
+    ) {
+      if (orderedMarkers[index]?.status !== 'complete') {
+        return index;
+      }
+    }
+
+    return -1;
+  };
+
+  const handleStartGuidance = async () => {
+    const firstIndex = getNextIncompleteIndex(0);
+
+    if (firstIndex < 0) {
+      setGuideStartOpen(false);
+      setIsGuiding(false);
+      await stopRouteNotification();
+
+      showAlert(
+        '안내할 업무 없음',
+        '모든 방문지가 완료되었습니다.'
+      );
+      return;
+    }
+
+    setGuideStartOpen(false);
+    setIsGuiding(true);
+
+    await updateGuideTargetSegment(firstIndex);
+  };
+
+  const handleStopGuidance = async () => {
+    setIsGuiding(false);
+    await stopRouteNotification();
+  };
+
+  /*
+   * 안내 상태가 꺼지면 경로 알림도 항상 제거한다.
+   * 다른 화면/세션에서 setIsGuiding(false)를 호출하더라도 동일하게 동작한다.
+   */
+  useEffect(() => {
+    if (!isGuiding) {
+      stopRouteNotification();
+    }
+  }, [isGuiding]);
+
+  /*
+   * 현재 구간/경로가 바뀔 때 같은 notification id를 갱신한다.
+   * 경로 재탐색, 이동수단 변경, 다음 방문지 전환도 모두 여기서 반영된다.
+   */
+  useEffect(() => {
+    if (!isGuiding) {
+      return;
+    }
+
+    const target =
+      orderedMarkers[currentSegmentIndex];
+
+    const currentSegment =
+      routeSegments[currentSegmentIndex];
+
+    if (!target || !currentSegment) {
+      return;
+    }
+
+    const distance =
+      currentSegment.totalDistance ??
+      currentSegment.distance ??
+      getPathDistance(currentSegment.path);
+
+    const duration =
+      currentSegment.totalDuration ??
+      currentSegment.duration ??
+      currentSegment.durationSeconds ??
+      (distance ? distance / 5.5 : null);
+
+    const durationText =
+      formatDuration(duration)?.replace(/^약\s*/, '') ||
+      '-';
+
+    const distanceText =
+      formatDistance(distance)?.replace(/^약\s*/, '') ||
+      '-';
+
+    const remainingCount =
+      orderedMarkers
+        .slice(currentSegmentIndex)
+        .filter((item) => item?.status !== 'complete')
+        .length;
+
+    updateRouteNotification({
+      from: currentSegment.fromName || '현재 위치',
+      to:
+        target.detailAddress ||
+        currentSegment.toName ||
+        '다음 방문지',
+      duration: durationText,
+      distance: distanceText,
+      remainingCount,
+    });
+  }, [
+    isGuiding,
+    currentSegmentIndex,
+    routeSegments,
+    orderedMarkers,
+  ]);
+
+  /*
+   * 현재 목적지가 complete가 되면 다음 미완료 방문지로 자동 이동한다.
+   * 마지막 방문지까지 완료되면 안내와 경로 알림을 종료한다.
+   */
+  useEffect(() => {
+    if (
+      !isGuiding ||
+      segmentChanging ||
+      guideAdvanceRef.current
+    ) {
+      return;
+    }
+
+    const currentTarget =
+      orderedMarkers[currentSegmentIndex];
+
+    if (!currentTarget || currentTarget.status !== 'complete') {
+      return;
+    }
+
+    const nextIndex =
+      getNextIncompleteIndex(currentSegmentIndex + 1);
+
+    guideAdvanceRef.current = true;
+
+    if (nextIndex < 0) {
+      setIsGuiding(false);
+
+      stopRouteNotification().finally(() => {
+        guideAdvanceRef.current = false;
+      });
+
+      return;
+    }
+
+    updateGuideTargetSegment(nextIndex)
+      .finally(() => {
+        guideAdvanceRef.current = false;
+      });
+  }, [
+    isGuiding,
+    segmentChanging,
+    currentSegmentIndex,
+    orderedMarkers,
+  ]);
 
   return (
     <View style={styles.container}>
@@ -1311,7 +1547,7 @@ function NormalMapScreen({
               ]}
               onPress={() => {
                 if (isGuiding) {
-                  setIsGuiding(false);
+                  handleStopGuidance();
                 } else {
                   setGuideStartOpen(true);
                 }
@@ -1531,11 +1767,7 @@ function NormalMapScreen({
 
               <TouchableOpacity
                 style={styles.sheetButton}
-                onPress={async () => {
-                  setGuideStartOpen(false);
-                  setIsGuiding(true);
-                  await updateGuideTargetSegment(0);
-                }}
+                onPress={handleStartGuidance}
               >
                 <Text style={styles.sheetLabel}>안내 시작</Text>
               </TouchableOpacity>
