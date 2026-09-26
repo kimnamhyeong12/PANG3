@@ -759,7 +759,7 @@ function NormalMapScreen({
 
       const res = await fetch(`${API_BASE_URL}/api/routes/optimize`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(mode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) },
         body: JSON.stringify({
           currentLocation: cleanCurrentLocation,
           locations: cleanMarkers,
@@ -847,7 +847,7 @@ function NormalMapScreen({
 
       const res = await fetch(`${API_BASE_URL}/api/routes/segment`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(mode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) },
         body: JSON.stringify({
           start,
           end,
@@ -921,7 +921,7 @@ function NormalMapScreen({
 
       const res = await fetch(`${API_BASE_URL}/api/routes/segment`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(transportMode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) },
         body: JSON.stringify({
           start,
           end,

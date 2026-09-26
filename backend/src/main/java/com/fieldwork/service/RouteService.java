@@ -27,6 +27,7 @@ public class RouteService {
     private String orsApiKey;
 
     private final RestTemplate restTemplate = new RestTemplate();
+    private final KakaoWalkingClient walkingClient = new KakaoWalkingClient();
 
     public Map<String, Object> optimizeRoute(
             Map<String, Object> currentLocation,
@@ -37,6 +38,11 @@ public class RouteService {
             throw new IllegalArgumentException("방문지는 2개 이상 필요합니다.");
         }
 
+        return optimizeRoute(currentLocation, locations, transportMode, kakaoRestApiKey);
+    }
+
+    public Map<String, Object> optimizeRoute(Map<String, Object> currentLocation, List<Map<String, Object>> locations, String transportMode, String walkingKey) {
+        if (locations == null || locations.size() < 2) throw new IllegalArgumentException("방문지는 2개 이상 필요합니다.");
         String mode = transportMode == null ? "car" : transportMode;
 
         List<Map<String, Object>> optimizedLocations =
@@ -45,7 +51,7 @@ public class RouteService {
         Map<String, Object> routeResult;
 
         if (mode.equalsIgnoreCase("walk")) {
-            routeResult = getOrsWalkingPath(currentLocation, optimizedLocations);
+            routeResult = getKakaoWalkingPath(currentLocation, optimizedLocations, walkingKey);
         } else {
             routeResult = getKakaoRoadPath(currentLocation, optimizedLocations);
         }
@@ -385,6 +391,26 @@ public class RouteService {
         return result;
     }
 
+    private Map<String, Object> getKakaoWalkingPath(Map<String, Object> currentLocation, List<Map<String, Object>> locations, String key) {
+        List<Map<String, Object>> points = makeRoutePoints(currentLocation, locations);
+        List<Map<String, Double>> path = new ArrayList<>();
+        List<Map<String, Object>> segments = new ArrayList<>();
+        double distance = 0, duration = 0;
+        for (int i = 0; i < points.size() - 1; i++) {
+            Map<String, Object> start = points.get(i), end = points.get(i + 1);
+            Map<String, Object> route = walkingClient.route(getLat(start), getLng(start), getLat(end), getLng(end), key);
+            List<Map<String, Double>> segmentPath = (List<Map<String, Double>>) route.get("path");
+            path.addAll(segmentPath);
+            segments.add(makeSegment(i, start, end, segmentPath, "walk"));
+            distance += ((Number) route.get("totalDistance")).doubleValue();
+            duration += ((Number) route.get("totalDuration")).doubleValue();
+        }
+        Map<String, Object> result = new HashMap<>();
+        result.put("path", path); result.put("segments", segments);
+        result.put("totalDistance", distance); result.put("totalDuration", duration);
+        return result;
+    }
+
     private List<Map<String, Object>> makeRoutePoints(
             Map<String, Object> currentLocation,
             List<Map<String, Object>> locations
@@ -425,11 +451,15 @@ public class RouteService {
             Map<String, Object> end,
             String transportMode
     ) {
+        return getSingleSegmentPath(start, end, transportMode, kakaoRestApiKey);
+    }
+
+    public Map<String, Object> getSingleSegmentPath(Map<String, Object> start, Map<String, Object> end, String transportMode, String walkingKey) {
         List<Map<String, Object>> locations = new ArrayList<>();
         locations.add(end);
 
         if ("walk".equalsIgnoreCase(transportMode)) {
-            Map<String, Object> result = getOrsWalkingPath(start, locations);
+            Map<String, Object> result = getKakaoWalkingPath(start, locations, walkingKey);
             result.put("mode", "walk");
             return result;
         }
