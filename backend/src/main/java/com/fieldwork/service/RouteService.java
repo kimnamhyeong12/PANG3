@@ -34,15 +34,17 @@ public class RouteService {
             List<Map<String, Object>> locations,
             String transportMode
     ) {
-        if (locations == null || locations.size() < 2) {
-            throw new IllegalArgumentException("방문지는 2개 이상 필요합니다.");
+        if (locations == null || locations.isEmpty()) {
+            throw new IllegalArgumentException("미완료 방문지가 필요합니다.");
         }
 
         return optimizeRoute(currentLocation, locations, transportMode, kakaoRestApiKey);
     }
 
     public Map<String, Object> optimizeRoute(Map<String, Object> currentLocation, List<Map<String, Object>> locations, String transportMode, String walkingKey) {
-        if (locations == null || locations.size() < 2) throw new IllegalArgumentException("방문지는 2개 이상 필요합니다.");
+        if (locations == null) throw new IllegalArgumentException("미완료 방문지가 필요합니다.");
+        locations = locations.stream().filter(location -> !"complete".equals(location.get("status"))).toList();
+        if (locations.isEmpty()) throw new IllegalArgumentException("미완료 방문지가 필요합니다.");
         String mode = transportMode == null ? "car" : transportMode;
 
         List<Map<String, Object>> optimizedLocations =
