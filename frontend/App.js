@@ -32,6 +32,7 @@ import SettingsScreen from './screens/SettingsScreen';
 import { groupApi } from './utils/groupApi';
 import { CustomAlertHost } from './components/CustomAlert';
 import { colors } from './constants/design';
+import { locationKey, restoreRouteSession } from './utils/routeSession';
 
 const isPersonalGroup = (group) =>
   Boolean(
@@ -87,6 +88,9 @@ export default function App() {
   const workspaceLoadIdRef = useRef(0);
 
   const [todayLocationsLoaded, setTodayLocationsLoaded] = useState(false);
+  const [routeResumeToken, setRouteResumeToken] = useState(0);
+  const routeSaveQueueRef = useRef(Promise.resolve());
+  const loadedWorkspaceKeyRef = useRef(null);
 
   // 앱을 자정 넘겨 계속 켜둔 경우에도 오늘 업무/미처리 업무 기준을 자동 갱신한다.
   useEffect(() => {
@@ -146,8 +150,8 @@ export default function App() {
 
       const groupList = Array.isArray(groups) ? groups : [];
       setAvailableGroups(groupList);
-      // 로그인할 때는 로그인 아이디 이름의 자동 1인 그룹이 기본 작업공간이다.
-      const selected = groupList.find(isPersonalGroup) || groupList[0] || null;
+      const savedGroupId = await AsyncStorage.getItem(`pang3_active_group_${loginUser.userId}`);
+      const selected = groupList.find((group) => String(group.groupId) === savedGroupId) || groupList.find(isPersonalGroup) || groupList[0] || null;
 
       setActiveGroup(selected);
 
@@ -202,7 +206,26 @@ export default function App() {
 
     const cacheKey = workspaceCacheKey();
     setTodayLocationsLoaded(false);
-    setRouteLocations([]);
+    const restoreRows = async (rows) => {
+      await routeSaveQueueRef.current;
+      let session = null;
+      try {
+        const saved = await AsyncStorage.getItem(`${cacheKey}_route`);
+        session = saved ? JSON.parse(saved) : null;
+      } catch (error) {
+        console.log('저장 경로 복원 실패:', error);
+      }
+      if (requestId !== workspaceLoadIdRef.current) return;
+      const restored = restoreRouteSession(rows, session, calendarDayKey);
+      setRouteLocations(restored?.locations || rows);
+      setRouteSegments(restored?.segments || []);
+      setRoadPath(restored?.segments.slice(restored.currentSegmentIndex).flatMap((segment) => segment.path || []) || []);
+      setCurrentSegmentIndex(restored?.currentSegmentIndex || 0);
+      setOptimized(restored?.optimized || false);
+      setIsGuiding(restored?.isGuiding || false);
+      setTotalDuration(null);
+      setRouteResumeToken((value) => value + 1);
+    };
 
     try {
       // 그룹에서는 홈의 '내 담당 업무'와 같은 담당자 배정 데이터를 사용한다.
@@ -230,7 +253,7 @@ export default function App() {
       }));
       const todayRows = rows.filter(isTodayWork);
       if (requestId !== workspaceLoadIdRef.current) return;
-      setRouteLocations(todayRows);
+      await restoreRows(todayRows);
 
       if (cacheKey) {
         await AsyncStorage.setItem(cacheKey, JSON.stringify(todayRows));
@@ -243,7 +266,7 @@ export default function App() {
         const cached = cacheKey ? await AsyncStorage.getItem(cacheKey) : null;
         const parsed = cached ? JSON.parse(cached) : [];
         if (requestId !== workspaceLoadIdRef.current) return;
-        setRouteLocations(
+        await restoreRows(
           Array.isArray(parsed) ? parsed.filter(isTodayWork) : []
         );
       } catch {
@@ -252,6 +275,7 @@ export default function App() {
       }
     } finally {
       if (requestId === workspaceLoadIdRef.current) {
+        loadedWorkspaceKeyRef.current = cacheKey;
         setTodayLocationsLoaded(true);
       }
     }
@@ -264,12 +288,26 @@ export default function App() {
   useEffect(() => {
     if (!todayLocationsLoaded) return;
     const cacheKey = workspaceCacheKey();
-    if (!cacheKey) return;
+    if (!cacheKey || loadedWorkspaceKeyRef.current !== cacheKey) return;
 
     AsyncStorage.setItem(cacheKey, JSON.stringify(routeLocations)).catch((error) => {
       console.log('작업공간 방문지 캐시 저장 실패:', error);
     });
   }, [routeLocations, todayLocationsLoaded, workspaceCacheKey]);
+
+  useEffect(() => {
+    if (!todayLocationsLoaded) return;
+    const cacheKey = workspaceCacheKey();
+    if (!cacheKey || loadedWorkspaceKeyRef.current !== cacheKey) return;
+    const session = JSON.stringify({
+      day: calendarDayKey,
+      order: routeLocations.map(locationKey),
+      routeSegments, currentSegmentIndex, optimized, isGuiding,
+    });
+    routeSaveQueueRef.current = routeSaveQueueRef.current
+      .then(() => AsyncStorage.setItem(`${cacheKey}_route`, session))
+      .catch((error) => console.log('진행 경로 저장 실패:', error));
+  }, [routeLocations, routeSegments, currentSegmentIndex, optimized, isGuiding, todayLocationsLoaded, workspaceCacheKey, calendarDayKey]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') {
@@ -786,6 +824,7 @@ export default function App() {
               setPanelOpen={setPanelOpen}
               isActive={screen === 'mapDirect'}
               persistNormalMap
+              routeResumeToken={routeResumeToken}
             />
           </View>
         )}

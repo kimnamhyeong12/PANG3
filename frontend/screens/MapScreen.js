@@ -102,6 +102,7 @@ function NormalMapScreen({
   panelOpen,
   setPanelOpen,
   onSwitchToPublic,
+  routeResumeToken = 0,
 }) {
   const [selected, setSelected] = useState(null);
   const [optimizing, setOptimizing] = useState(false);
@@ -134,7 +135,8 @@ function NormalMapScreen({
   const searchInputRef = useRef(null);
 
   const markers = locations?.length ? locations : [];
-  const orderedMarkers = useMemo(() => markers, [markers]);
+  const orderedMarkers = useMemo(() => markers.filter((item) => item.status !== 'complete'), [markers]);
+  const resumedTokenRef = useRef(null);
   const assignmentMap = useMemo(() => {
     const map = new Map();
     groupAssignments.forEach((item) => map.set(Number(item.taskId), item));
@@ -711,13 +713,6 @@ function NormalMapScreen({
   };
 
   const handleOptimizeRoute = async (mode = transportMode) => {
-    setGuideStartOpen(false);
-    setCurrentSegmentIndex(0);
-    setRoadPath([]);
-    setRouteSegments([]);
-    setTotalDuration(null);
-    setOptimized(false);
-    setIsGuiding(false);
 
     if (!API_BASE_URL) {
       showAlert('오류', '.env의 EXPO_PUBLIC_API_BASE_URL을 확인하세요.');
@@ -729,8 +724,8 @@ function NormalMapScreen({
       return;
     }
 
-    if (!markers || markers.length < 2) {
-      showAlert('정렬 불가', '방문지가 2개 이상 필요합니다.');
+    if (orderedMarkers.length === 0) {
+      showAlert('남은 작업 없음', '모든 방문지의 작업이 완료되었습니다.');
       return;
     }
 
@@ -739,7 +734,7 @@ function NormalMapScreen({
 
       const cleanCurrentLocation = cleanLocation(currentLocation, '현재 위치');
 
-      const priorityMarkers = [...markers].sort((a, b) => {
+      const priorityMarkers = [...orderedMarkers].sort((a, b) => {
         const pa = a.priority ?? 9999;
         const pb = b.priority ?? 9999;
 
@@ -779,6 +774,7 @@ function NormalMapScreen({
       const data = JSON.parse(text);
 
       const optimizedLocations = (data.optimizedLocations || []).map((loc) => ({
+        ...priorityMarkers.find((item) => String(item.id) === String(loc.id)),
         ...loc,
         lat: loc.lat ?? loc.latitude,
         lng: loc.lng ?? loc.longitude,
@@ -787,9 +783,9 @@ function NormalMapScreen({
       }));
 
       if (optimizedLocations.length > 0) {
-        setLocations?.(optimizedLocations);
+        setLocations?.([...optimizedLocations, ...markers.filter((item) => item.status === 'complete')]);
       } else {
-        setLocations?.(priorityMarkers);
+        setLocations?.([...priorityMarkers, ...markers.filter((item) => item.status === 'complete')]);
       }
 
       if (data.path && data.path.length > 0) {
@@ -807,6 +803,8 @@ function NormalMapScreen({
 
       setTransportMode(mode);
       setOptimized(true);
+      setIsGuiding(false);
+      setGuideStartOpen(false);
     } catch (error) {
       console.log(error);
       showAlert('오류', '경로 최적화 중 문제가 발생했습니다.');
@@ -882,6 +880,7 @@ function NormalMapScreen({
 
       setRouteSegments(updatedSegments);
       setCurrentSegmentIndex(targetIndex);
+      setRoadPath(updatedSegments.slice(targetIndex).flatMap((segment) => segment?.path || []));
 
       if (data.totalDuration !== undefined && data.totalDuration !== null) {
         setTotalDuration(data.totalDuration);
@@ -897,6 +896,13 @@ function NormalMapScreen({
   const updateCurrentSegmentMode = async (mode) => {
     await updateGuideTargetSegment(currentSegmentIndex, mode);
   };
+
+  useEffect(() => {
+    if (!isActive || !currentLocation || !optimized || !routeResumeToken ||
+        resumedTokenRef.current === routeResumeToken || !orderedMarkers[currentSegmentIndex]) return;
+    resumedTokenRef.current = routeResumeToken;
+    updateGuideTargetSegment(currentSegmentIndex, routeSegments[currentSegmentIndex]?.mode || transportMode);
+  }, [isActive, currentLocation, optimized, routeResumeToken, currentSegmentIndex]);
 
   const handleTransportPress = (mode) => {
     if (optimized && isGuiding) {
@@ -1080,7 +1086,7 @@ function NormalMapScreen({
           >
             <Ionicons name="git-branch-outline" size={13} color="#10285B" />
             <Text style={styles.smallTopText}>
-              {optimizing ? '계산중' : '경로 최적화'}
+              {optimizing ? '계산중' : '남은 작업 재최적화'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1534,7 +1540,7 @@ function NormalMapScreen({
                 onPress={async () => {
                   setGuideStartOpen(false);
                   setIsGuiding(true);
-                  await updateGuideTargetSegment(0);
+                  await updateGuideTargetSegment(currentSegmentIndex);
                 }}
               >
                 <Text style={styles.sheetLabel}>안내 시작</Text>
