@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { showAlert } from '../components/CustomAlert';
 import { PrimaryButton, ScreenHeader, SectionTitle } from '../components/ui';
@@ -57,7 +57,7 @@ export default function SettingsScreen({ user, activeGroup, onBack, onUpdatedUse
     }
   };
 
-  const logout = () => Alert.alert('로그아웃', '현재 계정에서 로그아웃하시겠습니까?', [
+  const logout = () => showAlert('로그아웃', '현재 계정에서 로그아웃하시겠습니까?', [
     { text: '취소', style: 'cancel' },
     { text: '로그아웃', style: 'destructive', onPress: onLogout },
   ]);

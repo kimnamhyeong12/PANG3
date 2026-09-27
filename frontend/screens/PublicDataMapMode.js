@@ -734,7 +734,7 @@ export default function PublicDataMapMode({
       <View style={styles.selectionScreen}>
         <View style={styles.selectionHeader}>
           <TouchableOpacity style={styles.plainBackButton} onPress={handleBack}>
-            <Ionicons name="arrow-back" size={25} color="#10285B" />
+            <Ionicons name="arrow-back" size={25} color="#2477F3" />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={styles.selectionTitle}>구·군 설정 필요</Text>
@@ -785,7 +785,7 @@ export default function PublicDataMapMode({
             <Ionicons
               name="chevron-back"
               size={21}
-              color="#10285B"
+              color="#2477F3"
             />
           </TouchableOpacity>
 
@@ -817,7 +817,7 @@ export default function PublicDataMapMode({
                   : 'chevron-down'
               }
               size={16}
-              color="#10285B"
+              color="#2477F3"
             />
           </TouchableOpacity>
 
@@ -861,7 +861,7 @@ export default function PublicDataMapMode({
                   : 'chevron-down'
               }
               size={17}
-              color="#10285B"
+              color="#2477F3"
             />
           </TouchableOpacity>
         </View>
@@ -1278,7 +1278,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#D7E4F4',
-    shadowColor: '#10285B',
+    shadowColor: '#2477F3',
     shadowOpacity: 0.08,
     shadowRadius: 7,
     elevation: 3,
@@ -1330,7 +1330,7 @@ const styles = StyleSheet.create({
   },
 
   normalModeButtonText: {
-    color: '#2477F3',
+    color: '#10285B',
     fontSize: 11,
     fontWeight: '900',
   },
@@ -1489,7 +1489,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#10285B',
+    shadowColor: '#2477F3',
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 4,
@@ -1504,7 +1504,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    shadowColor: '#10285B',
+    shadowColor: '#2477F3',
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 4,
@@ -1526,7 +1526,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    shadowColor: '#10285B',
+    shadowColor: '#2477F3',
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 4,
@@ -1547,7 +1547,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     paddingHorizontal: 12,
-    shadowColor: '#10285B',
+    shadowColor: '#2477F3',
     shadowOpacity: 0.16,
     shadowRadius: 10,
     elevation: 7,
@@ -1569,7 +1569,7 @@ const styles = StyleSheet.create({
   },
 
   dongMenuCount: {
-    color: '#2477F3',
+    color: '#10285B',
     fontSize: 9,
     fontWeight: '800',
   },
@@ -1634,7 +1634,7 @@ const styles = StyleSheet.create({
   },
 
   dongMenuTextSelected: {
-    color: '#2477F3',
+    color: '#10285B',
     fontWeight: '900',
   },
 
@@ -1643,7 +1643,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     paddingHorizontal: 14,
-    shadowColor: '#10285B',
+    shadowColor: '#2477F3',
     shadowOpacity: 0.14,
     shadowRadius: 10,
     elevation: 6,
@@ -1692,7 +1692,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    shadowColor: '#10285B',
+    shadowColor: '#2477F3',
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 3,
@@ -1729,7 +1729,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 7,
-    shadowColor: '#10285B',
+    shadowColor: '#2477F3',
     shadowOpacity: 0.24,
     shadowRadius: 10,
     elevation: 8,
@@ -1751,7 +1751,7 @@ const styles = StyleSheet.create({
     padding: 15,
     paddingTop: 8,
     backgroundColor: '#FFFFFF',
-    shadowColor: '#10285B',
+    shadowColor: '#2477F3',
     shadowOpacity: 0.2,
     shadowRadius: 14,
     elevation: 10,
@@ -1792,7 +1792,7 @@ const styles = StyleSheet.create({
   },
 
   selectAll: {
-    color: '#2477F3',
+    color: '#10285B',
     fontSize: 10,
     fontWeight: '900',
   },
