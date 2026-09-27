@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, BackHandler, Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
+import { BackHandler, Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { showAlert } from '../components/CustomAlert';
 import { EmptyState, SectionTitle } from '../components/ui';
@@ -20,6 +20,7 @@ export default function MainScreen({
   user, activeGroup, availableGroups = [], groupAssignments = [], onRoute, onReport,
   onGroup, onSelectWorkspace, onRefreshWorkspaces, onWorkStatus, onDashboard,
   onSettings, onPublicData, locations = [], setLocations, onRefreshAssignments,
+  pendingWork, onAddWork,
 }) {
   const [incompleteLocations, setIncompleteLocations] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -46,7 +47,7 @@ export default function MainScreen({
   const working = displayLocations.filter((item) => normalizedStatus(item) === 'working').length;
   const pending = Math.max(0, displayLocations.length - completed - working);
   const progress = displayLocations.length ? Math.round((completed / displayLocations.length) * 100) : 0;
-  const visibleIncomplete = activeGroup ? incompleteLocations.filter((item) => myAssignmentIds.has(Number(item.id ?? item.taskId ?? item.task_id))) : incompleteLocations;
+  const visibleIncomplete = pendingWork ?? (activeGroup ? incompleteLocations.filter((item) => myAssignmentIds.has(Number(item.id ?? item.taskId ?? item.task_id))) : incompleteLocations);
   const currentTask = displayLocations.find((item) => normalizedStatus(item) === 'working') || displayLocations.find((item) => !['complete', 'done'].includes(normalizedStatus(item)));
   const recentCompleted = (activeGroup && groupAssignments.length ? groupAssignments : displayLocations).filter((item) => ['complete', 'done'].includes(normalizedStatus(item))).slice(0, 3);
   const displayName = user?.name || user?.loginId || '사용자';
@@ -61,6 +62,7 @@ export default function MainScreen({
   };
 
   const loadIncomplete = async () => {
+    if (pendingWork !== undefined) return;
     if (!API_BASE_URL || !user?.userId) return setIncompleteLocations([]);
     try {
       const query = `userId=${encodeURIComponent(user.userId)}${activeGroup?.groupId ? `&groupId=${encodeURIComponent(activeGroup.groupId)}` : ''}`;
@@ -85,6 +87,11 @@ export default function MainScreen({
     if (!selected.length) return showAlert('선택 필요', '오늘 업무로 가져올 항목을 선택하세요.');
     try {
       setMovingToToday(true);
+      if (onAddWork) {
+        if (await onAddWork(selected) === false) return;
+        setSelectedIds([]);
+        return;
+      }
       const moved = await Promise.all(selected.map(async (item) => {
         const response = await fetch(`${API_BASE_URL}/api/locations/${item.id}/scheduled-date`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scheduledDate: localDateKey() }) });
         const text = await response.text();
@@ -102,13 +109,14 @@ export default function MainScreen({
 
   const removeIncomplete = (item) => {
     if (normalizedStatus(item) !== 'pending') return showAlert('삭제 불가', '작업 전 업무만 삭제할 수 있습니다.');
-    Alert.alert('미처리 업무 삭제', '선택한 업무를 삭제하시겠습니까?', [{ text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: async () => {
+    showAlert('미처리 업무 삭제', '선택한 업무를 삭제하시겠습니까?', [{ text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: async () => {
       try {
         setDeletingId(item.id); const response = await fetch(`${API_BASE_URL}/api/locations/${item.id}`, { method: 'DELETE' });
         if (!response.ok) throw new Error('삭제 실패');
         setIncompleteLocations((prev) => prev.filter((row) => Number(row.id) !== Number(item.id)));
         setSelectedIds((prev) => prev.filter((id) => Number(id) !== Number(item.id)));
         setLocations?.((prev) => (prev || []).filter((row) => Number(row.id ?? row.taskId) !== Number(item.id)));
+        await onRefreshAssignments?.();
       } catch (error) { showAlert('삭제 실패', error.message); } finally { setDeletingId(null); }
     } }]);
   };
@@ -141,10 +149,10 @@ export default function MainScreen({
         </View>
 
         <SectionTitle title="현재 업무" actionLabel="지도에서 보기" onAction={onRoute} />
-        {currentTask ? <View style={styles.currentCard}><View style={styles.currentTop}><View style={[styles.statusDot, { backgroundColor: normalizedStatus(currentTask) === 'working' ? colors.warning : colors.pending }]} /><Text style={styles.currentStatus}>{normalizedStatus(currentTask) === 'working' ? '진행 중' : '진행 전'}</Text><Text style={styles.currentCount}>남은 방문지 {pending + working}곳</Text></View><Text style={styles.currentTitle} numberOfLines={1}>{currentTask.detailAddress || currentTask.task || '현장 업무'}</Text><Text style={styles.currentAddress} numberOfLines={1}>{currentTask.roadAddress || '주소 정보 없음'}</Text><TouchableOpacity style={styles.routeButton} onPress={onRoute}><Ionicons name="navigate-outline" size={17} color="#FFFFFF" /><Text style={styles.routeButtonText}>업무 경로 열기</Text></TouchableOpacity></View> : <EmptyState icon="checkmark-circle-outline" title="오늘 남은 업무가 없습니다" description="새 업무가 배정되면 이곳에 표시됩니다." />}
+        {currentTask ? <View style={styles.currentCard}><View style={styles.currentTop}><View style={[styles.statusDot, { backgroundColor: normalizedStatus(currentTask) === 'working' ? colors.warning : colors.pending }]} /><Text style={styles.currentStatus}>{normalizedStatus(currentTask) === 'working' ? '진행 중' : '진행 전'}</Text><Text style={styles.currentCount}>남은 방문지 {pending + working}곳</Text></View><Text style={styles.currentTitle} numberOfLines={1}>{currentTask.detailAddress || currentTask.task || '현장 업무'}</Text><Text style={styles.currentAddress} numberOfLines={1}>{currentTask.roadAddress || '주소 정보 없음'}</Text><TouchableOpacity style={styles.routeButton} onPress={onRoute}><Ionicons name="navigate-outline" size={17} color="#FFFFFF" /><Text style={styles.routeButtonText}>업무 경로 열기</Text></TouchableOpacity></View> : <EmptyState icon="checkmark-circle-outline" title="오늘 남은 업무가 없습니다" description="미처리 업무에서 선택해 지도에 추가하세요." />}
 
         <View style={styles.sectionGap}><SectionTitle title={`미처리 업무 ${visibleIncomplete.length}`} actionLabel={visibleIncomplete.length ? (selectedIds.length === visibleIncomplete.length ? '선택 해제' : '전체 선택') : undefined} onAction={() => setSelectedIds(selectedIds.length === visibleIncomplete.length ? [] : visibleIncomplete.map((item) => item.id))} /></View>
-        {visibleIncomplete.length ? <View style={styles.listCard}>{visibleIncomplete.map((item, index) => { const checked = selectedIds.includes(item.id); return <View key={item.id ?? index} style={[styles.overdueRow, index > 0 && styles.rowBorder]}><TouchableOpacity style={[styles.checkbox, checked && styles.checkboxActive]} onPress={() => toggleSelect(item.id)}>{checked ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}</TouchableOpacity><View style={{ flex: 1 }}><View style={styles.metaRow}><Text style={styles.dateChip}>{shortDate(dateKey(item))}</Text>{item.task ? <Text style={styles.categoryChip}>{item.task}</Text> : null}<Text style={[styles.statusChip, normalizedStatus(item) === 'working' && styles.workingChip]}>{normalizedStatus(item) === 'working' ? '진행 중' : '진행 전'}</Text></View><Text style={styles.rowTitle} numberOfLines={1}>{item.detailAddress || item.roadAddress || '방문지'}</Text><Text style={styles.rowSub} numberOfLines={1}>{item.roadAddress || '주소 정보 없음'}</Text></View><TouchableOpacity disabled={deletingId !== null || normalizedStatus(item) !== 'pending'} onPress={() => removeIncomplete(item)} style={styles.deleteButton}><Ionicons name="trash-outline" size={17} color={normalizedStatus(item) === 'pending' ? colors.danger : colors.textFaint} /></TouchableOpacity></View>; })}<TouchableOpacity disabled={!selectedIds.length || movingToToday} onPress={moveSelectedToToday} style={[styles.moveButton, (!selectedIds.length || movingToToday) && styles.moveDisabled]}><Text style={styles.moveText}>{movingToToday ? '가져오는 중...' : selectedIds.length ? `${selectedIds.length}건 오늘 업무로 가져오기` : '업무를 선택하세요'}</Text></TouchableOpacity></View> : <EmptyState icon="archive-outline" title="미처리 업무가 없습니다" description="날짜가 지난 진행 전·진행 중 업무가 표시됩니다." />}
+        {visibleIncomplete.length ? <View style={styles.listCard}>{visibleIncomplete.map((item, index) => { const checked = selectedIds.includes(item.id); return <View key={item.id ?? index} style={[styles.overdueRow, index > 0 && styles.rowBorder]}><TouchableOpacity style={[styles.checkbox, checked && styles.checkboxActive]} onPress={() => toggleSelect(item.id)}>{checked ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}</TouchableOpacity><View style={{ flex: 1 }}><View style={styles.metaRow}><Text style={styles.dateChip}>{shortDate(dateKey(item))}</Text>{item.isNewAssignment ? <Text style={styles.categoryChip}>새 배정</Text> : null}{item.task ? <Text style={styles.categoryChip}>{item.task}</Text> : null}<Text style={[styles.statusChip, normalizedStatus(item) === 'working' && styles.workingChip]}>{normalizedStatus(item) === 'working' ? '진행 중' : '진행 전'}</Text></View><Text style={styles.rowTitle} numberOfLines={1}>{item.detailAddress || item.roadAddress || '방문지'}</Text><Text style={styles.rowSub} numberOfLines={1}>{item.roadAddress || '주소 정보 없음'}</Text></View><TouchableOpacity disabled={deletingId !== null || normalizedStatus(item) !== 'pending'} onPress={() => removeIncomplete(item)} style={styles.deleteButton}><Ionicons name="trash-outline" size={17} color={normalizedStatus(item) === 'pending' ? colors.danger : colors.textFaint} /></TouchableOpacity></View>; })}<TouchableOpacity disabled={!selectedIds.length || movingToToday} onPress={moveSelectedToToday} style={[styles.moveButton, (!selectedIds.length || movingToToday) && styles.moveDisabled]}><Text style={styles.moveText}>{movingToToday ? '가져오는 중...' : selectedIds.length ? `${selectedIds.length}건 지도에 추가` : '업무를 선택하세요'}</Text></TouchableOpacity></View> : <EmptyState icon="archive-outline" title="미처리 업무가 없습니다" description="새로 배정된 업무와 날짜가 지난 미완료 업무가 표시됩니다." />}
 
         <View style={styles.sectionGap}><SectionTitle title="최근 완료" /></View>
         <View style={styles.historyCard}>{recentCompleted.length ? recentCompleted.map((item, index) => <View key={item.id ?? item.taskId ?? index} style={[styles.historyRow, index > 0 && styles.rowBorder]}><View style={styles.checkIcon}><Ionicons name="checkmark" size={14} color="#FFFFFF" /></View><View style={{ flex: 1 }}><Text style={styles.historyTitle} numberOfLines={1}>{item.detailAddress || item.task || '현장 업무'}</Text><Text style={styles.rowSub} numberOfLines={1}>{item.roadAddress || '업무 완료'}</Text></View></View>) : <Text style={styles.emptyInline}>완료된 방문 기록이 없습니다.</Text>}</View>

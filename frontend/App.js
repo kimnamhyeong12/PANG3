@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BackHandler,
+  AppState,
   PanResponder,
   Platform,
   StatusBar,
@@ -30,8 +31,10 @@ import AssignmentScreen from './screens/AssignmentScreen';
 import WorkStatusScreen from './screens/WorkStatusScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import { groupApi } from './utils/groupApi';
-import { CustomAlertHost } from './components/CustomAlert';
+import { CustomAlertHost, showAlert } from './components/CustomAlert';
 import { colors } from './constants/design';
+import { locationKey, numberVisits, restoreRouteSession } from './utils/routeSession';
+import { assignmentKey, splitWorkPlan } from './utils/workPlan';
 
 const isPersonalGroup = (group) =>
   Boolean(
@@ -87,6 +90,15 @@ export default function App() {
   const workspaceLoadIdRef = useRef(0);
 
   const [todayLocationsLoaded, setTodayLocationsLoaded] = useState(false);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  const [routeResumeToken, setRouteResumeToken] = useState(0);
+  const routeSaveQueueRef = useRef(Promise.resolve());
+  const loadedWorkspaceKeyRef = useRef(null);
+  const [pendingWork, setPendingWork] = useState([]);
+  const planBusyRef = useRef(false);
+  const workPlanRef = useRef({ rows: [], choices: {}, key: null });
+  const currentRouteRef = useRef(null);
+  currentRouteRef.current = { day: calendarDayKey, order: routeLocations.map(locationKey), visitNumbers: Object.fromEntries(routeLocations.map((row) => [locationKey(row), row.markerNumber])), locations: routeLocations, routeSegments, currentSegmentIndex, optimized, isGuiding };
 
   // 앱을 자정 넘겨 계속 켜둔 경우에도 오늘 업무/미처리 업무 기준을 자동 갱신한다.
   useEffect(() => {
@@ -114,9 +126,27 @@ export default function App() {
   const [teamIsGuiding, setTeamIsGuiding] = useState(false);
   const [teamTotalDuration, setTeamTotalDuration] = useState(null);
   const [teamPanelOpen, setTeamPanelOpen] = useState(true);
+  const [teamRouteResumeToken, setTeamRouteResumeToken] = useState(0);
+  const teamLoadedKeyRef = useRef(null);
+  const teamLoadIdRef = useRef(0);
+  const teamSaveQueueRef = useRef(Promise.resolve());
+  const teamSessionRef = useRef(null);
+  teamSessionRef.current = {
+    day: calendarDayKey, order: teamLocations.map(locationKey),
+    visitNumbers: Object.fromEntries(teamLocations.map((row) => [locationKey(row), row.markerNumber])),
+    locations: teamLocations, routeSegments: teamRouteSegments,
+    currentSegmentIndex: teamCurrentSegmentIndex, optimized: teamOptimized, isGuiding: teamIsGuiding,
+  };
 
   const selectActiveGroup = useCallback(async (group, targetUser = user) => {
+    if (targetUser?.userId === user?.userId && group?.groupId === activeGroup?.groupId) {
+      setActiveGroup(group || null);
+      return;
+    }
+    setTodayLocationsLoaded(false);
     setActiveGroup(group || null);
+    setPendingWork([]);
+    workPlanRef.current = { rows: [], choices: {}, key: null };
     setGroupAssignments([]);
     setRouteLocations([]);
     setRoadPath([]);
@@ -136,7 +166,7 @@ export default function App() {
         console.log('현재 그룹 저장 실패:', error);
       }
     }
-  }, [user]);
+  }, [user, activeGroup?.groupId]);
 
   const restoreActiveGroup = useCallback(async (loginUser) => {
     if (!loginUser?.userId) return;
@@ -146,8 +176,8 @@ export default function App() {
 
       const groupList = Array.isArray(groups) ? groups : [];
       setAvailableGroups(groupList);
-      // 로그인할 때는 로그인 아이디 이름의 자동 1인 그룹이 기본 작업공간이다.
-      const selected = groupList.find(isPersonalGroup) || groupList[0] || null;
+      const savedGroupId = await AsyncStorage.getItem(`pang3_active_group_${loginUser.userId}`);
+      const selected = groupList.find((group) => String(group.groupId) === savedGroupId) || groupList.find(isPersonalGroup) || groupList[0] || null;
 
       setActiveGroup(selected);
 
@@ -159,6 +189,8 @@ export default function App() {
       console.log('현재 그룹 복원 실패:', error);
       setAvailableGroups([]);
       setActiveGroup(null);
+    } finally {
+      setWorkspaceReady(true);
     }
   }, []);
 
@@ -194,7 +226,7 @@ export default function App() {
   const loadWorkspaceLocations = useCallback(async () => {
     const requestId = ++workspaceLoadIdRef.current;
 
-    if (!user?.userId) {
+    if (!user?.userId || !workspaceReady) {
       setRouteLocations([]);
       setTodayLocationsLoaded(false);
       return;
@@ -202,7 +234,45 @@ export default function App() {
 
     const cacheKey = workspaceCacheKey();
     setTodayLocationsLoaded(false);
-    setRouteLocations([]);
+    const restoreRows = async (rows, legacyRows = []) => {
+      await routeSaveQueueRef.current;
+      let session = null;
+      try {
+        const saved = await AsyncStorage.getItem(`${cacheKey}_route`);
+        session = loadedWorkspaceKeyRef.current === cacheKey ? currentRouteRef.current : saved ? JSON.parse(saved) : null;
+      } catch (error) {
+        console.log('저장 경로 복원 실패:', error);
+      }
+      if (requestId !== workspaceLoadIdRef.current) return;
+      const savedPlan = await AsyncStorage.getItem(`${cacheKey}_work_plan`);
+      if (requestId !== workspaceLoadIdRef.current) return;
+      const choices = savedPlan ? JSON.parse(savedPlan) : {};
+      // A refresh may overlap optimization or guidance. Use the latest in-memory
+      // session after storage reads rather than overwriting it with an older snapshot.
+      if (loadedWorkspaceKeyRef.current === cacheKey) session = currentRouteRef.current;
+      const plan = splitWorkPlan(rows, choices, calendarDayKey, savedPlan ? [] : legacyRows);
+      plan.map = numberVisits(plan.map, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])));
+      // Persist migration once; subsequently every new assignment needs a decision.
+      if (!savedPlan) {
+        plan.map.filter((row) => row.status !== 'complete').forEach((row) => { choices[assignmentKey(row)] = calendarDayKey; });
+        await AsyncStorage.setItem(`${cacheKey}_work_plan`, JSON.stringify(choices));
+      }
+      workPlanRef.current = { rows, choices, key: cacheKey };
+      setPendingWork(plan.pending);
+      const sameMap = loadedWorkspaceKeyRef.current === cacheKey &&
+        JSON.stringify(plan.map.map((row) => [locationKey(row), row.status]).sort()) ===
+        JSON.stringify((currentRouteRef.current.locations || []).map((row) => [locationKey(row), row.status]).sort());
+      if (sameMap && (session?.routeSegments?.length || 0) <= plan.map.filter((row) => row.status !== 'complete').length) return;
+      const restored = restoreRouteSession(plan.map, session, calendarDayKey);
+      setRouteLocations(restored?.locations || plan.map);
+      setRouteSegments(restored?.segments || []);
+      setRoadPath(restored?.segments.slice(restored.currentSegmentIndex).flatMap((segment) => segment?.path || []) || []);
+      setCurrentSegmentIndex(restored?.currentSegmentIndex || 0);
+      setOptimized(restored?.optimized || false);
+      setIsGuiding(restored?.isGuiding || false);
+      setTotalDuration(null);
+      setRouteResumeToken((value) => value + 1);
+    };
 
     try {
       // 그룹에서는 홈의 '내 담당 업무'와 같은 담당자 배정 데이터를 사용한다.
@@ -228,23 +298,23 @@ export default function App() {
           item.work_date ??
           null,
       }));
-      const todayRows = rows.filter(isTodayWork);
       if (requestId !== workspaceLoadIdRef.current) return;
-      setRouteLocations(todayRows);
+      const previous = cacheKey ? await AsyncStorage.getItem(cacheKey) : null;
+      await restoreRows(rows, previous ? JSON.parse(previous) : []);
 
       if (cacheKey) {
-        await AsyncStorage.setItem(cacheKey, JSON.stringify(todayRows));
+        await AsyncStorage.setItem(`${cacheKey}_all_work`, JSON.stringify(rows));
       }
     } catch (error) {
       console.log('현재 작업공간 방문지 조회 실패:', error);
 
       // 네트워크가 잠시 끊겼을 때만 마지막 DB 조회 결과를 임시로 보여준다.
       try {
-        const cached = cacheKey ? await AsyncStorage.getItem(cacheKey) : null;
+        const cached = cacheKey ? await AsyncStorage.getItem(`${cacheKey}_all_work`) || await AsyncStorage.getItem(cacheKey) : null;
         const parsed = cached ? JSON.parse(cached) : [];
         if (requestId !== workspaceLoadIdRef.current) return;
-        setRouteLocations(
-          Array.isArray(parsed) ? parsed.filter(isTodayWork) : []
+        await restoreRows(
+          Array.isArray(parsed) ? parsed : [], Array.isArray(parsed) ? parsed.filter(isTodayWork) : []
         );
       } catch {
         if (requestId !== workspaceLoadIdRef.current) return;
@@ -252,24 +322,73 @@ export default function App() {
       }
     } finally {
       if (requestId === workspaceLoadIdRef.current) {
+        loadedWorkspaceKeyRef.current = cacheKey;
         setTodayLocationsLoaded(true);
       }
     }
-  }, [activeGroup?.groupId, user?.userId, workspaceCacheKey, calendarDayKey]);
+  }, [activeGroup?.groupId, user?.userId, workspaceCacheKey, calendarDayKey, workspaceReady]);
+
+  const addWorkToMap = async (items) => {
+    if (planBusyRef.current || workPlanRef.current.key !== workspaceCacheKey()) return false;
+    planBusyRef.current = true;
+    const { rows, choices, key } = workPlanRef.current;
+    const updated = { ...choices };
+    items.filter((row) => row.status !== 'complete').forEach((row) => {
+      updated[assignmentKey(row)] = calendarDayKey;
+    });
+    try {
+      await AsyncStorage.setItem(`${key}_work_plan`, JSON.stringify(updated));
+      if (workPlanRef.current.key !== key) return false;
+      workPlanRef.current = { rows, choices: updated, key };
+      await loadWorkspaceLocations();
+      return true;
+    } catch (error) {
+      showAlert('저장 실패', '업무 선택을 저장하지 못했습니다. 다시 시도하세요.');
+      return false;
+    } finally {
+      planBusyRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    if (!user?.userId) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') loadWorkspaceLocations();
+    });
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active' && ['main', 'mapDirect'].includes(screenRef.current)) loadWorkspaceLocations();
+    }, 30000);
+    return () => { subscription.remove(); clearInterval(timer); };
+  }, [user?.userId, loadWorkspaceLocations]);
 
   useEffect(() => {
     loadWorkspaceLocations();
   }, [loadWorkspaceLocations]);
 
   useEffect(() => {
-    if (!todayLocationsLoaded) return;
+    if (!workspaceReady) return;
     const cacheKey = workspaceCacheKey();
-    if (!cacheKey) return;
+    if (!cacheKey || loadedWorkspaceKeyRef.current !== cacheKey) return;
 
     AsyncStorage.setItem(cacheKey, JSON.stringify(routeLocations)).catch((error) => {
       console.log('작업공간 방문지 캐시 저장 실패:', error);
     });
-  }, [routeLocations, todayLocationsLoaded, workspaceCacheKey]);
+  }, [routeLocations, todayLocationsLoaded, workspaceCacheKey, workspaceReady]);
+
+  useEffect(() => {
+    if (!workspaceReady) return;
+    const cacheKey = workspaceCacheKey();
+    if (!cacheKey || loadedWorkspaceKeyRef.current !== cacheKey) return;
+    const session = JSON.stringify({
+      day: calendarDayKey,
+      order: routeLocations.map(locationKey),
+      visitNumbers: Object.fromEntries(routeLocations.map((row) => [locationKey(row), row.markerNumber])),
+      routeSegments, currentSegmentIndex, optimized, isGuiding,
+    });
+    routeSaveQueueRef.current = routeSaveQueueRef.current
+      .then(() => AsyncStorage.setItem(`${cacheKey}_route`, session))
+      .catch((error) => console.log('진행 경로 저장 실패:', error));
+  }, [routeLocations, routeSegments, currentSegmentIndex, optimized, isGuiding, todayLocationsLoaded, workspaceCacheKey, calendarDayKey, workspaceReady]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') {
@@ -380,10 +499,34 @@ export default function App() {
   }, []);
 
   const loadTeamLocations = useCallback(async (group = activeGroup) => {
+    const requestId = ++teamLoadIdRef.current;
     if (!group?.groupId || !user?.userId) {
       setTeamLocations([]);
       return;
     }
+
+    const key = `${workspaceCacheKey(user, group)}_team_route`;
+    const applyTeamRows = async (rows) => {
+      await teamSaveQueueRef.current;
+      const saved = await AsyncStorage.getItem(key);
+      if (requestId !== teamLoadIdRef.current) return;
+      const session = teamLoadedKeyRef.current === key ? teamSessionRef.current : saved ? JSON.parse(saved) : null;
+      const numbered = numberVisits(rows, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])));
+      const sameMap = teamLoadedKeyRef.current === key &&
+        JSON.stringify(numbered.map((row) => [locationKey(row), row.status]).sort()) ===
+        JSON.stringify((teamSessionRef.current.locations || []).map((row) => [locationKey(row), row.status]).sort());
+      if (sameMap && (session?.routeSegments?.length || 0) <= numbered.filter((row) => row.status !== 'complete').length) return;
+      const restored = restoreRouteSession(numbered, session, calendarDayKey);
+      setTeamLocations(restored?.locations || numbered);
+      setTeamRouteSegments(restored?.segments || []);
+      setTeamRoadPath(restored?.segments.slice(restored.currentSegmentIndex).flatMap((segment) => segment?.path || []) || []);
+      setTeamCurrentSegmentIndex(restored?.currentSegmentIndex || 0);
+      setTeamOptimized(restored?.optimized || false);
+      setTeamIsGuiding(restored?.isGuiding || false);
+      setTeamTotalDuration(null);
+      teamLoadedKeyRef.current = key;
+      setTeamRouteResumeToken((value) => value + 1);
+    };
 
     try {
       const response = await fetch(
@@ -392,12 +535,33 @@ export default function App() {
       const text = await response.text();
       if (!response.ok) throw new Error(text || '팀 방문지 조회 실패');
       const data = JSON.parse(text);
-      setTeamLocations(Array.isArray(data) ? data : []);
+      const rows = (Array.isArray(data) ? data : []).map((row) => ({
+        ...row, id: row.id ?? row.taskId ?? row.task_id,
+        status: row.status ?? row.taskStatus ?? row.task_status ?? 'pending',
+        lat: row.lat ?? row.latitude, lng: row.lng ?? row.longitude,
+      }));
+      await applyTeamRows(rows);
+      if (requestId === teamLoadIdRef.current) await AsyncStorage.setItem(`${key}_locations`, JSON.stringify(rows));
     } catch (error) {
       console.log('팀 방문지 조회 실패:', error);
-      setTeamLocations([]);
+      try {
+        const cached = await AsyncStorage.getItem(`${key}_locations`);
+        if (cached) await applyTeamRows(JSON.parse(cached));
+      } catch (cacheError) {
+        console.log('팀 지도 복원 실패:', cacheError);
+      }
     }
-  }, [activeGroup, user?.userId]);
+  }, [activeGroup, user?.userId, workspaceCacheKey, calendarDayKey]);
+
+  useEffect(() => {
+    if (!workspaceReady || !user?.userId || !activeGroup?.groupId) return;
+    const key = `${workspaceCacheKey()}_team_route`;
+    if (teamLoadedKeyRef.current !== key) return;
+    const snapshot = JSON.stringify(teamSessionRef.current);
+    teamSaveQueueRef.current = teamSaveQueueRef.current
+      .then(() => AsyncStorage.setItem(key, snapshot))
+      .catch((error) => console.log('팀 지도 경로 저장 실패:', error));
+  }, [teamLocations, teamRouteSegments, teamCurrentSegmentIndex, teamOptimized, teamIsGuiding, teamRouteResumeToken, workspaceReady, workspaceCacheKey, user?.userId, activeGroup?.groupId, calendarDayKey]);
 
   const refreshCurrentWorkspace = useCallback(async () => {
     await Promise.all([
@@ -410,10 +574,22 @@ export default function App() {
   }, [activeGroup, loadTeamLocations, loadWorkspaceLocations, refreshGroupAssignments]);
 
   useEffect(() => {
+    if (screen === 'main' && user?.userId) {
+      refreshCurrentWorkspace();
+    }
+  }, [screen, user?.userId, refreshCurrentWorkspace]);
+
+  useEffect(() => {
     refreshGroupAssignments();
   }, [refreshGroupAssignments]);
 
   const handleLogout = () => {
+    setWorkspaceReady(false);
+    teamLoadedKeyRef.current = null;
+    teamLoadIdRef.current++;
+    loadedWorkspaceKeyRef.current = null;
+    workPlanRef.current = { rows: [], choices: {}, key: null };
+    setPendingWork([]);
     setMapInitialized(false);
     setUser(null);
     setActiveGroup(null);
@@ -485,6 +661,11 @@ export default function App() {
         {screen === 'login' && (
           <LoginScreen
             onLogin={(loginUser) => {
+              setWorkspaceReady(false);
+              loadedWorkspaceKeyRef.current = null;
+              workspaceLoadIdRef.current++;
+              teamLoadedKeyRef.current = null;
+              teamLoadIdRef.current++;
               setRouteLocations([]);
               setReportTargets([]);
               setTodayLocationsLoaded(false);
@@ -545,6 +726,8 @@ export default function App() {
             locations={routeLocations}
             setLocations={setRouteLocations}
             onRefreshAssignments={refreshCurrentWorkspace}
+            pendingWork={pendingWork}
+            onAddWork={addWorkToMap}
           />
         )}
 
@@ -677,6 +860,7 @@ export default function App() {
             optimized={teamOptimized}
             setOptimized={setTeamOptimized}
             isGuiding={teamIsGuiding}
+            routeResumeToken={teamRouteResumeToken}
             setIsGuiding={setTeamIsGuiding}
             totalDuration={teamTotalDuration}
             setTotalDuration={setTeamTotalDuration}
@@ -786,6 +970,7 @@ export default function App() {
               setPanelOpen={setPanelOpen}
               isActive={screen === 'mapDirect'}
               persistNormalMap
+              routeResumeToken={routeResumeToken}
             />
           </View>
         )}

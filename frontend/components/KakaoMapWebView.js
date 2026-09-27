@@ -771,7 +771,7 @@ const buildKakaoMapHtml = (
 
         var markerElement =
           createMarkerElement(
-            index,
+            location.markerNumber ? location.markerNumber - 1 : index,
             location.color,
             !!location.pulse
           );
@@ -2914,7 +2914,7 @@ export default function KakaoMapWebView({
       >
         <ActivityIndicator
           size="large"
-          color="#12395B"
+          color="#2477F3"
         />
 
         <Text
@@ -3042,7 +3042,7 @@ export default function KakaoMapWebView({
           <Ionicons
             name="locate"
             size={24}
-            color="#12395B"
+            color="#2477F3"
           />
         </TouchableOpacity>
       )}
@@ -3585,7 +3585,7 @@ const styles =
         "800",
 
       color:
-        "#12395B",
+        "#10285B",
     },
 
     locationErrorTitle: {
@@ -3607,7 +3607,7 @@ const styles =
       marginTop: 16,
 
       backgroundColor:
-        "#12395B",
+        "#2477F3",
 
       borderRadius: 12,
 
@@ -3685,7 +3685,7 @@ const styles =
 
     closePanelButtonText: {
       color:
-        "#12395B",
+        "#10285B",
 
       fontSize: 10,
 
@@ -3732,7 +3732,7 @@ const styles =
       borderRadius: 10,
 
       backgroundColor:
-        "#12395B",
+        "#2477F3",
 
       alignItems:
         "center",
@@ -3820,10 +3820,10 @@ const styles =
 
     categoryButtonActive: {
       backgroundColor:
-        "#12395B",
+        "#2477F3",
 
       borderColor:
-        "#12395B",
+        "#2477F3",
     },
 
     categoryText: {
@@ -3900,7 +3900,7 @@ const styles =
         999,
 
       backgroundColor:
-        "#12395B",
+        "#2477F3",
     },
 
     sortButtonText: {
@@ -4196,7 +4196,7 @@ const styles =
         "900",
 
       color:
-        "#12395B",
+        "#10285B",
     },
 
     /*
@@ -4224,7 +4224,7 @@ const styles =
         "900",
 
       color:
-        "#12395B",
+        "#10285B",
     },
 
     placeholderDesc: {

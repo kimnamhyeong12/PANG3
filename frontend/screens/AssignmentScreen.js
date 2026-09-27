@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -13,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BackButton } from '../components/ui';
 import { API_BASE_URL } from '../utils/api';
 import { groupApi } from '../utils/groupApi';
+import { showAlert } from '../components/CustomAlert';
 
 const KAKAO_REST_API_KEY =
   process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
@@ -199,7 +199,7 @@ export default function AssignmentScreen({
 
       setLocations(resolvedLocations);
     } catch (error) {
-      Alert.alert(
+      showAlert(
         '담당자 배정 조회 실패',
         error.message
       );
@@ -336,9 +336,9 @@ export default function AssignmentScreen({
       });
 
       setSelectedTask(null);
-      onChanged?.();
+      await onChanged?.();
     } catch (error) {
-      Alert.alert(
+      showAlert(
         '담당자 지정 실패',
         error.message
       );
@@ -415,9 +415,9 @@ export default function AssignmentScreen({
       });
 
       setSelectedArea(null);
-      onChanged?.();
+      await onChanged?.();
     } catch (error) {
-      Alert.alert(
+      showAlert(
         '구역 일괄 배정 실패',
         error.message
       );
@@ -446,9 +446,9 @@ export default function AssignmentScreen({
         )
       );
 
-      onChanged?.();
+      await onChanged?.();
     } catch (error) {
-      Alert.alert(
+      showAlert(
         '배정 해제 실패',
         error.message
       );

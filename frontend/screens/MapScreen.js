@@ -9,6 +9,7 @@ import {
   Keyboard,
   Modal,
   PanResponder,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,6 +19,7 @@ import {
 } from 'react-native';
 import KakaoMapWebView from '../components/KakaoMapWebView';
 import PublicDataMapMode from './PublicDataMapMode';
+import { locationKey, numberVisits, numberOptimizedVisits } from '../utils/routeSession';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
@@ -102,6 +104,7 @@ function NormalMapScreen({
   panelOpen,
   setPanelOpen,
   onSwitchToPublic,
+  routeResumeToken = 0,
 }) {
   const [selected, setSelected] = useState(null);
   const [optimizing, setOptimizing] = useState(false);
@@ -133,8 +136,21 @@ function NormalMapScreen({
   const sheetY = useRef(new Animated.Value(0)).current;
   const searchInputRef = useRef(null);
 
-  const markers = locations?.length ? locations : [];
-  const orderedMarkers = useMemo(() => markers, [markers]);
+  const visitNumbersRef = useRef({});
+  const visitNumberScopeRef = useRef(null);
+  const routeMarkers = useMemo(() => {
+    const scope = `${user?.userId}:${activeGroup?.groupId}:${locationScope}`;
+    if (visitNumberScopeRef.current !== scope) {
+      visitNumbersRef.current = {};
+      visitNumberScopeRef.current = scope;
+    }
+    const numbered = numberVisits(locations || [], visitNumbersRef.current);
+    numbered.forEach((row) => { visitNumbersRef.current[locationKey(row)] = row.markerNumber; });
+    return numbered;
+  }, [locations, user?.userId, activeGroup?.groupId, locationScope]);
+  const markers = useMemo(() => [...routeMarkers].sort((a, b) => a.markerNumber - b.markerNumber), [routeMarkers]);
+  const orderedMarkers = useMemo(() => routeMarkers.filter((item) => item.status !== 'complete'), [routeMarkers]);
+  const resumedTokenRef = useRef(null);
   const assignmentMap = useMemo(() => {
     const map = new Map();
     groupAssignments.forEach((item) => map.set(Number(item.taskId), item));
@@ -311,7 +327,7 @@ function NormalMapScreen({
       return;
     }
 
-    const updatedLocations = markers.map((loc) => {
+    const updatedLocations = routeMarkers.map((loc) => {
       if (loc.id === targetLocation.id) {
         return {
           ...loc,
@@ -327,7 +343,7 @@ function NormalMapScreen({
   };
 
   const resetPriority = () => {
-    const updatedLocations = markers.map((loc) => ({
+    const updatedLocations = routeMarkers.map((loc) => ({
       ...loc,
       priority: null,
     }));
@@ -555,7 +571,7 @@ function NormalMapScreen({
       const savedLocation = JSON.parse(text);
 
       setLocations?.([
-        ...markers,
+        ...routeMarkers,
         {
           ...savedLocation,
           id: savedLocation.id ?? savedLocation.taskId ?? savedLocation.task_id,
@@ -610,7 +626,7 @@ function NormalMapScreen({
       return;
     }
 
-    const nextLocations = markers.filter((loc) => loc.id !== id);
+    const nextLocations = routeMarkers.filter((loc) => loc.id !== id);
     setLocations?.(nextLocations);
     onDataChanged?.();
   };
@@ -711,13 +727,6 @@ function NormalMapScreen({
   };
 
   const handleOptimizeRoute = async (mode = transportMode) => {
-    setGuideStartOpen(false);
-    setCurrentSegmentIndex(0);
-    setRoadPath([]);
-    setRouteSegments([]);
-    setTotalDuration(null);
-    setOptimized(false);
-    setIsGuiding(false);
 
     if (!API_BASE_URL) {
       showAlert('오류', '.env의 EXPO_PUBLIC_API_BASE_URL을 확인하세요.');
@@ -729,8 +738,8 @@ function NormalMapScreen({
       return;
     }
 
-    if (!markers || markers.length < 2) {
-      showAlert('정렬 불가', '방문지가 2개 이상 필요합니다.');
+    if (orderedMarkers.length === 0) {
+      showAlert('남은 작업 없음', '모든 방문지의 작업이 완료되었습니다.');
       return;
     }
 
@@ -739,7 +748,7 @@ function NormalMapScreen({
 
       const cleanCurrentLocation = cleanLocation(currentLocation, '현재 위치');
 
-      const priorityMarkers = [...markers].sort((a, b) => {
+      const priorityMarkers = [...orderedMarkers].sort((a, b) => {
         const pa = a.priority ?? 9999;
         const pb = b.priority ?? 9999;
 
@@ -759,7 +768,7 @@ function NormalMapScreen({
 
       const res = await fetch(`${API_BASE_URL}/api/routes/optimize`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(mode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) },
         body: JSON.stringify({
           currentLocation: cleanCurrentLocation,
           locations: cleanMarkers,
@@ -779,6 +788,7 @@ function NormalMapScreen({
       const data = JSON.parse(text);
 
       const optimizedLocations = (data.optimizedLocations || []).map((loc) => ({
+        ...priorityMarkers.find((item) => String(item.id) === String(loc.id)),
         ...loc,
         lat: loc.lat ?? loc.latitude,
         lng: loc.lng ?? loc.longitude,
@@ -786,11 +796,10 @@ function NormalMapScreen({
         priority: loc.priority ?? null,
       }));
 
-      if (optimizedLocations.length > 0) {
-        setLocations?.(optimizedLocations);
-      } else {
-        setLocations?.(priorityMarkers);
-      }
+      setLocations?.(numberOptimizedVisits(
+        optimizedLocations.length > 0 ? optimizedLocations : priorityMarkers,
+        markers.filter((item) => item.status === 'complete')
+      ));
 
       if (data.path && data.path.length > 0) {
         setRoadPath(data.path);
@@ -807,6 +816,8 @@ function NormalMapScreen({
 
       setTransportMode(mode);
       setOptimized(true);
+      setIsGuiding(false);
+      setGuideStartOpen(false);
     } catch (error) {
       console.log(error);
       showAlert('오류', '경로 최적화 중 문제가 발생했습니다.');
@@ -847,7 +858,7 @@ function NormalMapScreen({
 
       const res = await fetch(`${API_BASE_URL}/api/routes/segment`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(mode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) },
         body: JSON.stringify({
           start,
           end,
@@ -882,6 +893,7 @@ function NormalMapScreen({
 
       setRouteSegments(updatedSegments);
       setCurrentSegmentIndex(targetIndex);
+      setRoadPath(updatedSegments.slice(targetIndex).flatMap((segment) => segment?.path || []));
 
       if (data.totalDuration !== undefined && data.totalDuration !== null) {
         setTotalDuration(data.totalDuration);
@@ -897,6 +909,13 @@ function NormalMapScreen({
   const updateCurrentSegmentMode = async (mode) => {
     await updateGuideTargetSegment(currentSegmentIndex, mode);
   };
+
+  useEffect(() => {
+    if (!isActive || !currentLocation || !optimized || !routeResumeToken ||
+        resumedTokenRef.current === routeResumeToken || !orderedMarkers[currentSegmentIndex]) return;
+    resumedTokenRef.current = routeResumeToken;
+    updateGuideTargetSegment(currentSegmentIndex, routeSegments[currentSegmentIndex]?.mode || transportMode);
+  }, [isActive, currentLocation, optimized, routeResumeToken, currentSegmentIndex]);
 
   const handleTransportPress = (mode) => {
     if (optimized && isGuiding) {
@@ -921,7 +940,7 @@ function NormalMapScreen({
 
       const res = await fetch(`${API_BASE_URL}/api/routes/segment`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(transportMode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) },
         body: JSON.stringify({
           start,
           end,
@@ -977,7 +996,7 @@ function NormalMapScreen({
   return (
     <View style={styles.container}>
       <KakaoMapWebView
-        locations={orderedMarkers}
+        locations={[...orderedMarkers, ...markers.filter((item) => item.status === 'complete')]}
         roadPath={roadPath}
         routeSegments={routeSegments}
         currentSegmentIndex={currentSegmentIndex}
@@ -1004,13 +1023,17 @@ function NormalMapScreen({
         onRerouteRequest={handleReroute}
       />
 
+      {addMenuOpen && (
+        <Pressable style={[StyleSheet.absoluteFill, { zIndex: 19 }]}
+          accessibilityLabel="방문지 추가 메뉴 닫기" onPress={() => setAddMenuOpen(false)} />
+      )}
       <View style={styles.topOverlay}>
         <View style={styles.searchControlRow}>
           <TouchableOpacity
             style={styles.searchBox}
             activeOpacity={0.9}
             onPress={() => {
-              if (!addressSearchMode) setAddMenuOpen(true);
+              if (!addressSearchMode) setAddMenuOpen((open) => !open);
             }}
           >
 
@@ -1018,11 +1041,11 @@ function NormalMapScreen({
               onPress={() => {
                 resetAddModes();
                 setAddressSearchMode(false);
-                setAddMenuOpen(true);
+                setAddMenuOpen((open) => !open);
                 searchInputRef.current?.blur();
               }}
             >
-              <Ionicons name="menu" size={18} color="#10285B" />
+              <Ionicons name="menu" size={18} color="#2477F3" />
             </TouchableOpacity>
 
             <TextInput
@@ -1056,7 +1079,7 @@ function NormalMapScreen({
               }}
               disabled={isSearching}
             >
-              <Ionicons name="search" size={18} color="#10285B" />
+              <Ionicons name="search" size={18} color="#2477F3" />
             </TouchableOpacity>
           </TouchableOpacity>
 
@@ -1067,7 +1090,7 @@ function NormalMapScreen({
             ]}
             onPress={() => setPriorityMode(!priorityMode)}
           >
-            <Ionicons name="list" size={13} color="#10285B" />
+            <Ionicons name="list" size={13} color="#2477F3" />
             <Text style={styles.smallTopText}>
               {priorityMode ? '선택중' : '우선순위'}
             </Text>
@@ -1078,7 +1101,7 @@ function NormalMapScreen({
             onPress={() => handleOptimizeRoute(transportMode)}
             disabled={optimizing || segmentChanging}
           >
-            <Ionicons name="git-branch-outline" size={13} color="#10285B" />
+            <Ionicons name="git-branch-outline" size={13} color="#2477F3" />
             <Text style={styles.smallTopText}>
               {optimizing ? '계산중' : '경로 최적화'}
             </Text>
@@ -1162,7 +1185,7 @@ function NormalMapScreen({
         )}
 
         <View style={styles.chipRowWrap}>
-          {orderedMarkers.length === 0 ? (
+          {markers.length === 0 ? (
             <View style={styles.emptyChip}>
               <Ionicons name="location-outline" size={14} color="#8A98A8" />
               <Text style={styles.emptyChipText}>방문지 없음</Text>
@@ -1170,7 +1193,7 @@ function NormalMapScreen({
           ) : (
             <FlatList
               horizontal
-              data={orderedMarkers}
+              data={markers}
               keyExtractor={(item, idx) => String(item.id ?? idx)}
               showsHorizontalScrollIndicator={false}
               renderItem={({ item, index }) => (
@@ -1185,7 +1208,7 @@ function NormalMapScreen({
                     ]}
                   >
                     <Text style={styles.noText}>
-                      {item.priority ? `P${item.priority}` : index + 1}
+                      {item.markerNumber}
                     </Text>
                   </View>
 
@@ -1207,22 +1230,22 @@ function NormalMapScreen({
             <Ionicons
               name={visitListOpen ? 'chevron-up' : 'chevron-down'}
               size={20}
-              color="#10285B"
+              color="#2477F3"
             />
           </TouchableOpacity>
         </View>
 
-        {visitListOpen && orderedMarkers.length > 0 && (
+        {visitListOpen && markers.length > 0 && (
           <View style={styles.visitListCard}>
             <View style={styles.visitListHead}>
-              <Text style={styles.visitCount}>방문지 {orderedMarkers.length}개</Text>
+              <Text style={styles.visitCount}>방문지 {markers.length}개</Text>
 
               <TouchableOpacity onPress={() => setVisitListOpen(false)}>
                 <Text style={styles.foldText}>접기</Text>
               </TouchableOpacity>
             </View>
 
-            {orderedMarkers.map((loc, index) => (
+            {markers.map((loc, index) => (
               <View
                 key={`${loc.detailAddress || 'loc'}-${loc.lat}-${loc.lng}-${index}`}
                 style={styles.visitItem}
@@ -1237,7 +1260,7 @@ function NormalMapScreen({
                       { backgroundColor: getStatusColor(loc.status) },
                     ]}
                   >
-                    <Text style={styles.visitNoText}>{index + 1}</Text>
+                    <Text style={styles.visitNoText}>{loc.markerNumber}</Text>
                   </View>
 
                   <View style={styles.visitTextWrap}>
@@ -1285,7 +1308,7 @@ function NormalMapScreen({
               <Ionicons
                 name="car"
                 size={18}
-                color={transportMode === 'car' ? '#FFFFFF' : '#10285B'}
+                color={transportMode === 'car' ? '#FFFFFF' : '#2477F3'}
               />
             </TouchableOpacity>
 
@@ -1300,7 +1323,7 @@ function NormalMapScreen({
               <Ionicons
                 name="walk"
                 size={18}
-                color={transportMode === 'walk' ? '#FFFFFF' : '#10285B'}
+                color={transportMode === 'walk' ? '#FFFFFF' : '#2477F3'}
               />
             </TouchableOpacity>
 
@@ -1534,7 +1557,7 @@ function NormalMapScreen({
                 onPress={async () => {
                   setGuideStartOpen(false);
                   setIsGuiding(true);
-                  await updateGuideTargetSegment(0);
+                  await updateGuideTargetSegment(currentSegmentIndex);
                 }}
               >
                 <Text style={styles.sheetLabel}>안내 시작</Text>
@@ -1788,7 +1811,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 7,
-    shadowColor: '#10285B',
+    shadowColor: '#2477F3',
     shadowOpacity: 0.24,
     shadowRadius: 10,
     elevation: 8,
@@ -1805,7 +1828,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#10285B',
+    backgroundColor: '#2477F3',
     borderRadius: 12,
     paddingHorizontal: 11,
     paddingVertical: 8,
@@ -2065,7 +2088,7 @@ const styles = StyleSheet.create({
 
   doneBar: {
     flex: 1,
-    backgroundColor: '#10285B',
+    backgroundColor: '#2477F3',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
@@ -2098,8 +2121,8 @@ const styles = StyleSheet.create({
   },
 
   modeButtonActive: {
-    backgroundColor: '#10285B',
-    borderColor: '#10285B',
+    backgroundColor: '#2477F3',
+    borderColor: '#2477F3',
   },
 
   stopGuideButton: {
@@ -2206,7 +2229,7 @@ const styles = StyleSheet.create({
   },
 
   categoryChipActive: {
-    backgroundColor: '#10285B',
+    backgroundColor: '#2477F3',
   },
 
   categoryText: {
@@ -2418,7 +2441,7 @@ const styles = StyleSheet.create({
   },
 
   pageActive: {
-    backgroundColor: '#10285B',
+    backgroundColor: '#2477F3',
     color: '#fff',
     borderRadius: 6,
     overflow: 'hidden',
@@ -2426,7 +2449,7 @@ const styles = StyleSheet.create({
 
   closeButton: {
     marginTop: 14,
-    backgroundColor: '#10285B',
+    backgroundColor: '#2477F3',
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
@@ -2438,7 +2461,10 @@ const styles = StyleSheet.create({
   },
 
   addMenuBox: {
-    marginTop: 8,
+    position: 'absolute',
+    top: 54,
+    left: 0,
+    zIndex: 50,
     width: 250,
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
@@ -2448,7 +2474,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
-    elevation: 6,
+    elevation: 12,
   },
 
   addMenuItem: {

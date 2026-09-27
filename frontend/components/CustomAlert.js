@@ -6,6 +6,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { colors } from '../constants/design';
 
 let alertListener = null;
 let pendingAlert = null;
@@ -46,12 +47,12 @@ export const showAlert = (title, message, buttons, options) => {
 const getTone = (title = '') => {
   const value = String(title);
 
-  if (/완료|성공|저장|추가/.test(value)) {
-    return 'success';
+  if (/경고|실패|오류|불가|필요|없음|권한/.test(value)) {
+    return 'warning';
   }
 
-  if (/실패|오류|불가|필요|없음|권한/.test(value)) {
-    return 'warning';
+  if (/완료|성공|저장|추가/.test(value)) {
+    return 'success';
   }
 
   return 'info';
@@ -271,13 +272,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   primaryButton: {
-    backgroundColor: '#12395B',
+    backgroundColor: colors.primary,
   },
   cancelButton: {
-    backgroundColor: '#F2F4F7',
+    backgroundColor: colors.primarySoft,
   },
   destructiveButton: {
-    backgroundColor: '#FEF3F2',
+    backgroundColor: colors.primarySoft,
   },
   buttonPressed: {
     opacity: 0.78,
@@ -290,10 +291,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   cancelButtonText: {
-    color: '#344054',
+    color: colors.primaryDark,
   },
   destructiveButtonText: {
-    color: '#D92D20',
+    color: colors.primaryDark,
   },
 });
 
