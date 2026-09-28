@@ -70,11 +70,14 @@ jobs:
             set -eu
             cd /home/ubuntu/PANG3
             test "$(git branch --show-current)" = "main"
-            if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
-              echo "Server checkout has local changes; leaving it untouched"
-              git status --short
-              exit 1
-            fi
+            case "$(git status --porcelain --untracked-files=all)" in
+              ""|"?? report_latest.hwpx") ;;
+              *)
+                echo "Server checkout has other local changes; leaving it untouched"
+                git status --short
+                exit 1
+                ;;
+            esac
             git fetch origin main
             if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
               git branch "deploy-backup-${{ github.run_id }}" HEAD
