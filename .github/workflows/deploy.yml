@@ -69,7 +69,17 @@ jobs:
           script: |
             set -eu
             cd /home/ubuntu/PANG3
-            git pull origin main
+            test "$(git branch --show-current)" = "main"
+            if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+              echo "Server checkout has local changes; leaving it untouched"
+              git status --short
+              exit 1
+            fi
+            git fetch origin main
+            if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+              git branch "deploy-backup-${{ github.run_id }}" HEAD
+              git reset --hard origin/main
+            fi
             test "$(git rev-parse HEAD)" = "${{ github.sha }}"
             docker compose pull
             docker compose up -d
