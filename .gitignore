@@ -39,3 +39,6 @@ ai/__pycache__/
 # goal, plan
 GOAL.md
 PLAN.md
+
+# Locally prepared licensed address-map data; mounted on the backend host.
+backend/data/

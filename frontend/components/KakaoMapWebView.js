@@ -223,6 +223,16 @@ const buildKakaoMapHtml = (
       0 2px 7px rgba(0, 0, 0, 0.3);
   }
 
+  .entrance-location {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #FFFFFF;
+    border: 3px solid #4C88F7;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.32);
+    pointer-events: none;
+  }
+
   .boundary-label {
     padding: 3px 6px;
     border: 1px solid rgba(36, 119, 243, 0.28);
@@ -331,6 +341,8 @@ const buildKakaoMapHtml = (
 
   var roadLine = null;
   var activeLine = null;
+  var connectorLines = [];
+  var entranceOverlays = [];
 
   var userLocationOverlay = null;
   var userLocationElement = null;
@@ -404,6 +416,11 @@ const buildKakaoMapHtml = (
       activeLine.setMap(null);
       activeLine = null;
     }
+
+    connectorLines.forEach(function (line) { line.setMap(null); });
+    connectorLines = [];
+    entranceOverlays.forEach(function (overlay) { overlay.setMap(null); });
+    entranceOverlays = [];
   }
 
   function clearBoundaryData() {
@@ -891,6 +908,31 @@ const buildKakaoMapHtml = (
 
       activeLine.setMap(map);
     }
+
+    (data.connectorPaths || []).forEach(function (connector) {
+      if (!Array.isArray(connector) || connector.length < 2) return;
+      var line = new window.kakao.maps.Polyline({
+        path: connector.map(toLatLng),
+        strokeWeight: 5,
+        strokeColor: "#4C88F7",
+        strokeOpacity: 0.9,
+        strokeStyle: "shortdot"
+      });
+      line.setMap(map);
+      connectorLines.push(line);
+
+      var dot = document.createElement("div");
+      dot.className = "entrance-location";
+      var entrance = new window.kakao.maps.CustomOverlay({
+        position: toLatLng(connector[0]),
+        content: dot,
+        xAnchor: 0.5,
+        yAnchor: 0.5,
+        zIndex: 90
+      });
+      entrance.setMap(map);
+      entranceOverlays.push(entrance);
+    });
 
     /*
      * 현재 GPS 위치
@@ -1671,7 +1713,8 @@ export default function KakaoMapWebView({
     }
 
     const coordinates =
-      targetPath
+      targetPath.concat((isGuiding ? [routeSegments[currentSegmentIndex]] : routeSegments)
+        .flatMap((segment) => segment?.connectorPath || []))
         .map((point) => ({
           latitude:
             Number(
@@ -2631,6 +2674,9 @@ export default function KakaoMapWebView({
         currentPos,
 
         roadPath,
+        connectorPaths: (isGuiding ? [routeSegments[currentSegmentIndex]] : routeSegments)
+          .map((segment) => segment?.connectorPath)
+          .filter((path) => Array.isArray(path) && path.length >= 2),
 
         /*
          * 안내 중이면 이미 지나간 경로를
@@ -2647,6 +2693,8 @@ export default function KakaoMapWebView({
     selectedPos,
     currentPos,
     roadPath,
+    routeSegments,
+    currentSegmentIndex,
     activePath,
     remainingActivePath,
     isGuiding,
