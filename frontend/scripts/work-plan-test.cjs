@@ -37,6 +37,14 @@ const path = require('node:path');
   plan = splitWorkPlan([row, newWork], savedChoices, day);
   assert.deepEqual(plan.map.map(item => item.id), [1]);
   assert.deepEqual(plan.incoming.map(item => item.id), [2]);
+  const personal = splitWorkPlan([newWork], {}, day, [], { autoAddToday: true });
+  assert.deepEqual(personal.map.map(item => item.id), [2]);
+  assert.equal(personal.pending.length, 0);
+  assert.equal(personal.incoming.length, 0);
+  assert.equal(splitWorkPlan([newWork], { [assignmentKey(newWork)]: 'later' }, day, [],
+    { autoAddToday: true }).pending.length, 1);
+  assert.equal(splitWorkPlan([{ ...newWork, scheduledDate: '2026-09-28' }], {}, day, [],
+    { autoAddToday: true }).map.length, 0);
   const session = { day, order: ['1'], optimized: true, isGuiding: true, currentSegmentIndex: 0, routeSegments: [{ to: 1 }] };
   let route = restoreRouteSession(plan.map, session, day);
   assert.deepEqual(route.segments, [{ to: 1 }]);
