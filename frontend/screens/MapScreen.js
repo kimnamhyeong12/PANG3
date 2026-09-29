@@ -23,6 +23,7 @@ import { locationKey, numberVisits, numberOptimizedVisits } from '../utils/route
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
+const EMPTY_MARKERS = [];
 
 const getLocalDateKey = (date = new Date()) => {
   const year = date.getFullYear();
@@ -86,6 +87,8 @@ function NormalMapScreen({
   onDataChanged,
   locations,
   setLocations,
+  previewMarkers = EMPTY_MARKERS,
+  previewOnlyRegistrations = false,
   activeGroup,
   locationScope = 'personal',
   groupAssignments = [],
@@ -150,6 +153,12 @@ function NormalMapScreen({
   }, [locations, user?.userId, activeGroup?.groupId, locationScope]);
   const markers = useMemo(() => [...routeMarkers].sort((a, b) => a.markerNumber - b.markerNumber), [routeMarkers]);
   const orderedMarkers = useMemo(() => routeMarkers.filter((item) => item.status !== 'complete'), [routeMarkers]);
+  const mapOnlyMarkers = useMemo(() => {
+    const routeKeys = new Set(routeMarkers.map(locationKey));
+    const lastNumber = Math.max(0, ...markers.map((item) => item.markerNumber || 0));
+    return previewMarkers.filter((item) => !routeKeys.has(locationKey(item)))
+      .map((item, index) => ({ ...item, markerNumber: lastNumber + index + 1 }));
+  }, [previewMarkers, routeMarkers, markers]);
   const resumedTokenRef = useRef(null);
   const assignmentMap = useMemo(() => {
     const map = new Map();
@@ -570,24 +579,26 @@ function NormalMapScreen({
 
       const savedLocation = JSON.parse(text);
 
-      setLocations?.([
-        ...routeMarkers,
-        {
-          ...savedLocation,
-          id: savedLocation.id ?? savedLocation.taskId ?? savedLocation.task_id,
-          detailAddress: savedLocation.detailAddress || newLoc.detailAddress,
-          roadAddress: savedLocation.roadAddress || newLoc.roadAddress,
-          status: savedLocation.status || 'pending',
-          task: savedLocation.taskCategory || savedLocation.task || newLoc.task || '',
-          createdAt: savedLocation.createdAt || savedLocation.created_at || null,
-          workDate: savedLocation.workDate || savedLocation.work_date || newLoc.workDate,
-          scheduledDate:
-            savedLocation.scheduledDate ||
-            savedLocation.scheduled_date ||
-            newLoc.scheduledDate,
-          priority: savedLocation.priority || '',
-        },
-      ]);
+      if (!previewOnlyRegistrations) {
+        setLocations?.([
+          ...routeMarkers,
+          {
+            ...savedLocation,
+            id: savedLocation.id ?? savedLocation.taskId ?? savedLocation.task_id,
+            detailAddress: savedLocation.detailAddress || newLoc.detailAddress,
+            roadAddress: savedLocation.roadAddress || newLoc.roadAddress,
+            status: savedLocation.status || 'pending',
+            task: savedLocation.taskCategory || savedLocation.task || newLoc.task || '',
+            createdAt: savedLocation.createdAt || savedLocation.created_at || null,
+            workDate: savedLocation.workDate || savedLocation.work_date || newLoc.workDate,
+            scheduledDate:
+              savedLocation.scheduledDate ||
+              savedLocation.scheduled_date ||
+              newLoc.scheduledDate,
+            priority: savedLocation.priority || '',
+          },
+        ]);
+      }
       onDataChanged?.();
 
       if (locationScope === 'team') {
@@ -997,6 +1008,7 @@ function NormalMapScreen({
     <View style={styles.container}>
       <KakaoMapWebView
         locations={[...orderedMarkers, ...markers.filter((item) => item.status === 'complete')]}
+        displayOnlyLocations={mapOnlyMarkers}
         roadPath={roadPath}
         routeSegments={routeSegments}
         currentSegmentIndex={currentSegmentIndex}
@@ -1717,7 +1729,7 @@ export default function MapScreen(props) {
   }, [mode, props.isActive, props.persistNormalMap]);
 
   const mergeRegisteredLocations = (registered = []) => {
-    if (!registered.length) return;
+    if (!registered.length || props.previewOnlyRegistrations) return;
     props.setLocations?.((previous) => {
       const source = Array.isArray(previous) ? previous : (props.locations || []);
       const byId = new Map(source.map((item) => [String(item.id ?? item.taskId ?? item.task_id), item]));

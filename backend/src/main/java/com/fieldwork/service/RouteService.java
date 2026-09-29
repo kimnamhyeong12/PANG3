@@ -30,6 +30,8 @@ public class RouteService {
     private final RestTemplate restTemplate = new RestTemplate();
     private final KakaoWalkingClient walkingClient = new KakaoWalkingClient();
     private static final double MAX_ENTRANCE_SNAP_METERS = 50;
+    private static final double APPROACH_OFFSET_METERS = 10;
+    private static final double MAX_APPROACH_TO_ENTRANCE_METERS = 30;
 
     @Autowired(required = false)
     private BusanEntranceService busanEntranceService;
@@ -210,14 +212,36 @@ public class RouteService {
         for (int i = 0; i < routePoints.size() - 1; i++) {
             Map<String, Object> start = routePoints.get(i);
             Map<String, Object> end = routePoints.get(i + 1);
+            Map<String, Object> entrance = end.containsKey("markerLatitude") ? end : null;
+            Map<String, Object> approach = entrance == null ? null : outsideEntrancePoint(entrance);
+            if (approach != null) {
+                end = approach;
+                routePoints.set(i + 1, end);
+            }
             RoadLeg leg;
             try {
                 leg = requestRoadLeg(start, end);
+                if (approach != null && !endsWithinMeters(leg.path(), entrance,
+                        MAX_APPROACH_TO_ENTRANCE_METERS)) {
+                    throw new IllegalStateException("차량 경로가 출입구 근처에 연결되지 않았습니다.");
+                }
             } catch (RuntimeException error) {
                 if (!end.containsKey("markerLatitude")) throw error;
-                end = originalMarkerPoint(end);
-                routePoints.set(i + 1, end);
-                leg = requestRoadLeg(start, end);
+                if (approach != null) {
+                    try {
+                        end = entrance;
+                        routePoints.set(i + 1, end);
+                        leg = requestRoadLeg(start, end);
+                    } catch (RuntimeException entranceError) {
+                        end = originalMarkerPoint(entrance);
+                        routePoints.set(i + 1, end);
+                        leg = requestRoadLeg(start, end);
+                    }
+                } else {
+                    end = originalMarkerPoint(end);
+                    routePoints.set(i + 1, end);
+                    leg = requestRoadLeg(start, end);
+                }
             }
             totalDistance += leg.distance();
             totalDuration += leg.duration();
@@ -486,11 +510,30 @@ public class RouteService {
         return Math.hypot(north, east);
     }
 
+    private Map<String, Object> outsideEntrancePoint(Map<String, Object> entrance) {
+        double entranceLat = getLat(entrance), entranceLng = getLng(entrance);
+        double markerLat = ((Number) entrance.get("markerLatitude")).doubleValue();
+        double markerLng = ((Number) entrance.get("markerLongitude")).doubleValue();
+        double north = (entranceLat - markerLat) * 111_000;
+        double east = (entranceLng - markerLng) * 111_000 * Math.cos(Math.toRadians(entranceLat));
+        double length = Math.hypot(north, east);
+        if (length < 40 || length > 500) return null;
+        Map<String, Object> approach = new HashMap<>(entrance);
+        approach.put("lat", entranceLat + north / length * APPROACH_OFFSET_METERS / 111_000);
+        approach.put("lng", entranceLng + east / length * APPROACH_OFFSET_METERS /
+                (111_000 * Math.cos(Math.toRadians(entranceLat))));
+        return approach;
+    }
+
     private boolean endsNearEntrance(List<Map<String, Double>> path, Map<String, Object> entrance) {
+        return endsWithinMeters(path, entrance, MAX_ENTRANCE_SNAP_METERS);
+    }
+
+    private boolean endsWithinMeters(List<Map<String, Double>> path, Map<String, Object> entrance, double meters) {
         if (path == null || path.isEmpty()) return false;
         Map<String, Double> last = path.get(path.size() - 1);
         return distanceMeters(last.get("latitude"), last.get("longitude"),
-                getLat(entrance), getLng(entrance)) <= MAX_ENTRANCE_SNAP_METERS;
+                getLat(entrance), getLng(entrance)) <= meters;
     }
 
     public Map<String, Object> getSingleSegmentPath(

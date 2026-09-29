@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BackHandler,
   AppState,
@@ -116,6 +116,13 @@ export default function App() {
   const [availableGroups, setAvailableGroups] = useState([]);
   const [groupAssignments, setGroupAssignments] = useState([]);
   const [teamLocations, setTeamLocations] = useState([]);
+  const leaderMapMarkers = useMemo(() => {
+    if (activeGroup?.role !== 'LEADER' || isPersonalGroup(activeGroup)) return [];
+    const assignedIds = new Set(groupAssignments.map((item) => String(item.taskId)));
+    return teamLocations.filter((item) => String(item.createdByUserId) === String(user?.userId) &&
+      getScheduledDateKey(item) === calendarDayKey &&
+      !assignedIds.has(String(item.id ?? item.taskId ?? item.task_id)));
+  }, [activeGroup, teamLocations, groupAssignments, user?.userId, calendarDayKey]);
 
   // 팀 방문지 지도는 개인 지도와 경로 상태를 완전히 분리한다.
   // 그룹 화면에서 팀 방문지 관리를 열어도 개인 경로가 사라지지 않는다.
@@ -250,11 +257,20 @@ export default function App() {
       // A refresh may overlap optimization or guidance. Use the latest in-memory
       // session after storage reads rather than overwriting it with an older snapshot.
       if (loadedWorkspaceKeyRef.current === cacheKey) session = currentRouteRef.current;
-      const plan = splitWorkPlan(rows, choices, calendarDayKey, savedPlan ? [] : legacyRows);
+      const personalWorkspace = isPersonalGroup(activeGroup);
+      const plan = splitWorkPlan(rows, choices, calendarDayKey, savedPlan ? [] : legacyRows,
+        { autoAddToday: personalWorkspace });
       plan.map = numberVisits(plan.map, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])));
-      // Persist migration once; subsequently every new assignment needs a decision.
+      // Personal visits scheduled for today go straight onto their owner's map.
+      const autoAdded = personalWorkspace
+        ? plan.map.filter((row) => row.status !== 'complete' && !choices[assignmentKey(row)])
+        : [];
+      autoAdded.forEach((row) => { choices[assignmentKey(row)] = calendarDayKey; });
+      // Persist migration once; team assignments still need an explicit decision.
       if (!savedPlan) {
         plan.map.filter((row) => row.status !== 'complete').forEach((row) => { choices[assignmentKey(row)] = calendarDayKey; });
+      }
+      if (!savedPlan || autoAdded.length) {
         await AsyncStorage.setItem(`${cacheKey}_work_plan`, JSON.stringify(choices));
       }
       workPlanRef.current = { rows, choices, key: cacheKey };
@@ -326,7 +342,8 @@ export default function App() {
         setTodayLocationsLoaded(true);
       }
     }
-  }, [activeGroup?.groupId, user?.userId, workspaceCacheKey, calendarDayKey, workspaceReady]);
+  }, [activeGroup?.groupId, activeGroup?.personalWorkspace, activeGroup?.personal,
+    activeGroup?.workspaceType, user?.userId, workspaceCacheKey, calendarDayKey, workspaceReady]);
 
   const addWorkToMap = async (items) => {
     if (planBusyRef.current || workPlanRef.current.key !== workspaceCacheKey()) return false;
@@ -815,6 +832,8 @@ export default function App() {
             publicDataMode
             locations={routeLocations}
             setLocations={setRouteLocations}
+            previewMarkers={leaderMapMarkers}
+            previewOnlyRegistrations={!isPersonalGroup(activeGroup)}
             locationScope={isPersonalGroup(activeGroup) ? 'personal' : 'team'}
             groupAssignments={groupAssignments}
             onBack={() => goBack('groupDetail')}
@@ -930,6 +949,8 @@ export default function App() {
               setLocations={
                 setRouteLocations
               }
+              previewMarkers={leaderMapMarkers}
+              previewOnlyRegistrations={Boolean(activeGroup && !isPersonalGroup(activeGroup))}
               activeGroup={activeGroup}
               locationScope={!activeGroup || isPersonalGroup(activeGroup) ? 'personal' : 'team'}
               groupAssignments={activeGroup?.groupId ? groupAssignments : []}

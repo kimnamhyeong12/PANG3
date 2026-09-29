@@ -881,33 +881,7 @@ const buildKakaoMapHtml = (
       roadLine.setMap(map);
     }
 
-    /*
-     * 현재 안내 구간
-     */
-    if (
-      data.activePath &&
-      data.activePath.length >= 2
-    ) {
-      activeLine =
-        new window.kakao.maps.Polyline({
-          path:
-            data.activePath.map(
-              toLatLng
-            ),
-
-          strokeWeight: 9,
-
-          strokeColor:
-            "#12395B",
-
-          strokeOpacity: 1,
-
-          strokeStyle:
-            "solid"
-        });
-
-      activeLine.setMap(map);
-    }
+    updateActivePath(data.activePath);
 
     (data.connectorPaths || []).forEach(function (connector) {
       if (!Array.isArray(connector) || connector.length < 2) return;
@@ -945,6 +919,23 @@ const buildKakaoMapHtml = (
     }
   }
 
+  function updateActivePath(path) {
+    if (!map) return;
+    if (activeLine) {
+      activeLine.setMap(null);
+      activeLine = null;
+    }
+    if (!Array.isArray(path) || path.length < 2) return;
+    activeLine = new window.kakao.maps.Polyline({
+      path: path.map(toLatLng),
+      strokeWeight: 9,
+      strokeColor: "#12395B",
+      strokeOpacity: 1,
+      strokeStyle: "solid"
+    });
+    activeLine.setMap(map);
+  }
+
   /*
    * React Native에서 들어오는 명령.
    */
@@ -964,6 +955,11 @@ const buildKakaoMapHtml = (
         commandData.data
       );
 
+      return;
+    }
+
+    if (commandData.type === "ACTIVE_PATH") {
+      updateActivePath(commandData.path);
       return;
     }
 
@@ -1115,6 +1111,14 @@ const buildKakaoMapHtml = (
         }
       );
 
+      window.kakao.maps.event.addListener(
+        map,
+        "dragend",
+        function () {
+          post({ type: "PAN_DRAG_END" });
+        }
+      );
+
       ready = true;
 
       post({
@@ -1143,8 +1147,11 @@ const buildKakaoMapHtml = (
 `;
 };
 
+const EMPTY_DISPLAY_LOCATIONS = [];
+
 export default function KakaoMapWebView({
   locations = [],
+  displayOnlyLocations = EMPTY_DISPLAY_LOCATIONS,
   boundaries = null,
   roadPath = [],
   panelOpen = true,
@@ -1230,6 +1237,9 @@ export default function KakaoMapWebView({
     useRef(0);
 
   const segmentFocusTimerRef =
+    useRef(null);
+
+  const panReturnTimerRef =
     useRef(null);
 
   const segmentFocusKeyRef =
@@ -1408,6 +1418,12 @@ export default function KakaoMapWebView({
       );
     }, [locations]);
 
+  const visibleMapLocations = useMemo(() => [
+    ...mapLocations,
+    ...displayOnlyLocations.filter((location) => location &&
+      location.lat !== undefined && location.lng !== undefined),
+  ], [mapLocations, displayOnlyLocations]);
+
   const currentTargetIndex =
     currentSegmentIndex;
 
@@ -1415,6 +1431,7 @@ export default function KakaoMapWebView({
     mapLocations[
       currentTargetIndex
     ];
+  const hasCurrentPosition = Boolean(currentPos);
 
   const activePath =
     isGuiding
@@ -1449,6 +1466,9 @@ export default function KakaoMapWebView({
     if (isGuiding) {
       followModeRef.current =
         true;
+    } else if (panReturnTimerRef.current) {
+      clearTimeout(panReturnTimerRef.current);
+      panReturnTimerRef.current = null;
     }
   }, [isGuiding]);
 
@@ -1471,6 +1491,11 @@ export default function KakaoMapWebView({
 
         segmentFocusTimerRef.current =
           null;
+      }
+
+      if (panReturnTimerRef.current) {
+        clearTimeout(panReturnTimerRef.current);
+        panReturnTimerRef.current = null;
       }
 
       if (
@@ -1709,6 +1734,7 @@ export default function KakaoMapWebView({
       !targetPath ||
       targetPath.length < 2
     ) {
+      segmentFocusKeyRef.current = null;
       return;
     }
 
@@ -1772,8 +1798,16 @@ export default function KakaoMapWebView({
       last.longitude,
     ].join("-");
 
+    if (segmentFocusKeyRef.current === focusKey) {
+      return;
+    }
+
     segmentFocusKeyRef.current =
       focusKey;
+
+    if (isGuiding && !followModeRef.current) {
+      return;
+    }
 
     mapRef.current.fitToCoordinates(
       coordinates,
@@ -1801,7 +1835,8 @@ export default function KakaoMapWebView({
       setTimeout(() => {
         if (
           segmentFocusKeyRef.current !==
-          focusKey
+          focusKey ||
+          !followModeRef.current
         ) {
           return;
         }
@@ -2158,6 +2193,11 @@ export default function KakaoMapWebView({
 
       if (!pos) {
         return;
+      }
+
+      if (panReturnTimerRef.current) {
+        clearTimeout(panReturnTimerRef.current);
+        panReturnTimerRef.current = null;
       }
 
       followModeRef.current =
@@ -2635,7 +2675,7 @@ export default function KakaoMapWebView({
     }
 
     const locationsForMap =
-      mapLocations.map(
+      visibleMapLocations.map(
         (location) => {
           const locationKey =
             location.id ??
@@ -2671,9 +2711,9 @@ export default function KakaoMapWebView({
 
         selectedPos,
 
-        currentPos,
+        currentPos: currentPosRef.current,
 
-        roadPath,
+        roadPath: isGuiding ? [] : roadPath,
         connectorPaths: (isGuiding ? [routeSegments[currentSegmentIndex]] : routeSegments)
           .map((segment) => segment?.connectorPath)
           .filter((path) => Array.isArray(path) && path.length >= 2),
@@ -2689,17 +2729,21 @@ export default function KakaoMapWebView({
       },
     });
   }, [
-    mapLocations,
+    visibleMapLocations,
     selectedPos,
-    currentPos,
+    hasCurrentPosition,
     roadPath,
     routeSegments,
     currentSegmentIndex,
     activePath,
-    remainingActivePath,
     isGuiding,
     pulseTargetKey,
   ]);
+
+  useEffect(() => {
+    if (!isGuiding || !initialMapPositionRef.current) return;
+    sendMapCommand({ type: "ACTIVE_PATH", path: remainingActivePath });
+  }, [isGuiding, remainingActivePath]);
 
   useEffect(() => {
     if (!boundaries) return;
@@ -2821,6 +2865,29 @@ export default function KakaoMapWebView({
           followModeRef.current =
             false;
 
+          if (segmentFocusTimerRef.current) {
+            clearTimeout(segmentFocusTimerRef.current);
+            segmentFocusTimerRef.current = null;
+          }
+
+          if (panReturnTimerRef.current) {
+            clearTimeout(panReturnTimerRef.current);
+            panReturnTimerRef.current = null;
+          }
+
+          return;
+        }
+
+        if (message.type === "PAN_DRAG_END") {
+          if (guidingRef.current) {
+            panReturnTimerRef.current = setTimeout(() => {
+              panReturnTimerRef.current = null;
+              if (guidingRef.current && !followModeRef.current) {
+                moveToCurrentLocation();
+              }
+            }, 5000);
+          }
+
           return;
         }
 
@@ -2846,7 +2913,7 @@ export default function KakaoMapWebView({
           "MARKER_PRESS"
         ) {
           const location =
-            mapLocations[
+            visibleMapLocations[
               Number(
                 message.index
               )
