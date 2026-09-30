@@ -9,7 +9,6 @@
       "ios",
       "web"
     ],
-
     "android": {
       "permissions": [
         "ACCESS_FINE_LOCATION",
@@ -20,7 +19,6 @@
       ],
       "package": "com.pang3.fieldworkhelper"
     },
-
     "ios": {
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "현재 위치 기반 경로 안내를 위해 위치 권한이 필요합니다.",
@@ -31,13 +29,10 @@
       },
       "bundleIdentifier": "com.pang3.fieldworkhelper"
     },
-
     "plugins": [
       "expo-router",
       "expo-web-browser",
-
       "expo-notifications",
-
       [
         "expo-speech-recognition",
         {
@@ -48,7 +43,6 @@
           ]
         }
       ],
-
       [
         "expo-build-properties",
         {
@@ -59,12 +53,12 @@
         }
       ]
     ],
-
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "6fac80ae-61a2-44cb-bfeb-71e958ac9be6"
+        "projectId": "f6957131-791d-48a6-8e1d-9f7d5030c52a"
       }
-    }
+    },
+    "owner": "pang3"
   }
 }
