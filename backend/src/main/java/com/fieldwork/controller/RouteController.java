@@ -6,6 +6,7 @@ import java.util.Map;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -24,7 +25,7 @@ public class RouteController {
     }
 
     @PostMapping("/optimize")
-    public Map<String, Object> optimizeRoute(@RequestBody Map<String, Object> body) {
+    public Map<String, Object> optimizeRoute(@RequestBody Map<String, Object> body, @RequestHeader(value = "X-Kakao-Walk-Key", required = false) String walkingKey) {
         System.out.println("=== /api/routes/optimize 호출됨 ===");
         System.out.println(body);
 
@@ -38,11 +39,12 @@ public class RouteController {
                 body.getOrDefault("transportMode", "car")
         );
 
-        return routeService.optimizeRoute(currentLocation, locations, transportMode);
+        return walkingKey == null ? routeService.optimizeRoute(currentLocation, locations, transportMode)
+                : routeService.optimizeRoute(currentLocation, locations, transportMode, walkingKey);
     }
 
     @PostMapping("/segment")
-    public Map<String, Object> getSegmentRoute(@RequestBody Map<String, Object> body) {
+    public Map<String, Object> getSegmentRoute(@RequestBody Map<String, Object> body, @RequestHeader(value = "X-Kakao-Walk-Key", required = false) String walkingKey) {
         Map<String, Object> start =
                 (Map<String, Object>) body.get("start");
 
@@ -53,6 +55,7 @@ public class RouteController {
                 body.getOrDefault("transportMode", "car")
         );
 
-        return routeService.getSingleSegmentPath(start, end, transportMode);
+        return walkingKey == null ? routeService.getSingleSegmentPath(start, end, transportMode)
+                : routeService.getSingleSegmentPath(start, end, transportMode, walkingKey);
     }
 }

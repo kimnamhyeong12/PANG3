@@ -40,4 +40,7 @@ ai/__pycache__/
 GOAL.md
 PLAN.md
 
+# Expo verification output
+frontend/.expo-verify/
+
 .env

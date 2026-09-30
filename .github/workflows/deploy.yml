@@ -67,10 +67,26 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -eu
             cd /home/ubuntu/PANG3
-            git pull origin main
+            test "$(git branch --show-current)" = "main"
+            case "$(git status --porcelain --untracked-files=all)" in
+              ""|"?? report_latest.hwpx") ;;
+              *)
+                echo "Server checkout has other local changes; leaving it untouched"
+                git status --short
+                exit 1
+                ;;
+            esac
+            git fetch origin main
+            if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+              git branch "deploy-backup-${{ github.run_id }}" HEAD
+              git reset --hard origin/main
+            fi
+            test "$(git rev-parse HEAD)" = "${{ github.sha }}"
             docker compose pull
             docker compose up -d
+            docker exec sahagu-api test -s /app/data/busan-entrances.jsonl.gz
             docker image prune -f
 
       

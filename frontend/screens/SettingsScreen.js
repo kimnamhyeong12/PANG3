@@ -390,23 +390,10 @@ export default function SettingsScreen({
     }
   };
 
-  const logout = () =>
-    Alert.alert(
-      '로그아웃',
-      '현재 계정에서 로그아웃하시겠습니까?',
-      [
-        {
-          text: '취소',
-          style: 'cancel',
-        },
-
-        {
-          text: '로그아웃',
-          style: 'destructive',
-          onPress: onLogout,
-        },
-      ]
-    );
+  const logout = () => showAlert('로그아웃', '현재 계정에서 로그아웃하시겠습니까?', [
+    { text: '취소', style: 'cancel' },
+    { text: '로그아웃', style: 'destructive', onPress: onLogout },
+  ]);
 
   const options =
     picker === 'sido'

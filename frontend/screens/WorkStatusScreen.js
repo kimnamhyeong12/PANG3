@@ -15,7 +15,20 @@ const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const KAKAO_JAVASCRIPT_KEY =
   process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY ||
   process.env.EXPO_PUBLIC_KAKAO_MAP_API_KEY;
-const MEMBER_COLORS = ['#2E8BFF', '#8B5CF6', '#F97316', '#14B8A6', '#EC4899', '#6366F1'];
+const MEMBER_COLORS = [
+  '#2E8BFF',
+  '#8B5CF6',
+  '#F97316',
+  '#14B8A6',
+  '#EC4899',
+  '#6366F1',
+  '#D97706',
+  '#0891B2',
+  '#65A30D',
+  '#DC2626',
+];
+const MIXED_AREA_COLOR = '#64748B';
+const UNASSIGNED_COLOR = '#94A3B8';
 const isPersonalGroup = (group) =>
   Boolean(
     group?.personalWorkspace ||
@@ -45,8 +58,9 @@ const buildMapHtml = ({ boundaries, assignments, memberColors, selectedMemberId,
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
 <style>
 html,body,#map{width:100%;height:100%;margin:0;padding:0;overflow:hidden}body{background:#eaf0f5;font-family:Arial,sans-serif}
-.pin{width:30px;height:38px;position:relative;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3))}.pin-body{width:28px;height:28px;border-radius:50% 50% 50% 0;border:3px solid #fff;transform:rotate(-45deg);box-sizing:border-box}.pin-body:after{content:'';position:absolute;width:7px;height:7px;border-radius:50%;background:#fff;left:8px;top:8px}
+.pin{width:32px;height:40px;position:relative;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3))}.pin-body{width:30px;height:30px;border-radius:50% 50% 50% 0;border:4px solid #94A3B8;box-shadow:0 0 0 1px rgba(255,255,255,.95);transform:rotate(-45deg);box-sizing:border-box}.pin-body:after{content:'';position:absolute;width:7px;height:7px;border-radius:50%;background:#fff;left:8px;top:8px}
 .place-callout{position:relative;min-width:190px;max-width:245px;padding:10px 12px 12px;border-radius:12px;background:#fff;box-shadow:0 3px 12px rgba(0,0,0,.24);color:#172b3f}.place-callout:after{content:'';position:absolute;left:50%;bottom:-9px;margin-left:-9px;border-left:9px solid transparent;border-right:9px solid transparent;border-top:10px solid #fff}.place-title{font-size:12px;font-weight:900;line-height:1.35}.place-address{margin-top:3px;font-size:10px;color:#64748b;line-height:1.35}.place-status{display:inline-block;margin-top:7px;padding:4px 8px;border-radius:10px;color:#fff;font-size:9px;font-weight:900}
+.place-assignee{margin-top:7px;font-size:10px;font-weight:900}
 </style>
 <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JAVASCRIPT_KEY || ''}&autoload=false"></script>
 </head><body><div id="map"></div><script>
@@ -66,7 +80,8 @@ kakao.maps.load(function(){
  assignments.forEach(i=>{const a=shortName(i.adminDong||i.admin_dong);if(a)(byArea[a]||(byArea[a]=[])).push(i)});
  function addRing(feature,ring,areaBounds,areaKey){
   const area=shortName(feature.properties&&feature.properties.adm_nm),items=byArea[area]||[];if(!items.length||!Array.isArray(ring))return;
-  const owner=items[0],ownerId=String(owner.assigneeUserId||'unknown'),color=memberColors[ownerId]||'#2E8BFF',dimmed=selectedMemberId&&selectedMemberId!==ownerId;
+  const ownerIds=Array.from(new Set(items.map(item=>String(item.assigneeUserId||'unknown'))));
+  const singleOwner=ownerIds.length===1,ownerId=singleOwner?ownerIds[0]:'',color=singleOwner?(memberColors[ownerId]||'${UNASSIGNED_COLOR}'):'${MIXED_AREA_COLOR}',dimmed=selectedMemberId&&!ownerIds.includes(selectedMemberId);
   const path=ring.map(p=>{const ll=new kakao.maps.LatLng(Number(p[1]),Number(p[0]));bounds.extend(ll);hasBounds=true;return ll});
   const polygon=new kakao.maps.Polygon({path,strokeWeight:dimmed?1:3,strokeColor:color,strokeOpacity:dimmed?0.25:1,fillColor:color,fillOpacity:dimmed?0.05:0.24});polygon.setMap(map);
   kakao.maps.event.addListener(polygon,'click',()=>{
@@ -77,7 +92,7 @@ kakao.maps.load(function(){
  }
  (boundaries.features||[]).forEach((f,index)=>{const g=f.geometry||{},rings=[];if(g.type==='Polygon'&&g.coordinates&&g.coordinates[0])rings.push(g.coordinates[0]);else if(g.type==='MultiPolygon')(g.coordinates||[]).forEach(p=>p[0]&&rings.push(p[0]));if(!rings.length)return;const areaBounds=new kakao.maps.LatLngBounds(),properties=f.properties||{},areaKey=String(properties.adm_cd||properties.adm_nm||index);rings.forEach(r=>r.forEach(p=>areaBounds.extend(new kakao.maps.LatLng(Number(p[1]),Number(p[0])))));rings.forEach(r=>addRing(f,r,areaBounds,areaKey));});
  let openedCallout=null,openedMarkerKey=null;
- assignments.forEach((i,index)=>{const lat=Number(i.lat!=null?i.lat:i.latitude),lng=Number(i.lng!=null?i.lng:i.longitude);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;const s=statusOf(i.status||i.taskStatus),ownerId=String(i.assigneeUserId||'unknown'),markerKey=String(i.taskId||i.assignmentId||i.id||index),dimmed=selectedMemberId&&selectedMemberId!==ownerId,position=new kakao.maps.LatLng(lat,lng);bounds.extend(position);hasBounds=true;const content=document.createElement('div');content.className='pin';content.style.opacity=dimmed?'.22':'1';content.innerHTML='<div class="pin-body" style="background:'+statusColors[s]+'"></div>';const markerOverlay=new kakao.maps.CustomOverlay({map,position,content,yAnchor:1,zIndex:5});content.onclick=(event)=>{event.stopPropagation();if(openedMarkerKey===markerKey){if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;return;}if(openedCallout)openedCallout.setMap(null);const box=document.createElement('div');box.className='place-callout';const title=document.createElement('div');title.className='place-title';title.textContent=i.detailAddress||i.roadAddress||('방문지 '+i.taskId);const address=document.createElement('div');address.className='place-address';address.textContent=i.roadAddress||i.detailAddress||'주소 정보 없음';const status=document.createElement('span');status.className='place-status';status.style.background=statusColors[s];status.textContent=s==='complete'?'완료':s==='working'?'작업 중':'작업 전';box.appendChild(title);box.appendChild(address);box.appendChild(status);openedCallout=new kakao.maps.CustomOverlay({map,position,content:box,yAnchor:1.65,zIndex:10});openedMarkerKey=markerKey;};});
+ assignments.forEach((i,index)=>{const lat=Number(i.lat!=null?i.lat:i.latitude),lng=Number(i.lng!=null?i.lng:i.longitude);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;const s=statusOf(i.status||i.taskStatus),ownerId=String(i.assigneeUserId||'unknown'),ownerColor=memberColors[ownerId]||'${UNASSIGNED_COLOR}',markerKey=String(i.taskId||i.assignmentId||i.id||index),dimmed=selectedMemberId&&selectedMemberId!==ownerId,position=new kakao.maps.LatLng(lat,lng);bounds.extend(position);hasBounds=true;const content=document.createElement('div');content.className='pin';content.style.opacity=dimmed?'.22':'1';content.innerHTML='<div class="pin-body" style="background:'+statusColors[s]+';border-color:'+ownerColor+'"></div>';const markerOverlay=new kakao.maps.CustomOverlay({map,position,content,yAnchor:1,zIndex:5});content.onclick=(event)=>{event.stopPropagation();if(openedMarkerKey===markerKey){if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;return;}if(openedCallout)openedCallout.setMap(null);const box=document.createElement('div');box.className='place-callout';const title=document.createElement('div');title.className='place-title';title.textContent=i.detailAddress||i.roadAddress||('방문지 '+i.taskId);const address=document.createElement('div');address.className='place-address';address.textContent=i.roadAddress||i.detailAddress||'주소 정보 없음';const assignee=document.createElement('div');assignee.className='place-assignee';assignee.style.color=ownerColor;assignee.textContent='담당자: '+(i.assigneeName||i.assigneeLoginId||'미배정');const status=document.createElement('span');status.className='place-status';status.style.background=statusColors[s];status.textContent=s==='complete'?'완료':s==='working'?'작업 중':'작업 전';box.appendChild(title);box.appendChild(address);box.appendChild(assignee);box.appendChild(status);openedCallout=new kakao.maps.CustomOverlay({map,position,content:box,yAnchor:1.65,zIndex:10});openedMarkerKey=markerKey;};});
  kakao.maps.event.addListener(map,'click',()=>{if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;});
  if(focusedAreaBounds&&Number.isFinite(Number(focusedAreaBounds.south))&&Number.isFinite(Number(focusedAreaBounds.west))&&Number.isFinite(Number(focusedAreaBounds.north))&&Number.isFinite(Number(focusedAreaBounds.east))){const focused=new kakao.maps.LatLngBounds(new kakao.maps.LatLng(Number(focusedAreaBounds.south),Number(focusedAreaBounds.west)),new kakao.maps.LatLng(Number(focusedAreaBounds.north),Number(focusedAreaBounds.east)));map.setBounds(focused,35,35,35,35);}else if(hasBounds)map.setBounds(bounds,35,35,35,35);
 });
@@ -153,10 +168,28 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
   }, [resolvedAssignments, isLeader, user?.userId]);
 
   const memberColors = useMemo(() => {
-    const result = {}; let index = 0;
-    visibleAssignments.forEach((item) => { const id = String(item.assigneeUserId || 'unknown'); if (!result[id]) result[id] = MEMBER_COLORS[index++ % MEMBER_COLORS.length]; });
+    const leaderId = String(group?.leaderUserId || '');
+    const memberIds = Array.from(new Set(
+      resolvedAssignments
+        .map((item) => String(item.assigneeUserId || 'unknown'))
+        .filter((id) => id !== 'unknown')
+    )).sort((left, right) => {
+      if (left === leaderId) return -1;
+      if (right === leaderId) return 1;
+      const leftNumber = Number(left);
+      const rightNumber = Number(right);
+      if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+        return leftNumber - rightNumber;
+      }
+      return left.localeCompare(right);
+    });
+
+    const result = { unknown: UNASSIGNED_COLOR };
+    memberIds.forEach((id, index) => {
+      result[id] = MEMBER_COLORS[index % MEMBER_COLORS.length];
+    });
     return result;
-  }, [visibleAssignments]);
+  }, [resolvedAssignments, group?.leaderUserId]);
 
   const counts = useMemo(() => {
     const value = { pending: 0, working: 0, complete: 0 };
@@ -264,6 +297,8 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
           )}
           <View style={styles.legend} pointerEvents="none">
             {Object.entries(STATUS).map(([key, value]) => <View key={key} style={styles.legendRow}><View style={[styles.legendDot, { backgroundColor: value.color }]} /><Text style={styles.legendText}>{value.label}</Text></View>)}
+            <View style={styles.legendDivider} />
+            <View style={styles.legendRow}><View style={[styles.legendArea, { backgroundColor: MIXED_AREA_COLOR }]} /><Text style={styles.legendText}>공동 담당 구역</Text></View>
           </View>
         </View>
 
@@ -274,7 +309,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
             <Text style={styles.memberTitle}>
               {personalWorkspace ? '내 진행 현황' : '팀원별 진행 현황'}
             </Text>
-            {!!selectedMemberId && (
+            {(!!selectedMemberId || !!selectedAreaKey) && (
               <TouchableOpacity onPress={() => { setSelectedMemberId(null); setSelectedAreaKey(null); setFocusedAreaBounds(null); }}>
                 <Text style={styles.showAllText}>전체 보기</Text>
               </TouchableOpacity>
@@ -359,6 +394,8 @@ const styles = StyleSheet.create({
   legend: { position: 'absolute', right: 10, bottom: 10, backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 12, padding: 10, gap: 7, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   legendDot: { width: 9, height: 9, borderRadius: 5 },
+  legendArea: { width: 11, height: 9, borderRadius: 2 },
+  legendDivider: { height: 1, backgroundColor: '#E2E8F0', marginVertical: 1 },
   legendText: { fontSize: 9, color: '#334155', fontWeight: '800' },
   boundaryWarning: { fontSize: 10, lineHeight: 15, color: '#B45309', backgroundColor: '#FFF8E6', borderRadius: 10, padding: 10 },
   memberCard: { maxHeight: 190, minHeight: 106, backgroundColor: '#FFFFFF', borderRadius: 18, padding: 14, borderWidth: 1, borderColor: '#DCE5E0' },
