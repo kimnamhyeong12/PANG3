@@ -720,6 +720,18 @@ function NormalMapScreen({
     onDataChanged?.();
   };
 
+  const confirmRemoveLocation = (loc) => {
+    const name = loc.detailAddress || loc.roadAddress || '이 방문지';
+    showAlert(
+      '방문지 삭제',
+      `‘${name}’ 방문지를 삭제할까요? 삭제한 방문지는 복구할 수 없습니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        { text: '방문지 삭제', style: 'destructive', onPress: () => removeLocation(loc.id) },
+      ]
+    );
+  };
+
   const getPathDistance = (path = []) => {
     if (!path || path.length < 2) return null;
 
@@ -1519,7 +1531,7 @@ function NormalMapScreen({
                   </View>
 
                   <View style={styles.visitTextWrap}>
-                    <Text style={styles.visitName} numberOfLines={1}>
+                    <Text style={styles.visitName} numberOfLines={2}>
                       {loc.detailAddress || '이름 없음'}
                     </Text>
                     <Text style={styles.visitTask} numberOfLines={1}>
@@ -1533,9 +1545,16 @@ function NormalMapScreen({
                   </View>
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => removeLocation(loc.id)}>
-                  <Text style={styles.deleteText}>삭제</Text>
-                </TouchableOpacity>
+                {(!loc.status || loc.status === 'pending') && (
+                  <TouchableOpacity
+                    onPress={() => confirmRemoveLocation(loc)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${loc.detailAddress || loc.roadAddress || '방문지'} 삭제`}
+                    style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Text style={styles.deleteText}>삭제</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
           </View>

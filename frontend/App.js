@@ -428,6 +428,11 @@ export default function App() {
           return false;
         }
 
+        // 보고서 작성 화면은 자체 이탈 확인이 변경 내용을 보호한다.
+        if (screen === 'fieldAction') {
+          return false;
+        }
+
         goBack(
           screen === 'register'
             ? 'login'

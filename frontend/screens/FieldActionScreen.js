@@ -5,6 +5,7 @@ import {
   View,
   Text,
   TextInput,
+  BackHandler,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -374,6 +375,34 @@ export default function FieldActionScreen({
     setMarkedMapUri,
   ] = useState(null);
 
+  const formSnapshot = JSON.stringify({ status, latitude, longitude, photos, fieldMemo, markedMapUri });
+  const initialFormRef = useRef(formSnapshot);
+  const currentFormRef = useRef(formSnapshot);
+  currentFormRef.current = formSnapshot;
+
+  const requestBack = () => {
+    if (saving) {
+      showAlert('저장 중', '보고서 저장이 끝난 뒤 다시 시도하세요.');
+      return;
+    }
+    if (currentFormRef.current === initialFormRef.current) {
+      onBack?.();
+      return;
+    }
+    showAlert('작성 중인 보고서', '저장하지 않은 변경 내용이 있습니다. 나가면 변경 내용이 사라집니다.', [
+      { text: '계속 작성', style: 'cancel' },
+      { text: '저장하지 않고 나가기', style: 'destructive', onPress: onBack },
+    ]);
+  };
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      requestBack();
+      return true;
+    });
+    return () => subscription.remove();
+  });
+
   const taskId =
     location?.id ??
     location?.taskId ??
@@ -438,7 +467,7 @@ export default function FieldActionScreen({
             return;
           }
 
-          if (!data) {
+          if (!data || currentFormRef.current !== initialFormRef.current) {
             return;
           }
 
@@ -468,8 +497,7 @@ export default function FieldActionScreen({
           const savedPhotos =
             data.fieldPhotos || [];
 
-          setPhotos(
-            PHOTO_TYPES.map(
+          const loadedPhotos = PHOTO_TYPES.map(
               (type, index) => {
                 const savedPhoto =
                   savedPhotos[index];
@@ -492,8 +520,8 @@ export default function FieldActionScreen({
                     '',
                 };
               }
-            )
-          );
+            );
+          setPhotos(loadedPhotos);
 
           setFieldMemo(
             data.fieldMemo || ''
@@ -512,11 +540,18 @@ export default function FieldActionScreen({
           );
 
           const currentLocationStatus = location?.status;
-          setStatus(
-            currentLocationStatus === 'working' || currentLocationStatus === 'complete'
+          const loadedStatus = currentLocationStatus === 'working' || currentLocationStatus === 'complete'
               ? currentLocationStatus
-              : data.progressStatus || currentLocationStatus || 'pending'
-          );
+              : data.progressStatus || currentLocationStatus || 'pending';
+          setStatus(loadedStatus);
+          initialFormRef.current = JSON.stringify({
+            status: loadedStatus,
+            latitude: data.latitude == null ? latitude : String(data.latitude),
+            longitude: data.longitude == null ? longitude : String(data.longitude),
+            photos: loadedPhotos,
+            fieldMemo: data.fieldMemo || '',
+            markedMapUri: null,
+          });
         } catch (error) {
           console.log(
             '저장된 보고서 불러오기 실패:',
@@ -1072,6 +1107,7 @@ export default function FieldActionScreen({
         );
       }
 
+      initialFormRef.current = currentFormRef.current;
       onSave?.({
         ...savedReport,
         taskId,
@@ -1115,7 +1151,7 @@ export default function FieldActionScreen({
         styles.container
       }
     >
-      <ScreenHeader title="보고서 양식 작성" onBack={onBack} />
+      <ScreenHeader title="보고서 양식 작성" onBack={requestBack} />
 
       <ScrollView
         contentContainerStyle={
@@ -1647,6 +1683,7 @@ export default function FieldActionScreen({
           onPress={
             handleSave
           }
+          disabled={saving}
         />
       </ScrollView>
 
