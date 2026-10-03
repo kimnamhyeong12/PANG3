@@ -24,27 +24,25 @@ const shortDong = (value) => {
 };
 
 
-function buildAreaRows(items) {
-  const grouped = new Map();
-  (Array.isArray(items) ? items : []).forEach((item, index) => {
-    const dong = shortDong(item.adminDong || item.admin_dong);
-    if (!dong) return;
-    const assigneeId = item.assigneeUserId ?? item.assigneeId ?? item.userId ?? `unknown-${index}`;
-    const assigneeName = item.assigneeName || item.assigneeLoginId || '미배정';
-    const key = `${dong}|${assigneeId}`;
-    if (!grouped.has(key)) {
-      grouped.set(key, {
-        key,
-        dong,
-        assigneeName,
-        count: 0,
-      });
-    }
-    grouped.get(key).count += 1;
-  });
-  return Array.from(grouped.values()).sort((a, b) => {
-    const dongCompare = a.dong.localeCompare(b.dong, 'ko');
-    return dongCompare !== 0 ? dongCompare : a.assigneeName.localeCompare(b.assigneeName, 'ko');
+function buildMemberTransferRows(members, items) {
+  const tasks = Array.isArray(items) ? items : [];
+  return (Array.isArray(members) ? members : []).map((member) => {
+    const memberTasks = tasks.filter(
+      (item) => Number(item.assigneeUserId) === Number(member.userId)
+    );
+    const dongs = Array.from(new Set(
+      memberTasks
+        .map((item) => shortDong(item.adminDong || item.admin_dong))
+        .filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, 'ko'));
+
+    return {
+      userId: member.userId,
+      name: member.name || member.loginId || '이름 없음',
+      dongs,
+      taskCount: memberTasks.length,
+      member,
+    };
   });
 }
 
@@ -110,7 +108,7 @@ export default function GroupWorkspaceScreen({
     .filter(Boolean)
     .join(' · ');
 
-  const areaRows = useMemo(() => buildAreaRows(sharedTasks), [sharedTasks]);
+  const transferRows = useMemo(() => buildMemberTransferRows(members, sharedTasks), [members, sharedTasks]);
 
   return (
     <View style={styles.root}>
@@ -222,24 +220,39 @@ export default function GroupWorkspaceScreen({
 
           <View style={styles.card}>
             <CardTitle icon="swap-horizontal" title="업무 이관" />
-            <Text style={styles.cardDescription}>행정동 업무를 팀원에게 이관합니다.</Text>
-            {areaRows.length === 0 ? (
-              <Text style={styles.emptyText}>표시할 행정동 업무가 없습니다.</Text>
+            <Text style={styles.cardDescription}>팀원을 선택한 뒤 넘길 방문지를 직접 고릅니다.</Text>
+            {transferRows.length === 0 ? (
+              <Text style={styles.emptyText}>표시할 팀원이 없습니다.</Text>
             ) : (
               <View style={styles.areaList}>
-                {areaRows.map((item, index) => (
-                  <TouchableOpacity
-                    key={item.key}
-                    style={[styles.infoActionRow, index > 0 && styles.divider]}
-                    activeOpacity={0.78}
-                    onPress={onTransfer}
-                  >
-                    <Ionicons name="document-text-outline" size={20} color={colors.primary} />
-                    <Text style={styles.areaName}>{item.dong}</Text>
-                    <Text style={styles.areaOwner}>{item.assigneeName}</Text>
-                    <Ionicons name="chevron-forward" size={19} color={colors.textFaint} />
-                  </TouchableOpacity>
-                ))}
+                {transferRows.map((item, index) => {
+                  const isMe = Number(item.userId) === Number(user?.userId);
+                  const dongText = item.dongs.length
+                    ? item.dongs.join(', ')
+                    : '담당 방문지 없음';
+
+                  return (
+                    <TouchableOpacity
+                      key={item.userId || item.name}
+                      style={[styles.transferMemberRow, index > 0 && styles.divider, isMe && styles.transferMemberRowDisabled]}
+                      activeOpacity={isMe ? 1 : 0.78}
+                      disabled={isMe}
+                      onPress={() => onTransfer?.(item.member)}
+                    >
+                      <View style={styles.transferMemberIcon}>
+                        <Ionicons name="person-outline" size={19} color={isMe ? colors.textSoft : colors.primary} />
+                      </View>
+                      <View style={styles.transferMemberInfo}>
+                        <View style={styles.transferMemberTitleRow}>
+                          <Text style={styles.transferMemberName}>{item.name}</Text>
+                          {isMe ? <Text style={styles.meBadge}>본인</Text> : null}
+                        </View>
+                        <Text style={styles.transferMemberDongs} numberOfLines={2}>{dongText}</Text>
+                      </View>
+                      {!isMe ? <Ionicons name="chevron-forward" size={20} color={colors.textFaint} /> : null}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
           </View>
@@ -403,8 +416,14 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 4,
   },
-  areaName: { width: 88, color: colors.text, fontSize: 12.5, fontWeight: '800' },
-  areaOwner: { flex: 1, color: colors.text, fontSize: 12.5, fontWeight: '900' },
+  transferMemberRow: { minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 4 },
+  transferMemberRowDisabled: { opacity: 0.72 },
+  transferMemberIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  transferMemberInfo: { flex: 1 },
+  transferMemberTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  transferMemberName: { color: colors.text, fontSize: 13, fontWeight: '900' },
+  transferMemberDongs: { color: colors.textSoft, fontSize: 10.5, lineHeight: 15, marginTop: 4 },
+  meBadge: { color: colors.textSoft, fontSize: 9.5, fontWeight: '800', backgroundColor: colors.surfaceMuted, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999 },
   reportBar: {
     marginTop: 4,
     flexDirection: 'row',

@@ -7,14 +7,21 @@ import { groupApi } from '../utils/groupApi';
 import { colors } from '../constants/design';
 
 const dongName = (value) => String(value || '').trim().split(/\s+/).pop() || '';
-const areaKey = (item) => [item.sido || '', item.sigungu || '', dongName(item.adminDong)].join('|');
+const taskIdOf = (task) => Number(task?.id ?? task?.taskId ?? task?.task_id);
 
-export default function TransferScreen({ user, group, onBack, onChanged }) {
+export default function TransferScreen({
+  user,
+  group,
+  onBack,
+  onChanged,
+  initialRecipientId = null,
+  initialRecipientName = '',
+}) {
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
   const [requests, setRequests] = useState([]);
-  const [selectedAreaKey, setSelectedAreaKey] = useState('');
-  const [recipientId, setRecipientId] = useState(null);
+  const [recipientId, setRecipientId] = useState(initialRecipientId ? Number(initialRecipientId) : null);
+  const [selectedTaskIds, setSelectedTaskIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -38,36 +45,62 @@ export default function TransferScreen({ user, group, onBack, onChanged }) {
   }, [group?.groupId, user?.userId]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    setRecipientId(initialRecipientId ? Number(initialRecipientId) : null);
+    setSelectedTaskIds([]);
+  }, [initialRecipientId]);
 
   const mine = useMemo(() => tasks.filter((task) =>
     Number(task.assigneeUserId) === Number(user?.userId)
   ), [tasks, user?.userId]);
-  const areas = useMemo(() => {
+
+  const groupedMine = useMemo(() => {
     const grouped = new Map();
     mine.forEach((task) => {
-      const adminDong = dongName(task.adminDong);
-      if (!adminDong) return;
-      const key = areaKey(task);
-      if (!grouped.has(key)) grouped.set(key, { key, sido: task.sido || '', sigungu: task.sigungu || '', adminDong, tasks: [] });
-      grouped.get(key).tasks.push(task);
+      const dong = dongName(task.adminDong || task.admin_dong) || '행정동 미확인';
+      if (!grouped.has(dong)) grouped.set(dong, []);
+      grouped.get(dong).push(task);
     });
-    return Array.from(grouped.values()).sort((left, right) => left.key.localeCompare(right.key, 'ko'));
+    return Array.from(grouped.entries())
+      .map(([dong, rows]) => ({ dong, rows }))
+      .sort((a, b) => a.dong.localeCompare(b.dong, 'ko'));
   }, [mine]);
-  const selectedArea = areas.find((item) => item.key === selectedAreaKey);
+
+  const recipient = members.find((member) => Number(member.userId) === Number(recipientId));
+  const recipientName = recipient?.name || recipient?.loginId || initialRecipientName || '';
+
+  const toggleTask = (task) => {
+    const id = taskIdOf(task);
+    if (!Number.isFinite(id)) return;
+    setSelectedTaskIds((previous) => previous.includes(id)
+      ? previous.filter((value) => value !== id)
+      : [...previous, id]);
+  };
+
+  const toggleDong = (rows) => {
+    const ids = rows.map(taskIdOf).filter(Number.isFinite);
+    const allSelected = ids.length > 0 && ids.every((id) => selectedTaskIds.includes(id));
+    setSelectedTaskIds((previous) => {
+      if (allSelected) return previous.filter((id) => !ids.includes(id));
+      return Array.from(new Set([...previous, ...ids]));
+    });
+  };
 
   const submit = async () => {
-    if (!selectedArea || !recipientId || busy) return;
+    if (!recipientId || !selectedTaskIds.length || busy) return;
     try {
       setBusy(true);
       await groupApi(`/api/groups/${group.groupId}/transfers`, {
         method: 'POST',
-        body: JSON.stringify({ senderUserId: user.userId, recipientUserId: recipientId,
-          sido: selectedArea.sido, sigungu: selectedArea.sigungu, adminDong: selectedArea.adminDong }),
+        body: JSON.stringify({
+          senderUserId: user.userId,
+          recipientUserId: recipientId,
+          taskIds: selectedTaskIds,
+        }),
       });
-      setSelectedAreaKey('');
-      setRecipientId(null);
+      setSelectedTaskIds([]);
       await load();
-      showAlert('이관 요청 완료', '받는 팀원이 수락하면 해당 행정동의 업무가 함께 이관됩니다.');
+      showAlert('이관 요청 완료', `${recipientName || '선택한 팀원'}에게 ${selectedTaskIds.length}건의 방문지 이관을 요청했습니다.`);
     } catch (error) {
       showAlert('이관 요청 실패', error.message);
     } finally {
@@ -93,40 +126,69 @@ export default function TransferScreen({ user, group, onBack, onChanged }) {
   };
 
   return <View style={styles.root}>
-    <ScreenHeader title="행정동 업무 이관" onBack={onBack} />
+    <ScreenHeader title={recipientName ? `${recipientName}에게 업무 이관` : '업무 이관'} onBack={onBack} />
     {loading ? <ActivityIndicator style={{ marginTop: 32 }} color={colors.primary} /> :
       <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.title}>이관할 행정동</Text>
-        <Text style={styles.hint}>요청 시점에 해당 행정동에서 담당 중인 완료·진행·미처리 업무 전체와 기존 기록을 함께 이관합니다.</Text>
-        {areas.length === 0 ? <Text style={styles.empty}>행정동이 확인된 담당 업무가 없습니다.</Text> : areas.map((area) =>
-          <TouchableOpacity key={area.key} style={[styles.row, selectedAreaKey === area.key && styles.chosen]} onPress={() => setSelectedAreaKey(area.key)}>
-            <Ionicons name={selectedAreaKey === area.key ? 'radio-button-on' : 'radio-button-off'} size={22} color={colors.primary} />
-            <View style={{ flex: 1 }}><Text style={styles.rowTitle}>{[area.sigungu, area.adminDong].filter(Boolean).join(' ')}</Text>
-              <Text style={styles.hint}>{area.tasks.length}건 · 완료 {area.tasks.filter((item) => item.status === 'complete').length}건</Text></View>
+        {!initialRecipientId && <>
+          <Text style={styles.title}>받는 팀원</Text>
+          <Text style={styles.hint}>업무를 넘길 팀원을 먼저 선택하세요.</Text>
+          {members.filter((member) => Number(member.userId) !== Number(user.userId)).map((member) =>
+            <TouchableOpacity key={member.userId} style={[styles.memberRow, recipientId === member.userId && styles.chosen]} onPress={() => { setRecipientId(member.userId); setSelectedTaskIds([]); }}>
+              <Ionicons name={recipientId === member.userId ? 'radio-button-on' : 'radio-button-off'} size={21} color={colors.primary} />
+              <Text style={styles.rowTitle}>{member.name || member.loginId}</Text>
+            </TouchableOpacity>
+          )}
+        </>}
+
+        {recipientId ? <>
+          <View style={styles.recipientCard}>
+            <View style={styles.recipientIcon}><Ionicons name="person-outline" size={20} color={colors.primary} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.recipientLabel}>받는 팀원</Text>
+              <Text style={styles.recipientName}>{recipientName}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.title}>넘길 방문지</Text>
+          <Text style={styles.hint}>행정동 단위로 한꺼번에 선택하거나 방문지를 하나씩 선택할 수 있습니다.</Text>
+
+          {groupedMine.length === 0 ? <Text style={styles.empty}>이관할 수 있는 본인 담당 방문지가 없습니다.</Text> : groupedMine.map((groupRow) => {
+            const groupIds = groupRow.rows.map(taskIdOf).filter(Number.isFinite);
+            const allSelected = groupIds.length > 0 && groupIds.every((id) => selectedTaskIds.includes(id));
+            return <View key={groupRow.dong} style={styles.dongCard}>
+              <TouchableOpacity style={styles.dongHeader} onPress={() => toggleDong(groupRow.rows)}>
+                <Ionicons name={allSelected ? 'checkbox' : 'square-outline'} size={22} color={colors.primary} />
+                <Text style={styles.dongTitle}>{groupRow.dong}</Text>
+                <Text style={styles.dongCount}>{groupRow.rows.length}건</Text>
+              </TouchableOpacity>
+              {groupRow.rows.map((task) => {
+                const id = taskIdOf(task);
+                const checked = selectedTaskIds.includes(id);
+                return <TouchableOpacity key={id} style={styles.taskRow} onPress={() => toggleTask(task)}>
+                  <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={20} color={checked ? colors.primary : colors.textFaint} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.taskTitle}>{task.detailAddress || task.roadAddress || `방문지 #${id}`}</Text>
+                    {task.roadAddress && task.detailAddress ? <Text style={styles.taskMeta}>{task.roadAddress}</Text> : null}
+                  </View>
+                </TouchableOpacity>;
+              })}
+            </View>;
+          })}
+
+          <TouchableOpacity style={[styles.submit, (!selectedTaskIds.length || busy) && styles.disabled]} disabled={!selectedTaskIds.length || busy} onPress={submit}>
+            <Text style={styles.submitText}>{busy ? '처리 중...' : `${selectedTaskIds.length}건 이관 요청`}</Text>
           </TouchableOpacity>
-        )}
-        {mine.length > areas.reduce((sum, item) => sum + item.tasks.length, 0) &&
-          <Text style={styles.hint}>행정동 정보가 없는 업무는 위치 정보를 확인한 뒤 이관할 수 있습니다.</Text>}
-        <Text style={styles.title}>받는 팀원</Text>
-        {members.filter((member) => Number(member.userId) !== Number(user.userId)).map((member) =>
-          <TouchableOpacity key={member.userId} style={[styles.row, recipientId === member.userId && styles.chosen]} onPress={() => setRecipientId(member.userId)}>
-            <Ionicons name={recipientId === member.userId ? 'radio-button-on' : 'radio-button-off'} size={21} color={colors.primary} />
-            <Text style={styles.rowTitle}>{member.name || member.loginId}</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity style={[styles.submit, (!selectedArea || !recipientId || busy) && styles.disabled]} disabled={!selectedArea || !recipientId || busy} onPress={submit}>
-          <Text style={styles.submitText}>{busy ? '처리 중...' : selectedArea ? `${selectedArea.adminDong} ${selectedArea.tasks.length}건 이관 요청` : '행정동을 선택하세요'}</Text>
-        </TouchableOpacity>
+        </> : null}
 
         <Text style={styles.title}>이관 요청과 이력</Text>
         {requests.length === 0 ? <Text style={styles.empty}>요청 내역이 없습니다.</Text> : requests.map((request) => {
           const incoming = Number(request.recipientUserId) === Number(user.userId);
           return <View key={request.id} style={styles.request}>
-            <Text style={styles.rowTitle}>{request.adminDong || '행정동 미확인'} · {request.senderName} → {request.recipientName} · {request.taskIds?.length || 0}건</Text>
+            <Text style={styles.rowTitle}>{request.senderName} → {request.recipientName} · {request.taskIds?.length || 0}건</Text>
             <Text style={styles.hint}>{request.status === 'PENDING' ? '응답 대기' : request.status === 'ACCEPTED' ? '수락' : '거절'} · {String(request.requestedAt || '').slice(0, 16).replace('T', ' ')}</Text>
             <Text style={styles.hint}>{(request.taskIds || []).map((id) => {
               const task = tasks.find((item) => Number(item.id ?? item.taskId) === Number(id));
-              return task ? `${task.adminDong || '지역 미확인'} ${task.detailAddress || task.roadAddress || `#${id}`}` : `방문지 #${id}`;
+              return task ? `${dongName(task.adminDong) || '지역 미확인'} ${task.detailAddress || task.roadAddress || `#${id}`}` : `방문지 #${id}`;
             }).join(', ')}</Text>
             {incoming && request.status === 'PENDING' && <View style={styles.actions}>
               <TouchableOpacity style={styles.action} disabled={busy} onPress={() => respond(request, true)}><Text style={styles.actionText}>수락</Text></TouchableOpacity>
@@ -139,13 +201,30 @@ export default function TransferScreen({ user, group, onBack, onChanged }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background }, body: { padding: 18, paddingBottom: 50 },
+  root: { flex: 1, backgroundColor: colors.background },
+  body: { padding: 18, paddingBottom: 50 },
   title: { color: colors.text, fontSize: 17, fontWeight: '800', marginTop: 20, marginBottom: 9 },
-  hint: { color: colors.textSoft, fontSize: 11, marginTop: 3 },
-  search: { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: 12, marginTop: 12, color: colors.text },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: 13, marginTop: 8 },
-  chosen: { borderColor: colors.primary, backgroundColor: '#F2F8FF' }, rowTitle: { color: colors.text, fontSize: 13, fontWeight: '700' },
-  empty: { color: colors.textSoft, paddingVertical: 16 }, submit: { marginTop: 18, padding: 15, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center' },
-  disabled: { opacity: 0.45 }, submitText: { color: '#fff', fontWeight: '800' }, request: { backgroundColor: '#fff', padding: 14, borderRadius: 12, marginTop: 8 },
-  actions: { flexDirection: 'row', gap: 9, marginTop: 10 }, action: { paddingVertical: 8, paddingHorizontal: 17, borderRadius: 8, backgroundColor: colors.primarySoft }, actionText: { color: colors.primary, fontWeight: '800' },
+  hint: { color: colors.textSoft, fontSize: 11, lineHeight: 16, marginTop: 3 },
+  empty: { color: colors.textSoft, paddingVertical: 16 },
+  memberRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: 13, marginTop: 8 },
+  chosen: { borderColor: colors.primary, backgroundColor: '#F2F8FF' },
+  rowTitle: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  recipientCard: { flexDirection: 'row', alignItems: 'center', gap: 11, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 14, padding: 14, marginTop: 4 },
+  recipientIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  recipientLabel: { color: colors.textSoft, fontSize: 10 },
+  recipientName: { color: colors.text, fontSize: 14, fontWeight: '900', marginTop: 3 },
+  dongCard: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 14, marginTop: 10, overflow: 'hidden' },
+  dongHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 13, backgroundColor: colors.surfaceMuted },
+  dongTitle: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '900' },
+  dongCount: { color: colors.primary, fontSize: 11, fontWeight: '800' },
+  taskRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 13, borderTopWidth: 1, borderTopColor: colors.line },
+  taskTitle: { color: colors.text, fontSize: 12, fontWeight: '800' },
+  taskMeta: { color: colors.textSoft, fontSize: 9.5, marginTop: 3 },
+  submit: { marginTop: 18, padding: 15, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center' },
+  disabled: { opacity: 0.45 },
+  submitText: { color: '#fff', fontWeight: '800' },
+  request: { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, padding: 14, borderRadius: 12, marginTop: 8 },
+  actions: { flexDirection: 'row', gap: 9, marginTop: 10 },
+  action: { paddingVertical: 8, paddingHorizontal: 17, borderRadius: 8, backgroundColor: colors.primarySoft },
+  actionText: { color: colors.primary, fontWeight: '800' },
 });

@@ -2,6 +2,8 @@ package com.fieldwork.controller;
 
 import com.fieldwork.service.TaskTransferService;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -21,9 +23,15 @@ public class TaskTransferController {
 
     @PostMapping
     public Map<String, Object> create(@PathVariable Long groupId, @RequestBody Map<String, Object> body) {
-        return service.create(groupId, asLong(body.get("senderUserId")),
-                asLong(body.get("recipientUserId")), text(body.get("sido")),
-                text(body.get("sigungu")), text(body.get("adminDong")));
+        return service.create(
+                groupId,
+                asLong(body.get("senderUserId")),
+                asLong(body.get("recipientUserId")),
+                asLongList(body.get("taskIds")),
+                text(body.get("sido")),
+                text(body.get("sigungu")),
+                text(body.get("adminDong"))
+        );
     }
 
     @PostMapping("/{requestId}/accept")
@@ -41,6 +49,16 @@ public class TaskTransferController {
     private Long asLong(Object value) {
         if (value == null) throw new IllegalArgumentException("사용자 ID가 필요합니다.");
         return Long.valueOf(value.toString());
+    }
+
+    private List<Long> asLongList(Object value) {
+        if (!(value instanceof List<?> values)) return List.of();
+        List<Long> result = new ArrayList<>();
+        for (Object item : values) {
+            if (item == null) continue;
+            result.add(Long.valueOf(item.toString()));
+        }
+        return result;
     }
 
     private String text(Object value) {

@@ -82,6 +82,7 @@ export default function App() {
   const [groupWorkspaceTab, setGroupWorkspaceTab] = useState('status');
   const [mapInitialized, setMapInitialized] = useState(false);
   const [selectedDong, setSelectedDong] = useState(null);
+  const [transferTargetMember, setTransferTargetMember] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -967,7 +968,10 @@ export default function App() {
               onRefresh={refreshCurrentWorkspace}
               onChooseGroup={() => go('groupHome')}
               onMembers={() => go('groupMembers')}
-              onTransfer={() => go('transfer')}
+              onTransfer={(member) => {
+                setTransferTargetMember(member || null);
+                go('transfer');
+              }}
               onReports={() => go('groupReports')}
               onSettings={() => go('groupSettings')}
             />
@@ -999,7 +1003,10 @@ export default function App() {
                   selectActiveGroup(group);
                 }}
                 onWorkStatus={() => { refreshCurrentWorkspace(); go('workStatus'); }}
-                onTransfer={() => go('transfer')}
+                onTransfer={(member) => {
+                setTransferTargetMember(member || null);
+                go('transfer');
+              }}
                 onReports={() => go('groupReports')}
               />
             )}
@@ -1099,7 +1106,12 @@ export default function App() {
             <TransferScreen
               user={user}
               group={activeGroup}
-              onBack={() => goBack('groupWorkspace')}
+              initialRecipientId={transferTargetMember?.userId || null}
+              initialRecipientName={transferTargetMember?.name || transferTargetMember?.loginId || ''}
+              onBack={() => {
+                setTransferTargetMember(null);
+                goBack('groupWorkspace');
+              }}
               onChanged={refreshCurrentWorkspace}
             />
           )}

@@ -95,6 +95,9 @@ kakao.maps.load(function(){
  let openedCallout=null,openedMarkerKey=null;
  assignments.forEach((i,index)=>{const lat=Number(i.lat!=null?i.lat:i.latitude),lng=Number(i.lng!=null?i.lng:i.longitude);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;const s=statusOf(i.status||i.taskStatus),ownerId=String(i.assigneeUserId||'unknown'),ownerColor=memberColors[ownerId]||'${UNASSIGNED_COLOR}',markerKey=String(i.taskId||i.assignmentId||i.id||index),dimmed=selectedMemberId&&selectedMemberId!==ownerId,position=new kakao.maps.LatLng(lat,lng);bounds.extend(position);hasBounds=true;const content=document.createElement('div');content.className='pin';content.style.opacity=dimmed?'.22':'1';content.innerHTML='<div class="pin-body" style="background:'+statusColors[s]+';border-color:'+ownerColor+'"></div>';const markerOverlay=new kakao.maps.CustomOverlay({map,position,content,yAnchor:1,zIndex:5});content.onclick=(event)=>{event.stopPropagation();if(openedMarkerKey===markerKey){if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;return;}if(openedCallout)openedCallout.setMap(null);const box=document.createElement('div');box.className='place-callout';const title=document.createElement('div');title.className='place-title';title.textContent=i.detailAddress||i.roadAddress||('방문지 '+i.taskId);const address=document.createElement('div');address.className='place-address';address.textContent=i.roadAddress||i.detailAddress||'주소 정보 없음';const assignee=document.createElement('div');assignee.className='place-assignee';assignee.style.color=ownerColor;assignee.textContent='담당자: '+(i.assigneeName||i.assigneeLoginId||'미배정');const status=document.createElement('span');status.className='place-status';status.style.background=statusColors[s];status.textContent=s==='complete'?'완료':s==='working'?'작업 중':'작업 전';box.appendChild(title);box.appendChild(address);box.appendChild(assignee);box.appendChild(status);openedCallout=new kakao.maps.CustomOverlay({map,position,content:box,yAnchor:1.65,zIndex:10});openedMarkerKey=markerKey;};});
  kakao.maps.event.addListener(map,'click',()=>{if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;});
+ // 사용자가 행정동을 직접 눌렀을 때만 해당 동으로 확대한다.
+ // 그 외 최초 진입/재진입은 SGIS 시군구 전체 경계를 최우선으로 사용한다.
+ // 방문지 좌표 bounds는 SGIS 경계를 못 불러온 경우에만 최후의 fallback이다.
  if(focusedAreaBounds&&Number.isFinite(Number(focusedAreaBounds.south))&&Number.isFinite(Number(focusedAreaBounds.west))&&Number.isFinite(Number(focusedAreaBounds.north))&&Number.isFinite(Number(focusedAreaBounds.east))){const focused=new kakao.maps.LatLngBounds(new kakao.maps.LatLng(Number(focusedAreaBounds.south),Number(focusedAreaBounds.west)),new kakao.maps.LatLng(Number(focusedAreaBounds.north),Number(focusedAreaBounds.east)));map.setBounds(focused,35,35,35,35);}else if(hasRegionBounds)map.setBounds(regionBounds,35,35,35,35);else if(hasBounds)map.setBounds(bounds,35,35,35,35);
 });
 </script></body></html>`;
@@ -115,8 +118,12 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
     setLoadingBoundary(true);
     setBoundaryError('');
     try {
-      const primaryCode =
-        group?.regionAdmCode ||
+      // 그룹 업무현황의 최초 지도 범위는 '방문지 좌표'가 아니라
+      // 그룹에 설정된 시/군/구 전체 SGIS 경계를 기준으로 잡는다.
+      //
+      // 중요: group.regionAdmCode가 행정동 코드로 저장돼 있을 수 있으므로
+      // 사하구/영도구 같은 regionSigungu 값이 있으면 반드시 구·군 코드를 우선한다.
+      const districtCode =
         ((!group?.regionSido || String(group.regionSido).includes('부산'))
           ? BUSAN_DISTRICT_CODES[group?.regionSigungu]
           : null) ||
@@ -124,13 +131,19 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
           ? BUSAN_DISTRICT_CODES[user?.workSigungu]
           : null);
 
+      const primaryCode = districtCode || group?.regionAdmCode || null;
+
       const fallbackCodes = assignments.map((item) =>
         (!item.sido || String(item.sido).includes('부산'))
           ? BUSAN_DISTRICT_CODES[item.sigungu]
           : null
       ).filter(Boolean);
 
-      const codes = Array.from(new Set((primaryCode ? [primaryCode] : fallbackCodes).filter(Boolean)));
+      // 그룹 시군구가 정해져 있으면 그 경계 하나만 요청한다.
+      // 방문지 데이터에 잘못된 시군구/좌표가 섞여도 최초 화면 범위에 영향을 주지 않는다.
+      const codes = Array.from(
+        new Set((primaryCode ? [primaryCode] : fallbackCodes).filter(Boolean))
+      );
       if (!codes.length) {
         setBoundaries({ type: 'FeatureCollection', features: [] });
         if (!personalWorkspace) {

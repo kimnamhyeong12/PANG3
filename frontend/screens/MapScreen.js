@@ -660,8 +660,17 @@ function NormalMapScreen({
       setPublicSelectedIds([]);
       return undefined;
     }
-    const admCode = selectedDong?.properties?.adm_cd || selectedDong?.properties?.admCode;
-    if (!admCode) {
+    const props = selectedDong?.properties || {};
+    const fullName = String(props.adm_nm || props.adm_name || props.name || '').trim();
+    const parts = fullName.split(/\s+/).filter(Boolean);
+    const selectedSido = props.sido_nm || parts[0] || activeGroup?.regionSido || user?.workSido || '부산광역시';
+    const selectedSigungu = props.sgg_nm || (parts.length >= 3 ? parts[parts.length - 2] : '') || activeGroup?.regionSigungu || user?.workSigungu || '';
+    const selectedAdminDong = parts.length ? parts[parts.length - 1] : '';
+    const admCode = props.adm_cd || props.admCode || '';
+
+    // 공공시설물은 외부 공공데이터 API를 호출하지 않고,
+    // 서버 DB에 저장된 AED/버스정류장을 행정동 이름으로 직접 조회한다.
+    if (!selectedAdminDong && !admCode) {
       setPublicItems([]);
       return undefined;
     }
@@ -669,9 +678,12 @@ function NormalMapScreen({
     (async () => {
       try {
         setPublicLoading(true);
-        const response = await fetch(
-          `${API_BASE_URL}/api/public-data?category=${encodeURIComponent(publicCategory)}&admCode=${encodeURIComponent(admCode)}`
-        );
+        const query = new URLSearchParams({ category: publicCategory });
+        if (selectedSido) query.append('sido', selectedSido);
+        if (selectedSigungu) query.append('sigungu', selectedSigungu);
+        if (selectedAdminDong) query.append('adminDong', selectedAdminDong);
+        if (admCode) query.append('admCode', admCode); // 구버전 서버 fallback 호환
+        const response = await fetch(`${API_BASE_URL}/api/public-data?${query.toString()}`);
         const text = await response.text();
         if (!response.ok) throw new Error(text || '공공시설물 조회 실패');
         const data = JSON.parse(text);
@@ -686,7 +698,7 @@ function NormalMapScreen({
       }
     })();
     return () => { cancelled = true; };
-  }, [publicFacilityMode, publicCategory, selectedDong?.properties?.adm_cd]);
+  }, [publicFacilityMode, publicCategory, selectedDong, activeGroup?.regionSido, activeGroup?.regionSigungu, user?.workSido, user?.workSigungu]);
 
   const togglePublicFacility = (item) => {
     setPublicSelectedIds((previous) => previous.includes(item.id)

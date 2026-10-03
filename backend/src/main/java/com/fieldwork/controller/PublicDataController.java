@@ -16,23 +16,25 @@ public class PublicDataController {
 
     private final PublicDataService publicDataService;
 
-    public PublicDataController(
-            PublicDataService publicDataService
-    ) {
+    public PublicDataController(PublicDataService publicDataService) {
         this.publicDataService = publicDataService;
     }
 
     @GetMapping
     public Map<String, Object> getPublicData(
             @RequestParam String category,
-            @RequestParam String admCode
+            @RequestParam(required = false) String admCode,
+            @RequestParam(required = false) String sido,
+            @RequestParam(required = false) String sigungu,
+            @RequestParam(required = false) String adminDong
     ) {
-
-        List<PublicDataItem> items =
-                publicDataService.getPublicData(
-                        category,
-                        admCode
-                );
+        List<PublicDataItem> items = publicDataService.getPublicData(
+                category,
+                admCode,
+                sido,
+                sigungu,
+                adminDong
+        );
 
         return Map.of(
                 "category", category,

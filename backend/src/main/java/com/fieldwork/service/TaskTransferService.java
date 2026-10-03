@@ -40,22 +40,41 @@ public class TaskTransferService {
 
     @Transactional
     public Map<String, Object> create(Long groupId, Long senderId, Long recipientId,
-            String sido, String sigungu, String adminDong) {
+            List<Long> requestedTaskIds, String sido, String sigungu, String adminDong) {
         WorkGroup group = group(groupId);
         User sender = member(group, senderId);
         User recipient = member(group, recipientId);
         if (group.isPersonal() || senderId.equals(recipientId)) {
             throw new IllegalArgumentException("다른 그룹 구성원을 선택해주세요.");
         }
-        if (normalizeDong(adminDong).isBlank()) {
-            throw new IllegalArgumentException("이관할 행정동을 선택해주세요.");
+
+        List<Map<String, Object>> senderTasks = taskService.getGroupLocations(groupId, senderId).stream()
+                .filter(task -> senderId.equals(number(task.get("assigneeUserId"))))
+                .toList();
+
+        List<Long> selectedIds;
+        if (requestedTaskIds != null && !requestedTaskIds.isEmpty()) {
+            selectedIds = requestedTaskIds.stream().distinct().sorted().toList();
+            List<Long> ownedIds = senderTasks.stream()
+                    .map(task -> number(task.get("taskId")))
+                    .filter(id -> id != null)
+                    .distinct()
+                    .toList();
+            if (!ownedIds.containsAll(selectedIds)) {
+                throw new IllegalArgumentException("본인 담당 방문지만 이관할 수 있습니다.");
+            }
+        } else {
+            if (normalizeDong(adminDong).isBlank()) {
+                throw new IllegalArgumentException("이관할 방문지를 선택해주세요.");
+            }
+            selectedIds = senderTasks.stream()
+                    .filter(task -> sameArea(task, sido, sigungu, adminDong))
+                    .map(task -> number(task.get("taskId")))
+                    .filter(id -> id != null)
+                    .distinct().sorted().toList();
         }
-        List<Long> selectedIds = taskService.getGroupLocations(groupId, senderId).stream()
-                .filter(task -> senderId.equals(number(task.get("assigneeUserId")))
-                        && sameArea(task, sido, sigungu, adminDong))
-                .map(task -> number(task.get("taskId")))
-                .distinct().sorted().toList();
-        if (selectedIds.isEmpty()) throw new IllegalArgumentException("해당 행정동에 담당 업무가 없습니다.");
+
+        if (selectedIds.isEmpty()) throw new IllegalArgumentException("이관할 방문지를 선택해주세요.");
         for (Long taskId : selectedIds) {
             Task task = tasks.findById(taskId)
                     .orElseThrow(() -> new IllegalArgumentException("방문지를 찾을 수 없습니다."));
