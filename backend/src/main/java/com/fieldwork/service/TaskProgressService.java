@@ -38,11 +38,15 @@ public class TaskProgressService {
     public Map<String, Object> saveFromMultipart(MultipartHttpServletRequest request) throws Exception {
         Long taskId = Long.valueOf(request.getParameter("taskId"));
         Task task = taskService.getById(taskId);
+        Long performerId = parseLong(request.getParameter("userId"));
+        validateEditor(task, performerId);
 
         TaskProgress progress = new TaskProgress();
         progress.setTask(task);
+        progress.setPerformedByUserId(performerId);
         progress.setLatitude(parseDouble(request.getParameter("latitude")));
         progress.setLongitude(parseDouble(request.getParameter("longitude")));
+        progress.setLocationAddress(request.getParameter("locationAddress"));
         progress.setMainComment(request.getParameter("mainComment"));
         progress.setFieldMemo(request.getParameter("fieldMemo"));
         progress.setProgressStatus(request.getParameter("progressStatus"));
@@ -65,6 +69,7 @@ public class TaskProgressService {
             Map<String, Object> item = new HashMap<>();
             item.put("path", savedPath);
             item.put("comment", i < comments.size() ? comments.get(i) : "");
+            item.put("performedByUserId", performerId);
             fieldPhotos.add(item);
         }
 
@@ -80,11 +85,15 @@ public class TaskProgressService {
     public Map<String, Object> saveFromJson(Map<String, Object> body) throws Exception {
         Long taskId = Long.valueOf(body.get("taskId").toString());
         Task task = taskService.getById(taskId);
+        Long performerId = parseLong(body.get("userId") == null ? null : body.get("userId").toString());
+        validateEditor(task, performerId);
 
         TaskProgress progress = new TaskProgress();
         progress.setTask(task);
+        progress.setPerformedByUserId(performerId);
         progress.setLatitude(parseDoubleObj(body.get("latitude")));
         progress.setLongitude(parseDoubleObj(body.get("longitude")));
+        progress.setLocationAddress(str(body.get("locationAddress")));
         progress.setMainComment(str(body.get("mainComment")));
         progress.setFieldMemo(str(body.get("fieldMemo")));
         progress.setProgressStatus(str(body.get("progressStatus")));
@@ -104,6 +113,7 @@ public class TaskProgressService {
                     Object path = photoMap.get("path");
                     normalized.put("path", path != null ? path.toString() : (uri != null ? uri.toString() : null));
                     normalized.put("comment", photoMap.get("comment"));
+                    normalized.put("performedByUserId", performerId);
                     normalizedPhotos.add(normalized);
                 }
             }
@@ -134,6 +144,16 @@ public class TaskProgressService {
                 .orElseThrow(() -> new RuntimeException("Progress not found: " + progressId));
     }
 
+    private void validateEditor(Task task, Long performerId) {
+        if ("complete".equalsIgnoreCase(task.getTaskStatus())) {
+            throw new IllegalArgumentException("완료한 방문지의 자료는 수정할 수 없습니다.");
+        }
+        var owner = taskService.currentAssignee(task);
+        if (performerId == null || owner == null || !performerId.equals(owner.getUserId())) {
+            throw new IllegalArgumentException("현재 담당자만 작업 자료를 등록할 수 있습니다.");
+        }
+    }
+
     private void runAiIfPossible(Task task, TaskProgress progress) {
         try {
             aiReportService.generateReport(task, progress);
@@ -158,6 +178,8 @@ public class TaskProgressService {
         result.put("taskId", task.getTaskId());
         result.put("latitude", progress.getLatitude());
         result.put("longitude", progress.getLongitude());
+        result.put("locationAddress", progress.getLocationAddress());
+        result.put("performedByUserId", progress.getPerformedByUserId());
         result.put("locationMapImage", toPublicFileUrl(task.getTaskId(), progress.getLocationMapImage()));
         result.put("fieldPhotos", toPublicPhotoList(task.getTaskId(), progress.getFieldPhotos()));
         result.put("mainComment", progress.getMainComment());
@@ -202,6 +224,10 @@ public class TaskProgressService {
             return null;
         }
         return Double.valueOf(value);
+    }
+
+    private Long parseLong(String value) {
+        return value == null || value.isBlank() ? null : Long.valueOf(value);
     }
 
     private Double parseDoubleObj(Object value) {

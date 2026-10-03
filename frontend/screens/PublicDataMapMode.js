@@ -26,7 +26,7 @@ const CATEGORIES = [
 
 // 예전에 만든 부산 그룹은 regionAdmCode가 비어 있을 수 있어
 // 저장된 구·군 이름으로 SGIS 코드를 보완한다.
-const BUSAN_DISTRICT_CODES = {
+export const BUSAN_DISTRICT_CODES = {
   중구: '21010',
   서구: '21020',
   동구: '21030',

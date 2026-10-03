@@ -79,10 +79,10 @@ public class GroupService {
         GroupMember leaderMember = new GroupMember();
         leaderMember.setGroup(savedGroup);
         leaderMember.setUser(leader);
-        leaderMember.setRole(ROLE_LEADER);
+        leaderMember.setRole(ROLE_MEMBER);
         groupMemberRepository.save(leaderMember);
 
-        Map<String, Object> result = groupSummary(savedGroup, ROLE_LEADER);
+        Map<String, Object> result = groupSummary(savedGroup, ROLE_MEMBER);
         result.put("message", "洹몃９???앹꽦?섏뿀?듬땲??");
         return result;
     }
@@ -95,7 +95,7 @@ public class GroupService {
             String regionSigungu,
             String regionAdmCode) {
         WorkGroup group = getGroup(groupId);
-        requireLeader(group, leaderUserId);
+        requireMember(group, leaderUserId);
 
         if (group.isPersonal()) {
             throw new RuntimeException("媛쒖씤 ?낅Т怨듦컙? 怨듦났?낅Т ?붾㈃?먯꽌 援?룰뎔???좏깮?⑸땲??");
@@ -112,7 +112,7 @@ public class GroupService {
         group.setRegionAdmCode(regionAdmCode.trim());
 
         WorkGroup saved = workGroupRepository.save(group);
-        Map<String, Object> result = groupSummary(saved, ROLE_LEADER);
+        Map<String, Object> result = groupSummary(saved, ROLE_MEMBER);
         result.put("message", "?쒕룞吏??씠 蹂寃쎈릺?덉뒿?덈떎.");
         return result;
     }
@@ -147,7 +147,7 @@ public class GroupService {
             GroupMember member = new GroupMember();
             member.setGroup(personalGroup);
             member.setUser(user);
-            member.setRole(ROLE_LEADER);
+            member.setRole(ROLE_MEMBER);
             groupMemberRepository.save(member);
         }
 
@@ -189,10 +189,6 @@ public class GroupService {
                 .stream()
                 .map(this::memberMap)
                 .toList());
-        result.put("assignments", locationAssignmentRepository.findByGroupOrderByAssignedAtDesc(group)
-                .stream()
-                .map(this::assignmentMap)
-                .toList());
         return result;
     }
 
@@ -213,7 +209,7 @@ public class GroupService {
             Long inviterUserId,
             String inviteeLoginId) {
         WorkGroup group = getGroup(groupId);
-        User inviter = requireLeader(group, inviterUserId);
+        User inviter = requireMember(group, inviterUserId).getUser();
 
         if (group.isPersonal()) {
             throw new RuntimeException("?먮룞 1??洹몃９?먮뒗 ??먯쓣 珥덈??????놁뒿?덈떎. ??洹몃９??留뚮뱾?댁＜?몄슂.");
@@ -648,10 +644,7 @@ public class GroupService {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("groupId", group.getGroupId());
         map.put("groupName", group.getName());
-        map.put("leaderUserId", group.getLeader().getUserId());
-        map.put("leaderLoginId", group.getLeader().getLoginId());
-        map.put("leaderName", group.getLeader().getName());
-        map.put("role", role);
+        map.put("role", ROLE_MEMBER);
         map.put("personal", group.isPersonal());
         map.put("personalWorkspace", group.isPersonal());
         map.put("workspaceType", group.isPersonal() ? "PERSONAL" : "TEAM");
@@ -670,7 +663,9 @@ public class GroupService {
         map.put("userId", user.getUserId());
         map.put("loginId", user.getLoginId());
         map.put("name", user.getName());
-        map.put("role", member.getRole());
+        map.put("workSido", user.getWorkSido());
+        map.put("workSigungu", user.getWorkSigungu());
+        map.put("role", ROLE_MEMBER);
         map.put("joinedAt", member.getJoinedAt());
         return map;
     }

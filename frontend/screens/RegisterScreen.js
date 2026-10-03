@@ -4,10 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { showAlert } from '../components/CustomAlert';
 import { PrimaryButton, ScreenHeader } from '../components/ui';
 import { colors, radius, shadow } from '../constants/design';
+import { REGIONS, DISTRICTS_BY_REGION } from './SettingsScreen';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
-const REGIONS = ['부산광역시', '서울특별시', '대구광역시', '인천광역시', '광주광역시', '대전광역시', '울산광역시', '제주특별자치도'];
-
 export default function RegisterScreen({ onBack }) {
   const [loginId, setLoginId] = useState('');
   const [pw, setPw] = useState('');
@@ -15,11 +14,12 @@ export default function RegisterScreen({ onBack }) {
   const [showPw, setShowPw] = useState(false);
   const [showPwConfirm, setShowPwConfirm] = useState(false);
   const [workSido, setWorkSido] = useState('부산광역시');
-  const [regionOpen, setRegionOpen] = useState(false);
+  const [workSigungu, setWorkSigungu] = useState('');
+  const [regionOpen, setRegionOpen] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const passwordMatches = Boolean(pw) && pw === pwConfirm;
-  const canSubmit = Boolean(loginId.trim() && pw && pwConfirm && passwordMatches && !loading);
+  const canSubmit = Boolean(loginId.trim() && pw && pwConfirm && passwordMatches && workSigungu && !loading);
 
   const register = async () => {
     if (!loginId.trim() || !pw || !pwConfirm || loading) return;
@@ -29,7 +29,7 @@ export default function RegisterScreen({ onBack }) {
       const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ loginId: loginId.trim(), password: pw, name: loginId.trim(), workSido }),
+        body: JSON.stringify({ loginId: loginId.trim(), password: pw, name: loginId.trim(), workSido, workSigungu }),
       });
       if (!res.ok) throw new Error('회원가입 실패');
       showAlert('가입 완료', '등록한 계정으로 로그인할 수 있습니다.');
@@ -54,21 +54,38 @@ export default function RegisterScreen({ onBack }) {
         <Field label="비밀번호 확인" icon="lock-closed" value={pwConfirm} onChangeText={setPwConfirm} placeholder="비밀번호를 다시 입력해주세요" secureTextEntry={!showPwConfirm} error={Boolean(pwConfirm) && !passwordMatches ? '비밀번호가 일치하지 않습니다.' : ''} right={<TouchableOpacity onPress={() => setShowPwConfirm((value) => !value)}><Ionicons name={showPwConfirm ? 'eye-outline' : 'eye-off-outline'} size={19} color={colors.textFaint} /></TouchableOpacity>} />
 
         <Text style={styles.label}>근무지역 <Text style={styles.required}>*</Text></Text>
-        <TouchableOpacity style={styles.regionButton} onPress={() => setRegionOpen(true)} activeOpacity={0.76}>
+        <TouchableOpacity style={styles.regionButton} onPress={() => setRegionOpen('sido')} activeOpacity={0.76}>
           <View style={styles.regionIcon}><Ionicons name="location" size={20} color={colors.primary} /></View>
           <View style={{ flex: 1 }}><Text style={styles.regionSmall}>시·도</Text><Text style={styles.regionValue}>{workSido}</Text></View>
           <Ionicons name="chevron-down" size={19} color={colors.textSoft} />
         </TouchableOpacity>
-        <View style={styles.infoRow}><Ionicons name="information-circle" size={17} color={colors.primary} /><Text style={styles.infoText}>세부 활동지역은 가입 후 그룹에서 설정할 수 있습니다.</Text></View>
+        <TouchableOpacity style={[styles.regionButton, { marginTop: 9 }]} onPress={() => setRegionOpen('sigungu')} activeOpacity={0.76}>
+          <View style={styles.regionIcon}><Ionicons name="navigate" size={20} color={colors.primary} /></View>
+          <View style={{ flex: 1 }}><Text style={styles.regionSmall}>시·군·구</Text><Text style={styles.regionValue}>{workSigungu || '선택해주세요'}</Text></View>
+          <Ionicons name="chevron-down" size={19} color={colors.textSoft} />
+        </TouchableOpacity>
+        <View style={styles.infoRow}><Ionicons name="information-circle" size={17} color={colors.primary} /><Text style={styles.infoText}>행정동은 가입 후 지도에서 선택할 수 있습니다.</Text></View>
 
         <PrimaryButton title={loading ? '가입 중...' : '회원가입'} icon="arrow-forward" onPress={register} disabled={!canSubmit} style={styles.submit} />
         <TouchableOpacity style={styles.loginLink} onPress={onBack}><Text style={styles.loginMuted}>이미 계정이 있나요?</Text><Text style={styles.loginText}>로그인</Text></TouchableOpacity>
       </View>
     </ScrollView>
 
-    <Modal visible={regionOpen} transparent animationType="fade" onRequestClose={() => setRegionOpen(false)}>
-      <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => setRegionOpen(false)}>
-        <View style={styles.sheet}><Text style={styles.sheetTitle}>근무지역 선택</Text>{REGIONS.map((region) => <TouchableOpacity key={region} style={styles.regionOption} onPress={() => { setWorkSido(region); setRegionOpen(false); }}><Text style={[styles.optionText, workSido === region && styles.optionActive]}>{region}</Text>{workSido === region ? <Ionicons name="checkmark-circle" size={20} color={colors.primary} /> : null}</TouchableOpacity>)}</View>
+    <Modal visible={Boolean(regionOpen)} transparent animationType="fade" onRequestClose={() => setRegionOpen(null)}>
+      <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => setRegionOpen(null)}>
+        <View style={styles.sheet} onStartShouldSetResponder={() => true}>
+          <Text style={styles.sheetTitle}>{regionOpen === 'sido' ? '시·도 선택' : '시·군·구 선택'}</Text>
+          <ScrollView style={{ maxHeight: 400 }} nestedScrollEnabled>
+            {(regionOpen === 'sido' ? REGIONS : DISTRICTS_BY_REGION[workSido] || []).map((region) => {
+              const selected = regionOpen === 'sido' ? workSido === region : workSigungu === region;
+              return <TouchableOpacity key={region} style={styles.regionOption} onPress={() => {
+                if (regionOpen === 'sido') { setWorkSido(region); setWorkSigungu(''); }
+                else setWorkSigungu(region);
+                setRegionOpen(null);
+              }}><Text style={[styles.optionText, selected && styles.optionActive]}>{region}</Text>{selected ? <Ionicons name="checkmark-circle" size={20} color={colors.primary} /> : null}</TouchableOpacity>;
+            })}
+          </ScrollView>
+        </View>
       </TouchableOpacity>
     </Modal>
   </KeyboardAvoidingView>;

@@ -66,12 +66,13 @@ export default function GroupDetailScreen({
   user,
   group,
   onBack,
-  onAssign,
-  onTeamLocations,
-  onPublicData,
+  onWorkStatus,
+  onTransfer,
+  onReports,
   onUpdatedGroup,
 }) {
   const [detail, setDetail] = useState(group || null);
+  const [sharedTasks, setSharedTasks] = useState([]);
   const [inviteId, setInviteId] = useState('');
   const [loading, setLoading] = useState(true);
   const [inviting, setInviting] = useState(false);
@@ -93,6 +94,8 @@ export default function GroupDetailScreen({
       );
 
       setDetail(data);
+      const rows = await groupApi(`/api/locations/group/${group.groupId}?userId=${user.userId}`);
+      setSharedTasks(Array.isArray(rows) ? rows : []);
       onUpdatedGroup?.(data);
     } catch (error) {
       showAlert('그룹 조회 실패', error.message);
@@ -167,9 +170,8 @@ export default function GroupDetailScreen({
   };
 
   const members = detail?.members || [];
-  const assignments = detail?.assignments || [];
+  const assignments = sharedTasks;
 
-  const isLeader = detail?.role === 'LEADER';
 
   const groupName =
     detail?.groupName ||
@@ -183,33 +185,6 @@ export default function GroupDetailScreen({
   const regionSigungu =
     detail?.regionSigungu ||
     '';
-
-  const leaderName =
-    detail?.leaderName ||
-    detail?.leaderLoginId ||
-    members.find((member) => member.role === 'LEADER')?.name ||
-    '-';
-
-  const openPublicData = () => {
-    if (
-      regionSigungu &&
-      (detail?.regionAdmCode || DISTRICT_CODES[regionSigungu])
-    ) {
-      onPublicData?.(detail);
-      return;
-    }
-
-    if (isLeader) {
-      setDraftDistrict('');
-      setRegionOpen(true);
-      return;
-    }
-
-    showAlert(
-      '활동지역 미설정',
-      '그룹장에게 활동 구·군 설정을 요청하세요.'
-    );
-  };
 
   if (loading) {
     return (
@@ -257,12 +232,6 @@ export default function GroupDetailScreen({
           />
 
           <InfoRow
-            icon="ribbon"
-            label="그룹장"
-            value={leaderName}
-          />
-
-          <InfoRow
             icon="location"
             label="활동 지역"
             value={
@@ -273,7 +242,6 @@ export default function GroupDetailScreen({
             last
           />
 
-          {isLeader ? (
             <SecondaryButton
               title={
                 regionSigungu
@@ -287,7 +255,6 @@ export default function GroupDetailScreen({
               }}
               style={styles.fullButton}
             />
-          ) : null}
         </View>
 
         <View style={styles.card}>
@@ -295,7 +262,7 @@ export default function GroupDetailScreen({
             icon="people"
             title="팀원 관리"
             suffix={`(${members.length}명)`}
-            actionLabel={isLeader ? '팀원 추가' : undefined}
+            actionLabel="팀원 추가"
             onAction={() =>
               setInviteOpen((value) => !value)
             }
@@ -324,9 +291,6 @@ export default function GroupDetailScreen({
 
           <View style={styles.memberList}>
             {members.map((member, index) => {
-              const leader =
-                member.role === 'LEADER';
-
               const assignedCount =
                 assignments.filter(
                   (item) =>
@@ -335,17 +299,12 @@ export default function GroupDetailScreen({
                 ).length;
 
               return (
-                <TouchableOpacity
+                <View
                   key={member.userId}
                   style={[
                     styles.memberRow,
                     index > 0 && styles.divider,
                   ]}
-                  activeOpacity={0.75}
-                  onPress={() =>
-                    isLeader &&
-                    onAssign?.(detail)
-                  }
                 >
                   <View
                     style={[
@@ -375,28 +334,16 @@ export default function GroupDetailScreen({
                     </Text>
 
                     <Text
-                      style={[
-                        styles.memberRole,
-                        leader &&
-                          styles.leaderRole,
-                      ]}
+                      style={styles.memberRole}
                     >
-                      {leader
-                        ? '♛  그룹장'
-                        : `팀원${
-                            assignedCount
-                              ? ` · ${assignedCount}건 배정`
-                              : ''
-                          }`}
+                      {`${member.workSigungu || '근무지역 미설정'}${assignedCount ? ` · ${assignedCount}건` : ''}`}
                     </Text>
                   </View>
 
                   <View
                     style={[
                       styles.statusBadge,
-                      leader
-                        ? styles.statusGreen
-                        : assignedCount
+                      assignedCount
                         ? styles.statusBlue
                         : styles.statusGray,
                     ]}
@@ -404,9 +351,7 @@ export default function GroupDetailScreen({
                     <View
                       style={[
                         styles.statusDot,
-                        leader
-                          ? styles.dotGreen
-                          : assignedCount
+                        assignedCount
                           ? styles.dotBlue
                           : styles.dotGray,
                       ]}
@@ -415,27 +360,16 @@ export default function GroupDetailScreen({
                     <Text
                       style={[
                         styles.statusText,
-                        leader
-                          ? styles.textGreen
-                          : assignedCount
+                        assignedCount
                           ? styles.textBlue
                           : styles.textGray,
                       ]}
                     >
-                      {leader
-                        ? '관리 중'
-                        : assignedCount
-                        ? '업무 중'
-                        : '대기'}
+                      {assignedCount ? '업무 중' : '대기'}
                     </Text>
                   </View>
 
-                  <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color={colors.textFaint}
-                  />
-                </TouchableOpacity>
+                </View>
               );
             })}
           </View>
@@ -445,7 +379,7 @@ export default function GroupDetailScreen({
           <TouchableOpacity
             style={styles.managementCard}
             activeOpacity={0.76}
-            onPress={() => onAssign?.(detail)}
+            onPress={onWorkStatus}
           >
             <View style={styles.managementIcon}>
               <Ionicons
@@ -456,7 +390,7 @@ export default function GroupDetailScreen({
             </View>
 
             <Text style={styles.managementTitle}>
-              담당구역 관리
+              업무현황
             </Text>
 
             <Ionicons
@@ -473,7 +407,7 @@ export default function GroupDetailScreen({
               styles.publicManagementCard,
             ]}
             activeOpacity={0.76}
-            onPress={openPublicData}
+            onPress={onTransfer}
           >
             <View
               style={[
@@ -489,7 +423,7 @@ export default function GroupDetailScreen({
             </View>
 
             <Text style={styles.managementTitle}>
-              지역 공공업무
+              방문지 이관
             </Text>
 
             <Ionicons
@@ -501,7 +435,11 @@ export default function GroupDetailScreen({
           </TouchableOpacity>
         </View>
 
-        {isLeader ? (
+        <TouchableOpacity style={styles.card} activeOpacity={0.76} onPress={onReports}>
+          <CardTitle icon="document-text" title="그룹 보고서 모아보기" />
+          <Text style={styles.memberRole}>팀원별 · 행정동별 · 기간별 보고서를 확인합니다.</Text>
+        </TouchableOpacity>
+
           <View style={styles.card}>
             <CardTitle
               icon="settings"
@@ -525,7 +463,6 @@ export default function GroupDetailScreen({
               last
             />
           </View>
-        ) : null}
       </ScrollView>
 
       <Modal

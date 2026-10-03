@@ -17,6 +17,7 @@ src/main/resources/application-*.yml
 # build
 backend/build/
 backend/target/
+.m2/
 
 # IDE
 .idea/

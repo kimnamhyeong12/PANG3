@@ -93,65 +93,6 @@ public class GroupController {
                 longValue(body.get("userId")));
     }
 
-    @PutMapping("/{groupId}/bulk-assignments")
-public List<Map<String, Object>> assignTasksBulk(
-        @PathVariable Long groupId,
-        @RequestBody Map<String, Object> body
-) {
-    Long leaderUserId = longValue(body.get("leaderUserId"));
-    Long assigneeUserId = longValue(body.get("assigneeUserId"));
-
-    Object taskIdsValue = body.get("taskIds");
-
-    if (!(taskIdsValue instanceof List<?> rawTaskIds)) {
-        throw new RuntimeException("방문지 목록이 올바르지 않습니다.");
-    }
-
-    List<Long> taskIds = rawTaskIds.stream()
-            .map(this::longValue)
-            .toList();
-
-    return groupService.assignTasksBulk(
-            groupId,
-            taskIds,
-            leaderUserId,
-            assigneeUserId
-    );
-}
-    @PutMapping("/{groupId}/assignments/{taskId}")
-    public Map<String, Object> assignTask(
-            @PathVariable Long groupId,
-            @PathVariable Long taskId,
-            @RequestBody Map<String, Object> body) {
-        return groupService.assignTask(
-                groupId,
-                taskId,
-                longValue(body.get("leaderUserId")),
-                longValue(body.get("assigneeUserId")));
-    }
-
-    @DeleteMapping("/{groupId}/assignments/{taskId}")
-    public Map<String, Object> unassignTask(
-            @PathVariable Long groupId,
-            @PathVariable Long taskId,
-            @RequestParam Long leaderUserId) {
-        return groupService.unassignTask(groupId, taskId, leaderUserId);
-    }
-
-    @GetMapping("/{groupId}/assignments")
-    public List<Map<String, Object>> getAssignments(
-            @PathVariable Long groupId,
-            @RequestParam Long userId) {
-        return groupService.getAssignments(groupId, userId);
-    }
-
-    @GetMapping("/{groupId}/assignments/mine")
-    public List<Map<String, Object>> getMyAssignments(
-            @PathVariable Long groupId,
-            @RequestParam Long userId) {
-        return groupService.getMyAssignments(groupId, userId);
-    }
-
     private Long longValue(Object value) {
         if (value == null) {
             throw new RuntimeException("필수 값이 누락되었습니다.");

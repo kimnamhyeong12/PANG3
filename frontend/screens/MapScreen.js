@@ -18,7 +18,7 @@ import {
   View,
 } from 'react-native';
 import KakaoMapWebView from '../components/KakaoMapWebView';
-import PublicDataMapMode from './PublicDataMapMode';
+import PublicDataMapMode, { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
 import { locationKey, numberVisits, numberOptimizedVisits } from '../utils/routeSession';
 import {
   stopRouteNotification,
@@ -112,6 +112,8 @@ function NormalMapScreen({
   setPanelOpen,
   onSwitchToPublic,
   routeResumeToken = 0,
+  pendingWork = [],
+  onAddWork,
 }) {
   const [selected, setSelected] = useState(null);
   const [optimizing, setOptimizing] = useState(false);
@@ -130,6 +132,8 @@ function NormalMapScreen({
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [addressSearchMode, setAddressSearchMode] = useState(false);
   const [mapSelectMode, setMapSelectMode] = useState(false);
+  const [directCenter, setDirectCenter] = useState(null);
+  const [centerAddress, setCenterAddress] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const [coordSheetOpen, setCoordSheetOpen] = useState(false);
@@ -139,15 +143,62 @@ function NormalMapScreen({
   const [priorityMode, setPriorityMode] = useState(false);
   const [priorityCount, setPriorityCount] = useState(1);
   const [visitListOpen, setVisitListOpen] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState(false);
+  const [pendingSelected, setPendingSelected] = useState([]);
+  const [pendingBusy, setPendingBusy] = useState(false);
+  const [dongOpen, setDongOpen] = useState(false);
+  const [dongOptions, setDongOptions] = useState([]);
+  const [dongLoading, setDongLoading] = useState(false);
+  const [selectedDong, setSelectedDong] = useState(null);
 
   const sheetY = useRef(new Animated.Value(0)).current;
   const searchInputRef = useRef(null);
   const guideAdvanceRef = useRef(false);
 
   const visitNumbersRef = useRef({});
+  const autoRouteKeyRef = useRef('');
   const visitNumberScopeRef = useRef(null);
+  useEffect(() => {
+    if (!mapSelectMode || !directCenter || !KAKAO_REST_API_KEY) return undefined;
+    let cancelled = false;
+    setCenterAddress('주소 확인 중...');
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`https://dapi.kakao.com/v2/local/geo/coord2address.json?x=${encodeURIComponent(directCenter.lng)}&y=${encodeURIComponent(directCenter.lat)}`, { headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` } });
+        if (!response.ok) throw new Error('주소 조회 실패');
+        const data = await response.json();
+        if (!cancelled) setCenterAddress(data.documents?.[0]?.road_address?.address_name || data.documents?.[0]?.address?.address_name || '주소를 확인할 수 없습니다.');
+      } catch {
+        if (!cancelled) setCenterAddress('주소를 확인할 수 없습니다.');
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [mapSelectMode, directCenter?.lat, directCenter?.lng]);
+  const loadDongs = async () => {
+    const admCode = user?.workSido === '부산광역시'
+      ? BUSAN_DISTRICT_CODES[user?.workSigungu]
+      : activeGroup?.regionAdmCode;
+    if (!admCode) {
+      showAlert('지역 정보 필요', '설정에서 근무 시·군·구를 선택해주세요.');
+      return;
+    }
+    setDongOpen(true);
+    try {
+      setDongLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/sgis/boundaries?admCode=${encodeURIComponent(admCode)}`);
+      if (!response.ok) throw new Error('경계를 불러오지 못했습니다.');
+      const data = await response.json();
+      setDongOptions(Array.isArray(data?.features) ? data.features : []);
+    } catch (error) {
+      showAlert('행정동 조회 실패', error.message);
+    } finally {
+      setDongLoading(false);
+    }
+  };
   const routeMarkers = useMemo(() => {
-    const scope = `${user?.userId}:${activeGroup?.groupId}:${locationScope}`;
+    const scope = locationScope === 'personal'
+      ? `${user?.userId}:personal`
+      : `${user?.userId}:${activeGroup?.groupId}:${locationScope}`;
     if (visitNumberScopeRef.current !== scope) {
       visitNumbersRef.current = {};
       visitNumberScopeRef.current = scope;
@@ -679,15 +730,6 @@ function NormalMapScreen({
       }
       onDataChanged?.();
 
-      if (locationScope === 'team') {
-        showAlert(
-          '팀 방문지 추가 완료',
-          activeGroup?.role === 'MEMBER'
-            ? '팀 방문지로 등록했으며 본인에게 자동 배정되었습니다.'
-            : '팀 방문지로 등록했습니다. 담당자를 지정해주세요.'
-        );
-      }
-
       setKeyword('');
       setAddressSearchMode(false);
       closeAddSheet();
@@ -934,6 +976,60 @@ function NormalMapScreen({
       setOptimizing(false);
     }
   };
+
+  const autoRouteKey = orderedMarkers.map((item) => String(item.id ?? item.taskId)).sort().join(',');
+  const optimizeRemainingRoute = async () => {
+    const target = orderedMarkers[currentSegmentIndex];
+    const remaining = orderedMarkers.slice(currentSegmentIndex + 1);
+    if (!target || !remaining.length || !API_BASE_URL) return;
+    try {
+      setOptimizing(true);
+      const response = await fetch(`${API_BASE_URL}/api/routes/optimize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(transportMode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) },
+        body: JSON.stringify({
+          currentLocation: cleanLocation(target, '현재 목적지'),
+          locations: remaining.map((item) => cleanLocation(item)).filter(Boolean),
+          transportMode,
+        }),
+      });
+      if (!response.ok) throw new Error('이후 경로 계산 실패');
+      const data = await response.json();
+      const tail = (data.optimizedLocations || []).map((item) => ({
+        ...remaining.find((row) => String(row.id ?? row.taskId) === String(item.id)),
+        ...item,
+      }));
+      if (!tail.length || !Array.isArray(data.segments) || !data.segments.length) throw new Error('경로 정보 없음');
+      const nextSegments = [...routeSegments.slice(0, currentSegmentIndex + 1), ...data.segments];
+      setLocations?.(numberOptimizedVisits(
+        [...orderedMarkers.slice(0, currentSegmentIndex + 1), ...tail],
+        markers.filter((item) => item.status === 'complete')
+      ));
+      setRouteSegments(nextSegments);
+      setRoadPath(nextSegments.slice(currentSegmentIndex).flatMap((segment) => segment?.path || []));
+    } catch (error) {
+      console.log(error);
+      showAlert('경로 계산 실패', '방문지는 유지했습니다. 이후 경로를 다시 계산해주세요.');
+    } finally {
+      setOptimizing(false);
+    }
+  };
+  useEffect(() => {
+    if (!isActive || !currentLocation || !autoRouteKey || optimizing) return undefined;
+    if (isGuiding) {
+      if (autoRouteKeyRef.current !== autoRouteKey) {
+        autoRouteKeyRef.current = autoRouteKey;
+        optimizeRemainingRoute();
+      }
+      return undefined;
+    }
+    if (autoRouteKeyRef.current === autoRouteKey) return undefined;
+    const timer = setTimeout(() => {
+      autoRouteKeyRef.current = autoRouteKey;
+      handleOptimizeRoute(transportMode);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [isActive, autoRouteKey, currentLocation?.lat, currentLocation?.lng, isGuiding, optimizing]);
 
   const updateGuideTargetSegment = async (targetIndex, mode = transportMode) => {
     if (!API_BASE_URL) {
@@ -1262,6 +1358,7 @@ function NormalMapScreen({
   return (
     <View style={styles.container}>
       <KakaoMapWebView
+        boundaries={selectedDong ? { type: 'FeatureCollection', features: [selectedDong] } : null}
         locations={[...orderedMarkers, ...markers.filter((item) => item.status === 'complete')]}
         displayOnlyLocations={mapOnlyMarkers}
         roadPath={roadPath}
@@ -1272,16 +1369,8 @@ function NormalMapScreen({
         isGuiding={isGuiding}
         searchedPlace={searchedPlace}
         clearSearchMarkerSignal={clearSearchMarkerSignal}
-        mapSelectMode={mapSelectMode}
-        onDirectPlaceSelect={(place) => {
-          if (!mapSelectMode) return;
-
-          sheetY.setValue(0);
-          setSearchedPlace(place);
-          setPlaceName(place.detailAddress || '지도 선택 위치');
-          setTask('');
-          setMapSelectMode(false);
-        }}
+        mapSelectMode={false}
+        onCenterChange={setDirectCenter}
         onCurrentLocationChange={setCurrentLocation}
         onMarkerClick={(loc) => {
           onLocationClick?.(loc, 'report');
@@ -1290,12 +1379,35 @@ function NormalMapScreen({
         onRerouteRequest={handleReroute}
       />
 
+      {mapSelectMode && <View pointerEvents="none" style={{ position: 'absolute', left: '50%', top: '50%', zIndex: 45, transform: [{ translateX: -21 }, { translateY: -42 }] }}>
+        <Ionicons name="location-sharp" size={42} color="#E53935" />
+      </View>}
+      {mapSelectMode && <View style={{ position: 'absolute', left: 16, right: 16, bottom: 95, zIndex: 46, backgroundColor: '#FFFFFF', padding: 14, borderRadius: 14 }}>
+        <Text style={{ color: '#172033', fontWeight: '800' }}>{centerAddress || '지도를 움직여 위치를 선택하세요'}</Text>
+        <Text style={{ color: '#697386', marginTop: 4 }}>{directCenter ? `${directCenter.lat.toFixed(6)}, ${directCenter.lng.toFixed(6)}` : '지도 중심을 확인하는 중'}</Text>
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+          <TouchableOpacity style={{ flex: 1, padding: 12, alignItems: 'center' }} onPress={() => setMapSelectMode(false)}><Text>취소</Text></TouchableOpacity>
+          <TouchableOpacity disabled={!directCenter} style={{ flex: 2, padding: 12, alignItems: 'center', borderRadius: 10, backgroundColor: '#2477F3', opacity: directCenter ? 1 : 0.5 }} onPress={() => {
+            const place = { lat: directCenter.lat, lng: directCenter.lng, detailAddress: centerAddress && centerAddress !== '주소 확인 중...' ? centerAddress : '지도 선택 위치', roadAddress: centerAddress && centerAddress !== '주소 확인 중...' ? centerAddress : '' };
+            sheetY.setValue(0);
+            setSearchedPlace(place);
+            setPlaceName(place.detailAddress);
+            setTask('');
+            setMapSelectMode(false);
+          }}><Text style={{ color: '#FFFFFF', fontWeight: '800' }}>이 위치로 설정</Text></TouchableOpacity>
+        </View>
+      </View>}
+
       {addMenuOpen && (
         <Pressable style={[StyleSheet.absoluteFill, { zIndex: 19 }]}
           accessibilityLabel="방문지 추가 메뉴 닫기" onPress={() => setAddMenuOpen(false)} />
       )}
       <View style={styles.topOverlay}>
         <View style={styles.searchControlRow}>
+          <TouchableOpacity style={styles.smallTopButton} onPress={loadDongs}>
+            <Ionicons name="map-outline" size={13} color="#2477F3" />
+            <Text style={styles.smallTopText}>{selectedDong?.properties?.adm_nm?.split(' ').pop() || '행정동'}</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.searchBox}
             activeOpacity={0.9}
@@ -1430,20 +1542,22 @@ function NormalMapScreen({
                 <Text style={styles.addMenuDesc}>지도를 눌러 위치 선택</Text>
               </View>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.addMenuItem} onPress={() => { setAddMenuOpen(false); onSwitchToPublic?.(); }}>
+              <Ionicons name="business-outline" size={18} color="#2563EB" />
+              <View><Text style={styles.addMenuTitle}>공공시설물</Text><Text style={styles.addMenuDesc}>AED · 버스정류장 조회</Text></View>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addMenuItem} onPress={() => { setAddMenuOpen(false); showAlert('준비 중', '엑셀 일괄 등록은 후속 개발 예정입니다.'); }}>
+              <Ionicons name="grid-outline" size={18} color="#2563EB" />
+              <View><Text style={styles.addMenuTitle}>엑셀 일괄 등록</Text><Text style={styles.addMenuDesc}>후속 개발 예정</Text></View>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addMenuItemLast} onPress={() => { setAddMenuOpen(false); showAlert('준비 중', '사진으로 등록은 후속 개발 예정입니다.'); }}>
+              <Ionicons name="image-outline" size={18} color="#2563EB" />
+              <View><Text style={styles.addMenuTitle}>사진으로 등록</Text><Text style={styles.addMenuDesc}>후속 개발 예정</Text></View>
+            </TouchableOpacity>
           </View>
         )}
 
-        {mapSelectMode && (
-          <TouchableOpacity
-            style={styles.mapSelectNotice}
-            onPress={() => setMapSelectMode(false)}
-          >
-            <Ionicons name="map" size={14} color="#FFFFFF" />
-            <Text style={styles.mapSelectNoticeText}>
-              지도에서 위치를 눌러주세요 · 취소하려면 터치
-            </Text>
-          </TouchableOpacity>
-        )}
+        {mapSelectMode && <Text style={styles.mapSelectNoticeText}>지도를 움직여 중앙 핀에 위치를 맞춰주세요</Text>}
 
         {priorityMode && (
           <TouchableOpacity style={styles.priorityResetBox} onPress={resetPriority}>
@@ -1625,6 +1739,9 @@ function NormalMapScreen({
 
         {isGuiding && orderedMarkers.length > 0 && (
           <View style={styles.segmentControlBar}>
+            <TouchableOpacity onPress={optimizeRemainingRoute} disabled={optimizing} style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+              <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 11 }}>이후 경로 다시 계산</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[
                 styles.segmentButton,
@@ -1661,16 +1778,16 @@ function NormalMapScreen({
       <TouchableOpacity
         style={styles.floatingModeButton}
         activeOpacity={0.88}
-        onPress={onSwitchToPublic}
+        onPress={() => setPendingOpen(true)}
       >
         <Ionicons
-          name="layers-outline"
+          name="file-tray-outline"
           size={20}
           color="#FFFFFF"
         />
 
         <Text style={styles.floatingModeButtonText}>
-          공공데이터
+          미처리 업무 {pendingWork.length}
         </Text>
       </TouchableOpacity>
 
@@ -1969,6 +2086,52 @@ function NormalMapScreen({
               onPress={() => setSearchModalVisible(false)}
             >
               <Text style={styles.closeButtonText}>닫기</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={dongOpen} transparent animationType="slide" onRequestClose={() => setDongOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}>
+          <View style={{ maxHeight: '70%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 18 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ fontSize: 18, fontWeight: '800' }}>{user?.workSigungu || '근무지역'} 행정동</Text><TouchableOpacity onPress={() => setDongOpen(false)}><Ionicons name="close" size={24} color="#465267" /></TouchableOpacity></View>
+            {dongLoading ? <Text style={{ padding: 18 }}>행정동을 불러오는 중입니다.</Text> : <ScrollView>
+              {dongOptions.map((feature, index) => <TouchableOpacity key={feature.properties?.adm_cd || index} style={{ padding: 13, borderBottomWidth: 1, borderColor: '#E6ECF2' }} onPress={() => { setSelectedDong(feature); setDongOpen(false); }}>
+                <Text style={{ color: '#172033', fontWeight: '700' }}>{String(feature.properties?.adm_nm || feature.properties?.name || `행정동 ${index + 1}`).split(' ').pop()}</Text>
+              </TouchableOpacity>)}
+              {dongOptions.length === 0 && <Text style={{ padding: 18 }}>표시할 행정동이 없습니다.</Text>}
+            </ScrollView>}
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={pendingOpen} transparent animationType="slide" onRequestClose={() => setPendingOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}>
+          <View style={{ maxHeight: '75%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 18 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: '#172033' }}>미처리 업무 불러오기</Text>
+              <TouchableOpacity onPress={() => setPendingOpen(false)}><Ionicons name="close" size={24} color="#465267" /></TouchableOpacity>
+            </View>
+            <Text style={{ marginTop: 5, color: '#697386' }}>선택한 업무를 오늘 지도에 표시합니다. 원래 일정은 유지됩니다.</Text>
+            <TouchableOpacity style={{ paddingVertical: 12 }} onPress={() => setPendingSelected(pendingSelected.length === pendingWork.length ? [] : pendingWork.map((item) => String(item.id ?? item.taskId)))}>
+              <Text style={{ color: '#2477F3', fontWeight: '800' }}>{pendingSelected.length === pendingWork.length ? '전체 해제' : '전체 선택'}</Text>
+            </TouchableOpacity>
+            <ScrollView>
+              {pendingWork.length === 0 ? <Text style={{ paddingVertical: 20, color: '#697386' }}>미처리 업무가 없습니다.</Text> : pendingWork.map((item) => {
+                const id = String(item.id ?? item.taskId);
+                const checked = pendingSelected.includes(id);
+                return <TouchableOpacity key={id} onPress={() => setPendingSelected((old) => old.includes(id) ? old.filter((value) => value !== id) : [...old, id])} style={{ flexDirection: 'row', gap: 10, paddingVertical: 12, borderTopWidth: 1, borderColor: '#E6ECF2' }}>
+                  <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={22} color="#2477F3" />
+                  <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: '#172033' }}>{item.detailAddress || item.roadAddress || `방문지 ${id}`}</Text><Text style={{ color: '#697386', marginTop: 2 }}>{item.adminDong || ''}</Text></View>
+                </TouchableOpacity>;
+              })}
+            </ScrollView>
+            <TouchableOpacity disabled={!pendingSelected.length || pendingBusy} onPress={async () => {
+              try {
+                setPendingBusy(true);
+                const rows = pendingWork.filter((item) => pendingSelected.includes(String(item.id ?? item.taskId)));
+                if (await onAddWork?.(rows) !== false) { setPendingSelected([]); setPendingOpen(false); }
+              } finally { setPendingBusy(false); }
+            }} style={{ marginTop: 12, backgroundColor: '#2477F3', opacity: !pendingSelected.length || pendingBusy ? 0.5 : 1, padding: 15, borderRadius: 12, alignItems: 'center' }}>
+              <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>{pendingBusy ? '불러오는 중' : `${pendingSelected.length}건 지도에 표시`}</Text>
             </TouchableOpacity>
           </View>
         </View>

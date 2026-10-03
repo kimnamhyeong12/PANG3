@@ -23,8 +23,9 @@ public class AuthController {
         String password = body.get("password");
         String name = body.get("name");
         String workSido = body.get("workSido");
+        String workSigungu = body.get("workSigungu");
 
-        return authService.register(loginId, password, name, workSido);
+        return authService.register(loginId, password, name, workSido, workSigungu);
     }
 
     @PostMapping("/login")

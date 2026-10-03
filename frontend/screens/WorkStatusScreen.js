@@ -10,6 +10,7 @@ import {
 import { WebView } from 'react-native-webview';
 import { BackButton } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
+import { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
 
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const KAKAO_JAVASCRIPT_KEY =
@@ -107,32 +108,50 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
   const [selectedAreaKey, setSelectedAreaKey] = useState(null);
   const [focusedAreaBounds, setFocusedAreaBounds] = useState(null);
   const [mapInteracting, setMapInteracting] = useState(false);
-  const isLeader = group?.role === 'LEADER';
+  const [groupMembers, setGroupMembers] = useState([]);
   const personalWorkspace = isPersonalGroup(group);
 
   const loadBoundaries = useCallback(async () => {
     setLoadingBoundary(true);
     setBoundaryError('');
     try {
-      if (!group?.regionAdmCode) {
+      const codes = Array.from(new Set([
+        group?.regionAdmCode,
+        ...assignments.map((item) =>
+          (!item.sido || String(item.sido).includes('부산'))
+            ? BUSAN_DISTRICT_CODES[item.sigungu] : null),
+      ].filter(Boolean)));
+      if (!codes.length) {
         setBoundaries({ type: 'FeatureCollection', features: [] });
         if (!personalWorkspace) {
-          setBoundaryError('그룹 활동 구·군을 먼저 설정해주세요.');
+          setBoundaryError('표시할 행정동 경계를 찾지 못했습니다.');
         }
         return;
       }
-      const data = await groupApi(
-        `/api/sgis/boundaries?admCode=${encodeURIComponent(group.regionAdmCode)}`
-      );
-      setBoundaries(data?.type === 'FeatureCollection' ? data : { type: 'FeatureCollection', features: [] });
+      const results = await Promise.allSettled(codes.map((code) => groupApi(
+        `/api/sgis/boundaries?admCode=${encodeURIComponent(code)}`
+      )));
+      const features = results.flatMap((result) => result.status === 'fulfilled' && result.value?.type === 'FeatureCollection'
+        ? result.value.features || [] : []);
+      setBoundaries({ type: 'FeatureCollection', features });
+      if (features.length === 0) setBoundaryError('행정동 경계를 불러오지 못했습니다.');
     } catch (error) {
       setBoundaryError(error.message || '행정동 경계를 불러오지 못했습니다.');
     } finally {
       setLoadingBoundary(false);
     }
-  }, [group?.regionAdmCode, personalWorkspace]);
+  }, [group?.regionAdmCode, personalWorkspace, assignments]);
 
-  useEffect(() => { onRefresh?.(); loadBoundaries(); }, [loadBoundaries, onRefresh]);
+  useEffect(() => { onRefresh?.(); }, [onRefresh]);
+  useEffect(() => { loadBoundaries(); }, [loadBoundaries]);
+  useEffect(() => {
+    if (!group?.groupId || !user?.userId) return undefined;
+    let active = true;
+    groupApi(`/api/groups/${group.groupId}/members?userId=${user.userId}`)
+      .then((rows) => { if (active) setGroupMembers(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (active) setGroupMembers([]); });
+    return () => { active = false; };
+  }, [group?.groupId, user?.userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,18 +183,16 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
 
   const visibleAssignments = useMemo(() => {
     const source = Array.isArray(resolvedAssignments) ? resolvedAssignments : [];
-    return isLeader ? source : source.filter((i) => Number(i.assigneeUserId) === Number(user?.userId));
-  }, [resolvedAssignments, isLeader, user?.userId]);
+    return source;
+  }, [resolvedAssignments]);
 
   const memberColors = useMemo(() => {
-    const leaderId = String(group?.leaderUserId || '');
-    const memberIds = Array.from(new Set(
-      resolvedAssignments
+    const memberIds = Array.from(new Set([
+      ...groupMembers.map((member) => String(member.userId)),
+      ...resolvedAssignments
         .map((item) => String(item.assigneeUserId || 'unknown'))
-        .filter((id) => id !== 'unknown')
-    )).sort((left, right) => {
-      if (left === leaderId) return -1;
-      if (right === leaderId) return 1;
+        .filter((id) => id !== 'unknown'),
+    ])).sort((left, right) => {
       const leftNumber = Number(left);
       const rightNumber = Number(right);
       if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
@@ -189,7 +206,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
       result[id] = MEMBER_COLORS[index % MEMBER_COLORS.length];
     });
     return result;
-  }, [resolvedAssignments, group?.leaderUserId]);
+  }, [resolvedAssignments, groupMembers]);
 
   const counts = useMemo(() => {
     const value = { pending: 0, working: 0, complete: 0 };
@@ -233,10 +250,10 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
         <View style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>업무 현황</Text>
           <Text style={styles.title}>
-            {personalWorkspace ? '내 업무 현황' : isLeader ? '팀 작업현황' : '내 담당 업무'}
+            {personalWorkspace ? '내 업무 현황' : '팀 작업현황'}
           </Text>
           <Text style={styles.desc}>
-            {group?.groupName || '현재 그룹'} · {personalWorkspace ? '1인 그룹' : isLeader ? '팀장 화면' : '팀원 화면'}
+            {group?.groupName || '현재 그룹'} · {personalWorkspace ? '개인 업무' : '팀 전체 현황'}
           </Text>
         </View>
       </View>
@@ -317,7 +334,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
           </View>
           {memberProgress.length === 0 ? (
             <Text style={styles.emptyText}>
-              {personalWorkspace ? '등록된 업무가 없습니다.' : '배정된 팀 업무가 없습니다.'}
+              {personalWorkspace ? '등록된 업무가 없습니다.' : '공유된 팀원 업무가 없습니다.'}
             </Text>
           ) : (
             <ScrollView style={styles.memberList} nestedScrollEnabled showsVerticalScrollIndicator={false}>

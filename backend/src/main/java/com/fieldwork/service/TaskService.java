@@ -1,7 +1,6 @@
 package com.fieldwork.service;
 
 import com.fieldwork.entity.Task;
-import com.fieldwork.entity.GroupMember;
 import com.fieldwork.entity.LocationAssignment;
 import com.fieldwork.entity.User;
 import com.fieldwork.entity.WorkGroup;
@@ -61,28 +60,19 @@ public class TaskService {
                 .collect(Collectors.toList());
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<Map<String, Object>> getForFrontend(Long userId, Long groupId) {
         User user = getUser(userId);
-
-        if (groupId == null) {
-            groupId = groupService.ensurePersonalGroup(user).getGroupId();
-        }
-
-        WorkGroup group = getGroup(groupId);
-        GroupMember member = groupMemberRepository.findByGroupAndUser(group, user)
-                .orElseThrow(() -> new RuntimeException("?대떦 洹몃９??硫ㅻ쾭媛 ?꾨떃?덈떎."));
-
-        if ("LEADER".equalsIgnoreCase(member.getRole())) {
-            return taskRepository.findByGroupOrderByTaskIdDesc(group).stream()
-                    .map(this::toFrontendMap)
-                    .collect(Collectors.toList());
-        }
-
-        return locationAssignmentRepository
-                .findByGroupAndAssigneeOrderByAssignedAtDesc(group, user)
-                .stream()
-                .map(assignment -> toFrontendMap(assignment.getTask()))
+        List<Task> owned = new java.util.ArrayList<>(taskRepository.findByCurrentAssigneeOrderByTaskIdDesc(user));
+        taskRepository.findByCurrentAssigneeIsNullOrderByTaskIdDesc().stream()
+                .filter(task -> {
+                    User owner = currentAssignee(task);
+                    return owner != null && user.getUserId().equals(owner.getUserId());
+                })
+                .forEach(owned::add);
+        return owned.stream()
+                .sorted((left, right) -> right.getTaskId().compareTo(left.getTaskId()))
+                .map(this::toFrontendMap)
                 .collect(Collectors.toList());
     }
 
@@ -90,15 +80,35 @@ public class TaskService {
     public List<Map<String, Object>> getGroupLocations(Long groupId, Long userId) {
         User user = getUser(userId);
         WorkGroup group = getGroup(groupId);
-
         if (!groupMemberRepository.existsByGroupAndUser(group, user)) {
-            throw new RuntimeException("?대떦 洹몃９??硫ㅻ쾭媛 ?꾨떃?덈떎.");
+            throw new RuntimeException("그룹 구성원이 아닙니다.");
         }
-
-        return taskRepository.findByGroupOrderByTaskIdDesc(group)
-                .stream()
+        var memberIds = groupMemberRepository.findByGroupOrderByJoinedAtAsc(group).stream()
+                .map(member -> member.getUser().getUserId())
+                .collect(Collectors.toSet());
+        List<Task> owned = new java.util.ArrayList<>(taskRepository.findByCurrentAssignee_UserIdInOrderByTaskIdDesc(memberIds));
+        taskRepository.findByCurrentAssigneeIsNullOrderByTaskIdDesc().stream()
+                .filter(task -> {
+                    User owner = currentAssignee(task);
+                    return owner != null && memberIds.contains(owner.getUserId());
+                })
+                .forEach(owned::add);
+        return owned.stream()
+                .sorted((left, right) -> right.getTaskId().compareTo(left.getTaskId()))
                 .map(this::toFrontendMap)
                 .collect(Collectors.toList());
+    }
+
+    public User currentAssignee(Task task) {
+        if (task.getCurrentAssignee() != null) return task.getCurrentAssignee();
+        var assignments = locationAssignmentRepository.findByTaskOrderByAssignedAtAsc(task);
+        for (int index = assignments.size() - 1; index >= 0; index--) {
+            var assignment = assignments.get(index);
+            if (!assignment.getGroup().isPersonal()) return assignment.getAssignee();
+        }
+        if (!assignments.isEmpty()) return assignments.get(assignments.size() - 1).getAssignee();
+        if (task.getCreatedBy() != null) return task.getCreatedBy();
+        return null;
     }
 
     public Task getById(Long taskId) {
@@ -117,18 +127,11 @@ public class TaskService {
 
         User creator = getUser(createdByUserId);
         task.setCreatedBy(creator);
+        task.setCurrentAssignee(creator);
 
-        Long groupId = toLong(body.get("groupId"));
-        if (groupId == null) {
-            groupId = groupService.ensurePersonalGroup(creator).getGroupId();
-        }
-        GroupMember creatorMembership = null;
-        WorkGroup taskGroup = null;
-        WorkGroup group = getGroup(groupId);
-        creatorMembership = groupMemberRepository.findByGroupAndUser(group, creator)
-                .orElseThrow(() -> new RuntimeException("?대떦 洹몃９??硫ㅻ쾭留?諛⑸Ц吏瑜?留뚮뱾 ???덉뒿?덈떎."));
-        task.setGroup(group);
-        taskGroup = group;
+        // 방문지는 항상 작성자의 개인 업무로 저장한다. 그룹은 개인 업무를 조회하는 범위다.
+        WorkGroup personalGroup = groupService.ensurePersonalGroup(creator);
+        task.setGroup(personalGroup);
 
         task.setDetailAddress(firstNonBlank(
                 str(body.get("detailAddress")),
@@ -207,28 +210,14 @@ public class TaskService {
 
         // 1??洹몃９怨??쇰컲 ??먯? ?깅줉 利됱떆 蹂몄씤 ?대떦?쇰줈 ?곌껐?쒕떎.
         // ?ㅼ씤 洹몃９????μ씠 異붽???諛⑸Ц吏???대떦??吏???붾㈃?먯꽌 諛곗젙?쒕떎.
-        boolean deferAssignment = booleanValue(body.get("deferAssignment"));
-        if (taskGroup != null
-                && creatorMembership != null
-                && (taskGroup.isPersonal()
-                    || (!deferAssignment
-                        && "MEMBER".equalsIgnoreCase(creatorMembership.getRole())))) {
-            LocationAssignment assignment = new LocationAssignment();
-            assignment.setGroup(taskGroup);
-            assignment.setTask(savedTask);
-            assignment.setAssignee(creator);
-            assignment.setAssignedBy(creator);
-            locationAssignmentRepository.save(assignment);
-        }
+        LocationAssignment assignment = new LocationAssignment();
+        assignment.setGroup(personalGroup);
+        assignment.setTask(savedTask);
+        assignment.setAssignee(creator);
+        assignment.setAssignedBy(creator);
+        locationAssignmentRepository.save(assignment);
 
         return toFrontendMap(savedTask);
-    }
-
-    private boolean booleanValue(Object value) {
-        if (value instanceof Boolean bool) {
-            return bool;
-        }
-        return value != null && Boolean.parseBoolean(value.toString());
     }
 
     @Transactional
@@ -239,6 +228,10 @@ public class TaskService {
 
     @Transactional
     public Task updateStatusEntity(Task task, String status) {
+        if ("complete".equalsIgnoreCase(task.getTaskStatus())
+                && !"complete".equalsIgnoreCase(status)) {
+            throw new IllegalArgumentException("완료한 방문지의 상태는 변경할 수 없습니다.");
+        }
         applyStatusTransition(task, status);
         return taskRepository.save(task);
     }
@@ -452,6 +445,10 @@ public class TaskService {
         map.put("adminDong", task.getAdminDong());
         map.put("admin_dong", task.getAdminDong());
 
+        User owner = currentAssignee(task);
+        map.put("assigneeUserId", owner == null ? null : owner.getUserId());
+        map.put("assigneeName", owner == null ? null : owner.getName());
+        map.put("assigneeLoginId", owner == null ? null : owner.getLoginId());
         map.put("createdByUserId", task.getCreatedBy() != null
                 ? task.getCreatedBy().getUserId()
                 : null);

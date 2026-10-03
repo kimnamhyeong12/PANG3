@@ -71,6 +71,10 @@ public class Task {
     private User createdBy;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "current_assignee_user_id")
+    private User currentAssignee;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "group_id")
     private WorkGroup group;
 
@@ -213,6 +217,14 @@ public class Task {
 
     public void setCreatedBy(User createdBy) {
         this.createdBy = createdBy;
+    }
+
+    public User getCurrentAssignee() {
+        return currentAssignee;
+    }
+
+    public void setCurrentAssignee(User currentAssignee) {
+        this.currentAssignee = currentAssignee;
     }
 
     public WorkGroup getGroup() {

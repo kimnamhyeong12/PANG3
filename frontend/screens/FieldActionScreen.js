@@ -31,6 +31,7 @@ import {
 
 const KAKAO_JAVASCRIPT_KEY =
   process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY || '';
+const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY || '';
 
 const PHOTO_TYPES = [
   {
@@ -159,6 +160,29 @@ function getInteractiveMapHtml(latitude, longitude) {
           body {
             background: #E8F2FF;
           }
+          #pointer {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            width: 28px;
+            height: 34px;
+            transform: translate(-50%, -40px);
+            background: #E53935;
+            border: 3px solid white;
+            border-radius: 50% 50% 45% 45%;
+            box-shadow: 0 2px 7px rgba(0,0,0,.3);
+            pointer-events: none;
+            z-index: 10;
+          }
+          #pointer::after {
+            content: '';
+            position: absolute;
+            left: 5px;
+            top: 28px;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 12px solid #E53935;
+          }
         </style>
 
         <script
@@ -169,10 +193,10 @@ function getInteractiveMapHtml(latitude, longitude) {
 
       <body>
         <div id="map"></div>
+        <div id="pointer"></div>
 
         <script>
           var map = null;
-          var marker = null;
           var ready = false;
 
           function postMessage(data) {
@@ -189,7 +213,7 @@ function getInteractiveMapHtml(latitude, longitude) {
             latitude,
             longitude
           ) {
-            if (!ready || !map || !marker) {
+            if (!ready || !map) {
               return;
             }
 
@@ -208,8 +232,6 @@ function getInteractiveMapHtml(latitude, longitude) {
                 lat,
                 lng
               );
-
-            marker.setPosition(position);
 
             map.relayout();
             map.panTo(position);
@@ -244,12 +266,6 @@ function getInteractiveMapHtml(latitude, longitude) {
                   }
                 );
 
-              marker =
-                new window.kakao.maps.Marker({
-                  position: initialPosition,
-                  map: map
-                });
-
               ready = true;
 
               setTimeout(function() {
@@ -259,26 +275,10 @@ function getInteractiveMapHtml(latitude, longitude) {
                 );
               }, 300);
 
-              window.kakao.maps.event.addListener(
-                map,
-                'click',
-                function(mouseEvent) {
-                  var position =
-                    mouseEvent.latLng;
-
-                  marker.setPosition(
-                    position
-                  );
-
-                  map.panTo(position);
-
-                  postMessage({
-                    type: 'LOCATION_SELECTED',
-                    latitude: position.getLat(),
-                    longitude: position.getLng()
-                  });
-                }
-              );
+              window.kakao.maps.event.addListener(map, 'idle', function() {
+                var position = map.getCenter();
+                postMessage({ type: 'LOCATION_SELECTED', latitude: position.getLat(), longitude: position.getLng() });
+              });
             });
           }
 
@@ -290,6 +290,7 @@ function getInteractiveMapHtml(latitude, longitude) {
 }
 
 export default function FieldActionScreen({
+  user,
   location,
   actionType,
   onBack,
@@ -297,6 +298,7 @@ export default function FieldActionScreen({
 }) {
   const mapRef = useRef(null);
   const mapWrapperRef = useRef(null);
+  const lastMapCoordinateRef = useRef('');
 
   const [
     mapInteracting,
@@ -329,6 +331,9 @@ export default function FieldActionScreen({
         ? String(location.lng)
         : ''
     );
+  const [locationAddress, setLocationAddress] = useState(location?.roadAddress || location?.detailAddress || '');
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [editingLocation, setEditingLocation] = useState(false);
 
   const [photos, setPhotos] =
     useState(createEmptyPhotos());
@@ -493,6 +498,7 @@ export default function FieldActionScreen({
               String(data.longitude)
             );
           }
+          if (data.locationAddress) setLocationAddress(data.locationAddress);
 
           const savedPhotos =
             data.fieldPhotos || [];
@@ -584,6 +590,8 @@ export default function FieldActionScreen({
         data.type ===
         'LOCATION_SELECTED'
       ) {
+        lastMapCoordinateRef.current = `${Number(data.latitude).toFixed(6)}:${Number(data.longitude).toFixed(6)}`;
+        if (editingLocation) setMarkedMapUri(null);
         setLatitude(
           String(data.latitude)
         );
@@ -639,9 +647,30 @@ export default function FieldActionScreen({
     };
 
   useEffect(() => {
-    if (!isValidCoordinate(latitude, longitude)) return;
-    const timer = setTimeout(() => { applyCoordinateToMap(); }, 150);
+    if (!isValidCoordinate(latitude, longitude)) return undefined;
+    const key = `${Number(latitude).toFixed(6)}:${Number(longitude).toFixed(6)}`;
+    if (lastMapCoordinateRef.current === key) return undefined;
+    const timer = setTimeout(() => {
+      lastMapCoordinateRef.current = key;
+      applyCoordinateToMap();
+    }, 150);
     return () => clearTimeout(timer);
+  }, [latitude, longitude]);
+
+  useEffect(() => {
+    if (!KAKAO_REST_API_KEY || !isValidCoordinate(latitude, longitude)) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`https://dapi.kakao.com/v2/local/geo/coord2address.json?x=${encodeURIComponent(longitude)}&y=${encodeURIComponent(latitude)}`, { headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` } });
+        if (!response.ok) throw new Error('주소 조회 실패');
+        const data = await response.json();
+        if (!cancelled) setLocationAddress(data.documents?.[0]?.road_address?.address_name || data.documents?.[0]?.address?.address_name || '주소 확인 불가');
+      } catch {
+        if (!cancelled) setLocationAddress('주소 확인 불가');
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [latitude, longitude]);
 
   const handleMapTouchStart =
@@ -966,6 +995,7 @@ export default function FieldActionScreen({
         'taskId',
         String(taskId)
       );
+      if (user?.userId) form.append('userId', String(user.userId));
 
       form.append(
         'latitude',
@@ -976,6 +1006,7 @@ export default function FieldActionScreen({
         'longitude',
         String(longitude || '')
       );
+      form.append('locationAddress', locationAddress || '');
 
       form.append(
         'mainComment',
@@ -1200,9 +1231,15 @@ export default function FieldActionScreen({
             작업 위치
           </Text>
 
+          <Text style={styles.mapGuide}>{locationAddress || '주소 확인 중...'}</Text>
+          <TouchableOpacity style={styles.photoSmallButton} onPress={() => setEditingLocation(true)}>
+            <Text style={styles.photoSmallButtonText}>위치 수정</Text>
+          </TouchableOpacity>
+
           <View
             ref={mapWrapperRef}
             collapsable={false}
+            pointerEvents={editingLocation ? 'auto' : 'none'}
             style={
               styles.mapWrapper
             }
@@ -1274,7 +1311,7 @@ export default function FieldActionScreen({
               styles.mapGuide
             }
           >
-            지도를 움직이거나 터치해서 작업 위치를 선택할 수 있습니다.
+            {editingLocation ? '지도를 움직여 중앙 핀에 작업 위치를 맞춰주세요. 보고서 저장 시 반영됩니다.' : '위치 수정을 누르면 지도를 움직일 수 있습니다.'}
           </Text>
 
           {markedMapUri ? (
@@ -1323,6 +1360,10 @@ export default function FieldActionScreen({
             </TouchableOpacity>
           )}
 
+          <TouchableOpacity onPress={() => setDetailsOpen((open) => !open)} style={{ marginTop: 16, paddingVertical: 8 }}>
+            <Text style={{ color: '#2477F3', fontWeight: '700' }}>상세 정보 {detailsOpen ? '▲' : '▼'}</Text>
+          </TouchableOpacity>
+          {detailsOpen && <>
           <Text
             style={
               styles.inputLabel
@@ -1374,6 +1415,7 @@ export default function FieldActionScreen({
 
             style={styles.input}
           />
+          </>}
         </View>
 
         {/* 3. 현장 사진 */}

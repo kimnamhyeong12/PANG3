@@ -115,12 +115,14 @@ const buildKakaoMapHtml = (
   }
 
   .marker {
-    position: relative;
+    position: absolute;
+    top: 2px;
+    left: 8px;
 
     width: 30px;
     height: 30px;
 
-    border-radius: 50%;
+    border-radius: 50% 50% 46% 46%;
 
     /*
      * 기존의 기본 흰 테두리는 유지.
@@ -142,6 +144,15 @@ const buildKakaoMapHtml = (
       0 2px 7px rgba(0, 0, 0, 0.28);
 
     z-index: 5;
+  }
+  .marker::after {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 27px;
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-top: 15px solid var(--pin-color, #E74C3C);
   }
 
   /*
@@ -584,6 +595,7 @@ const buildKakaoMapHtml = (
 
     marker.style.background =
       color || "#E74C3C";
+    marker.style.setProperty("--pin-color", color || "#E74C3C");
 
     marker.innerText =
       String(index + 1);
@@ -798,7 +810,7 @@ const buildKakaoMapHtml = (
             position: position,
             content: markerElement,
             xAnchor: 0.5,
-            yAnchor: 0.5,
+            yAnchor: 1,
             zIndex: 20 + index
           });
 
@@ -1119,6 +1131,11 @@ const buildKakaoMapHtml = (
         }
       );
 
+      window.kakao.maps.event.addListener(map, "idle", function () {
+        var center = map.getCenter();
+        post({ type: "CENTER_CHANGE", latitude: center.getLat(), longitude: center.getLng() });
+      });
+
       ready = true;
 
       post({
@@ -1166,6 +1183,7 @@ export default function KakaoMapWebView({
   mapSelectMode,
 
   onDirectPlaceSelect,
+  onCenterChange,
   onCurrentLocationChange,
   onMarkerClick,
   onBoundaryClick,
@@ -2875,6 +2893,11 @@ export default function KakaoMapWebView({
             panReturnTimerRef.current = null;
           }
 
+          return;
+        }
+
+        if (message.type === "CENTER_CHANGE") {
+          onCenterChange?.({ lat: Number(message.latitude), lng: Number(message.longitude) });
           return;
         }
 

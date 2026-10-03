@@ -31,7 +31,7 @@ import {
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL;
 
-const REGIONS = [
+export const REGIONS = [
   '부산광역시',
   '서울특별시',
   '대구광역시',
@@ -42,7 +42,7 @@ const REGIONS = [
   '제주특별자치도',
 ];
 
-const DISTRICTS_BY_REGION = {
+export const DISTRICTS_BY_REGION = {
   부산광역시: [
     '중구',
     '서구',
@@ -477,10 +477,8 @@ export default function SettingsScreen({
           />
 
           <Text style={styles.help}>
-            개인 공공업무는 이 구·군의
-            행정동을 사용하며, 팀 업무는
-            각 그룹의 활동지역을
-            따릅니다.
+            지도에서 행정동과 공공시설물을 찾을 때
+            이 근무지역을 사용합니다.
           </Text>
 
           <PrimaryButton
