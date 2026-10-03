@@ -150,7 +150,6 @@ export default function SettingsScreen({
   activeGroup,
   onBack,
   onUpdatedUser,
-  onDashboard,
   onLogout,
 }) {
   const [workSido, setWorkSido] = useState(
@@ -566,51 +565,6 @@ export default function SettingsScreen({
                 : 'OFF'}
             </Text>
           </View>
-        </TouchableOpacity>
-
-        {/* 업무 도구 */}
-
-        <SectionTitle title="업무 도구" />
-
-        <TouchableOpacity
-          style={styles.menuRow}
-          onPress={onDashboard}
-        >
-          <View
-            style={
-              styles.itemIcon
-            }
-          >
-            <Ionicons
-              name="stats-chart-outline"
-              size={21}
-              color={colors.primary}
-            />
-          </View>
-
-          <View style={{ flex: 1 }}>
-            <Text
-              style={styles.itemValue}
-            >
-              외근 분석
-            </Text>
-
-            <Text
-              style={styles.itemLabel}
-            >
-              {activeGroup?.groupName ||
-                '현재 업무공간'}{' '}
-              현황 보기
-            </Text>
-          </View>
-
-          <Ionicons
-            name="chevron-forward"
-            size={18}
-            color={
-              colors.textFaint
-            }
-          />
         </TouchableOpacity>
 
         {/* 로그아웃 */}

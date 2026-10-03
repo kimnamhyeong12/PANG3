@@ -203,6 +203,7 @@ function NormalMapScreen({
   const [addressSearchMode, setAddressSearchMode] = useState(false);
   const [mapSelectMode, setMapSelectMode] = useState(false);
   const [locationSettingMode, setLocationSettingMode] = useState(false);
+  const [locationMoving, setLocationMoving] = useState(false);
   const [directCenter, setDirectCenter] = useState(null);
   const [centerAddress, setCenterAddress] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -1876,6 +1877,7 @@ function NormalMapScreen({
         selectionSessionActive={mapSelectMode}
         selectionPosition={directCenter}
         onCenterChange={setDirectCenter}
+        onSelectionMoveChange={setLocationMoving}
         onCurrentLocationChange={setCurrentLocation}
         onMarkerClick={(loc) => {
           if (loc?.isReturnLocation) return;
@@ -1900,6 +1902,13 @@ function NormalMapScreen({
             <Text style={{ color: '#697386', marginTop: 4 }}>
               {directCenter ? `${directCenter.lat.toFixed(6)}, ${directCenter.lng.toFixed(6)}` : '선택된 위치 없음'}
             </Text>
+            <Text style={{ color: locationMoving ? '#2477F3' : '#697386', marginTop: 6, fontWeight: '800', fontSize: 12 }}>
+              {locationMoving
+                ? '옮기는 중...'
+                : locationSettingMode
+                  ? '위치 이동 가능 · 지도를 움직여 조정하세요'
+                  : '마커 고정됨'}
+            </Text>
           </View>
 
           <TouchableOpacity
@@ -1911,7 +1920,10 @@ function NormalMapScreen({
               borderWidth: 1,
               borderColor: locationSettingMode ? '#2477F3' : '#BFD6F6',
             }}
-            onPress={() => setLocationSettingMode((value) => !value)}
+            onPress={() => {
+              setLocationMoving(false);
+              setLocationSettingMode((value) => !value);
+            }}
           >
             <Text style={{ color: locationSettingMode ? '#FFFFFF' : '#2477F3', fontWeight: '900', fontSize: 12 }}>
               위치 설정
@@ -1923,6 +1935,7 @@ function NormalMapScreen({
           <TouchableOpacity
             style={{ flex: 1, padding: 12, alignItems: 'center' }}
             onPress={() => {
+              setLocationMoving(false);
               setLocationSettingMode(false);
               setMapSelectMode(false);
               setDirectCenter(null);
@@ -1939,6 +1952,7 @@ function NormalMapScreen({
             onPress={async () => {
               const place = { lat: directCenter.lat, lng: directCenter.lng, detailAddress: centerAddress && centerAddress !== '주소 확인 중...' ? centerAddress : (selectionPurpose === 'return' ? '근무지' : '지도 선택 위치'), roadAddress: centerAddress && centerAddress !== '주소 확인 중...' ? centerAddress : '' };
               sheetY.setValue(0);
+              setLocationMoving(false);
               setLocationSettingMode(false);
               setMapSelectMode(false);
               if (selectionPurpose === 'return') {

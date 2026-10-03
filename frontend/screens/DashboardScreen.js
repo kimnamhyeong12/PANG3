@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 
-import { BackButton } from '../components/ui';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow, spacing } from '../constants/design';
 import { groupApi } from '../utils/groupApi';
 
@@ -730,8 +730,7 @@ export const buildAnalytics = (
 
 export default function DashboardScreen({
   user,
-  activeGroup,
-  onBack,
+  onSettings,
 }) {
   const [
     locations,
@@ -770,7 +769,6 @@ export default function DashboardScreen({
     useCallback(
       async () => {
         if (
-          !activeGroup?.groupId ||
           !user?.userId
         ) {
           setLocations([]);
@@ -784,11 +782,8 @@ export default function DashboardScreen({
           setLoading(true);
           setLoadError('');
 
-          const personal = activeGroup.personalWorkspace || activeGroup.personal || activeGroup.workspaceType === 'PERSONAL';
-          const path = personal
-            ? `/api/locations?userId=${encodeURIComponent(user.userId)}`
-            : `/api/locations/group/${activeGroup.groupId}?userId=${encodeURIComponent(user.userId)}`;
-          const locationData = await groupApi(path);
+          const userId = encodeURIComponent(user.userId);
+          const locationData = await groupApi(`/api/locations?userId=${userId}`);
           const groupLocations = Array.isArray(locationData) ? locationData : [];
 
           const resolvedLocations =
@@ -916,7 +911,6 @@ export default function DashboardScreen({
         }
       },
       [
-        activeGroup?.groupId,
         user?.userId,
       ]
     );
@@ -937,7 +931,7 @@ export default function DashboardScreen({
   useEffect(() => {
     if (
       loading ||
-      !activeGroup?.groupId
+      !user?.userId
     ) {
       return;
     }
@@ -966,7 +960,7 @@ export default function DashboardScreen({
             currentMonth
     );
   }, [
-    activeGroup?.groupId,
+    user?.userId,
     analytics.dates,
     loading,
   ]);
@@ -1013,63 +1007,24 @@ export default function DashboardScreen({
         styles.container
       }
     >
-      <View
-        style={styles.header}
-      >
-        <BackButton
-          onPress={onBack}
-        />
-
-        <View
-          style={
-            styles.headerText
-          }
-        >
-          <Text
-            style={
-              styles.eyebrow
-            }
-          >
-            업무 통계 · {today}
-          </Text>
-
-          <Text
-            style={
-              styles.title
-            }
-          >
-            외근 분석 대시보드
-          </Text>
-
-          <Text
-            style={
-              styles.workspace
-            }
-            numberOfLines={1}
-          >
-            {activeGroup?.groupName ||
-              activeGroup?.name ||
-              '선택된 그룹 없음'}
+      <View style={styles.header}>
+        <View style={styles.headerText}>
+          <Text style={styles.eyebrow}>업무 통계 · {today}</Text>
+          <Text style={styles.title}>대시보드</Text>
+          <Text style={styles.workspace} numberOfLines={1}>
+            개인 포함 모든 그룹
           </Text>
         </View>
 
-        <View
-          style={
-            styles.userCircle
-          }
+        <TouchableOpacity
+          style={styles.settingsButton}
+          onPress={onSettings}
+          accessibilityRole="button"
+          accessibilityLabel="설정"
+          activeOpacity={0.75}
         >
-          <Text
-            style={
-              styles.userText
-            }
-          >
-            {String(
-              user?.name ||
-                user?.loginId ||
-                '사'
-            ).slice(0, 1)}
-          </Text>
-        </View>
+          <Ionicons name="settings-outline" size={23} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -1090,7 +1045,7 @@ export default function DashboardScreen({
               styles.loadingText
             }
           >
-            그룹 방문지 현황을
+            전체 방문지 현황을
             불러오는 중...
           </Text>
         </View>
@@ -1103,10 +1058,10 @@ export default function DashboardScreen({
             false
           }
         >
-          {!activeGroup ? (
+          {!user?.userId ? (
             <MessageCard
-              title="선택된 그룹이 없습니다"
-              message="메인 화면에서 그룹을 선택한 후 다시 확인해 주세요."
+              title="로그인이 필요합니다"
+              message="로그인한 뒤 업무 통계를 확인해 주세요."
             />
           ) : loadError ? (
             <MessageCard
@@ -2150,6 +2105,17 @@ const styles =
       fontSize: 11,
       fontWeight: '700',
       marginTop: 3,
+    },
+
+    settingsButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.primarySoft,
+      borderWidth: 1,
+      borderColor: colors.line,
     },
 
     userCircle: {

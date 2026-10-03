@@ -172,19 +172,8 @@ function getInteractiveMapHtml(latitude, longitude) {
             pointer-events: none;
             z-index: 10;
           }
-          .selected-pin-wrap {
+          #pointer .pin-body {
             position: relative;
-            width: 32px;
-            height: 40px;
-            overflow: visible;
-            pointer-events: none;
-            filter: drop-shadow(0 2px 3px rgba(0,0,0,.3));
-          }
-          #pointer .pin-body,
-          .selected-pin-body {
-            position: absolute;
-            top: 0;
-            left: 1px;
             width: 30px;
             height: 30px;
             background: #E53935;
@@ -193,8 +182,7 @@ function getInteractiveMapHtml(latitude, longitude) {
             box-shadow: 0 0 0 1px rgba(255,255,255,.95);
             transform: rotate(-45deg);
           }
-          #pointer .pin-body::after,
-          .selected-pin-body::after {
+          #pointer .pin-body::after {
             content: '';
             position: absolute;
             width: 7px;
@@ -221,36 +209,6 @@ function getInteractiveMapHtml(latitude, longitude) {
           var ready = false;
           var selectedPosition = null;
           var selectionMode = false;
-          var selectionDragStarted = false;
-          var selectedOverlay = null;
-
-          function renderSelectedMarker() {
-            if (!map || !selectedPosition || !window.kakao || !window.kakao.maps) {
-              return;
-            }
-
-            if (selectedOverlay) {
-              selectedOverlay.setMap(null);
-              selectedOverlay = null;
-            }
-
-            // 위치 설정 ON/OFF 모두 같은 Kakao CustomOverlay 핀을 사용한다.
-            // 별도의 중앙 DOM 핀으로 교체하지 않아 토글할 때 핀이 밀리지 않는다.
-            var markerElement = document.createElement('div');
-            markerElement.className = 'selected-pin-wrap';
-            var markerBody = document.createElement('div');
-            markerBody.className = 'selected-pin-body';
-            markerElement.appendChild(markerBody);
-
-            selectedOverlay = new window.kakao.maps.CustomOverlay({
-              position: selectedPosition,
-              content: markerElement,
-              xAnchor: 0.5,
-              yAnchor: 1.0,
-              zIndex: 30
-            });
-            selectedOverlay.setMap(map);
-          }
 
           function postMessage(data) {
             if (!window.ReactNativeWebView) {
@@ -263,30 +221,18 @@ function getInteractiveMapHtml(latitude, longitude) {
           }
 
           window.setSelectionMode = function(enabled) {
-            var nextMode = !!enabled;
-
-            if (nextMode) {
-              // 기존 확정 위치를 현재 줌 레벨 그대로 화면 중심으로 가져온다.
-              // 핀은 교체하지 않고 같은 CustomOverlay를 계속 사용한다.
-              selectionMode = true;
-              selectionDragStarted = false;
-              if (map && selectedPosition) {
-                map.setCenter(selectedPosition);
-                if (selectedOverlay) {
-                  selectedOverlay.setPosition(selectedPosition);
-                  selectedOverlay.setMap(map);
-                }
-              }
-              return;
+            selectionMode = !!enabled;
+            var pointer = document.getElementById('pointer');
+            if (pointer) {
+              pointer.style.display = selectionMode ? 'block' : 'none';
             }
-
-            // OFF에서는 map.getCenter()로 좌표를 다시 덮어쓰지 않는다.
-            // 마지막 드래그에서 확정된 selectedPosition을 그대로 유지한다.
-            selectionMode = false;
-            selectionDragStarted = false;
-            if (selectedOverlay && selectedPosition) {
-              selectedOverlay.setPosition(selectedPosition);
-              selectedOverlay.setMap(map);
+            if (selectionMode && map) {
+              selectedPosition = map.getCenter();
+              postMessage({
+                type: 'LOCATION_SELECTED',
+                latitude: selectedPosition.getLat(),
+                longitude: selectedPosition.getLng()
+              });
             }
           };
 
@@ -316,8 +262,7 @@ function getInteractiveMapHtml(latitude, longitude) {
 
             selectedPosition = position;
             map.relayout();
-            map.setCenter(position);
-            renderSelectedMarker();
+            map.panTo(position);
           };
 
           function startMap() {
@@ -351,7 +296,6 @@ function getInteractiveMapHtml(latitude, longitude) {
 
               ready = true;
               selectedPosition = initialPosition;
-              renderSelectedMarker();
 
               setTimeout(function() {
                 map.relayout();
@@ -360,43 +304,21 @@ function getInteractiveMapHtml(latitude, longitude) {
                 );
               }, 300);
 
-              window.kakao.maps.event.addListener(map, 'dragstart', function() {
-                if (selectionMode) {
-                  selectionDragStarted = true;
-                }
-              });
-
-              // 위치 설정 중에는 같은 지도 마커가 드래그하는 동안 지도 중심을 실시간으로 따라간다.
-              window.kakao.maps.event.addListener(map, 'center_changed', function() {
-                if (!selectionMode || !selectionDragStarted) return;
-                selectedPosition = map.getCenter();
-                if (selectedOverlay) {
-                  selectedOverlay.setPosition(selectedPosition);
-                  selectedOverlay.setMap(map);
-                }
-              });
-
-              // 드래그가 끝났을 때만 React Native 상태/보고서 좌표를 최종 반영한다.
               window.kakao.maps.event.addListener(map, 'dragend', function() {
-                if (!selectionMode || !selectionDragStarted) {
-                  selectionDragStarted = false;
+                if (!selectionMode) {
                   return;
                 }
                 selectedPosition = map.getCenter();
-                if (selectedOverlay) selectedOverlay.setPosition(selectedPosition);
                 postMessage({
                   type: 'LOCATION_SELECTED',
                   latitude: selectedPosition.getLat(),
                   longitude: selectedPosition.getLng()
                 });
-                selectionDragStarted = false;
               });
 
               window.kakao.maps.event.addListener(map, 'zoom_changed', function() {
-                // 줌은 위치를 바꾸지 않는다. 기존 선택 좌표를 중심으로 줌만 유지한다.
                 if (selectionMode && selectedPosition) {
                   map.setCenter(selectedPosition);
-                  if (selectedOverlay) selectedOverlay.setPosition(selectedPosition);
                 }
               });
             });
@@ -424,6 +346,9 @@ export default function FieldActionScreen({
     mapInteracting,
     setMapInteracting,
   ] = useState(false);
+
+  const [locationMoving, setLocationMoving] =
+    useState(false);
 
   const [status, setStatus] =
     useState(
@@ -805,10 +730,14 @@ export default function FieldActionScreen({
   const handleMapTouchStart =
     () => {
       setMapInteracting(true);
+      if (editingLocation) {
+        setLocationMoving(true);
+      }
     };
 
   const handleMapTouchEnd =
     () => {
+      setLocationMoving(false);
       setTimeout(() => {
         setMapInteracting(false);
       }, 100);
@@ -1280,6 +1209,11 @@ export default function FieldActionScreen({
           status ||
           savedReport?.progressStatus ||
           'pending',
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        lat: Number(latitude),
+        lng: Number(longitude),
+        locationAddress: locationAddress || '',
       });
 
       showAlert(
@@ -1366,14 +1300,28 @@ export default function FieldActionScreen({
             />
           </View>
 
+          <Text style={styles.locationMoveStatus}>
+            {locationMoving
+              ? '옮기는 중...'
+              : editingLocation
+                ? '위치 이동 가능 · 지도를 움직여 조정하세요'
+                : '마커 고정됨'}
+          </Text>
+
           {markedMapUri ? (
             <Image source={{ uri: markedMapUri }} style={styles.mapPreviewImage} />
           ) : null}
 
           <View style={styles.locationActionRow}>
             <TouchableOpacity
-              style={styles.photoSmallButton}
-              onPress={() => setEditingLocation((value) => !value)}
+              style={[
+                styles.photoSmallButton,
+                editingLocation && styles.locationSettingActive,
+              ]}
+              onPress={() => {
+                setLocationMoving(false);
+                setEditingLocation((value) => !value);
+              }}
             >
               <Text style={styles.photoSmallButtonText}>위치 설정</Text>
             </TouchableOpacity>
@@ -1891,6 +1839,16 @@ const styles =
       marginTop: 2,
     },
 
+    locationMoveStatus: {
+      marginTop: 8,
+      color: '#607195',
+      fontSize: 12,
+      fontWeight: '800',
+    },
+
+    locationSettingActive: {
+      backgroundColor: '#10285B',
+    },
 
     mapPreviewImage: {
       width: '100%',

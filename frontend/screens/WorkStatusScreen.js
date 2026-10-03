@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   ScrollView,
   StyleSheet,
   Text,
@@ -48,6 +49,17 @@ const STATUS = {
   pending: { label: '작업 전', color: '#E53935' },
   working: { label: '작업 중', color: '#F5B400' },
   complete: { label: '완료', color: '#16A05D' },
+};
+
+const localDayKey = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+const showOnMap = (item, today) => {
+  if (normalizeStatus(item.status || item.taskStatus) !== 'complete') return true;
+  const completedAt = item.completedAt ?? item.completed_at;
+  if (!completedAt) return true;
+  const completedDate = new Date(completedAt);
+  return Number.isNaN(completedDate.getTime()) || localDayKey(completedDate) >= today;
 };
 
 const safeJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
@@ -112,7 +124,24 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
   const [focusedAreaBounds, setFocusedAreaBounds] = useState(null);
   const [mapInteracting, setMapInteracting] = useState(false);
   const [groupMembers, setGroupMembers] = useState([]);
+  const [today, setToday] = useState(() => localDayKey(new Date()));
   const personalWorkspace = isPersonalGroup(group);
+
+  useEffect(() => {
+    let timer;
+    const scheduleMidnight = () => {
+      clearTimeout(timer);
+      const now = new Date();
+      setToday(localDayKey(now));
+      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      timer = setTimeout(scheduleMidnight, nextMidnight.getTime() - now.getTime() + 50);
+    };
+    scheduleMidnight();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') scheduleMidnight();
+    });
+    return () => { clearTimeout(timer); subscription.remove(); };
+  }, []);
 
   const loadBoundaries = useCallback(async () => {
     setLoadingBoundary(true);
@@ -209,6 +238,10 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
     return source;
   }, [resolvedAssignments]);
 
+  const mapAssignments = useMemo(() =>
+    visibleAssignments.filter((item) => showOnMap(item, today)),
+  [visibleAssignments, today]);
+
   const memberColors = useMemo(() => {
     const memberIds = Array.from(new Set([
       ...groupMembers.map((member) => String(member.userId)),
@@ -260,11 +293,11 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
 
   const mapHtml = useMemo(() => buildMapHtml({
     boundaries,
-    assignments: visibleAssignments,
+    assignments: mapAssignments,
     memberColors,
     selectedMemberId,
     focusedAreaBounds,
-  }), [boundaries, visibleAssignments, memberColors, selectedMemberId, focusedAreaBounds]);
+  }), [boundaries, mapAssignments, memberColors, selectedMemberId, focusedAreaBounds]);
 
   return (
     <View style={styles.container}>

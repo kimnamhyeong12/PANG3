@@ -16,7 +16,6 @@ import { Ionicons } from '@expo/vector-icons';
 
 import RegisterScreen from './screens/RegisterScreen';
 import LoginScreen from './screens/LoginScreen';
-import MainScreen from './screens/MainScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import MapScreen from './screens/MapScreen';
 import FieldActionScreen from './screens/FieldActionScreen';
@@ -509,8 +508,9 @@ export default function App() {
     }
 
     try {
+      const path = `/api/locations/group/${activeGroup.groupId}?userId=${user.userId}`;
       const data = await groupApi(
-        `/api/locations/group/${activeGroup.groupId}?userId=${user.userId}`
+        path
       );
 
       setGroupAssignments(
@@ -870,39 +870,10 @@ export default function App() {
               }
             />
           )}
-
-        {screen === 'main' && (
-          <MainScreen
+        {(screen === 'main' || screen === 'dashboard') && (
+          <DashboardScreen
             user={user}
-            activeGroup={activeGroup}
-            availableGroups={availableGroups}
-            groupAssignments={groupAssignments}
-            onRoute={openWorkspaceMap}
-            onReport={() =>
-              go('reportList')
-            }
-            onGroup={() =>
-              openGroupWorkspace()
-            }
-            onSelectWorkspace={(group) => selectActiveGroup(group)}
-            onRefreshWorkspaces={refreshAvailableGroups}
-            onWorkStatus={() =>
-              go('workStatus')
-            }
-            onDashboard={() =>
-              go('dashboard')
-            }
-            onSettings={() =>
-              go('settings')
-            }
-            onPublicData={() =>
-              go('publicDataAssignment')
-            }
-            locations={routeLocations}
-            setLocations={setRouteLocations}
-            onRefreshAssignments={refreshCurrentWorkspace}
-            pendingWork={pendingWork}
-            onAddWork={addWorkToMap}
+            onSettings={() => go('settings')}
           />
         )}
 
@@ -923,7 +894,7 @@ export default function App() {
                 rememberAvailableGroup(group);
                 selectActiveGroup(group);
                 setGroupWorkspaceTab('status');
-                go(isPersonalGroup(group) ? 'mapDirect' : 'groupWorkspace');
+                go(isPersonalGroup(group) ? 'workStatus' : 'groupWorkspace');
               }}
             />
           )}
@@ -1097,7 +1068,7 @@ export default function App() {
                 user={user}
                 group={activeGroup}
                 assignments={groupAssignments}
-                onBack={() => goBack('main')}
+                onBack={() => go('groupHome')}
                 onRefresh={refreshCurrentWorkspace}
               />
             )}
@@ -1116,21 +1087,12 @@ export default function App() {
             />
           )}
 
-          {screen === 'dashboard' && (
-            <DashboardScreen
-              user={user}
-              activeGroup={activeGroup}
-              onBack={() => goBack('main')}
-            />
-          )}
-
           {screen === 'settings' && (
             <SettingsScreen
               user={user}
               activeGroup={activeGroup}
-              onBack={() => goBack('main')}
+              onBack={() => go('dashboard')}
               onUpdatedUser={setUser}
-              onDashboard={() => go('dashboard')}
               onLogout={handleLogout}
             />
           )}
@@ -1223,6 +1185,14 @@ export default function App() {
                           savedReport.progressStatus ||
                           savedReport.status ||
                           loc.status,
+                        latitude:
+                          savedReport.latitude ?? loc.latitude,
+                        longitude:
+                          savedReport.longitude ?? loc.longitude,
+                        lat:
+                          savedReport.latitude ?? savedReport.lat ?? loc.lat ?? loc.latitude,
+                        lng:
+                          savedReport.longitude ?? savedReport.lng ?? loc.lng ?? loc.longitude,
                       }
                       : loc
                   );
@@ -1311,10 +1281,10 @@ export default function App() {
         </View>
 
         {user &&
-          !['login', 'register', 'dashboard', 'settings'].includes(screen) && (
+          !['login', 'register', 'settings'].includes(screen) && (
             <BottomNavigation
               screen={screen}
-              onHome={() => go('main')}
+              onDashboard={() => go('dashboard')}
               // 하단 메뉴도 홈에서 선택한 현재 작업공간을 그대로 따른다.
               onMap={openWorkspaceMap}
               onReport={() => go('reportList')}
@@ -1331,7 +1301,7 @@ export default function App() {
 
 function BottomNavigation({
   screen,
-  onHome,
+  onDashboard,
   onMap,
   onReport,
   onGroup,
@@ -1362,7 +1332,7 @@ function BottomNavigation({
           'assignment',
         ].includes(screen)
           ? 'group'
-          : 'home';
+          : 'dashboard';
 
   return (
     <View style={styles.bottomNav}>
@@ -1399,10 +1369,10 @@ function BottomNavigation({
         onPress={onGroup}
       />
       <BottomNavItem
-        icon={activeTab === 'home' ? 'home' : 'home-outline'}
-        label="홈"
-        active={activeTab === 'home'}
-        onPress={onHome}
+        icon={activeTab === 'dashboard' ? 'settings' : 'settings-outline'}
+        label="대시보드"
+        active={activeTab === 'dashboard'}
+        onPress={onDashboard}
       />
     </View>
   );

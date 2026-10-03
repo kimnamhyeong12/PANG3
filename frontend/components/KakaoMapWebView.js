@@ -614,8 +614,7 @@ const buildKakaoMapHtml = (
   function createMarkerElement(
     index,
     color,
-    pulse,
-    label
+    pulse
   ) {
     var wrapper =
       document.createElement("div");
@@ -652,9 +651,7 @@ const buildKakaoMapHtml = (
       "marker-number";
 
     markerNumber.innerText =
-      label != null && String(label).length
-        ? String(label)
-        : String(index + 1);
+      String(index + 1);
 
     marker.appendChild(markerNumber);
 
@@ -860,8 +857,7 @@ const buildKakaoMapHtml = (
           createMarkerElement(
             location.markerNumber ? location.markerNumber - 1 : index,
             location.color,
-            !!location.pulse,
-            location.markerLabel
+            !!location.pulse
           );
 
         var overlay =
@@ -1338,6 +1334,7 @@ export default function KakaoMapWebView({
 
   onDirectPlaceSelect,
   onCenterChange,
+  onSelectionMoveChange,
   onCurrentLocationChange,
   onMarkerClick,
   onBoundaryClick,
@@ -3061,6 +3058,10 @@ export default function KakaoMapWebView({
           message.type ===
           "PAN_DRAG"
         ) {
+          if (mapSelectMode && selectionSessionActive) {
+            onSelectionMoveChange?.(true);
+          }
+
           followModeRef.current =
             false;
 
@@ -3083,6 +3084,10 @@ export default function KakaoMapWebView({
         }
 
         if (message.type === "PAN_DRAG_END") {
+          if (mapSelectMode && selectionSessionActive) {
+            onSelectionMoveChange?.(false);
+          }
+
           if (guidingRef.current) {
             panReturnTimerRef.current = setTimeout(() => {
               panReturnTimerRef.current = null;

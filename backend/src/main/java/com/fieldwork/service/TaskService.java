@@ -83,18 +83,7 @@ public class TaskService {
         if (!groupMemberRepository.existsByGroupAndUser(group, user)) {
             throw new RuntimeException("그룹 구성원이 아닙니다.");
         }
-        var memberIds = groupMemberRepository.findByGroupOrderByJoinedAtAsc(group).stream()
-                .map(member -> member.getUser().getUserId())
-                .collect(Collectors.toSet());
-        List<Task> owned = new java.util.ArrayList<>(taskRepository.findByCurrentAssignee_UserIdInOrderByTaskIdDesc(memberIds));
-        taskRepository.findByCurrentAssigneeIsNullOrderByTaskIdDesc().stream()
-                .filter(task -> {
-                    User owner = currentAssignee(task);
-                    return owner != null && memberIds.contains(owner.getUserId());
-                })
-                .forEach(owned::add);
-        return owned.stream()
-                .sorted((left, right) -> right.getTaskId().compareTo(left.getTaskId()))
+        return taskRepository.findByGroupOrderByTaskIdDesc(group).stream()
                 .map(this::toFrontendMap)
                 .collect(Collectors.toList());
     }
@@ -129,9 +118,14 @@ public class TaskService {
         task.setCreatedBy(creator);
         task.setCurrentAssignee(creator);
 
-        // 방문지는 항상 작성자의 개인 업무로 저장한다. 그룹은 개인 업무를 조회하는 범위다.
-        WorkGroup personalGroup = groupService.ensurePersonalGroup(creator);
-        task.setGroup(personalGroup);
+        Long requestedGroupId = toLong(body.get("groupId"));
+        WorkGroup targetGroup = requestedGroupId == null
+                ? groupService.ensurePersonalGroup(creator)
+                : getGroup(requestedGroupId);
+        if (!groupMemberRepository.existsByGroupAndUser(targetGroup, creator)) {
+            throw new IllegalArgumentException("선택한 그룹의 구성원만 방문지를 등록할 수 있습니다.");
+        }
+        task.setGroup(targetGroup);
 
         task.setDetailAddress(firstNonBlank(
                 str(body.get("detailAddress")),
@@ -211,7 +205,7 @@ public class TaskService {
         // 1??洹몃９怨??쇰컲 ??먯? ?깅줉 利됱떆 蹂몄씤 ?대떦?쇰줈 ?곌껐?쒕떎.
         // ?ㅼ씤 洹몃９????μ씠 異붽???諛⑸Ц吏???대떦??吏???붾㈃?먯꽌 諛곗젙?쒕떎.
         LocationAssignment assignment = new LocationAssignment();
-        assignment.setGroup(personalGroup);
+        assignment.setGroup(targetGroup);
         assignment.setTask(savedTask);
         assignment.setAssignee(creator);
         assignment.setAssignedBy(creator);
