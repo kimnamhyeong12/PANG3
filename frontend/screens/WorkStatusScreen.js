@@ -77,7 +77,7 @@ function esc(v){return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 function post(v){window.ReactNativeWebView.postMessage(JSON.stringify(v))}
 kakao.maps.load(function(){
  const map=new kakao.maps.Map(document.getElementById('map'),{center:new kakao.maps.LatLng(35.1046,128.9747),level:7});
- const bounds=new kakao.maps.LatLngBounds();let hasBounds=false;const byArea={};
+ const bounds=new kakao.maps.LatLngBounds();let hasBounds=false;const regionBounds=new kakao.maps.LatLngBounds();let hasRegionBounds=false;const byArea={};
  assignments.forEach(i=>{const a=shortName(i.adminDong||i.admin_dong);if(a)(byArea[a]||(byArea[a]=[])).push(i)});
  function addRing(feature,ring,areaBounds,areaKey){
   const area=shortName(feature.properties&&feature.properties.adm_nm),items=byArea[area]||[];if(!items.length||!Array.isArray(ring))return;
@@ -91,11 +91,11 @@ kakao.maps.load(function(){
    post({type:'AREA_SELECT',areaKey,memberId:ownerId,bounds:{south:sw.getLat(),west:sw.getLng(),north:ne.getLat(),east:ne.getLng()}});
   });
  }
- (boundaries.features||[]).forEach((f,index)=>{const g=f.geometry||{},rings=[];if(g.type==='Polygon'&&g.coordinates&&g.coordinates[0])rings.push(g.coordinates[0]);else if(g.type==='MultiPolygon')(g.coordinates||[]).forEach(p=>p[0]&&rings.push(p[0]));if(!rings.length)return;const areaBounds=new kakao.maps.LatLngBounds(),properties=f.properties||{},areaKey=String(properties.adm_cd||properties.adm_nm||index);rings.forEach(r=>r.forEach(p=>areaBounds.extend(new kakao.maps.LatLng(Number(p[1]),Number(p[0])))));rings.forEach(r=>addRing(f,r,areaBounds,areaKey));});
+ (boundaries.features||[]).forEach((f,index)=>{const g=f.geometry||{},rings=[];if(g.type==='Polygon'&&g.coordinates&&g.coordinates[0])rings.push(g.coordinates[0]);else if(g.type==='MultiPolygon')(g.coordinates||[]).forEach(p=>p[0]&&rings.push(p[0]));if(!rings.length)return;const areaBounds=new kakao.maps.LatLngBounds(),properties=f.properties||{},areaKey=String(properties.adm_cd||properties.adm_nm||index);rings.forEach(r=>r.forEach(p=>{const ll=new kakao.maps.LatLng(Number(p[1]),Number(p[0]));areaBounds.extend(ll);regionBounds.extend(ll);hasRegionBounds=true;}));rings.forEach(r=>addRing(f,r,areaBounds,areaKey));});
  let openedCallout=null,openedMarkerKey=null;
  assignments.forEach((i,index)=>{const lat=Number(i.lat!=null?i.lat:i.latitude),lng=Number(i.lng!=null?i.lng:i.longitude);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;const s=statusOf(i.status||i.taskStatus),ownerId=String(i.assigneeUserId||'unknown'),ownerColor=memberColors[ownerId]||'${UNASSIGNED_COLOR}',markerKey=String(i.taskId||i.assignmentId||i.id||index),dimmed=selectedMemberId&&selectedMemberId!==ownerId,position=new kakao.maps.LatLng(lat,lng);bounds.extend(position);hasBounds=true;const content=document.createElement('div');content.className='pin';content.style.opacity=dimmed?'.22':'1';content.innerHTML='<div class="pin-body" style="background:'+statusColors[s]+';border-color:'+ownerColor+'"></div>';const markerOverlay=new kakao.maps.CustomOverlay({map,position,content,yAnchor:1,zIndex:5});content.onclick=(event)=>{event.stopPropagation();if(openedMarkerKey===markerKey){if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;return;}if(openedCallout)openedCallout.setMap(null);const box=document.createElement('div');box.className='place-callout';const title=document.createElement('div');title.className='place-title';title.textContent=i.detailAddress||i.roadAddress||('방문지 '+i.taskId);const address=document.createElement('div');address.className='place-address';address.textContent=i.roadAddress||i.detailAddress||'주소 정보 없음';const assignee=document.createElement('div');assignee.className='place-assignee';assignee.style.color=ownerColor;assignee.textContent='담당자: '+(i.assigneeName||i.assigneeLoginId||'미배정');const status=document.createElement('span');status.className='place-status';status.style.background=statusColors[s];status.textContent=s==='complete'?'완료':s==='working'?'작업 중':'작업 전';box.appendChild(title);box.appendChild(address);box.appendChild(assignee);box.appendChild(status);openedCallout=new kakao.maps.CustomOverlay({map,position,content:box,yAnchor:1.65,zIndex:10});openedMarkerKey=markerKey;};});
  kakao.maps.event.addListener(map,'click',()=>{if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;});
- if(focusedAreaBounds&&Number.isFinite(Number(focusedAreaBounds.south))&&Number.isFinite(Number(focusedAreaBounds.west))&&Number.isFinite(Number(focusedAreaBounds.north))&&Number.isFinite(Number(focusedAreaBounds.east))){const focused=new kakao.maps.LatLngBounds(new kakao.maps.LatLng(Number(focusedAreaBounds.south),Number(focusedAreaBounds.west)),new kakao.maps.LatLng(Number(focusedAreaBounds.north),Number(focusedAreaBounds.east)));map.setBounds(focused,35,35,35,35);}else if(hasBounds)map.setBounds(bounds,35,35,35,35);
+ if(focusedAreaBounds&&Number.isFinite(Number(focusedAreaBounds.south))&&Number.isFinite(Number(focusedAreaBounds.west))&&Number.isFinite(Number(focusedAreaBounds.north))&&Number.isFinite(Number(focusedAreaBounds.east))){const focused=new kakao.maps.LatLngBounds(new kakao.maps.LatLng(Number(focusedAreaBounds.south),Number(focusedAreaBounds.west)),new kakao.maps.LatLng(Number(focusedAreaBounds.north),Number(focusedAreaBounds.east)));map.setBounds(focused,35,35,35,35);}else if(hasRegionBounds)map.setBounds(regionBounds,35,35,35,35);else if(hasBounds)map.setBounds(bounds,35,35,35,35);
 });
 </script></body></html>`;
 
@@ -115,12 +115,22 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
     setLoadingBoundary(true);
     setBoundaryError('');
     try {
-      const codes = Array.from(new Set([
-        group?.regionAdmCode,
-        ...assignments.map((item) =>
-          (!item.sido || String(item.sido).includes('부산'))
-            ? BUSAN_DISTRICT_CODES[item.sigungu] : null),
-      ].filter(Boolean)));
+      const primaryCode =
+        group?.regionAdmCode ||
+        ((!group?.regionSido || String(group.regionSido).includes('부산'))
+          ? BUSAN_DISTRICT_CODES[group?.regionSigungu]
+          : null) ||
+        (personalWorkspace && (!user?.workSido || String(user.workSido).includes('부산'))
+          ? BUSAN_DISTRICT_CODES[user?.workSigungu]
+          : null);
+
+      const fallbackCodes = assignments.map((item) =>
+        (!item.sido || String(item.sido).includes('부산'))
+          ? BUSAN_DISTRICT_CODES[item.sigungu]
+          : null
+      ).filter(Boolean);
+
+      const codes = Array.from(new Set((primaryCode ? [primaryCode] : fallbackCodes).filter(Boolean)));
       if (!codes.length) {
         setBoundaries({ type: 'FeatureCollection', features: [] });
         if (!personalWorkspace) {
@@ -140,7 +150,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
     } finally {
       setLoadingBoundary(false);
     }
-  }, [group?.regionAdmCode, personalWorkspace, assignments]);
+  }, [group?.regionAdmCode, group?.regionSido, group?.regionSigungu, personalWorkspace, user?.workSido, user?.workSigungu, assignments]);
 
   useEffect(() => { onRefresh?.(); }, [onRefresh]);
   useEffect(() => { loadBoundaries(); }, [loadBoundaries]);

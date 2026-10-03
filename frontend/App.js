@@ -81,6 +81,27 @@ export default function App() {
   const [screen, setScreen] = useState('login');
   const [groupWorkspaceTab, setGroupWorkspaceTab] = useState('status');
   const [mapInitialized, setMapInitialized] = useState(false);
+  const [selectedDong, setSelectedDong] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem('pang3:selectedDong')
+      .then((value) => {
+        if (!active || !value) return;
+        try {
+          const parsed = JSON.parse(value);
+          if (parsed?.type === 'Feature') setSelectedDong(parsed);
+        } catch {}
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  const updateSelectedDong = useCallback((feature) => {
+    if (!feature) return;
+    setSelectedDong(feature);
+    AsyncStorage.setItem('pang3:selectedDong', JSON.stringify(feature)).catch(() => {});
+  }, []);
   const [calendarDayKey, setCalendarDayKey] = useState(getLocalDateKey());
   const [user, setUser] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
@@ -786,16 +807,9 @@ export default function App() {
   };
 
   const openGroupWorkspace = () => {
-    const group = activeGroup && !isPersonalGroup(activeGroup)
-      ? activeGroup
-      : availableGroups.find((item) => !isPersonalGroup(item));
-    if (group) {
-      selectActiveGroup(group);
-      setGroupWorkspaceTab('status');
-      go('groupWorkspace');
-    } else {
-      go('groupHome');
-    }
+    // 하단 '그룹' 탭은 항상 그룹 선택 화면부터 연다.
+    // 사용자가 '내 그룹'에서 그룹을 선택한 뒤에만 업무현황으로 진입한다.
+    go('groupHome');
   };
 
   const openTeamMap = async () => {
@@ -993,6 +1007,8 @@ export default function App() {
         {screen === 'publicDataAssignment' && activeGroup && (
           <MapScreen
             user={user}
+            selectedDong={selectedDong}
+            onSelectedDongChange={updateSelectedDong}
             activeGroup={activeGroup}
             publicDataMode
             locations={routeLocations}
@@ -1024,6 +1040,8 @@ export default function App() {
         {screen === 'teamLocations' && activeGroup && (
           <MapScreen
             user={user}
+            selectedDong={selectedDong}
+            onSelectedDongChange={updateSelectedDong}
             locations={teamLocations}
             setLocations={setTeamLocations}
             activeGroup={activeGroup}
@@ -1119,6 +1137,8 @@ export default function App() {
           >
             <MapScreen
               user={user}
+              selectedDong={selectedDong}
+              onSelectedDongChange={updateSelectedDong}
               locations={routeLocations}
               setLocations={
                 setRouteLocations

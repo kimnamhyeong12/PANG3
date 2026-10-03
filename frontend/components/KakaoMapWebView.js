@@ -103,56 +103,44 @@ const buildKakaoMapHtml = (
 
   .marker-wrap {
     position: relative;
-    width: 46px;
-    height: 46px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
+    width: 32px;
+    height: 40px;
     overflow: visible;
     cursor: pointer;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
   }
 
+  /*
+   * 업무현황(WorkStatusScreen)의 .pin/.pin-body 디자인을
+   * 기본 방문지 마커로 사용한다.
+   */
   .marker {
     position: absolute;
-    top: 2px;
-    left: 8px;
-
+    top: 0;
+    left: 1px;
     width: 30px;
     height: 30px;
-
-    border-radius: 50% 50% 46% 46%;
-
-    /*
-     * 기존의 기본 흰 테두리는 유지.
-     * 현재 목적지 검은 테두리는 사용하지 않는다.
-     */
-    border: 2px solid #FFFFFF;
-
+    border-radius: 50% 50% 50% 0;
+    border: 4px solid #94A3B8;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.95);
     box-sizing: border-box;
-
+    transform: rotate(-45deg);
     color: #FFFFFF;
-
     font-family: Arial, sans-serif;
-    font-size: 13px;
-    font-weight: 700;
-    line-height: 26px;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 22px;
     text-align: center;
-
-    box-shadow:
-      0 2px 7px rgba(0, 0, 0, 0.28);
-
     z-index: 5;
   }
-  .marker::after {
-    content: '';
-    position: absolute;
-    left: 6px;
-    top: 27px;
-    border-left: 7px solid transparent;
-    border-right: 7px solid transparent;
-    border-top: 15px solid var(--pin-color, #E74C3C);
+
+  .marker-number {
+    display: block;
+    width: 22px;
+    height: 22px;
+    line-height: 22px;
+    text-align: center;
+    transform: rotate(45deg);
   }
 
   /*
@@ -168,8 +156,8 @@ const buildKakaoMapHtml = (
   .destination-wave {
     position: absolute;
 
-    left: 8px;
-    top: 8px;
+    left: 1px;
+    top: 1px;
 
     width: 30px;
     height: 30px;
@@ -220,18 +208,47 @@ const buildKakaoMapHtml = (
    * ===============================
    */
 
+  .selected-pin-wrap {
+    position: relative;
+    width: 32px;
+    height: 40px;
+    overflow: visible;
+    pointer-events: none;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
+  }
+
   .selected-location {
-    width: 20px;
-    height: 20px;
+    position: absolute;
+    top: 0;
+    left: 1px;
+    width: 30px;
+    height: 30px;
+    background: #E53935;
+    border-radius: 50% 50% 50% 0;
+    border: 4px solid #94A3B8;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.95);
+    box-sizing: border-box;
+    transform: rotate(-45deg);
+  }
 
+  .selected-location::after {
+    content: '';
+    position: absolute;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
+    background: #FFFFFF;
+    left: 8px;
+    top: 8px;
+  }
 
-    background: #1F9D55;
-
-    border: 3px solid #FFFFFF;
-
-    box-shadow:
-      0 2px 7px rgba(0, 0, 0, 0.3);
+  #selection-pointer {
+    display: none;
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -100%);
+    z-index: 1000;
   }
 
   .entrance-location {
@@ -336,6 +353,7 @@ const buildKakaoMapHtml = (
 
 <body>
 <div id="map"></div>
+<div id="selection-pointer" class="selected-pin-wrap"><div class="selected-location"></div></div>
 <script>
 (function () {
   var map = null;
@@ -361,6 +379,11 @@ const buildKakaoMapHtml = (
   var ready = false;
 
   var queuedCommands = [];
+  var selectionMode = false;
+  var selectionSessionActive = false;
+  var selectionDragStarted = false;
+  var selectedCenter = null;
+  var selectionOverlay = null;
 
   /*
    * React Native로 메시지를 보낸다.
@@ -398,6 +421,31 @@ const buildKakaoMapHtml = (
       Number(latitude),
       Number(longitude)
     );
+  }
+
+  function ensureSelectionOverlay() {
+    if (!map || !selectedCenter || !window.kakao || !window.kakao.maps) {
+      return;
+    }
+
+    if (!selectionOverlay) {
+      var selectionElement = document.createElement("div");
+      selectionElement.className = "selected-pin-wrap";
+      var selectionBody = document.createElement("div");
+      selectionBody.className = "selected-location";
+      selectionElement.appendChild(selectionBody);
+
+      selectionOverlay = new window.kakao.maps.CustomOverlay({
+        position: selectedCenter,
+        content: selectionElement,
+        xAnchor: 0.5,
+        yAnchor: 1.0,
+        zIndex: 110
+      });
+    }
+
+    selectionOverlay.setPosition(selectedCenter);
+    selectionOverlay.setMap(map);
   }
 
   /*
@@ -566,7 +614,8 @@ const buildKakaoMapHtml = (
   function createMarkerElement(
     index,
     color,
-    pulse
+    pulse,
+    label
   ) {
     var wrapper =
       document.createElement("div");
@@ -595,10 +644,19 @@ const buildKakaoMapHtml = (
 
     marker.style.background =
       color || "#E74C3C";
-    marker.style.setProperty("--pin-color", color || "#E74C3C");
 
-    marker.innerText =
-      String(index + 1);
+    var markerNumber =
+      document.createElement("span");
+
+    markerNumber.className =
+      "marker-number";
+
+    markerNumber.innerText =
+      label != null && String(label).length
+        ? String(label)
+        : String(index + 1);
+
+    marker.appendChild(markerNumber);
 
     wrapper.appendChild(waveOne);
     wrapper.appendChild(waveTwo);
@@ -802,7 +860,8 @@ const buildKakaoMapHtml = (
           createMarkerElement(
             location.markerNumber ? location.markerNumber - 1 : index,
             location.color,
-            !!location.pulse
+            !!location.pulse,
+            location.markerLabel
           );
 
         var overlay =
@@ -837,12 +896,12 @@ const buildKakaoMapHtml = (
     /*
      * 지도 직접 선택 위치
      */
-    if (data.selectedPos) {
-      var selectedElement =
-        document.createElement("div");
-
-      selectedElement.className =
-        "selected-location";
+    if (data.selectedPos && !data.selectionSessionActive) {
+      var selectedElement = document.createElement("div");
+      selectedElement.className = "selected-pin-wrap";
+      var selectedBody = document.createElement("div");
+      selectedBody.className = "selected-location";
+      selectedElement.appendChild(selectedBody);
 
       selectedOverlay =
         new window.kakao.maps.CustomOverlay({
@@ -858,10 +917,20 @@ const buildKakaoMapHtml = (
           content:
             selectedElement,
           xAnchor: 0.5,
-          yAnchor: 0.5,
+          yAnchor: 1.0,
           zIndex: 100
         });
 
+      // 선택 핀은 위치 설정 ON/OFF 모두 같은 CustomOverlay 하나를 사용한다.
+      // ON 중에는 center_changed에서 이 오버레이의 좌표만 지도 중심으로 갱신한다.
+      var incomingSelectedCenter = new window.kakao.maps.LatLng(
+        Number(data.selectedPos.lat),
+        Number(data.selectedPos.lng)
+      );
+      if (!selectionMode || !selectedCenter) {
+        selectedCenter = incomingSelectedCenter;
+      }
+      selectedOverlay.setPosition(selectedCenter || incomingSelectedCenter);
       selectedOverlay.setMap(map);
     }
 
@@ -1001,6 +1070,65 @@ const buildKakaoMapHtml = (
       return;
     }
 
+    if (commandData.type === "SELECTION_SESSION") {
+      selectionSessionActive = Boolean(commandData.enabled);
+
+      if (!selectionSessionActive) {
+        selectionMode = false;
+        selectionDragStarted = false;
+        selectedCenter = null;
+        if (selectionOverlay) {
+          selectionOverlay.setMap(null);
+          selectionOverlay = null;
+        }
+      }
+
+      return;
+    }
+
+    if (commandData.type === "SELECTION_MODE") {
+      var nextSelectionMode = Boolean(commandData.enabled);
+
+      if (nextSelectionMode && map) {
+        // 지도 직접 선택에서는 WebView 내부 selectedCenter를 단일 기준으로 사용한다.
+        // 이미 한 번 잡은 좌표가 있으면 React에서 다시 넘어오는 좌표로 덮어쓰지 않는다.
+        if (!selectedCenter) {
+          var requestedLat = Number(commandData.latitude);
+          var requestedLng = Number(commandData.longitude);
+          var hasRequestedPosition = Number.isFinite(requestedLat) && Number.isFinite(requestedLng);
+
+          selectedCenter = hasRequestedPosition
+            ? new window.kakao.maps.LatLng(requestedLat, requestedLng)
+            : map.getCenter();
+        }
+
+        selectionMode = true;
+        selectionDragStarted = false;
+
+        // 현재 줌 레벨은 건드리지 않고, 저장된 위도/경도만 정확히 화면 중심으로 복귀시킨다.
+        map.setCenter(selectedCenter);
+        ensureSelectionOverlay();
+
+        // 최초 선택 시작 때만 React Native 쪽에도 현재 좌표를 알려준다.
+        if (!Number.isFinite(Number(commandData.latitude)) || !Number.isFinite(Number(commandData.longitude))) {
+          post({
+            type: "CENTER_CHANGE",
+            latitude: selectedCenter.getLat(),
+            longitude: selectedCenter.getLng()
+          });
+        }
+      } else if (map) {
+        // OFF는 좌표를 다시 계산하지 않는다. 마지막 selectedCenter 위치에 그대로 고정한다.
+        selectionMode = false;
+        selectionDragStarted = false;
+        if (selectedCenter) {
+          ensureSelectionOverlay();
+        }
+      }
+
+      return;
+    }
+
     if (
       commandData.type === "MOVE"
     ) {
@@ -1116,10 +1244,21 @@ const buildKakaoMapHtml = (
         map,
         "dragstart",
         function () {
-          post({
-            type:
-              "PAN_DRAG"
-          });
+          if (selectionMode && selectionSessionActive) {
+            selectionDragStarted = true;
+          }
+          post({ type: "PAN_DRAG" });
+        }
+      );
+
+      // 위치 설정 ON 중에는 드래그하는 동안 핀이 지도 중심을 실시간으로 따라간다.
+      window.kakao.maps.event.addListener(
+        map,
+        "center_changed",
+        function () {
+          if (!selectionMode || !selectionSessionActive || !selectionDragStarted) return;
+          selectedCenter = map.getCenter();
+          ensureSelectionOverlay();
         }
       );
 
@@ -1127,13 +1266,26 @@ const buildKakaoMapHtml = (
         map,
         "dragend",
         function () {
+          if (selectionMode && selectionSessionActive && selectionDragStarted) {
+            selectedCenter = map.getCenter();
+            ensureSelectionOverlay();
+            post({
+              type: "CENTER_CHANGE",
+              latitude: selectedCenter.getLat(),
+              longitude: selectedCenter.getLng()
+            });
+          }
+          selectionDragStarted = false;
           post({ type: "PAN_DRAG_END" });
         }
       );
 
-      window.kakao.maps.event.addListener(map, "idle", function () {
-        var center = map.getCenter();
-        post({ type: "CENTER_CHANGE", latitude: center.getLat(), longitude: center.getLng() });
+      window.kakao.maps.event.addListener(map, "zoom_changed", function () {
+        // 줌은 선택 위도/경도를 바꾸지 않는다. 위치 설정 중이면 같은 좌표를 중심으로만 유지한다.
+        if (selectionMode && selectionSessionActive && selectedCenter) {
+          map.setCenter(selectedCenter);
+          ensureSelectionOverlay();
+        }
       });
 
       ready = true;
@@ -1181,6 +1333,8 @@ export default function KakaoMapWebView({
   searchedPlace,
   clearSearchMarkerSignal,
   mapSelectMode,
+  selectionSessionActive = false,
+  selectionPosition = null,
 
   onDirectPlaceSelect,
   onCenterChange,
@@ -1373,6 +1527,31 @@ export default function KakaoMapWebView({
       `
     );
   };
+
+
+  useEffect(() => {
+    sendMapCommand({
+      type: "SELECTION_SESSION",
+      enabled: Boolean(selectionSessionActive),
+    });
+  }, [selectionSessionActive]);
+
+  useEffect(() => {
+    sendMapCommand({
+      type: "SELECTION_MODE",
+      enabled: Boolean(mapSelectMode),
+      latitude: selectionPosition?.lat,
+      longitude: selectionPosition?.lng,
+    });
+  }, [mapSelectMode]);
+
+  useEffect(() => {
+    if (!selectionPosition) return;
+    const lat = Number(selectionPosition.lat);
+    const lng = Number(selectionPosition.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    setSelectedPos({ lat, lng });
+  }, [selectionPosition?.lat, selectionPosition?.lng]);
 
   /*
    * 기존 MapView에서 사용하던
@@ -2727,7 +2906,8 @@ export default function KakaoMapWebView({
         locations:
           locationsForMap,
 
-        selectedPos,
+        selectedPos: selectedPos,
+        selectionSessionActive: Boolean(selectionSessionActive),
 
         currentPos: currentPosRef.current,
 
@@ -2756,6 +2936,7 @@ export default function KakaoMapWebView({
     activePath,
     isGuiding,
     pulseTargetKey,
+    selectionSessionActive,
   ]);
 
   useEffect(() => {

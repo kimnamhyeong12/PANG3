@@ -220,7 +220,7 @@ export default function GroupDetailScreen({
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
       >
-        {mode !== 'members' && <View style={styles.card}>
+        {mode === 'all' && <View style={styles.card}>
           <CardTitle
             icon="people"
             title="기본 정보"
@@ -441,7 +441,7 @@ export default function GroupDetailScreen({
           <Text style={styles.memberRole}>팀원별 · 행정동별 · 기간별 보고서를 확인합니다.</Text>
         </TouchableOpacity>}
 
-          {mode !== 'members' && <View style={styles.card}>
+          {mode === 'all' && <View style={styles.card}>
             <CardTitle
               icon="settings"
               title="그룹 설정"

@@ -143,7 +143,6 @@ export default function MainScreen({
 
         <View style={styles.quickGrid}>
           <QuickAction icon="stats-chart-outline" label="분석" onPress={onDashboard} />
-          <QuickAction icon="map-outline" label="지도" onPress={onRoute} />
           <QuickAction icon="settings-outline" label="설정" onPress={onSettings} />
         </View>
 
