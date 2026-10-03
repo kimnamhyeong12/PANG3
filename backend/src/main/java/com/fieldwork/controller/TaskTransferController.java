@@ -21,11 +21,9 @@ public class TaskTransferController {
 
     @PostMapping
     public Map<String, Object> create(@PathVariable Long groupId, @RequestBody Map<String, Object> body) {
-        Object values = body.get("taskIds");
-        if (!(values instanceof List<?> ids)) throw new IllegalArgumentException("방문지를 선택해주세요.");
-        List<Long> taskIds = ids.stream().map(value -> Long.valueOf(value.toString())).toList();
         return service.create(groupId, asLong(body.get("senderUserId")),
-                asLong(body.get("recipientUserId")), taskIds);
+                asLong(body.get("recipientUserId")), text(body.get("sido")),
+                text(body.get("sigungu")), text(body.get("adminDong")));
     }
 
     @PostMapping("/{requestId}/accept")
@@ -43,5 +41,9 @@ public class TaskTransferController {
     private Long asLong(Object value) {
         if (value == null) throw new IllegalArgumentException("사용자 ID가 필요합니다.");
         return Long.valueOf(value.toString());
+    }
+
+    private String text(Object value) {
+        return value == null ? "" : value.toString().trim();
     }
 }

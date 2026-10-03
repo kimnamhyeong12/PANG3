@@ -1,6 +1,7 @@
 package com.fieldwork.controller;
 
 import com.fieldwork.service.GroupService;
+import com.fieldwork.service.TaskService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -12,9 +13,11 @@ import java.util.Map;
 public class GroupController {
 
     private final GroupService groupService;
+    private final TaskService taskService;
 
-    public GroupController(GroupService groupService) {
+    public GroupController(GroupService groupService, TaskService taskService) {
         this.groupService = groupService;
+        this.taskService = taskService;
     }
 
     @PostMapping
@@ -91,6 +94,21 @@ public class GroupController {
         return groupService.rejectInvitation(
                 invitationId,
                 longValue(body.get("userId")));
+    }
+
+    // Older app builds still use these read paths for their analysis dashboard.
+    @GetMapping("/{groupId}/assignments")
+    public List<Map<String, Object>> getSharedWorkForLegacyApp(
+            @PathVariable Long groupId, @RequestParam Long userId) {
+        return taskService.getGroupLocations(groupId, userId);
+    }
+
+    @GetMapping("/{groupId}/assignments/mine")
+    public List<Map<String, Object>> getMyWorkForLegacyApp(
+            @PathVariable Long groupId, @RequestParam Long userId) {
+        return taskService.getGroupLocations(groupId, userId).stream()
+                .filter(task -> userId.equals(task.get("assigneeUserId")))
+                .toList();
     }
 
     private Long longValue(Object value) {

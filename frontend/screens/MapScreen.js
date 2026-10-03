@@ -150,6 +150,9 @@ function NormalMapScreen({
   const [dongOptions, setDongOptions] = useState([]);
   const [dongLoading, setDongLoading] = useState(false);
   const [selectedDong, setSelectedDong] = useState(null);
+  const selectedDongBoundary = useMemo(() => selectedDong
+    ? { type: 'FeatureCollection', features: [selectedDong] }
+    : null, [selectedDong]);
 
   const sheetY = useRef(new Animated.Value(0)).current;
   const searchInputRef = useRef(null);
@@ -1358,7 +1361,7 @@ function NormalMapScreen({
   return (
     <View style={styles.container}>
       <KakaoMapWebView
-        boundaries={selectedDong ? { type: 'FeatureCollection', features: [selectedDong] } : null}
+        boundaries={selectedDongBoundary}
         locations={[...orderedMarkers, ...markers.filter((item) => item.status === 'complete')]}
         displayOnlyLocations={mapOnlyMarkers}
         roadPath={roadPath}

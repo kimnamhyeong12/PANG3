@@ -99,7 +99,7 @@ kakao.maps.load(function(){
 });
 </script></body></html>`;
 
-export default function WorkStatusScreen({ user, group, assignments = [], onBack, onRefresh }) {
+export default function WorkStatusScreen({ user, group, assignments = [], onBack, onRefresh, embedded = false }) {
   const [loadingBoundary, setLoadingBoundary] = useState(true);
   const [boundaryError, setBoundaryError] = useState('');
   const [boundaries, setBoundaries] = useState({ type: 'FeatureCollection', features: [] });
@@ -245,7 +245,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      {!embedded && <View style={styles.header}>
         <BackButton onPress={onBack} />
         <View style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>업무 현황</Text>
@@ -256,7 +256,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
             {group?.groupName || '현재 그룹'} · {personalWorkspace ? '개인 업무' : '팀 전체 현황'}
           </Text>
         </View>
-      </View>
+      </View>}
 
       <ScrollView
         style={styles.screenScroll}

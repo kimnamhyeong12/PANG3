@@ -39,17 +39,23 @@ public class TaskTransferService {
     }
 
     @Transactional
-    public Map<String, Object> create(Long groupId, Long senderId, Long recipientId, List<Long> taskIds) {
+    public Map<String, Object> create(Long groupId, Long senderId, Long recipientId,
+            String sido, String sigungu, String adminDong) {
         WorkGroup group = group(groupId);
         User sender = member(group, senderId);
         User recipient = member(group, recipientId);
         if (group.isPersonal() || senderId.equals(recipientId)) {
             throw new IllegalArgumentException("다른 그룹 구성원을 선택해주세요.");
         }
-        if (taskIds == null || taskIds.isEmpty()) {
-            throw new IllegalArgumentException("이관할 방문지를 선택해주세요.");
+        if (normalizeDong(adminDong).isBlank()) {
+            throw new IllegalArgumentException("이관할 행정동을 선택해주세요.");
         }
-        List<Long> selectedIds = taskIds.stream().distinct().sorted().toList();
+        List<Long> selectedIds = taskService.getGroupLocations(groupId, senderId).stream()
+                .filter(task -> senderId.equals(number(task.get("assigneeUserId")))
+                        && sameArea(task, sido, sigungu, adminDong))
+                .map(task -> number(task.get("taskId")))
+                .distinct().sorted().toList();
+        if (selectedIds.isEmpty()) throw new IllegalArgumentException("해당 행정동에 담당 업무가 없습니다.");
         for (Long taskId : selectedIds) {
             Task task = tasks.findById(taskId)
                     .orElseThrow(() -> new IllegalArgumentException("방문지를 찾을 수 없습니다."));
@@ -134,9 +140,37 @@ public class TaskTransferService {
         map.put("recipientUserId", request.getRecipient().getUserId());
         map.put("recipientName", request.getRecipient().getName());
         map.put("taskIds", request.getTaskIds());
+        if (!request.getTaskIds().isEmpty()) {
+            tasks.findById(request.getTaskIds().get(0)).ifPresent(task -> {
+                map.put("sido", task.getSido());
+                map.put("sigungu", task.getSigungu());
+                map.put("adminDong", task.getAdminDong());
+            });
+        }
         map.put("status", request.getStatus());
         map.put("requestedAt", request.getRequestedAt());
         map.put("respondedAt", request.getRespondedAt());
         return map;
+    }
+
+    private Long number(Object value) {
+        return value instanceof Number number ? number.longValue() : null;
+    }
+
+    private boolean sameArea(Map<String, Object> task, String sido, String sigungu, String dong) {
+        return normalize(task.get("sido")).equals(normalize(sido))
+                && normalize(task.get("sigungu")).equals(normalize(sigungu))
+                && normalizeDong(task.get("adminDong")).equals(normalizeDong(dong));
+    }
+
+    private String normalize(Object value) {
+        return value == null ? "" : value.toString().trim();
+    }
+
+    private String normalizeDong(Object value) {
+        String full = normalize(value);
+        if (full.isEmpty()) return "";
+        String[] parts = full.split("\\s+");
+        return parts[parts.length - 1];
     }
 }

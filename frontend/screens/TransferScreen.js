@@ -1,18 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenHeader } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
 import { groupApi } from '../utils/groupApi';
 import { colors } from '../constants/design';
 
+const dongName = (value) => String(value || '').trim().split(/\s+/).pop() || '';
+const areaKey = (item) => [item.sido || '', item.sigungu || '', dongName(item.adminDong)].join('|');
+
 export default function TransferScreen({ user, group, onBack, onChanged }) {
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
   const [requests, setRequests] = useState([]);
-  const [selected, setSelected] = useState([]);
+  const [selectedAreaKey, setSelectedAreaKey] = useState('');
   const [recipientId, setRecipientId] = useState(null);
-  const [area, setArea] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -38,22 +40,34 @@ export default function TransferScreen({ user, group, onBack, onChanged }) {
   useEffect(() => { load(); }, [load]);
 
   const mine = useMemo(() => tasks.filter((task) =>
-    Number(task.assigneeUserId) === Number(user?.userId) &&
-    (!area.trim() || String(task.adminDong || task.roadAddress || '').includes(area.trim()))
-  ), [tasks, user?.userId, area]);
+    Number(task.assigneeUserId) === Number(user?.userId)
+  ), [tasks, user?.userId]);
+  const areas = useMemo(() => {
+    const grouped = new Map();
+    mine.forEach((task) => {
+      const adminDong = dongName(task.adminDong);
+      if (!adminDong) return;
+      const key = areaKey(task);
+      if (!grouped.has(key)) grouped.set(key, { key, sido: task.sido || '', sigungu: task.sigungu || '', adminDong, tasks: [] });
+      grouped.get(key).tasks.push(task);
+    });
+    return Array.from(grouped.values()).sort((left, right) => left.key.localeCompare(right.key, 'ko'));
+  }, [mine]);
+  const selectedArea = areas.find((item) => item.key === selectedAreaKey);
 
   const submit = async () => {
-    if (!selected.length || !recipientId || busy) return;
+    if (!selectedArea || !recipientId || busy) return;
     try {
       setBusy(true);
       await groupApi(`/api/groups/${group.groupId}/transfers`, {
         method: 'POST',
-        body: JSON.stringify({ senderUserId: user.userId, recipientUserId: recipientId, taskIds: selected }),
+        body: JSON.stringify({ senderUserId: user.userId, recipientUserId: recipientId,
+          sido: selectedArea.sido, sigungu: selectedArea.sigungu, adminDong: selectedArea.adminDong }),
       });
-      setSelected([]);
+      setSelectedAreaKey('');
       setRecipientId(null);
       await load();
-      showAlert('이관 요청 완료', '받는 팀원이 수락하면 선택한 방문지의 담당자가 변경됩니다.');
+      showAlert('이관 요청 완료', '받는 팀원이 수락하면 해당 행정동의 업무가 함께 이관됩니다.');
     } catch (error) {
       showAlert('이관 요청 실패', error.message);
     } finally {
@@ -78,24 +92,21 @@ export default function TransferScreen({ user, group, onBack, onChanged }) {
     }
   };
 
-  const toggle = (id) => setSelected((old) => old.includes(id) ? old.filter((value) => value !== id) : [...old, id]);
-
   return <View style={styles.root}>
-    <ScreenHeader title="방문지 이관" onBack={onBack} />
+    <ScreenHeader title="행정동 업무 이관" onBack={onBack} />
     {loading ? <ActivityIndicator style={{ marginTop: 32 }} color={colors.primary} /> :
       <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.title}>내 방문지 선택</Text>
-        <Text style={styles.hint}>선택한 방문지와 기존 작업 기록이 함께 이관됩니다.</Text>
-        <TextInput style={styles.search} value={area} onChangeText={setArea} placeholder="행정동 또는 주소로 찾기" />
-        {mine.length === 0 ? <Text style={styles.empty}>이관할 방문지가 없습니다.</Text> : mine.map((task) => {
-          const id = Number(task.id ?? task.taskId);
-          const checked = selected.includes(id);
-          return <TouchableOpacity key={id} style={[styles.row, checked && styles.chosen]} onPress={() => toggle(id)}>
-            <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={22} color={colors.primary} />
-            <View style={{ flex: 1 }}><Text style={styles.rowTitle}>{task.detailAddress || task.roadAddress || `방문지 ${id}`}</Text>
-              <Text style={styles.hint}>{task.adminDong || '행정동 미확인'} · {task.status === 'complete' ? '완료' : task.status === 'working' ? '작업 중' : '작업 전'}</Text></View>
-          </TouchableOpacity>;
-        })}
+        <Text style={styles.title}>이관할 행정동</Text>
+        <Text style={styles.hint}>요청 시점에 해당 행정동에서 담당 중인 완료·진행·미처리 업무 전체와 기존 기록을 함께 이관합니다.</Text>
+        {areas.length === 0 ? <Text style={styles.empty}>행정동이 확인된 담당 업무가 없습니다.</Text> : areas.map((area) =>
+          <TouchableOpacity key={area.key} style={[styles.row, selectedAreaKey === area.key && styles.chosen]} onPress={() => setSelectedAreaKey(area.key)}>
+            <Ionicons name={selectedAreaKey === area.key ? 'radio-button-on' : 'radio-button-off'} size={22} color={colors.primary} />
+            <View style={{ flex: 1 }}><Text style={styles.rowTitle}>{[area.sigungu, area.adminDong].filter(Boolean).join(' ')}</Text>
+              <Text style={styles.hint}>{area.tasks.length}건 · 완료 {area.tasks.filter((item) => item.status === 'complete').length}건</Text></View>
+          </TouchableOpacity>
+        )}
+        {mine.length > areas.reduce((sum, item) => sum + item.tasks.length, 0) &&
+          <Text style={styles.hint}>행정동 정보가 없는 업무는 위치 정보를 확인한 뒤 이관할 수 있습니다.</Text>}
         <Text style={styles.title}>받는 팀원</Text>
         {members.filter((member) => Number(member.userId) !== Number(user.userId)).map((member) =>
           <TouchableOpacity key={member.userId} style={[styles.row, recipientId === member.userId && styles.chosen]} onPress={() => setRecipientId(member.userId)}>
@@ -103,15 +114,15 @@ export default function TransferScreen({ user, group, onBack, onChanged }) {
             <Text style={styles.rowTitle}>{member.name || member.loginId}</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={[styles.submit, (!selected.length || !recipientId || busy) && styles.disabled]} disabled={!selected.length || !recipientId || busy} onPress={submit}>
-          <Text style={styles.submitText}>{busy ? '처리 중...' : `${selected.length}건 이관 요청`}</Text>
+        <TouchableOpacity style={[styles.submit, (!selectedArea || !recipientId || busy) && styles.disabled]} disabled={!selectedArea || !recipientId || busy} onPress={submit}>
+          <Text style={styles.submitText}>{busy ? '처리 중...' : selectedArea ? `${selectedArea.adminDong} ${selectedArea.tasks.length}건 이관 요청` : '행정동을 선택하세요'}</Text>
         </TouchableOpacity>
 
         <Text style={styles.title}>이관 요청과 이력</Text>
         {requests.length === 0 ? <Text style={styles.empty}>요청 내역이 없습니다.</Text> : requests.map((request) => {
           const incoming = Number(request.recipientUserId) === Number(user.userId);
           return <View key={request.id} style={styles.request}>
-            <Text style={styles.rowTitle}>{request.senderName} → {request.recipientName} · {request.taskIds?.length || 0}건</Text>
+            <Text style={styles.rowTitle}>{request.adminDong || '행정동 미확인'} · {request.senderName} → {request.recipientName} · {request.taskIds?.length || 0}건</Text>
             <Text style={styles.hint}>{request.status === 'PENDING' ? '응답 대기' : request.status === 'ACCEPTED' ? '수락' : '거절'} · {String(request.requestedAt || '').slice(0, 16).replace('T', ' ')}</Text>
             <Text style={styles.hint}>{(request.taskIds || []).map((id) => {
               const task = tasks.find((item) => Number(item.id ?? item.taskId) === Number(id));

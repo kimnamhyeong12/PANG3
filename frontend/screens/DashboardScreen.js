@@ -10,7 +10,6 @@ import {
 
 import { BackButton } from '../components/ui';
 import { colors, radius, shadow, spacing } from '../constants/design';
-import { API_BASE_URL } from '../utils/api';
 import { groupApi } from '../utils/groupApi';
 
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
@@ -785,87 +784,12 @@ export default function DashboardScreen({
           setLoading(true);
           setLoadError('');
 
-          const assignmentData =
-            await groupApi(
-              `/api/groups/${activeGroup.groupId}/assignments?userId=${encodeURIComponent(
-                user.userId
-              )}`
-            );
-
-          const locationResponse =
-            await fetch(
-              `${API_BASE_URL}/api/locations?userId=${encodeURIComponent(
-                user.userId
-              )}` +
-                `&groupId=${encodeURIComponent(
-                  activeGroup.groupId
-                )}`
-            );
-
-          if (
-            !locationResponse.ok
-          ) {
-            throw new Error(
-              '방문지를 불러오지 못했습니다.'
-            );
-          }
-
-          const locationData =
-            await locationResponse.json();
-
-          const assignments =
-            Array.isArray(
-              assignmentData
-            )
-              ? assignmentData
-              : [];
-
-          const allLocations =
-            Array.isArray(
-              locationData
-            )
-              ? locationData
-              : [];
-
-          const groupTaskIds =
-            new Set(
-              assignments
-                .map(
-                  comparableTaskId
-                )
-                .filter(Boolean)
-            );
-
-          const seenTaskIds =
-            new Set();
-
-          const groupLocations =
-            allLocations.filter(
-              (location) => {
-                const id =
-                  comparableTaskId(
-                    location
-                  );
-
-                if (
-                  !id ||
-                  !groupTaskIds.has(
-                    id
-                  ) ||
-                  seenTaskIds.has(
-                    id
-                  )
-                ) {
-                  return false;
-                }
-
-                seenTaskIds.add(
-                  id
-                );
-
-                return true;
-              }
-            );
+          const personal = activeGroup.personalWorkspace || activeGroup.personal || activeGroup.workspaceType === 'PERSONAL';
+          const path = personal
+            ? `/api/locations?userId=${encodeURIComponent(user.userId)}`
+            : `/api/locations/group/${activeGroup.groupId}?userId=${encodeURIComponent(user.userId)}`;
+          const locationData = await groupApi(path);
+          const groupLocations = Array.isArray(locationData) ? locationData : [];
 
           const resolvedLocations =
             await Promise.all(

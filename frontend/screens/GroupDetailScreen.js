@@ -70,6 +70,7 @@ export default function GroupDetailScreen({
   onTransfer,
   onReports,
   onUpdatedGroup,
+  mode = 'all',
 }) {
   const [detail, setDetail] = useState(group || null);
   const [sharedTasks, setSharedTasks] = useState([]);
@@ -211,7 +212,7 @@ export default function GroupDetailScreen({
   return (
     <View style={styles.container}>
       <ScreenHeader
-        title="그룹 설정"
+        title={mode === 'members' ? '팀원 관리' : '그룹 설정'}
         onBack={onBack}
       />
 
@@ -219,7 +220,7 @@ export default function GroupDetailScreen({
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.card}>
+        {mode !== 'members' && <View style={styles.card}>
           <CardTitle
             icon="people"
             title="기본 정보"
@@ -255,9 +256,9 @@ export default function GroupDetailScreen({
               }}
               style={styles.fullButton}
             />
-        </View>
+        </View>}
 
-        <View style={styles.card}>
+        {mode !== 'settings' && <View style={styles.card}>
           <CardTitle
             icon="people"
             title="팀원 관리"
@@ -373,9 +374,9 @@ export default function GroupDetailScreen({
               );
             })}
           </View>
-        </View>
+        </View>}
 
-        <View style={styles.managementGrid}>
+        {mode === 'all' && <View style={styles.managementGrid}>
           <TouchableOpacity
             style={styles.managementCard}
             activeOpacity={0.76}
@@ -433,14 +434,14 @@ export default function GroupDetailScreen({
               style={styles.managementArrow}
             />
           </TouchableOpacity>
-        </View>
+        </View>}
 
-        <TouchableOpacity style={styles.card} activeOpacity={0.76} onPress={onReports}>
+        {mode === 'all' && <TouchableOpacity style={styles.card} activeOpacity={0.76} onPress={onReports}>
           <CardTitle icon="document-text" title="그룹 보고서 모아보기" />
           <Text style={styles.memberRole}>팀원별 · 행정동별 · 기간별 보고서를 확인합니다.</Text>
-        </TouchableOpacity>
+        </TouchableOpacity>}
 
-          <View style={styles.card}>
+          {mode !== 'members' && <View style={styles.card}>
             <CardTitle
               icon="settings"
               title="그룹 설정"
@@ -462,7 +463,7 @@ export default function GroupDetailScreen({
               }
               last
             />
-          </View>
+          </View>}
       </ScrollView>
 
       <Modal

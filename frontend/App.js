@@ -28,6 +28,7 @@ import GroupScreen from './screens/GroupScreen';
 import GroupCreateScreen from './screens/GroupCreateScreen';
 import GroupInvitationsScreen from './screens/GroupInvitationsScreen';
 import GroupDetailScreen from './screens/GroupDetailScreen';
+import GroupWorkspaceScreen from './screens/GroupWorkspaceScreen';
 import AssignmentScreen from './screens/AssignmentScreen';
 import WorkStatusScreen from './screens/WorkStatusScreen';
 import TransferScreen from './screens/TransferScreen';
@@ -78,6 +79,7 @@ const isTodayWork = (item) => {
 
 export default function App() {
   const [screen, setScreen] = useState('login');
+  const [groupWorkspaceTab, setGroupWorkspaceTab] = useState('status');
   const [mapInitialized, setMapInitialized] = useState(false);
   const [calendarDayKey, setCalendarDayKey] = useState(getLocalDateKey());
   const [user, setUser] = useState(null);
@@ -731,6 +733,7 @@ export default function App() {
     setPendingWork([]);
     setMapInitialized(false);
     setUser(null);
+    setGroupWorkspaceTab('status');
     setActiveGroup(null);
     setAvailableGroups([]);
     setGroupAssignments([]);
@@ -780,6 +783,19 @@ export default function App() {
 
   const openWorkspaceMap = () => {
     go('mapDirect');
+  };
+
+  const openGroupWorkspace = () => {
+    const group = activeGroup && !isPersonalGroup(activeGroup)
+      ? activeGroup
+      : availableGroups.find((item) => !isPersonalGroup(item));
+    if (group) {
+      selectActiveGroup(group);
+      setGroupWorkspaceTab('status');
+      go('groupWorkspace');
+    } else {
+      go('groupHome');
+    }
   };
 
   const openTeamMap = async () => {
@@ -851,7 +867,7 @@ export default function App() {
               go('reportList')
             }
             onGroup={() =>
-              go('groupHome')
+              openGroupWorkspace()
             }
             onSelectWorkspace={(group) => selectActiveGroup(group)}
             onRefreshWorkspaces={refreshAvailableGroups}
@@ -880,7 +896,7 @@ export default function App() {
               user={user}
               activeGroup={activeGroup}
               onBack={() =>
-                go('main')
+                goBack('mapDirect')
               }
               onCreate={() =>
                 go('groupCreate')
@@ -891,7 +907,8 @@ export default function App() {
               onOpenGroup={(group) => {
                 rememberAvailableGroup(group);
                 selectActiveGroup(group);
-                go(isPersonalGroup(group) ? 'main' : 'groupDetail');
+                setGroupWorkspaceTab('status');
+                go(isPersonalGroup(group) ? 'mapDirect' : 'groupWorkspace');
               }}
             />
           )}
@@ -905,7 +922,8 @@ export default function App() {
               onCreated={(group) => {
                 rememberAvailableGroup(group);
                 selectActiveGroup(group);
-                go('groupDetail');
+                setGroupWorkspaceTab('status');
+                go('groupWorkspace');
               }}
             />
           )}
@@ -919,7 +937,37 @@ export default function App() {
               onAccepted={(group) => {
                 rememberAvailableGroup(group);
                 selectActiveGroup(group);
-                go('groupDetail');
+                setGroupWorkspaceTab('status');
+                go('groupWorkspace');
+              }}
+            />
+          )}
+
+          {screen === 'groupWorkspace' && activeGroup && !isPersonalGroup(activeGroup) && (
+            <GroupWorkspaceScreen
+              user={user}
+              group={activeGroup}
+              assignments={groupAssignments}
+              tab={groupWorkspaceTab}
+              onTabChange={setGroupWorkspaceTab}
+              onRefresh={refreshCurrentWorkspace}
+              onChooseGroup={() => go('groupHome')}
+              onMembers={() => go('groupMembers')}
+              onTransfer={() => go('transfer')}
+              onReports={() => go('groupReports')}
+              onSettings={() => go('groupSettings')}
+            />
+          )}
+
+          {['groupMembers', 'groupSettings'].includes(screen) && activeGroup && (
+            <GroupDetailScreen
+              user={user}
+              group={activeGroup}
+              mode={screen === 'groupMembers' ? 'members' : 'settings'}
+              onBack={() => goBack('groupWorkspace')}
+              onUpdatedGroup={(group) => {
+                rememberAvailableGroup(group);
+                selectActiveGroup(group);
               }}
             />
           )}
@@ -1033,7 +1081,7 @@ export default function App() {
             <TransferScreen
               user={user}
               group={activeGroup}
-              onBack={() => goBack('groupDetail')}
+              onBack={() => goBack('groupWorkspace')}
               onChanged={refreshCurrentWorkspace}
             />
           )}
@@ -1194,7 +1242,7 @@ export default function App() {
             <GroupReportsScreen
               group={activeGroup}
               user={user}
-              onBack={() => goBack('groupDetail')}
+              onBack={() => goBack('groupWorkspace')}
               onOpenReport={(report) => {
                 setDownloadInfo({ progressId: report.progressId, reportDownloadUrl: report.reportDownloadUrl });
                 go('download');
@@ -1238,7 +1286,7 @@ export default function App() {
               // 하단 메뉴도 홈에서 선택한 현재 작업공간을 그대로 따른다.
               onMap={openWorkspaceMap}
               onReport={() => go('reportList')}
-              onGroup={() => go('groupHome')}
+              onGroup={openGroupWorkspace}
             />
           )}
 
@@ -1273,6 +1321,10 @@ function BottomNavigation({
           'groupCreate',
           'groupInvitations',
           'groupDetail',
+          'groupWorkspace',
+          'groupMembers',
+          'groupSettings',
+          'groupReports',
           'transfer',
           'workStatus',
           'assignment',
