@@ -26,7 +26,7 @@ public class AuthService {
     }
 
     @Transactional
-    public User register(String loginId, String password, String name, String workSido) {
+    public User register(String loginId, String password, String name, String workSido, String workSigungu) {
         if (userRepository.existsByLoginId(loginId)) {
             throw new RuntimeException("이미 존재하는 아이디입니다.");
         }
@@ -37,6 +37,10 @@ public class AuthService {
         user.setName(name);
         user.setRole("USER");
         user.setWorkSido(workSido == null || workSido.isBlank() ? "부산광역시" : workSido.trim());
+        if (workSigungu == null || workSigungu.isBlank()) {
+            throw new IllegalArgumentException("시·군·구를 선택해주세요.");
+        }
+        user.setWorkSigungu(workSigungu.trim());
 
         User savedUser = userRepository.save(user);
         groupService.ensurePersonalGroup(savedUser);

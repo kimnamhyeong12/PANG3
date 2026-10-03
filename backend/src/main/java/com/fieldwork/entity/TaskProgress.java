@@ -25,6 +25,12 @@ public class TaskProgress {
     private Double latitude;
     private Double longitude;
 
+    @Column(name = "location_address")
+    private String locationAddress;
+
+    @Column(name = "performed_by_user_id")
+    private Long performedByUserId;
+
     @Column(name = "location_map_image")
     private String locationMapImage;
 
@@ -61,6 +67,10 @@ public class TaskProgress {
 
     public Double getLongitude() { return longitude; }
     public void setLongitude(Double longitude) { this.longitude = longitude; }
+    public String getLocationAddress() { return locationAddress; }
+    public void setLocationAddress(String locationAddress) { this.locationAddress = locationAddress; }
+    public Long getPerformedByUserId() { return performedByUserId; }
+    public void setPerformedByUserId(Long performedByUserId) { this.performedByUserId = performedByUserId; }
 
     public String getLocationMapImage() { return locationMapImage; }
     public void setLocationMapImage(String locationMapImage) { this.locationMapImage = locationMapImage; }
