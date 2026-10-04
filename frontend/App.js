@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import RegisterScreen from './screens/RegisterScreen';
@@ -81,6 +81,7 @@ export default function App() {
   const [groupWorkspaceTab, setGroupWorkspaceTab] = useState('status');
   const [mapInitialized, setMapInitialized] = useState(false);
   const [selectedDong, setSelectedDong] = useState(null);
+  const selectedDongDayRef = useRef(getLocalDateKey());
   const [transferTargetMember, setTransferTargetMember] = useState(null);
 
   useEffect(() => {
@@ -90,7 +91,12 @@ export default function App() {
         if (!active || !value) return;
         try {
           const parsed = JSON.parse(value);
-          if (parsed?.type === 'Feature') setSelectedDong(parsed);
+          if (parsed?.day === getLocalDateKey() && parsed?.feature?.type === 'Feature') {
+            selectedDongDayRef.current = parsed.day;
+            setSelectedDong(parsed.feature);
+          } else {
+            AsyncStorage.removeItem('pang3:selectedDong').catch(() => {});
+          }
         } catch {}
       })
       .catch(() => {});
@@ -99,10 +105,18 @@ export default function App() {
 
   const updateSelectedDong = useCallback((feature) => {
     if (!feature) return;
+    const day = getLocalDateKey();
+    selectedDongDayRef.current = day;
     setSelectedDong(feature);
-    AsyncStorage.setItem('pang3:selectedDong', JSON.stringify(feature)).catch(() => {});
+    AsyncStorage.setItem('pang3:selectedDong', JSON.stringify({ day, feature })).catch(() => {});
   }, []);
   const [calendarDayKey, setCalendarDayKey] = useState(getLocalDateKey());
+  useEffect(() => {
+    if (selectedDongDayRef.current === calendarDayKey) return;
+    selectedDongDayRef.current = calendarDayKey;
+    setSelectedDong(null);
+    AsyncStorage.removeItem('pang3:selectedDong').catch(() => {});
+  }, [calendarDayKey]);
   const [user, setUser] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [actionType, setActionType] = useState(null);
@@ -186,6 +200,14 @@ export default function App() {
     }
     setActiveGroup(group || null);
     setGroupAssignments([]);
+    setTodayLocationsLoaded(false);
+    setRouteLocations([]);
+    setPendingWork([]);
+    setRouteSegments([]);
+    setRoadPath([]);
+    setCurrentSegmentIndex(0);
+    setOptimized(false);
+    setIsGuiding(false);
 
     if (targetUser?.userId) {
       try {
@@ -248,15 +270,15 @@ export default function App() {
     setScreen(next);
   };
 
-  const workspaceCacheKey = useCallback((targetUser = user) => {
+  const workspaceCacheKey = useCallback((targetUser = user, group = activeGroup) => {
     if (!targetUser?.userId) return null;
-    return `${WORKSPACE_LOCATIONS_KEY_PREFIX}_${targetUser.userId}_personal`;
-  }, [user?.userId]);
+    return `${WORKSPACE_LOCATIONS_KEY_PREFIX}_${targetUser.userId}_${isPersonalGroup(group) ? 'personal' : `group_${group?.groupId || 'none'}`}`;
+  }, [user?.userId, activeGroup]);
 
   const loadWorkspaceLocations = useCallback(async () => {
     const requestId = ++workspaceLoadIdRef.current;
 
-    if (!user?.userId || !workspaceReady) {
+    if (!user?.userId || !workspaceReady || !activeGroup?.groupId) {
       setRouteLocations([]);
       setTodayLocationsLoaded(false);
       return;
@@ -264,7 +286,7 @@ export default function App() {
 
     const cacheKey = workspaceCacheKey();
     const personalGroupId = availableGroups.find(isPersonalGroup)?.groupId;
-    const legacyPersonalKey = personalGroupId
+    const legacyPersonalKey = isPersonalGroup(activeGroup) && personalGroupId
       ? `${WORKSPACE_LOCATIONS_KEY_PREFIX}_${user.userId}_group_${personalGroupId}`
       : null;
     setTodayLocationsLoaded(false);
@@ -321,10 +343,7 @@ export default function App() {
     };
 
     try {
-      // 그룹에서는 홈의 '내 담당 업무'와 같은 담당자 배정 데이터를 사용한다.
-      // 이전 데이터에 task.group_id가 비어 있어도 task_assignments가 있으면
-      // 지도와 보고서에 동일하게 표시된다.
-      const path = `/api/locations?userId=${encodeURIComponent(user.userId)}`;
+      const path = `/api/groups/${encodeURIComponent(activeGroup.groupId)}/assignments/mine?userId=${encodeURIComponent(user.userId)}`;
       const data = await groupApi(path);
       const rows = (Array.isArray(data) ? data : []).map((item) => ({
         ...item,
@@ -374,7 +393,7 @@ export default function App() {
         setTodayLocationsLoaded(true);
       }
     }
-  }, [user?.userId, availableGroups, workspaceCacheKey, calendarDayKey, workspaceReady]);
+  }, [user?.userId, activeGroup?.groupId, availableGroups, workspaceCacheKey, calendarDayKey, workspaceReady]);
 
   const addWorkToMap = async (items) => {
     if (planBusyRef.current || workPlanRef.current.key !== workspaceCacheKey()) return false;
@@ -401,7 +420,10 @@ export default function App() {
   useEffect(() => {
     if (!user?.userId) return;
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') loadWorkspaceLocations();
+      if (state === 'active') {
+        setCalendarDayKey(getLocalDateKey());
+        loadWorkspaceLocations();
+      }
     });
     const timer = setInterval(() => {
       if (AppState.currentState === 'active' && ['main', 'mapDirect'].includes(screenRef.current)) loadWorkspaceLocations();
@@ -825,6 +847,7 @@ export default function App() {
   };
 
   return (
+    <SafeAreaProvider>
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <View
         style={styles.app}
@@ -873,6 +896,7 @@ export default function App() {
         {(screen === 'main' || screen === 'dashboard') && (
           <DashboardScreen
             user={user}
+            onBack={() => goBack('mapDirect')}
             onSettings={() => go('settings')}
           />
         )}
@@ -935,9 +959,12 @@ export default function App() {
               group={activeGroup}
               assignments={groupAssignments}
               tab={groupWorkspaceTab}
-              onTabChange={setGroupWorkspaceTab}
+              onTabChange={(nextTab) => {
+                setGroupWorkspaceTab(nextTab);
+                if (nextTab === 'dashboard' || nextTab === 'status') refreshGroupAssignments();
+              }}
               onRefresh={refreshCurrentWorkspace}
-              onChooseGroup={() => go('groupHome')}
+              onBack={() => goBack('groupHome')}
               onMembers={() => go('groupMembers')}
               onTransfer={(member) => {
                 setTransferTargetMember(member || null);
@@ -1295,6 +1322,7 @@ export default function App() {
         <CustomAlertHost />
       </View>
     </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 

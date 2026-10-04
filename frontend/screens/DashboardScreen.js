@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
+import { ScreenHeader } from '../components/ui';
 import { colors, radius, shadow, spacing } from '../constants/design';
 import { groupApi } from '../utils/groupApi';
 
@@ -730,6 +731,7 @@ export const buildAnalytics = (
 
 export default function DashboardScreen({
   user,
+  onBack,
   onSettings,
 }) {
   const [
@@ -753,17 +755,6 @@ export default function DashboardScreen({
   ] = useState(
     getCurrentMonthKey
   );
-
-  const today =
-    new Date().toLocaleDateString(
-      'ko-KR',
-      {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        weekday: 'short',
-      }
-    );
 
   const loadDashboard =
     useCallback(
@@ -983,15 +974,6 @@ export default function DashboardScreen({
       )
     );
 
-  const maxHourCount =
-    Math.max(
-      1,
-      ...analytics.hours.map(
-        (item) =>
-          item.count
-      )
-    );
-
   const maxWeekdayCount =
     Math.max(
       1,
@@ -1007,25 +989,19 @@ export default function DashboardScreen({
         styles.container
       }
     >
-      <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text style={styles.eyebrow}>업무 통계 · {today}</Text>
-          <Text style={styles.title}>대시보드</Text>
-          <Text style={styles.workspace} numberOfLines={1}>
-            개인 포함 모든 그룹
-          </Text>
-        </View>
-
-        <TouchableOpacity
+      <ScreenHeader
+        title="대시보드"
+        onBack={onBack}
+        right={<TouchableOpacity
           style={styles.settingsButton}
           onPress={onSettings}
           accessibilityRole="button"
           accessibilityLabel="설정"
           activeOpacity={0.75}
         >
-          <Ionicons name="settings-outline" size={23} color={colors.primary} />
-        </TouchableOpacity>
-      </View>
+          <Ionicons name="settings-outline" size={19} color={colors.primary} />
+        </TouchableOpacity>}
+      />
 
       {loading ? (
         <View
@@ -1151,9 +1127,7 @@ export default function DashboardScreen({
                 }
               >
                 <SectionHeader
-                  eyebrow="완료 날짜 기준"
                   title="월간 업무 완료 히트맵"
-                  description="실제 완료 시각(completedAt)을 날짜별로 집계합니다."
                 />
 
                 <MonthlyHeatmap
@@ -1198,7 +1172,6 @@ export default function DashboardScreen({
                 }
               >
                 <SectionHeader
-                  eyebrow="행정동별 현황"
                   title="지역별 업무 현황"
                 />
 
@@ -1228,7 +1201,6 @@ export default function DashboardScreen({
                   )
                 ) : (
                   <EmptyText>
-                    현재 그룹에
                     배정된 방문지가
                     없습니다.
                   </EmptyText>
@@ -1242,7 +1214,6 @@ export default function DashboardScreen({
                 }
               >
                 <SectionHeader
-                  eyebrow="업무 유형"
                   title="카테고리별 업무 현황"
                 />
 
@@ -1282,57 +1253,6 @@ export default function DashboardScreen({
                 )}
               </View>
 
-              {/* 시간대별 */}
-              <View
-                style={
-                  styles.card
-                }
-              >
-                <SectionHeader
-                  eyebrow="완료 시각 기준"
-                  title="시간대별 업무 완료 현황"
-                  description="실제 완료 시각(completedAt)을 기준으로 집계합니다."
-                />
-
-                {analytics.hours.map(
-                  (item) => (
-                    <BarRow
-                      key={
-                        item.key
-                      }
-                      label={
-                        item.label
-                      }
-                      count={
-                        item.count
-                      }
-                      maxCount={
-                        maxHourCount
-                      }
-                      color={
-                        colors.primary
-                      }
-                    />
-                  )
-                )}
-
-                {analytics
-                  .unknownCompletionTimeCount >
-                0 ? (
-                  <Text
-                    style={
-                      styles.unknownText
-                    }
-                  >
-                    완료 시각 미확인{' '}
-                    {
-                      analytics.unknownCompletionTimeCount
-                    }
-                    건
-                  </Text>
-                ) : null}
-              </View>
-
               {/* 요일별 */}
               <View
                 style={
@@ -1340,9 +1260,7 @@ export default function DashboardScreen({
                 }
               >
                 <SectionHeader
-                  eyebrow="완료 요일 기준"
                   title="요일별 업무 완료 현황"
-                  description="실제 완료 날짜의 요일을 기준으로 집계합니다."
                 />
 
                 <View
@@ -1675,11 +1593,7 @@ function MonthlyHeatmap({
   );
 }
 
-function SectionHeader({
-  eyebrow,
-  title,
-  description,
-}) {
+function SectionHeader({ title }) {
   return (
     <View
       style={
@@ -1688,29 +1602,12 @@ function SectionHeader({
     >
       <Text
         style={
-          styles.cardEyebrow
-        }
-      >
-        {eyebrow}
-      </Text>
-
-      <Text
-        style={
           styles.cardTitle
         }
       >
         {title}
       </Text>
 
-      {description ? (
-        <Text
-          style={
-            styles.cardDescription
-          }
-        >
-          {description}
-        </Text>
-      ) : null}
     </View>
   );
 }
@@ -2061,78 +1958,19 @@ const styles =
       flex: 1,
       backgroundColor:
         colors.background,
-    },
-
-    header: {
-      minHeight: 92,
-      paddingHorizontal:
-        spacing.page,
-      paddingTop: 16,
-      paddingBottom: 12,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      backgroundColor:
-        colors.surface,
-      borderBottomWidth: 1,
-      borderBottomColor:
-        colors.line,
-    },
-
-    headerText: {
-      flex: 1,
-    },
-
-    eyebrow: {
-      color:
-        colors.primary,
-      fontSize: 10,
-      fontWeight: '800',
-      marginBottom: 2,
-    },
-
-    title: {
-      color:
-        colors.text,
-      fontSize: 23,
-      fontWeight: '900',
-      letterSpacing: -0.7,
-    },
-
-    workspace: {
-      color:
-        colors.textSoft,
-      fontSize: 11,
-      fontWeight: '700',
-      marginTop: 3,
+      transform: [{ translateY: -15 }],
     },
 
     settingsButton: {
-      width: 42,
-      height: 42,
-      borderRadius: 13,
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      marginTop: 10,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.primarySoft,
       borderWidth: 1,
       borderColor: colors.line,
-    },
-
-    userCircle: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
-      alignItems: 'center',
-      justifyContent:
-        'center',
-      backgroundColor:
-        colors.primary,
-    },
-
-    userText: {
-      color: '#FFFFFF',
-      fontSize: 15,
-      fontWeight: '900',
     },
 
     loadingBox: {

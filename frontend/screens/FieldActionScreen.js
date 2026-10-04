@@ -824,6 +824,10 @@ export default function FieldActionScreen({
       '사진을 가져올 방법을 선택해주세요.',
       [
         {
+          text: '취소',
+          style: 'cancel',
+        },
+        {
           text: '사진 촬영',
           onPress: () =>
             takePhoto(index),
@@ -834,10 +838,6 @@ export default function FieldActionScreen({
             pickPhotoFromLibrary(
               index
             ),
-        },
-        {
-          text: '취소',
-          style: 'cancel',
         },
       ]
     );
@@ -1217,7 +1217,7 @@ export default function FieldActionScreen({
       });
 
       showAlert(
-        '보고서가 저장되었고 AI 분석이 완료되었습니다.'
+        '보고서가 저장되었습니다.'
       );
     } catch (error) {
       console.log(error);

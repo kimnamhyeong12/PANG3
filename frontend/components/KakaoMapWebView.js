@@ -363,7 +363,6 @@ const buildKakaoMapHtml = (
 
   var boundaryPolygons = [];
   var boundaryLabels = [];
-  var selectedBoundaryPolygons = [];
   var boundaryAllBounds = null;
   var boundaryHasCoordinates = false;
   var renderedBoundaryCount = 0;
@@ -384,6 +383,9 @@ const buildKakaoMapHtml = (
   var selectionDragStarted = false;
   var selectedCenter = null;
   var selectionOverlay = null;
+  var pendingMapClickTimer = null;
+  var previousMapTap = null;
+  var lastDoubleTapAt = 0;
 
   /*
    * React Native로 메시지를 보낸다.
@@ -448,6 +450,22 @@ const buildKakaoMapHtml = (
     selectionOverlay.setMap(map);
   }
 
+  function zoomToDoubleTap(position) {
+    if (selectionMode && selectionSessionActive) {
+      selectedCenter = position;
+      ensureSelectionOverlay();
+      post({
+        type: "CENTER_CHANGE",
+        latitude: position.getLat(),
+        longitude: position.getLng()
+      });
+    }
+    map.setLevel(Math.max(1, map.getLevel() - 1), {
+      anchor: position,
+      animate: true
+    });
+  }
+
   /*
    * 방문지 / 선택 위치 / 경로만 제거한다.
    *
@@ -491,15 +509,9 @@ const buildKakaoMapHtml = (
     });
     boundaryPolygons = [];
     boundaryLabels = [];
-    selectedBoundaryPolygons = [];
     boundaryAllBounds = new window.kakao.maps.LatLngBounds();
     boundaryHasCoordinates = false;
     renderedBoundaryCount = 0;
-  }
-
-  function boundaryName(feature, index) {
-    var properties = feature.properties || {};
-    return properties.adm_nm || properties.adm_name || properties.name || ("행정동 " + (index + 1));
   }
 
   function geometryPolygons(geometry) {
@@ -509,19 +521,6 @@ const buildKakaoMapHtml = (
     return [];
   }
 
-  function resetBoundaryStyle() {
-    selectedBoundaryPolygons.forEach(function (polygon) {
-      polygon.setOptions({
-        strokeWeight: 1.5,
-        strokeColor: "#2477F3",
-        strokeOpacity: 0.72,
-        fillColor: "#72B7FF",
-        fillOpacity: 0.2
-      });
-    });
-    selectedBoundaryPolygons = [];
-  }
-
   function appendBoundaryData(featureCollection) {
     if (!map || !featureCollection || !featureCollection.features) return;
 
@@ -529,16 +528,13 @@ const buildKakaoMapHtml = (
       boundaryAllBounds = new window.kakao.maps.LatLngBounds();
     }
 
-    featureCollection.features.forEach(function (feature, featureIndex) {
-      var name = boundaryName(feature, featureIndex);
-      var featureBounds = new window.kakao.maps.LatLngBounds();
+    featureCollection.features.forEach(function (feature) {
       var featurePolygons = [];
 
       geometryPolygons(feature.geometry).forEach(function (polygonCoordinates) {
         var path = (polygonCoordinates || []).map(function (ring) {
           return (ring || []).map(function (point) {
             var latLng = new window.kakao.maps.LatLng(Number(point[1]), Number(point[0]));
-            featureBounds.extend(latLng);
             boundaryAllBounds.extend(latLng);
             boundaryHasCoordinates = true;
             return latLng;
@@ -548,6 +544,7 @@ const buildKakaoMapHtml = (
         var polygon = new window.kakao.maps.Polygon({
           map: map,
           path: path,
+          clickable: false,
           strokeWeight: 1.5,
           strokeColor: "#2477F3",
           strokeOpacity: 0.72,
@@ -558,29 +555,6 @@ const buildKakaoMapHtml = (
         featurePolygons.push(polygon);
         boundaryPolygons.push(polygon);
 
-        window.kakao.maps.event.addListener(polygon, "click", function () {
-          resetBoundaryStyle();
-          selectedBoundaryPolygons = featurePolygons;
-          selectedBoundaryPolygons.forEach(function (selectedPolygon) {
-            selectedPolygon.setOptions({
-              strokeWeight: 3,
-              strokeColor: "#0B5CE1",
-              strokeOpacity: 1,
-              fillColor: "#2477F3",
-              fillOpacity: 0.3
-            });
-          });
-
-          map.setBounds(featureBounds, 54, 54, 54, 54);
-          var center = featureBounds.getCenter();
-          post({
-            type: "BOUNDARY_PRESS",
-            name: name,
-            latitude: center.getLat(),
-            longitude: center.getLng(),
-            properties: feature.properties || {}
-          });
-        });
       });
 
       if (featurePolygons.length > 0) {
@@ -1202,7 +1176,9 @@ const buildKakaoMapHtml = (
               initialPosition,
 
             level:
-              ${MY_LOCATION_LEVEL}
+              ${MY_LOCATION_LEVEL},
+
+            disableDoubleClickZoom: true
           }
         );
 
@@ -1219,22 +1195,41 @@ const buildKakaoMapHtml = (
         map,
         "click",
         function (mouseEvent) {
-          post({
-            type:
-              "MAP_PRESS",
-
-            latitude:
-              mouseEvent
-                .latLng
-                .getLat(),
-
-            longitude:
-              mouseEvent
-                .latLng
-                .getLng()
-          });
+          var latitude = mouseEvent.latLng.getLat();
+          var longitude = mouseEvent.latLng.getLng();
+          var now = Date.now();
+          if (now - lastDoubleTapAt < 500) return;
+          var bounds = map.getBounds();
+          var latitudeRange = bounds.getNorthEast().getLat() - bounds.getSouthWest().getLat();
+          var longitudeRange = bounds.getNorthEast().getLng() - bounds.getSouthWest().getLng();
+          if (previousMapTap && now - previousMapTap.time < 350 &&
+              Math.abs(latitude - previousMapTap.latitude) < latitudeRange * 0.04 &&
+              Math.abs(longitude - previousMapTap.longitude) < longitudeRange * 0.04) {
+            clearTimeout(pendingMapClickTimer);
+            pendingMapClickTimer = null;
+            previousMapTap = null;
+            lastDoubleTapAt = now;
+            zoomToDoubleTap(mouseEvent.latLng);
+            return;
+          }
+          clearTimeout(pendingMapClickTimer);
+          previousMapTap = { time: now, latitude: latitude, longitude: longitude };
+          pendingMapClickTimer = setTimeout(function () {
+            pendingMapClickTimer = null;
+            previousMapTap = null;
+            post({ type: "MAP_PRESS", latitude: latitude, longitude: longitude });
+          }, 350);
         }
       );
+
+      window.kakao.maps.event.addListener(map, "dblclick", function (mouseEvent) {
+        clearTimeout(pendingMapClickTimer);
+        pendingMapClickTimer = null;
+        previousMapTap = null;
+        if (Date.now() - lastDoubleTapAt < 500) return;
+        lastDoubleTapAt = Date.now();
+        zoomToDoubleTap(mouseEvent.latLng);
+      });
 
       window.kakao.maps.event.addListener(
         map,
@@ -2942,7 +2937,10 @@ export default function KakaoMapWebView({
   }, [isGuiding, remainingActivePath]);
 
   useEffect(() => {
-    if (!boundaries) return;
+    if (!boundaries) {
+      sendMapCommand({ type: "BOUNDARIES_RESET" });
+      return;
+    }
     const features = Array.isArray(boundaries.features) ? boundaries.features : [];
     const transferId = boundaryTransferIdRef.current + 1;
     boundaryTransferIdRef.current = transferId;
@@ -3745,9 +3743,7 @@ export default function KakaoMapWebView({
               }
             >
               <TouchableOpacity
-                style={
-                  styles.actionButton
-                }
+                style={[styles.actionButton, styles.dismissActionButton]}
                 onPress={() => {
                   /*
                    * 나중에 눌러도
@@ -3758,11 +3754,7 @@ export default function KakaoMapWebView({
                   );
                 }}
               >
-                <Text
-                  style={
-                    styles.actionText
-                  }
-                >
+                <Text style={[styles.actionText, styles.dismissActionText]}>
                   나중에
                 </Text>
               </TouchableOpacity>
@@ -4505,6 +4497,15 @@ const styles =
 
       alignItems:
         "center",
+    },
+
+    dismissActionButton: {
+      backgroundColor: '#FDE9EB',
+      borderColor: '#F3B9C0',
+    },
+
+    dismissActionText: {
+      color: '#B94D59',
     },
 
     actionEmoji: {

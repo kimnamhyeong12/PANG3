@@ -191,8 +191,8 @@ export default function TransferScreen({
               return task ? `${dongName(task.adminDong) || '지역 미확인'} ${task.detailAddress || task.roadAddress || `#${id}`}` : `방문지 #${id}`;
             }).join(', ')}</Text>
             {incoming && request.status === 'PENDING' && <View style={styles.actions}>
+              <TouchableOpacity style={[styles.action, styles.rejectAction]} disabled={busy} onPress={() => respond(request, false)}><Text style={[styles.actionText, styles.rejectActionText]}>거절</Text></TouchableOpacity>
               <TouchableOpacity style={styles.action} disabled={busy} onPress={() => respond(request, true)}><Text style={styles.actionText}>수락</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.action} disabled={busy} onPress={() => respond(request, false)}><Text style={styles.actionText}>거절</Text></TouchableOpacity>
             </View>}
           </View>;
         })}
@@ -227,4 +227,6 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: 9, marginTop: 10 },
   action: { paddingVertical: 8, paddingHorizontal: 17, borderRadius: 8, backgroundColor: colors.primarySoft },
   actionText: { color: colors.primary, fontWeight: '800' },
+  rejectAction: { backgroundColor: '#FDE9EB' },
+  rejectActionText: { color: '#B94D59' },
 });

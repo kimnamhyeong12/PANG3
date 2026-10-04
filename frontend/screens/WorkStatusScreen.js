@@ -12,6 +12,7 @@ import { WebView } from 'react-native-webview';
 import { BackButton } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
 import { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
+import { koreaDayKey, isCurrentWork } from '../utils/completionDay';
 
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const KAKAO_JAVASCRIPT_KEY =
@@ -49,17 +50,6 @@ const STATUS = {
   pending: { label: '작업 전', color: '#E53935' },
   working: { label: '작업 중', color: '#F5B400' },
   complete: { label: '완료', color: '#16A05D' },
-};
-
-const localDayKey = (date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-
-const showOnMap = (item, today) => {
-  if (normalizeStatus(item.status || item.taskStatus) !== 'complete') return true;
-  const completedAt = item.completedAt ?? item.completed_at;
-  if (!completedAt) return true;
-  const completedDate = new Date(completedAt);
-  return Number.isNaN(completedDate.getTime()) || localDayKey(completedDate) >= today;
 };
 
 const safeJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
@@ -124,23 +114,16 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
   const [focusedAreaBounds, setFocusedAreaBounds] = useState(null);
   const [mapInteracting, setMapInteracting] = useState(false);
   const [groupMembers, setGroupMembers] = useState([]);
-  const [today, setToday] = useState(() => localDayKey(new Date()));
+  const [today, setToday] = useState(() => koreaDayKey());
   const personalWorkspace = isPersonalGroup(group);
 
   useEffect(() => {
-    let timer;
-    const scheduleMidnight = () => {
-      clearTimeout(timer);
-      const now = new Date();
-      setToday(localDayKey(now));
-      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      timer = setTimeout(scheduleMidnight, nextMidnight.getTime() - now.getTime() + 50);
-    };
-    scheduleMidnight();
+    const updateToday = () => setToday(koreaDayKey());
+    const timer = setInterval(updateToday, 60 * 1000);
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') scheduleMidnight();
+      if (state === 'active') updateToday();
     });
-    return () => { clearTimeout(timer); subscription.remove(); };
+    return () => { clearInterval(timer); subscription.remove(); };
   }, []);
 
   const loadBoundaries = useCallback(async () => {
@@ -235,12 +218,10 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
 
   const visibleAssignments = useMemo(() => {
     const source = Array.isArray(resolvedAssignments) ? resolvedAssignments : [];
-    return source;
-  }, [resolvedAssignments]);
+    return source.filter((item) => isCurrentWork(item, today));
+  }, [resolvedAssignments, today]);
 
-  const mapAssignments = useMemo(() =>
-    visibleAssignments.filter((item) => showOnMap(item, today)),
-  [visibleAssignments, today]);
+  const mapAssignments = visibleAssignments;
 
   const memberColors = useMemo(() => {
     const memberIds = Array.from(new Set([

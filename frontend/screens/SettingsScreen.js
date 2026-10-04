@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import {
-  Alert,
   Linking,
   Modal,
   ScrollView,
@@ -222,7 +221,7 @@ export default function SettingsScreen({
        * 사용자가 직접 끄거나 세부 설정 가능
        */
       if (notificationEnabled) {
-        Alert.alert(
+        showAlert(
           '업무 알림',
           '현재 알림이 허용되어 있습니다.',
           [
@@ -244,7 +243,7 @@ export default function SettingsScreen({
       /*
        * 아직 허용 안 된 경우
        */
-      Alert.alert(
+      showAlert(
         '업무 알림 사용',
         '새 업무 배정, 업무 우선순위 변경, 오늘 업무 요약, 미완료 업무 및 경로 안내를 받으려면 알림 권한이 필요합니다.',
         [
@@ -280,7 +279,7 @@ export default function SettingsScreen({
               if (
                 result.canAskAgain === false
               ) {
-                Alert.alert(
+                showAlert(
                   '알림 권한 필요',
                   '휴대폰 설정에서 외근도우미 알림을 허용해주세요.',
                   [
@@ -408,7 +407,6 @@ export default function SettingsScreen({
     <View style={styles.container}>
       <ScreenHeader
         title="설정"
-        subtitle="계정과 근무지역을 관리합니다"
         onBack={onBack}
       />
 
@@ -474,11 +472,6 @@ export default function SettingsScreen({
               setPicker('sigungu')
             }
           />
-
-          <Text style={styles.help}>
-            지도에서 행정동과 공공시설물을 찾을 때
-            이 근무지역을 사용합니다.
-          </Text>
 
           <PrimaryButton
             title={
@@ -744,6 +737,7 @@ const styles =
       flex: 1,
       backgroundColor:
         colors.background,
+      transform: [{ translateY: -15 }],
     },
 
     body: {
@@ -846,12 +840,6 @@ const styles =
     muted: {
       color:
         colors.textFaint,
-    },
-
-    help: {
-      color: colors.textSoft,
-      fontSize: 10,
-      lineHeight: 16,
     },
 
     menuRow: {

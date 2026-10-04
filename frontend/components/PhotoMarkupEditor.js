@@ -781,14 +781,10 @@ export default function PhotoMarkupEditor({
             disabled={
               saving
             }
-            style={
-              styles.headerTouch
-            }
+            style={[styles.headerTouch, styles.cancelHeaderTouch]}
           >
             <Text
-              style={
-                styles.headerButton
-              }
+              style={[styles.headerButton, styles.cancelHeaderButton]}
             >
               취소
             </Text>
@@ -1195,6 +1191,15 @@ const styles =
 
       justifyContent:
         'center',
+    },
+
+    cancelHeaderTouch: {
+      backgroundColor: '#FDE9EB',
+      borderRadius: 10,
+    },
+
+    cancelHeaderButton: {
+      color: '#B94D59',
     },
 
     title: {

@@ -218,6 +218,7 @@ function NormalMapScreen({
   const [priorityMap, setPriorityMap] = useState({});
   const [priorityLoaded, setPriorityLoaded] = useState(false);
   const [publicFacilityMode, setPublicFacilityMode] = useState(false);
+  const [publicSheetOpen, setPublicSheetOpen] = useState(true);
   const [publicCategoryOpen, setPublicCategoryOpen] = useState(false);
   const [publicCategory, setPublicCategory] = useState('');
   const [publicItems, setPublicItems] = useState([]);
@@ -237,6 +238,10 @@ function NormalMapScreen({
     : null, [selectedDong]);
 
   const sheetY = useRef(new Animated.Value(0)).current;
+  const publicSheetY = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!publicSheetOpen) publicSheetY.setValue(0);
+  }, [publicSheetOpen, publicSheetY]);
   const searchInputRef = useRef(null);
   const guideAdvanceRef = useRef(false);
 
@@ -554,6 +559,7 @@ function NormalMapScreen({
         setMapSelectMode(false);
         setDirectCenter(null);
         setCenterAddress('');
+        setClearSearchMarkerSignal((prev) => prev + 1);
         return true;
       }
 
@@ -619,6 +625,39 @@ function NormalMapScreen({
             useNativeDriver: true,
           }).start();
         }
+      },
+    })
+  ).current;
+
+  const publicSheetPanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) => gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderMove: (_, gesture) => {
+        publicSheetY.setValue(Math.max(0, gesture.dy));
+      },
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy > 65 || (gesture.dy > 20 && gesture.vy > 0.8)) {
+          Animated.timing(publicSheetY, {
+            toValue: 280,
+            duration: 220,
+            useNativeDriver: true,
+          }).start(({ finished }) => {
+            if (finished) {
+              setPublicSheetOpen(false);
+            } else {
+              Animated.spring(publicSheetY, { toValue: 0, useNativeDriver: true }).start();
+            }
+          });
+        } else {
+          Animated.spring(publicSheetY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(publicSheetY, { toValue: 0, useNativeDriver: true }).start();
       },
     })
   ).current;
@@ -762,6 +801,10 @@ function NormalMapScreen({
         registered.forEach((item) => byId.set(String(item.id ?? item.taskId ?? item.task_id), item));
         return Array.from(byId.values());
       });
+      setPublicFacilityMode(false);
+      setPublicCategoryOpen(false);
+      setPublicCategory('');
+      setPublicItems([]);
       setPublicSelectedIds([]);
       await onDataChanged?.();
       showAlert('방문지 등록 완료', `${selectedItems.length}건을 방문지로 등록했습니다.`);
@@ -1902,19 +1945,14 @@ function NormalMapScreen({
             <Text style={{ color: '#697386', marginTop: 4 }}>
               {directCenter ? `${directCenter.lat.toFixed(6)}, ${directCenter.lng.toFixed(6)}` : '선택된 위치 없음'}
             </Text>
-            <Text style={{ color: locationMoving ? '#2477F3' : '#697386', marginTop: 6, fontWeight: '800', fontSize: 12 }}>
-              {locationMoving
-                ? '옮기는 중...'
-                : locationSettingMode
-                  ? '위치 이동 가능 · 지도를 움직여 조정하세요'
-                  : '마커 고정됨'}
-            </Text>
           </View>
 
           <TouchableOpacity
             style={{
-              paddingHorizontal: 12,
-              paddingVertical: 8,
+              width: 92,
+              height: 36,
+              alignItems: 'center',
+              justifyContent: 'center',
               borderRadius: 9,
               backgroundColor: locationSettingMode ? '#2477F3' : '#E8F2FF',
               borderWidth: 1,
@@ -1926,14 +1964,14 @@ function NormalMapScreen({
             }}
           >
             <Text style={{ color: locationSettingMode ? '#FFFFFF' : '#2477F3', fontWeight: '900', fontSize: 12 }}>
-              위치 설정
+              {locationSettingMode ? '이동 중...' : '위치 설정'}
             </Text>
           </TouchableOpacity>
         </View>
 
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
           <TouchableOpacity
-            style={{ flex: 1, padding: 12, alignItems: 'center' }}
+            style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#F3B9C0', backgroundColor: '#FDE9EB' }}
             onPress={() => {
               setLocationMoving(false);
               setLocationSettingMode(false);
@@ -1941,9 +1979,10 @@ function NormalMapScreen({
               setDirectCenter(null);
               setCenterAddress('');
               setSelectionPurpose('visit');
+              setClearSearchMarkerSignal((prev) => prev + 1);
             }}
           >
-            <Text>취소</Text>
+            <Text style={{ color: '#B94D59', fontWeight: '800' }}>취소</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -2161,6 +2200,7 @@ function NormalMapScreen({
                 resetAddModes();
                 setAddMenuOpen(false);
                 setPublicFacilityMode(true);
+                setPublicSheetOpen(true);
                 setKeyword('');
                 setPublicCategory('');
                 setPublicItems([]);
@@ -2199,6 +2239,7 @@ function NormalMapScreen({
                   setPublicCategory('');
                   setPublicItems([]);
                   setPublicSelectedIds([]);
+                  setPublicSheetOpen(true);
                 }}
               >
                 <Ionicons name="close" size={20} color="#607195" />
@@ -2212,6 +2253,7 @@ function NormalMapScreen({
                   setPublicCategory(item.key);
                   setPublicCategoryOpen(false);
                   setPublicSelectedIds([]);
+                  setPublicSheetOpen(true);
                 }}
               >
                 <Ionicons name={item.icon} size={19} color="#2477F3" />
@@ -2431,18 +2473,13 @@ function NormalMapScreen({
         )}
       </View>
 
-      {!mapSelectMode && (
+      {!addressSearchMode && !mapSelectMode && !publicFacilityMode && !searchedPlace && !coordSheetOpen && (
         <TouchableOpacity
           style={styles.floatingModeButton}
           activeOpacity={0.88}
           onPress={() => setPendingOpen(true)}
         >
-          <Ionicons
-            name="file-tray-outline"
-            size={20}
-            color="#FFFFFF"
-          />
-
+          <Ionicons name="file-tray-outline" size={20} color="#FFFFFF" />
           <Text style={styles.floatingModeButtonText}>
             미처리 업무 {pendingWork.length}
           </Text>
@@ -2560,18 +2597,48 @@ function NormalMapScreen({
         </Animated.View>
       )}
 
-      {publicFacilityMode && publicCategory && (
-        <View style={styles.publicFacilityActionBar}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.publicFacilityActionTitle}>
-              {publicLoading
-                ? '공공시설물을 불러오는 중...'
-                : `${PUBLIC_FACILITY_CATEGORIES.find((item) => item.key === publicCategory)?.label || '공공시설물'} ${publicItems.length}곳`}
-            </Text>
-            <Text style={styles.publicFacilityActionDesc}>
-              지도에서 시설을 눌러 방문지로 추가할 항목을 선택하세요.
-            </Text>
+      {publicFacilityMode && publicCategory && !publicSheetOpen && (
+        <TouchableOpacity
+          style={styles.publicFacilityCollapsed}
+          onPress={() => setPublicSheetOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="공공시설물 목록 펼치기"
+        >
+          <Text style={styles.publicFacilityCollapsedText}>공공시설물 {publicItems.length}곳 보기</Text>
+        </TouchableOpacity>
+      )}
+
+      {publicFacilityMode && publicCategory && publicSheetOpen && (
+        <Animated.View style={[styles.publicFacilitySheet, { transform: [{ translateY: publicSheetY }] }]}>
+          <View style={styles.publicFacilityHandleArea} {...publicSheetPanResponder.panHandlers}>
+            <View style={styles.publicFacilityHandle} />
+            <View style={styles.publicFacilityHeader}>
+              <Text style={styles.publicFacilityActionTitle}>
+                {publicLoading
+                  ? '공공시설물을 불러오는 중...'
+                  : `${PUBLIC_FACILITY_CATEGORIES.find((item) => item.key === publicCategory)?.label || '공공시설물'} ${publicItems.length}곳`}
+              </Text>
+              <Text style={styles.publicFacilityCount}>{publicSelectedIds.length}곳 선택</Text>
+            </View>
           </View>
+          <ScrollView style={styles.publicFacilityList} nestedScrollEnabled>
+            {publicLoading ? (
+              <Text style={styles.publicFacilityEmpty}>시설물을 불러오는 중...</Text>
+            ) : publicItems.length ? publicItems.map((item) => {
+              const selected = publicSelectedIds.includes(item.id);
+              return (
+                <TouchableOpacity key={String(item.id)} style={styles.publicFacilityRow} onPress={() => togglePublicFacility(item)}>
+                  <Ionicons name={selected ? 'checkbox' : 'square-outline'} size={22} color={selected ? '#2477F3' : '#8A98A8'} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.publicFacilityName} numberOfLines={1}>{item.detailAddress || item.roadAddress || '공공시설물'}</Text>
+                    <Text style={styles.publicFacilityAddress} numberOfLines={1}>{item.roadAddress || item.adminDong || ''}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            }) : (
+              <Text style={styles.publicFacilityEmpty}>선택한 행정동에 시설물이 없습니다.</Text>
+            )}
+          </ScrollView>
           <TouchableOpacity
             style={[styles.publicFacilityRegisterButton, (!publicSelectedIds.length || publicSaving) && styles.publicFacilityRegisterButtonDisabled]}
             disabled={!publicSelectedIds.length || publicSaving}
@@ -2581,7 +2648,7 @@ function NormalMapScreen({
               {publicSaving ? '등록 중' : `${publicSelectedIds.length}건 등록`}
             </Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       )}
 
       {(optimizing || segmentChanging) && (
@@ -2619,10 +2686,10 @@ function NormalMapScreen({
 
             <View style={styles.actionRow}>
               <TouchableOpacity
-                style={styles.sheetButton}
+                style={[styles.sheetButton, styles.dismissSheetButton]}
                 onPress={() => setGuideStartOpen(false)}
               >
-                <Text style={styles.sheetLabel}>취소</Text>
+                <Text style={[styles.sheetLabel, styles.dismissSheetLabel]}>취소</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -3250,13 +3317,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 10,
     right: 10,
-    bottom: 50,
+    bottom: 16,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 16,
-    padding: 16,
+    padding: 14,
     zIndex: 30,
     shadowColor: '#000',
     shadowOpacity: 0.18,
@@ -3275,23 +3342,23 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: '#C9D3DF',
     alignSelf: 'center',
-    marginBottom: 13,
+    marginBottom: 8,
   },
 
   addTitle: {
     fontSize: 17,
     fontWeight: '900',
     color: '#10285B',
-    marginBottom: 12,
+    marginBottom: 8,
   },
 
   inputBox: {
-    minHeight: 48,
+    minHeight: 42,
     borderWidth: 1,
     borderColor: '#DDE5EF',
     borderRadius: 11,
     paddingHorizontal: 12,
-    marginBottom: 10,
+    marginBottom: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -3328,7 +3395,7 @@ const styles = StyleSheet.create({
   },
 
   addButton: {
-    height: 50,
+    height: 44,
     borderRadius: 11,
     backgroundColor: '#2563EB',
     alignItems: 'center',
@@ -3451,6 +3518,15 @@ const styles = StyleSheet.create({
     borderColor: '#D9E1EA',
     alignItems: 'center',
     paddingVertical: 16,
+  },
+
+  dismissSheetButton: {
+    backgroundColor: '#FDE9EB',
+    borderColor: '#F3B9C0',
+  },
+
+  dismissSheetLabel: {
+    color: '#B94D59',
   },
 
   sheetIcon: {
@@ -3581,37 +3657,48 @@ const styles = StyleSheet.create({
     borderTopColor: '#E7EEF8',
   },
   publicCategoryItemText: { flex: 1, color: '#10285B', fontSize: 12.5, fontWeight: '800' },
-  publicFacilityActionBar: {
+  publicFacilitySheet: {
     position: 'absolute',
     left: 16,
     right: 16,
-    bottom: 92,
+    bottom: 16,
     zIndex: 48,
-    minHeight: 74,
+    height: 250,
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#DCE7F5',
     padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
     shadowColor: '#2466B5',
     shadowOpacity: 0.13,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 5 },
     elevation: 7,
   },
+  publicFacilityHandleArea: { minHeight: 48, paddingTop: 5, paddingBottom: 6, justifyContent: 'center' },
+  publicFacilityHandle: { width: 34, height: 4, borderRadius: 2, backgroundColor: '#CAD8E8', alignSelf: 'center', marginBottom: 8 },
+  publicFacilityCollapsed: { position: 'absolute', bottom: 16, alignSelf: 'center', zIndex: 48, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE7F5', paddingHorizontal: 16, paddingVertical: 10, elevation: 7 },
+  publicFacilityCollapsedText: { color: '#2477F3', fontSize: 12, fontWeight: '800' },
+  publicFacilityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
   publicFacilityActionTitle: { color: '#10285B', fontSize: 12.5, fontWeight: '900' },
-  publicFacilityActionDesc: { color: '#607195', fontSize: 9.5, marginTop: 4 },
+  publicFacilityCount: { color: '#2477F3', fontSize: 10, fontWeight: '800' },
+  publicFacilityList: { flex: 1 },
+  publicFacilityRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 9, borderTopWidth: 1, borderTopColor: '#EEF2F6' },
+  publicFacilityName: { color: '#10285B', fontSize: 11, fontWeight: '800' },
+  publicFacilityAddress: { color: '#607195', fontSize: 9, marginTop: 2 },
+  publicFacilityEmpty: { color: '#607195', fontSize: 11, textAlign: 'center', paddingVertical: 18 },
   publicFacilityRegisterButton: {
-    minWidth: 82,
-    minHeight: 44,
+    height: 44,
     borderRadius: 12,
     backgroundColor: '#2477F3',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    marginTop: 8,
   },
   publicFacilityRegisterButtonDisabled: { opacity: 0.4 },
   publicFacilityRegisterText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },

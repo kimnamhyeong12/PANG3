@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import WorkStatusScreen from './WorkStatusScreen';
-import { CardTitle } from '../components/ui';
+import GroupDashboardScreen from './GroupDashboardScreen';
+import { CardTitle, ScreenHeader } from '../components/ui';
 import { colors, shadow } from '../constants/design';
 import { groupApi } from '../utils/groupApi';
 
@@ -52,7 +53,7 @@ export default function GroupWorkspaceScreen({
   group,
   assignments,
   onRefresh,
-  onChooseGroup,
+  onBack,
   tab = 'status',
   onTabChange,
   onMembers,
@@ -112,10 +113,7 @@ export default function GroupWorkspaceScreen({
 
   return (
     <View style={styles.root}>
-      <TouchableOpacity style={styles.groupTitle} onPress={onChooseGroup}>
-        <Text style={styles.groupName}>{group?.groupName || '그룹 선택'}</Text>
-        <Ionicons name="chevron-down" size={18} color={colors.primary} />
-      </TouchableOpacity>
+      <ScreenHeader title={groupName} onBack={onBack} />
 
       <View style={styles.tabs}>
         <TouchableOpacity
@@ -123,6 +121,12 @@ export default function GroupWorkspaceScreen({
           onPress={() => onTabChange?.('status')}
         >
           <Text style={[styles.tabText, tab === 'status' && styles.activeText]}>작업현황</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, tab === 'dashboard' && styles.activeTab]}
+          onPress={() => onTabChange?.('dashboard')}
+        >
+          <Text style={[styles.tabText, tab === 'dashboard' && styles.activeText]}>대시보드</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, tab === 'settings' && styles.activeTab]}
@@ -140,6 +144,8 @@ export default function GroupWorkspaceScreen({
           onRefresh={onRefresh}
           embedded
         />
+      ) : tab === 'dashboard' ? (
+        <GroupDashboardScreen assignments={assignments} group={group} />
       ) : (
         <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
           <View style={styles.card}>
@@ -326,16 +332,7 @@ function SettingSwitchRow({ icon, title, value, onValueChange, last }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
-  groupTitle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingTop: 16,
-    paddingBottom: 11,
-  },
-  groupName: { color: colors.text, fontWeight: '900', fontSize: 17 },
+  root: { flex: 1, backgroundColor: colors.background, transform: [{ translateY: -15 }] },
   tabs: {
     flexDirection: 'row',
     borderBottomWidth: 1,
