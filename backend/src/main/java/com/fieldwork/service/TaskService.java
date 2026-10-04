@@ -544,7 +544,7 @@ public class TaskService {
         boolean willBeComplete = isCompleteStatus(status);
 
         if (!wasComplete && willBeComplete) {
-            task.setCompletedAt(LocalDateTime.now());
+            task.setCompletedAt(LocalDateTime.now(java.time.ZoneId.of("Asia/Seoul")));
         } else if (wasComplete && !willBeComplete) {
             task.setCompletedAt(null);
         }
