@@ -160,35 +160,34 @@ function getInteractiveMapHtml(latitude, longitude) {
           body {
             background: #E8F2FF;
           }
-          #pointer {
-            display: none;
-            position: fixed;
-            left: 50%;
-            top: 50%;
+          .selected-pin-wrap {
+            position: relative;
             width: 32px;
             height: 40px;
-            transform: translate(-50%, -40px);
-            filter: drop-shadow(0 2px 3px rgba(0,0,0,.3));
+            overflow: visible;
             pointer-events: none;
-            z-index: 10;
+            filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
           }
-          #pointer .pin-body {
-            position: relative;
+          .selected-location {
+            position: absolute;
+            top: 0;
+            left: 1px;
             width: 30px;
             height: 30px;
             background: #E53935;
             border-radius: 50% 50% 50% 0;
             border: 4px solid #94A3B8;
-            box-shadow: 0 0 0 1px rgba(255,255,255,.95);
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.95);
+            box-sizing: border-box;
             transform: rotate(-45deg);
           }
-          #pointer .pin-body::after {
+          .selected-location::after {
             content: '';
             position: absolute;
             width: 7px;
             height: 7px;
             border-radius: 50%;
-            background: #fff;
+            background: #FFFFFF;
             left: 8px;
             top: 8px;
           }
@@ -202,13 +201,14 @@ function getInteractiveMapHtml(latitude, longitude) {
 
       <body>
         <div id="map"></div>
-        <div id="pointer"><div class="pin-body"></div></div>
 
         <script>
           var map = null;
           var ready = false;
           var selectedPosition = null;
           var selectionMode = false;
+          var selectionDragStarted = false;
+          var selectedOverlay = null;
 
           function postMessage(data) {
             if (!window.ReactNativeWebView) {
@@ -220,20 +220,53 @@ function getInteractiveMapHtml(latitude, longitude) {
             );
           }
 
-          window.setSelectionMode = function(enabled) {
-            selectionMode = !!enabled;
-            var pointer = document.getElementById('pointer');
-            if (pointer) {
-              pointer.style.display = selectionMode ? 'block' : 'none';
+          function ensureSelectedOverlay() {
+            if (!map || !selectedPosition || !window.kakao || !window.kakao.maps) {
+              return;
             }
-            if (selectionMode && map) {
-              selectedPosition = map.getCenter();
-              postMessage({
-                type: 'LOCATION_SELECTED',
-                latitude: selectedPosition.getLat(),
-                longitude: selectedPosition.getLng()
+
+            if (!selectedOverlay) {
+              var selectedElement = document.createElement('div');
+              selectedElement.className = 'selected-pin-wrap';
+              var selectedBody = document.createElement('div');
+              selectedBody.className = 'selected-location';
+              selectedElement.appendChild(selectedBody);
+
+              selectedOverlay = new window.kakao.maps.CustomOverlay({
+                position: selectedPosition,
+                content: selectedElement,
+                xAnchor: 0.5,
+                yAnchor: 1.0,
+                zIndex: 110
               });
             }
+
+            selectedOverlay.setPosition(selectedPosition);
+            selectedOverlay.setMap(map);
+          }
+
+          window.setSelectionMode = function(enabled) {
+            var nextSelectionMode = !!enabled;
+
+            if (nextSelectionMode && map) {
+              selectionMode = true;
+              selectionDragStarted = false;
+
+              // 지도 직접 선택과 동일하게 기존 선택 좌표 하나만 기준으로 사용한다.
+              // ON 할 때 좌표를 다시 계산하지 않고 기존 마커 좌표를 화면 중심으로 맞춘다.
+              if (!selectedPosition) {
+                selectedPosition = map.getCenter();
+              }
+              map.setCenter(selectedPosition);
+              ensureSelectedOverlay();
+              return;
+            }
+
+            // OFF에서는 현재 선택 좌표를 다시 계산하거나 이동시키지 않는다.
+            // 마지막 위치에 동일한 마커를 그대로 고정한다.
+            selectionMode = false;
+            selectionDragStarted = false;
+            ensureSelectedOverlay();
           };
 
           window.setExternalPosition = function(
@@ -254,15 +287,21 @@ function getInteractiveMapHtml(latitude, longitude) {
               return;
             }
 
-            var position =
+            // 위치 설정 중에는 dragend에서 정한 WebView 내부 selectedPosition이 단일 기준이다.
+            // React state가 되돌아오면서 pan/setCenter를 다시 실행하면 미세한 왕복 이동이 생길 수 있으므로 무시한다.
+            if (selectionMode) {
+              return;
+            }
+
+            selectedPosition =
               new window.kakao.maps.LatLng(
                 lat,
                 lng
               );
 
-            selectedPosition = position;
             map.relayout();
-            map.panTo(position);
+            map.setCenter(selectedPosition);
+            ensureSelectedOverlay();
           };
 
           function startMap() {
@@ -296,29 +335,48 @@ function getInteractiveMapHtml(latitude, longitude) {
 
               ready = true;
               selectedPosition = initialPosition;
+              ensureSelectedOverlay();
 
               setTimeout(function() {
                 map.relayout();
-                map.setCenter(
-                  selectedPosition
-                );
+                map.setCenter(selectedPosition);
+                ensureSelectedOverlay();
               }, 300);
 
-              window.kakao.maps.event.addListener(map, 'dragend', function() {
-                if (!selectionMode) {
+              window.kakao.maps.event.addListener(map, 'dragstart', function() {
+                if (selectionMode) {
+                  selectionDragStarted = true;
+                }
+              });
+
+              window.kakao.maps.event.addListener(map, 'center_changed', function() {
+                if (!selectionMode || !selectionDragStarted) {
                   return;
                 }
                 selectedPosition = map.getCenter();
+                ensureSelectedOverlay();
+              });
+
+              window.kakao.maps.event.addListener(map, 'dragend', function() {
+                if (!selectionMode || !selectionDragStarted) {
+                  selectionDragStarted = false;
+                  return;
+                }
+
+                selectedPosition = map.getCenter();
+                ensureSelectedOverlay();
                 postMessage({
                   type: 'LOCATION_SELECTED',
                   latitude: selectedPosition.getLat(),
                   longitude: selectedPosition.getLng()
                 });
+                selectionDragStarted = false;
               });
 
               window.kakao.maps.event.addListener(map, 'zoom_changed', function() {
                 if (selectionMode && selectedPosition) {
                   map.setCenter(selectedPosition);
+                  ensureSelectedOverlay();
                 }
               });
             });

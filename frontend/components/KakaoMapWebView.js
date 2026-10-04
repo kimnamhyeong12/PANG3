@@ -1043,6 +1043,20 @@ const buildKakaoMapHtml = (
     if (commandData.type === "SELECTION_SESSION") {
       selectionSessionActive = Boolean(commandData.enabled);
 
+      if (selectionSessionActive && map) {
+        // 새 방문지를 "지도에서 직접 선택"할 때는 기존/최근 마커로 이동하지 않는다.
+        // 사용자가 현재 보고 있던 지도 중심을 그대로 첫 선택 좌표로 잡고 즉시 마커를 표시한다.
+        if (!selectedCenter) {
+          selectedCenter = map.getCenter();
+        }
+        ensureSelectionOverlay();
+        post({
+          type: "CENTER_CHANGE",
+          latitude: selectedCenter.getLat(),
+          longitude: selectedCenter.getLng()
+        });
+      }
+
       if (!selectionSessionActive) {
         selectionMode = false;
         selectionDragStarted = false;
