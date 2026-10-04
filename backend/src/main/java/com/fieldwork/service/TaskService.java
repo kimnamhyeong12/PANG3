@@ -221,6 +221,16 @@ public class TaskService {
     }
 
     @Transactional
+    public Task updateLocationEntity(Task task, Double latitude, Double longitude) {
+        if (latitude == null || longitude == null) {
+            return task;
+        }
+        task.setLat(latitude);
+        task.setLng(longitude);
+        return taskRepository.save(task);
+    }
+
+    @Transactional
     public Task updateStatusEntity(Task task, String status) {
         if ("complete".equalsIgnoreCase(task.getTaskStatus())
                 && !"complete".equalsIgnoreCase(status)) {

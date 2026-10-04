@@ -50,6 +50,7 @@ public class TaskProgressService {
         progress.setMainComment(request.getParameter("mainComment"));
         progress.setFieldMemo(request.getParameter("fieldMemo"));
         progress.setProgressStatus(request.getParameter("progressStatus"));
+        syncTaskLocation(task, progress.getLatitude(), progress.getLongitude());
 
         MultipartFile mapImage = request.getFile("mapImage");
         if (mapImage != null && !mapImage.isEmpty()) {
@@ -97,6 +98,7 @@ public class TaskProgressService {
         progress.setMainComment(str(body.get("mainComment")));
         progress.setFieldMemo(str(body.get("fieldMemo")));
         progress.setProgressStatus(str(body.get("progressStatus")));
+        syncTaskLocation(task, progress.getLatitude(), progress.getLongitude());
 
         Object mapObj = body.get("locationMapImage");
         if (mapObj != null) {
@@ -169,6 +171,13 @@ public class TaskProgressService {
         if (progressStatus != null && !progressStatus.isBlank()) {
             taskService.updateStatusEntity(task, progressStatus);
         }
+    }
+
+    private void syncTaskLocation(Task task, Double latitude, Double longitude) {
+        if (latitude == null || longitude == null) {
+            return;
+        }
+        taskService.updateLocationEntity(task, latitude, longitude);
     }
 
     public Map<String, Object> toResponseMap(TaskProgress progress, Task task) {
