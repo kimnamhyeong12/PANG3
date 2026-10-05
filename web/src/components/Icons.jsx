@@ -88,3 +88,9 @@ export const IconLogo = (p) => (
     <circle cx="12" cy="10" r="2.5" />
   </Svg>
 );
+
+export const IconPlus = (p) => (
+  <Svg {...p}>
+    <path d="M12 5v14M5 12h14" />
+  </Svg>
+);
