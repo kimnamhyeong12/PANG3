@@ -1,13 +1,15 @@
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useGroup } from '../context/GroupContext.jsx';
 import NoTeamNotice from '../components/NoTeamNotice.jsx';
+import GroupLoadError from '../components/GroupLoadError.jsx';
+import { LoadingScreen } from '../components/Loading.jsx';
 
 export default function GroupSelectPage() {
   const { groups, groupId, setGroupId, loading, loaded, error } = useGroup();
   const navigate = useNavigate();
 
-  if (error) return <div className="full-center">{error}</div>;
-  if (!loaded || loading) return <div className="full-center">그룹 정보를 불러오는 중…</div>;
+  if (error) return <GroupLoadError message={error} />;
+  if (!loaded || loading) return <LoadingScreen label="그룹 정보를 불러오는 중…" />;
   if (groups.length === 0) return <NoTeamNotice />;
   // 그룹이 1개면 GroupContext가 자동 선택하므로 바로 진입
   if (groups.length === 1 && groupId != null) return <Navigate to="/dashboard" replace />;

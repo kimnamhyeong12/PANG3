@@ -4,6 +4,8 @@ import { fetchGroupMembers } from '../../api/groups.js';
 import { fetchGroupTasks } from '../../api/tasks.js';
 import { createTransfer } from '../../api/transfers.js';
 import { STATUS, normalizeStatus } from '../../utils/taskStatus.js';
+import { errorMessage } from '../../api/client.js';
+import { LoadingBlock } from '../Loading.jsx';
 
 const DIRECT_INPUT = '__direct__';
 
@@ -38,7 +40,7 @@ export default function NewTransferModal({ groupId, user, onClose, onCreated }) 
         // 백엔드는 보내는 사람이 현재 담당자인 업무만 이관 허용
         setMyTasks((taskList ?? []).filter((t) => t.assigneeUserId === user.userId));
       })
-      .catch((e) => !cancelled && setLoadError(e.message))
+      .catch((e) => !cancelled && setLoadError(errorMessage(e, '팀원·업무 정보를 불러오지 못했습니다.')))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
@@ -92,7 +94,7 @@ export default function NewTransferModal({ groupId, user, onClose, onCreated }) 
       });
       onCreated();
     } catch (e) {
-      setSubmitError(e.message);
+      setSubmitError(errorMessage(e, '이관 요청을 보내지 못했습니다.'));
       setSubmitting(false);
     }
   };
@@ -109,7 +111,7 @@ export default function NewTransferModal({ groupId, user, onClose, onCreated }) 
   );
 
   let body;
-  if (loading) body = <div className="modal-state">불러오는 중…</div>;
+  if (loading) body = <LoadingBlock />;
   else if (loadError) body = <div className="form-error">{loadError}</div>;
   else
     body = (

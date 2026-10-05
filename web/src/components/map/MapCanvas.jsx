@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { loadKakaoMaps } from '../../lib/kakaoLoader.js';
+import { LoadingBlock } from '../Loading.jsx';
 import { STATUS, STATUS_LABEL } from '../../utils/taskStatus.js';
 import {
   COLORS,
@@ -53,6 +54,7 @@ export default function MapCanvas({
   onSelectTask,
   onBoundsChange,
   searchResult,
+  dataReady,
 }) {
   const containerRef = useRef(null);
   const kakaoRef = useRef(null);
@@ -190,9 +192,9 @@ export default function MapCanvas({
     taskMarkersRef.current.forEach(({ marker }) => marker.setMap(target));
   }, [ready, layers.tasks, tasks]);
 
-  // 최초 1회 화면 맞춤: 업무가 있으면 업무 기준, 없으면 경계 기준
+  // 최초 1회 화면 맞춤: 업무가 있으면 업무 기준, 없으면 경계 기준 (업무·경계 로딩이 끝난 뒤에만)
   useEffect(() => {
-    if (!ready || fittedRef.current) return;
+    if (!ready || !dataReady || fittedRef.current) return;
     const kakao = kakaoRef.current;
     const located = tasks.filter(hasCoords);
     const bounds = new kakao.maps.LatLngBounds();
@@ -214,7 +216,7 @@ export default function MapCanvas({
     } else {
       mapRef.current.setBounds(bounds, 40, 40, 40, 40);
     }
-  }, [ready, tasks, boundaries]);
+  }, [ready, dataReady, tasks, boundaries]);
 
   // 선택된 업무: 마커 강조 + 정보 오버레이
   useEffect(() => {
@@ -317,7 +319,11 @@ export default function MapCanvas({
     <div className="map-canvas">
       <div ref={containerRef} className="map-container" />
       {loadError && <div className="map-error">{loadError}</div>}
-      {!ready && !loadError && <div className="map-error">지도를 불러오는 중…</div>}
+      {!ready && !loadError && (
+        <div className="map-error">
+          <LoadingBlock label="지도를 불러오는 중…" />
+        </div>
+      )}
 
       {ready && (
         <>

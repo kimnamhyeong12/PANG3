@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api } from '../api/client.js';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { api, errorMessage } from '../api/client.js';
 import { useAuth } from './AuthContext.jsx';
 
 const STORAGE_KEY = 'pang3.groupId';
@@ -17,6 +17,7 @@ export function GroupProvider({ children }) {
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(null);
+  const loadedOnceRef = useRef(false);
 
   const setGroupId = useCallback((nextId) => {
     if (nextId == null) localStorage.removeItem(STORAGE_KEY);
@@ -26,17 +27,21 @@ export function GroupProvider({ children }) {
 
   // GET /api/groups/user/{userId} → [{ groupId, groupName, personal, memberCount, regionSido, regionSigungu, ... }]
   // 관리자용 웹이라 1인 개인 그룹(personal: true)은 제외하고 팀 그룹만 다룬다.
+  // 최초 로드만 전체 화면 로딩/에러로 막고, 이후 reload(지역 변경 후 등)는 화면을 유지한 채 백그라운드로 갱신한다.
   const reload = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
+    const initial = !loadedOnceRef.current;
+    if (initial) setLoading(true);
     setError(null);
     try {
       const list = await api.get(`/api/groups/user/${user.userId}`);
       setGroups((list ?? []).filter((g) => !g.personal));
+      loadedOnceRef.current = true;
     } catch (e) {
-      setError(e.message);
+      if (initial) setError(errorMessage(e, '그룹 정보를 불러오지 못했습니다.'));
+      else console.warn('[group] 그룹 목록 갱신 실패', e);
     } finally {
-      setLoading(false);
+      if (initial) setLoading(false);
       setLoaded(true);
     }
   }, [user]);
@@ -47,6 +52,7 @@ export function GroupProvider({ children }) {
     } else {
       setGroups([]);
       setLoaded(false);
+      loadedOnceRef.current = false;
       setGroupId(null);
     }
   }, [user, reload, setGroupId]);

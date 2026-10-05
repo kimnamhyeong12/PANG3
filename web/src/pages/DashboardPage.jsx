@@ -6,21 +6,26 @@ import { fetchGroupTasks } from '../api/tasks.js';
 import { STATUS, normalizeStatus } from '../utils/taskStatus.js';
 import { formatDate, formatToday } from '../utils/format.js';
 import StatusPill from '../components/StatusPill.jsx';
+import ErrorBlock from '../components/ErrorBlock.jsx';
+import { SkeletonLine, SkeletonTable } from '../components/Loading.jsx';
+import { errorMessage } from '../api/client.js';
 import { IconBell, IconMap, IconPlus, IconReport } from '../components/Icons.jsx';
 
-function StatCard({ label, value, tone }) {
+function StatCard({ label, value, tone, loading }) {
   return (
     <div className="stat-card">
       <div className="stat-label">{label}</div>
-      <div className={`stat-value stat-${tone}`}>{value.toLocaleString()}</div>
+      <div className={`stat-value stat-${tone}`}>
+        {loading ? <SkeletonLine width={56} height={28} /> : value == null ? '-' : value.toLocaleString()}
+      </div>
     </div>
   );
 }
 
-function TaskTable({ tasks, loading, error }) {
+function TaskTable({ tasks, loading, error, onRetry }) {
   let body;
-  if (error) body = <div className="table-empty">{error}</div>;
-  else if (loading) body = <div className="table-empty">업무를 불러오는 중…</div>;
+  if (error) body = <ErrorBlock message={error} onRetry={onRetry} />;
+  else if (loading) body = <SkeletonTable />;
   else if (tasks.length === 0) body = <div className="table-empty">등록된 업무가 없습니다.</div>;
 
   return (
@@ -111,6 +116,7 @@ export default function DashboardPage() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,7 +129,7 @@ export default function DashboardPage() {
       .catch((e) => {
         if (!cancelled) {
           setTasks([]);
-          setError(e.message);
+          setError(errorMessage(e, '업무 목록을 불러오지 못했습니다.'));
         }
       })
       .finally(() => {
@@ -132,7 +138,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [groupId, user.userId]);
+  }, [groupId, user.userId, reloadKey]);
 
   const stats = useMemo(() => {
     const count = (s) => tasks.filter((t) => t._status === s).length;
@@ -152,14 +158,14 @@ export default function DashboardPage() {
       </p>
 
       <div className="stat-grid">
-        <StatCard label="전체 업무" value={stats.total} tone="text" />
-        <StatCard label="진행중" value={stats.working} tone="amber" />
-        <StatCard label="완료" value={stats.complete} tone="green" />
-        <StatCard label="미처리" value={stats.pending} tone="red" />
+        <StatCard label="전체 업무" value={error ? null : stats.total} tone="text" loading={loading} />
+        <StatCard label="진행중" value={error ? null : stats.working} tone="amber" loading={loading} />
+        <StatCard label="완료" value={error ? null : stats.complete} tone="green" loading={loading} />
+        <StatCard label="미처리" value={error ? null : stats.pending} tone="red" loading={loading} />
       </div>
 
       <div className="dashboard-columns">
-        <TaskTable tasks={tasks} loading={loading} error={error} />
+        <TaskTable tasks={tasks} loading={loading} error={error} onRetry={() => setReloadKey((k) => k + 1)} />
         <div className="dashboard-side">
           <QuickActions />
           <RecentNotifications />

@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useGroup } from '../context/GroupContext.jsx';
 import { TRANSFER_STATUS, acceptTransfer, fetchTransfers, rejectTransfer } from '../api/transfers.js';
 import { formatDateTime } from '../utils/format.js';
 import NewTransferModal from '../components/transfer/NewTransferModal.jsx';
 import { IconPlus } from '../components/Icons.jsx';
+import ErrorBlock from '../components/ErrorBlock.jsx';
+import { SkeletonTable } from '../components/Loading.jsx';
+import { errorMessage } from '../api/client.js';
 
 const STATUS_VIEW = {
   [TRANSFER_STATUS.PENDING]: { label: '대기', tone: 'amber' },
@@ -60,20 +63,26 @@ export default function TransferPage() {
   const [actionError, setActionError] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
 
+  // 그룹 전환 직후 이전 그룹 응답이 늦게 도착해 덮어쓰지 않도록 마지막 요청만 반영
+  const requestSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++requestSeq.current;
     setLoading(true);
     setError(null);
     try {
-      setTransfers((await fetchTransfers(groupId, user.userId)) ?? []);
+      const list = (await fetchTransfers(groupId, user.userId)) ?? [];
+      if (seq === requestSeq.current) setTransfers(list);
     } catch (e) {
+      if (seq !== requestSeq.current) return;
       setTransfers([]);
-      setError(e.message);
+      setError(errorMessage(e, '이관 요청 목록을 불러오지 못했습니다.'));
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
   }, [groupId, user.userId]);
 
   useEffect(() => {
+    setActionError(null);
     load();
   }, [load]);
 
@@ -93,15 +102,15 @@ export default function TransferPage() {
       await (accept ? acceptTransfer : rejectTransfer)(groupId, item.id, user.userId);
       await load();
     } catch (e) {
-      setActionError(e.message);
+      setActionError(errorMessage(e, accept ? '이관 요청을 수락하지 못했습니다.' : '이관 요청을 거절하지 못했습니다.'));
     } finally {
       setBusyId(null);
     }
   };
 
   let content;
-  if (error) content = <div className="table-empty">{error}</div>;
-  else if (loading) content = <div className="table-empty">이관 요청을 불러오는 중…</div>;
+  if (error) content = <ErrorBlock message={error} onRetry={load} />;
+  else if (loading) content = <SkeletonTable rows={4} columns={3} />;
   else if (list.length === 0)
     content = (
       <div className="table-empty">{tab === 'received' ? '받은 이관 요청이 없습니다.' : '보낸 이관 요청이 없습니다.'}</div>

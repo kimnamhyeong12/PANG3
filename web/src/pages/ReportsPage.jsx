@@ -4,6 +4,9 @@ import { useGroup } from '../context/GroupContext.jsx';
 import { downloadReport, fetchGroupReports } from '../api/reports.js';
 import { formatDate } from '../utils/format.js';
 import { IconDownload, IconReport } from '../components/Icons.jsx';
+import ErrorBlock from '../components/ErrorBlock.jsx';
+import { SkeletonLine } from '../components/Loading.jsx';
+import { errorMessage } from '../api/client.js';
 
 // taskCategory는 자유 문자열 → 이름 기준으로 항상 같은 색 (빨강은 '미처리' 의미라 제외)
 const CATEGORY_TONES = ['navy', 'green', 'amber', 'gray'];
@@ -81,6 +84,7 @@ export default function ReportsPage() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const [keyword, setKeyword] = useState('');
   const [fromDate, setFromDate] = useState('');
@@ -99,13 +103,19 @@ export default function ReportsPage() {
       .catch((e) => {
         if (cancelled) return;
         setReports([]);
-        setError(e.message);
+        setError(errorMessage(e, '보고서 목록을 불러오지 못했습니다.'));
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [groupId, user.userId]);
+  }, [groupId, user.userId, reloadKey]);
+
+  // 그룹이 바뀌면 이전 그룹 기준 필터(담당자 등)를 비운다
+  useEffect(() => {
+    setAssignee('');
+    setDownloadError(null);
+  }, [groupId]);
 
   // 담당자 드롭다운: 응답의 assigneeName 기준 (담당자 미확인은 "담당자 확인 불가"로 내려옴)
   const assigneeOptions = useMemo(
@@ -135,15 +145,37 @@ export default function ReportsPage() {
     try {
       saveBlob(await downloadReport(report.progressId), reportFileName(report));
     } catch (e) {
-      setDownloadError(e.message);
+      setDownloadError(errorMessage(e, '보고서를 내려받지 못했습니다.'));
     } finally {
       setDownloadingId(null);
     }
   };
 
   let content;
-  if (error) content = <div className="panel table-empty">{error}</div>;
-  else if (loading) content = <div className="panel table-empty">보고서를 불러오는 중…</div>;
+  if (error)
+    content = (
+      <div className="panel">
+        <ErrorBlock message={error} onRetry={() => setReloadKey((k) => k + 1)} />
+      </div>
+    );
+  else if (loading)
+    content = (
+      <div className="report-grid" role="status" aria-label="불러오는 중">
+        {Array.from({ length: 6 }, (_, i) => (
+          <div key={i} className="report-card">
+            <div className="report-card-top">
+              <SkeletonLine width={38} height={38} />
+              <SkeletonLine width={64} height={22} />
+            </div>
+            <SkeletonLine width="80%" height={16} />
+            <div style={{ height: 10 }} />
+            <SkeletonLine width="60%" />
+            <div style={{ height: 16 }} />
+            <SkeletonLine height={38} />
+          </div>
+        ))}
+      </div>
+    );
   else if (reports.length === 0) content = <div className="panel table-empty">제출된 보고서가 없습니다.</div>;
   else if (filtered.length === 0) content = <div className="panel table-empty">조건에 맞는 보고서가 없습니다.</div>;
   else

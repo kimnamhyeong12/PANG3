@@ -2,11 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useGroup } from '../context/GroupContext.jsx';
 import { fetchGroupTasks } from '../api/tasks.js';
-import { fetchAedsByDong, fetchBoundaries, fetchBusStopsByDong } from '../api/publicData.js';
+import { fetchAedsByDong, fetchBoundaries, fetchBusStopsByDong, fetchByDongs } from '../api/publicData.js';
 import { loadKakaoMaps } from '../lib/kakaoLoader.js';
 import { normalizeStatus } from '../utils/taskStatus.js';
 import MapCanvas from '../components/map/MapCanvas.jsx';
 import { STATUS_COLOR } from '../components/map/markerImages.js';
+import ErrorBlock from '../components/ErrorBlock.jsx';
+import { SkeletonTable, Spinner } from '../components/Loading.jsx';
+import { errorMessage } from '../api/client.js';
+
+const LOADING = Symbol('loading');
 
 // 그룹 지역 코드가 없을 때 기본값 (앱과 동일: 21100 = 부산 사하구)
 const DEFAULT_ADM_CODE = '21100';
@@ -22,17 +27,6 @@ const hasCoords = (item) => Number.isFinite(item?.lat) && Number.isFinite(item?.
 
 const inBounds = (item, b) =>
   item.lat >= b.south && item.lat <= b.north && item.lng >= b.west && item.lng <= b.east;
-
-// 경계 feature의 행정동 코드(adm_cd)별로 by-dong API를 호출해 합친다
-async function fetchByDongs(admCodes, fetcher, idKey) {
-  const results = await Promise.allSettled(admCodes.map((code) => fetcher(code)));
-  const failed = results.filter((r) => r.status === 'rejected');
-  const merged = new Map();
-  results
-    .filter((r) => r.status === 'fulfilled')
-    .forEach((r) => (r.value ?? []).forEach((item) => merged.set(item[idKey], item)));
-  return { items: [...merged.values()], failedCount: failed.length };
-}
 
 function geocode(query) {
   return loadKakaoMaps().then(
@@ -81,7 +75,9 @@ function useLayerData(enabled, admCodes, fetcher, idKey) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, key, fetcher, idKey, state.loadedFor]);
 
-  return state;
+  // 실패한 행정동이 있으면 다시 불러오기
+  const retry = useCallback(() => setState((s) => ({ ...s, loadedFor: null })), []);
+  return { ...state, retry };
 }
 
 export default function MapPage() {
@@ -89,12 +85,16 @@ export default function MapPage() {
   const { groupId, currentGroup } = useGroup();
   const [layers, setLayers] = useState({ tasks: true, bus: false, aed: false, boundary: true });
 
-  const [tasks, setTasks] = useState([]);
-  const [tasksLoading, setTasksLoading] = useState(true);
+  // 응답이 어느 그룹/지역 것인지 함께 저장한다. 그룹 전환 직후 렌더에서 이전 그룹 데이터가
+  // 새 지도에 쓰이지 않도록(새 지도가 이전 그룹 업무 기준으로 화면을 맞추던 문제) 현재 값과 다르면 '로딩 중'으로 본다.
+  const [taskData, setTaskData] = useState({ groupId: null, list: [] });
+  const [tasksFetching, setTasksFetching] = useState(true);
   const [tasksError, setTasksError] = useState(null);
 
-  const [boundaries, setBoundaries] = useState(null);
+  const [boundaryData, setBoundaryData] = useState({ admCode: null, data: null });
   const [boundaryError, setBoundaryError] = useState(null);
+  const [tasksReloadKey, setTasksReloadKey] = useState(0);
+  const [boundaryReloadKey, setBoundaryReloadKey] = useState(0);
 
   const [viewBounds, setViewBounds] = useState(null);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
@@ -108,32 +108,39 @@ export default function MapPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setTasksLoading(true);
+    setTasksFetching(true);
     setTasksError(null);
     setSelectedTaskId(null);
     fetchGroupTasks(groupId, user.userId)
-      .then((list) => !cancelled && setTasks((list ?? []).map((t) => ({ ...t, _status: normalizeStatus(t) }))))
+      .then(
+        (list) =>
+          !cancelled && setTaskData({ groupId, list: (list ?? []).map((t) => ({ ...t, _status: normalizeStatus(t) })) })
+      )
       .catch((e) => {
         if (cancelled) return;
-        setTasks([]);
-        setTasksError(e.message);
+        setTaskData({ groupId, list: [] });
+        setTasksError(errorMessage(e, '업무 목록을 불러오지 못했습니다.'));
       })
-      .finally(() => !cancelled && setTasksLoading(false));
+      .finally(() => !cancelled && setTasksFetching(false));
     return () => {
       cancelled = true;
     };
-  }, [groupId, user.userId]);
+  }, [groupId, user.userId, tasksReloadKey]);
 
   useEffect(() => {
     let cancelled = false;
     setBoundaryError(null);
     fetchBoundaries(admCode)
-      .then((data) => !cancelled && setBoundaries(data))
-      .catch((e) => !cancelled && setBoundaryError(e.message));
+      .then((data) => !cancelled && setBoundaryData({ admCode, data }))
+      .catch((e) => !cancelled && setBoundaryError(errorMessage(e, '행정동 경계를 불러오지 못했습니다.')));
     return () => {
       cancelled = true;
     };
-  }, [admCode]);
+  }, [admCode, boundaryReloadKey]);
+
+  const tasks = taskData.groupId === groupId ? taskData.list : [];
+  const tasksLoading = tasksFetching || taskData.groupId !== groupId;
+  const boundaries = boundaryData.admCode === admCode ? boundaryData.data : null;
 
   const dongCodes = useMemo(
     () => (boundaries?.features ?? []).map((f) => f.properties?.adm_cd).filter(Boolean),
@@ -163,19 +170,24 @@ export default function MapPage() {
       if (result) setSearchResult(result);
       else setSearchError('검색 결과가 없습니다.');
     } catch (err) {
-      setSearchError(err.message);
+      setSearchError(errorMessage(err, '주소 검색에 실패했습니다.'));
     } finally {
       setSearching(false);
     }
   };
 
   const layerStatus = {
-    tasks: tasksLoading ? '불러오는 중' : tasksError ? '오류' : `${locatedTasks.length}`,
-    bus: bus.loading ? '불러오는 중' : layers.bus && bus.loadedFor ? `${bus.items.length}` : '',
-    aed: aed.loading ? '불러오는 중' : layers.aed && aed.loadedFor ? `${aed.items.length}` : '',
-    boundary: boundaryError ? '오류' : boundaries ? `${dongCodes.length}` : '불러오는 중',
+    tasks: tasksLoading ? LOADING : tasksError ? '오류' : `${locatedTasks.length}`,
+    bus: bus.loading ? LOADING : layers.bus && bus.loadedFor ? `${bus.items.length}` : '',
+    aed: aed.loading ? LOADING : layers.aed && aed.loadedFor ? `${aed.items.length}` : '',
+    boundary: boundaryError ? '오류' : boundaries ? `${dongCodes.length}` : LOADING,
   };
-  const layerErrors = [tasksError, boundaryError, bus.error, aed.error].filter(Boolean);
+  const layerErrors = [
+    tasksError && { key: 'tasks', message: tasksError, retry: () => setTasksReloadKey((k) => k + 1) },
+    boundaryError && { key: 'boundary', message: boundaryError, retry: () => setBoundaryReloadKey((k) => k + 1) },
+    bus.error && { key: 'bus', message: `버스정류장: ${bus.error}`, retry: bus.retry },
+    aed.error && { key: 'aed', message: `AED: ${aed.error}`, retry: aed.retry },
+  ].filter(Boolean);
 
   return (
     <div className="map-page">
@@ -197,10 +209,8 @@ export default function MapPage() {
         </form>
       </div>
       {searchError && <p className="form-error">{searchError}</p>}
-      {layerErrors.map((msg) => (
-        <p key={msg} className="form-error">
-          {msg}
-        </p>
+      {layerErrors.map((err) => (
+        <ErrorBlock key={err.key} message={err.message} onRetry={err.retry} />
       ))}
 
       <div className="map-layout">
@@ -218,7 +228,11 @@ export default function MapPage() {
                     onChange={(e) => setLayers((prev) => ({ ...prev, [key]: e.target.checked }))}
                   />
                   <span className="layer-label">{label}</span>
-                  {layerStatus[key] && <span className="layer-count">{layerStatus[key]}</span>}
+                  {layerStatus[key] === LOADING ? (
+                    <Spinner size={12} />
+                  ) : (
+                    layerStatus[key] && <span className="layer-count">{layerStatus[key]}</span>
+                  )}
                 </label>
               ))}
             </div>
@@ -232,7 +246,7 @@ export default function MapPage() {
             {!layers.tasks ? (
               <div className="table-empty">현장 업무 레이어가 꺼져 있습니다.</div>
             ) : tasksLoading ? (
-              <div className="table-empty">불러오는 중…</div>
+              <SkeletonTable rows={5} columns={1} />
             ) : visibleTasks.length === 0 ? (
               <div className="table-empty">현재 지도 영역에 업무가 없습니다.</div>
             ) : (
@@ -262,7 +276,9 @@ export default function MapPage() {
           </section>
         </aside>
 
+        {/* 그룹이 바뀌면 지도를 새로 만들어 새 그룹 업무 기준으로 다시 화면을 맞춘다 */}
         <MapCanvas
+          key={groupId}
           tasks={tasks}
           busStops={bus.items}
           aeds={aed.items}
@@ -272,6 +288,7 @@ export default function MapPage() {
           onSelectTask={setSelectedTaskId}
           onBoundsChange={onBoundsChange}
           searchResult={searchResult}
+          dataReady={!tasksLoading && (boundaries != null || boundaryError != null)}
         />
       </div>
     </div>

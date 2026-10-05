@@ -24,19 +24,39 @@ async function request(method, path, { params, body } = {}) {
   }
   if (!res.ok) {
     // ApiExceptionHandler 응답: { timestamp, status, error, message } — 권한 에러 등은 message를 그대로 노출
-    const message = (data && (data.message || data.error)) || `요청 실패 (${res.status})`;
-    throw new ApiError(message, res.status, data);
+    throw toApiError(res.status, data, `요청 실패 (${res.status})`);
   }
   return data;
 }
 
 export class ApiError extends Error {
-  constructor(message, status, data) {
+  constructor(message, status, data, unreadable = false) {
     super(message);
     this.name = 'ApiError';
     this.status = status; // 네트워크 오류면 undefined
     this.data = data;
+    this.unreadable = unreadable; // 서버 메시지가 깨져 있어 대체 문구를 쓴 경우
   }
+}
+
+// 백엔드 GroupService/TaskService 일부 한글 메시지 리터럴이 소스에서 이미 깨져 있다
+// (예: "그룹을 찾을 수 없습니다." → "洹몃９??李얠쓣 ???놁뒿?덈떎."). 한자나 '?'+한글 조합이 보이면 깨진 것으로 본다.
+export function isGarbledMessage(text) {
+  return /[\u4e00-\u9fff]|\?[\uac00-\ud7a3]|\?\?/.test(String(text ?? ''));
+}
+
+function toApiError(status, data, fallback) {
+  const raw = data && (data.message || data.error);
+  if (raw && isGarbledMessage(raw)) {
+    console.warn('[api] 서버 오류 메시지를 읽을 수 없음', status, raw);
+    return new ApiError(`요청을 처리하지 못했습니다. (오류 ${status})`, status, data, true);
+  }
+  return new ApiError(raw || fallback, status, data);
+}
+
+// 화면별 상황에 맞는 문구: 서버 메시지가 깨졌을 때만 fallback 사용
+export function errorMessage(error, fallback) {
+  return error instanceof ApiError && error.unreadable ? fallback : error?.message || fallback;
 }
 
 // 서버 자체 장애(게이트웨이 오류, 네트워크 끊김) 여부
@@ -54,10 +74,11 @@ async function download(path) {
     } catch {
       data = null;
     }
-    const message =
-      (data && (data.message || data.error)) ||
-      (res.status === 404 ? '보고서 파일을 찾을 수 없습니다.' : `다운로드 실패 (${res.status})`);
-    throw new ApiError(message, res.status, data);
+    throw toApiError(
+      res.status,
+      data,
+      res.status === 404 ? '보고서 파일을 찾을 수 없습니다.' : `다운로드 실패 (${res.status})`
+    );
   }
   return res.blob();
 }

@@ -3,6 +3,8 @@ import { useAuth } from './context/AuthContext.jsx';
 import { useGroup } from './context/GroupContext.jsx';
 import AppLayout from './components/layout/AppLayout.jsx';
 import NoTeamNotice from './components/NoTeamNotice.jsx';
+import { LoadingScreen } from './components/Loading.jsx';
+import GroupLoadError from './components/GroupLoadError.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import GroupSelectPage from './pages/GroupSelectPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
@@ -19,8 +21,8 @@ function RequireAuth() {
 
 function RequireGroup() {
   const { groups, groupId, loading, loaded, error } = useGroup();
-  if (error) return <div className="full-center">{error}</div>;
-  if (!loaded || loading) return <div className="full-center">그룹 정보를 불러오는 중…</div>;
+  if (error) return <GroupLoadError message={error} />;
+  if (!loaded || loading) return <LoadingScreen label="그룹 정보를 불러오는 중…" />;
   if (groups.length === 0) return <NoTeamNotice />;
   if (groupId == null || !groups.some((g) => g.groupId === groupId)) {
     return <Navigate to="/groups/select" replace />;
