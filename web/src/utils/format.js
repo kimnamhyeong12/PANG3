@@ -13,3 +13,15 @@ export function formatDate(value) {
   }
   return String(value).slice(0, 10).replaceAll('-', '.');
 }
+
+// LocalDateTime 응답: "2026-10-05T12:31:59.111" → "2026.10.05 12:31"
+export function formatDateTime(value) {
+  if (!value) return '-';
+  if (Array.isArray(value)) {
+    const [y, m, d, hh = 0, mm = 0] = value;
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${y}.${pad(m)}.${pad(d)} ${pad(hh)}:${pad(mm)}`;
+  }
+  const [date, time = ''] = String(value).split('T');
+  return `${date.replaceAll('-', '.')} ${time.slice(0, 5)}`.trim();
+}
