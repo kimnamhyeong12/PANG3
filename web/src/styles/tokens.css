@@ -1,0 +1,56 @@
+:root {
+  --navy: #1B3A5C;
+  --navy-dark: #142C47;
+  --navy-soft: #EAF1F8;
+  --bg: #F5F7FA;
+  --surface: #FFFFFF;
+  --border: #E2E6EC;
+  --text: #1A1F29;
+  --text-soft: #5B6472;
+  --text-faint: #8A93A3;
+  --green: #1E8E5A;
+  --green-soft: #E6F4ED;
+  --amber: #B9790A;
+  --amber-soft: #FBF0DD;
+  --red: #C0392B;
+  --red-soft: #FBEAE8;
+  --gray-badge: #6B7280;
+  --gray-badge-soft: #EEF0F3;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Noto Sans KR', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

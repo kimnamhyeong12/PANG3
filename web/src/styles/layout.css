@@ -1,0 +1,399 @@
+/* ---------- App shell ---------- */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 32px 36px;
+}
+
+/* ---------- Header ---------- */
+.header {
+  height: 64px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.header-left,
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--navy);
+  color: #fff;
+  display: grid;
+  place-items: center;
+}
+
+.header-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.badge-navy {
+  background: var(--navy-soft);
+  color: var(--navy);
+}
+
+.badge-gray {
+  background: var(--gray-badge-soft);
+  color: var(--gray-badge);
+}
+
+.header-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border);
+}
+
+/* group switcher */
+.group-switcher {
+  position: relative;
+  margin-left: 12px;
+}
+
+.group-switcher-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.group-switcher-button:disabled {
+  cursor: default;
+}
+
+.group-switcher-button:not(:disabled):hover {
+  background: var(--bg);
+}
+
+.group-switcher-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(20, 44, 71, 0.12);
+  z-index: 20;
+}
+
+.group-switcher-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  font-weight: 500;
+}
+
+.group-switcher-item:hover {
+  background: var(--bg);
+}
+
+.group-switcher-item.is-active {
+  background: var(--navy-soft);
+  color: var(--navy);
+  font-weight: 700;
+}
+
+.icon-button {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-soft);
+}
+
+.icon-button:hover {
+  background: var(--bg);
+}
+
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--navy-soft);
+  color: var(--navy);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+}
+
+.header-user-name {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.header-user-sub {
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.2;
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 20px 12px;
+  overflow-y: auto;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: var(--text-soft);
+  font-weight: 500;
+}
+
+.sidebar-item:hover {
+  background: var(--bg);
+}
+
+.sidebar-item.active {
+  background: var(--navy-soft);
+  color: var(--navy);
+  font-weight: 700;
+}
+
+.sidebar-divider {
+  height: 1px;
+  margin: 12px 4px;
+  background: var(--border);
+}
+
+.sidebar-logout {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+/* ---------- Page ---------- */
+.page-title {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.page-desc {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.full-center {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  color: var(--text-soft);
+}
+
+/* ---------- Login / group select ---------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  padding: 32px;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.input {
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--navy);
+}
+
+.btn-primary {
+  width: 100%;
+  height: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--navy);
+  color: #fff;
+  font-weight: 700;
+}
+
+.btn-primary:hover {
+  background: var(--navy-dark);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.form-error {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 13px;
+}
+
+.group-select {
+  width: 100%;
+  max-width: 640px;
+}
+
+.group-select-title {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.group-select-desc {
+  margin: 0 0 20px;
+  color: var(--text-soft);
+}
+
+.group-card-list {
+  display: grid;
+  gap: 12px;
+}
+
+.group-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 18px 20px;
+  text-align: left;
+}
+
+.group-card:hover {
+  border-color: var(--navy);
+}
+
+.group-card-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.group-card-meta {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.no-team {
+  text-align: center;
+}
+
+.no-team-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.no-team-desc {
+  margin: 0 0 20px;
+  color: var(--text-soft);
+}
