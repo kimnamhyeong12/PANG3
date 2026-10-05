@@ -44,7 +44,26 @@ export function isServerDown(error) {
   return !(error instanceof ApiError) || [502, 503, 504].includes(error.status);
 }
 
+// 파일 다운로드: Blob으로 받는다 (실패 시 ApiError)
+async function download(path) {
+  const res = await fetch(new URL(BASE_URL + path, window.location.origin));
+  if (!res.ok) {
+    let data = null;
+    try {
+      data = JSON.parse(await res.text());
+    } catch {
+      data = null;
+    }
+    const message =
+      (data && (data.message || data.error)) ||
+      (res.status === 404 ? '보고서 파일을 찾을 수 없습니다.' : `다운로드 실패 (${res.status})`);
+    throw new ApiError(message, res.status, data);
+  }
+  return res.blob();
+}
+
 export const api = {
+  download,
   get: (path, params) => request('GET', path, { params }),
   post: (path, body, params) => request('POST', path, { body, params }),
   patch: (path, body, params) => request('PATCH', path, { body, params }),

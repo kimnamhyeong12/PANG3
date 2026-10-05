@@ -94,3 +94,9 @@ export const IconPlus = (p) => (
     <path d="M12 5v14M5 12h14" />
   </Svg>
 );
+
+export const IconDownload = (p) => (
+  <Svg {...p}>
+    <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+  </Svg>
+);
