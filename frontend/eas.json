@@ -12,18 +12,33 @@
       },
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://3.37.233.96:8080",
+        "EXPO_PUBLIC_KAKAO_REST_API_KEY": "c347aec2a50a9fb8cd52ba8c606a0553",
+        "EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY": "958f1842c5e274a17bd7798bb27d1501"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://3.37.233.96:8080",
+        "EXPO_PUBLIC_KAKAO_REST_API_KEY": "c347aec2a50a9fb8cd52ba8c606a0553",
+        "EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY": "958f1842c5e274a17bd7798bb27d1501"
       }
     },
     "production": {
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://3.37.233.96:8080",
+        "EXPO_PUBLIC_KAKAO_REST_API_KEY": "c347aec2a50a9fb8cd52ba8c606a0553",
+        "EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY": "958f1842c5e274a17bd7798bb27d1501"
       }
     }
   },
