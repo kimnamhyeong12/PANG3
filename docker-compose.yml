@@ -27,6 +27,9 @@ services:
       - "8080:8080"
     volumes:
       - ./backend/data:/app/data:ro
+      # 보고서(hwpx)·현장 사진을 호스트에 보관해서 재배포로 컨테이너가 바뀌어도 남게 한다
+      - ./ai/output:/app/ai/output
+      - ./ai/uploads:/app/ai/uploads
     environment:
       # AWS 금고(SSM)에서 데이터를 가져오도록 설정
       - SPRING_CONFIG_IMPORT=aws-parameterstore:/sahagu/
