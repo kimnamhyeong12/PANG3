@@ -6,7 +6,9 @@ import { showAlert } from '../components/CustomAlert';
 import { groupApi } from '../utils/groupApi';
 import { colors } from '../constants/design';
 
-export default function GroupReportsScreen({ group, user, onBack, onOpenReport }) {
+const dongName = (value) => String(value || '').trim().split(/\s+/).pop().replace(/제(?=\d+동$)/, '') || '행정동 미확인';
+
+export default function GroupReportsScreen({ group, user, selectedDong, onBack, onOpenReport }) {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [member, setMember] = useState('');
@@ -32,6 +34,20 @@ export default function GroupReportsScreen({ group, user, onBack, onOpenReport }
       && (!startDate || day >= startDate)
       && (!endDate || day <= endDate);
   }), [reports, member, dong, startDate, endDate]);
+  const selectedDongName = selectedDong
+    ? dongName(selectedDong.properties?.adm_nm || selectedDong.properties?.name)
+    : '';
+  const groupedReports = useMemo(() => {
+    const groups = new Map();
+    visible.forEach((item) => {
+      const name = dongName(item.adminDong);
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name).push(item);
+    });
+    return Array.from(groups, ([name, items]) => ({ name, items }))
+      .sort((a, b) => Number(b.name === selectedDongName) - Number(a.name === selectedDongName)
+        || a.name.localeCompare(b.name, 'ko'));
+  }, [visible, selectedDongName]);
 
   const filterRow = (values, selected, setSelected) => (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
@@ -54,22 +70,24 @@ export default function GroupReportsScreen({ group, user, onBack, onOpenReport }
         <Text style={styles.dateDash}>~</Text>
         <TextInput style={styles.dateInput} value={endDate} onChangeText={setEndDate} placeholder="종료일 YYYY-MM-DD" />
       </View>
-      {loading ? <ActivityIndicator color={colors.primary} /> : visible.length ? visible.map((item) =>
-        <TouchableOpacity key={item.progressId} style={styles.card} onPress={() => onOpenReport(item)}>
+      {loading ? <ActivityIndicator color={colors.primary} /> : groupedReports.length ? groupedReports.map(({ name, items }) => <View key={name} style={styles.dongGroup}>
+        <Text style={styles.dongGroupTitle}>{name}</Text>
+        {items.map((item) => <TouchableOpacity key={item.progressId} style={styles.card} onPress={() => onOpenReport(item)}>
           <Ionicons name="document-text-outline" size={22} color={colors.primary} />
           <View style={styles.cardBody}>
             <Text style={styles.title}>{item.detailAddress || item.roadAddress || `방문지 ${item.taskId}`}</Text>
-            <Text style={styles.meta}>{item.performedByName} · {item.adminDong || '행정동 미확인'} · {String(item.createdAt || '').slice(0, 10)}</Text>
+            <Text style={styles.meta}>{item.adminDong || '행정동 미확인'} · {String(item.createdAt || '').slice(0, 10)}</Text>
           </View>
           <Ionicons name="download-outline" size={20} color={colors.primary} />
-        </TouchableOpacity>
-      ) : <Text style={styles.empty}>조건에 맞는 보고서가 없습니다.</Text>}
+        </TouchableOpacity>)}
+      </View>) : <Text style={styles.empty}>조건에 맞는 보고서가 없습니다.</Text>}
     </ScrollView>
   </View>;
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background }, body: { padding: 18, paddingBottom: 36, gap: 12 },
+  dongGroup: { gap: 8 }, dongGroupTitle: { color: colors.text, fontSize: 13, fontWeight: '800', marginTop: 4 },
   label: { color: colors.text, fontSize: 13, fontWeight: '800' }, chips: { gap: 8, paddingBottom: 2 },
   chip: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 18, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
   selected: { backgroundColor: colors.primary, borderColor: colors.primary }, chipText: { color: colors.textSoft, fontSize: 11 },

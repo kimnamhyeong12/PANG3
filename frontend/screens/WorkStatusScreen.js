@@ -13,23 +13,12 @@ import { BackButton } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
 import { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
 import { koreaDayKey, isCurrentWork } from '../utils/completionDay';
+import { buildMemberColors } from '../utils/memberColors';
 
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const KAKAO_JAVASCRIPT_KEY =
   process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY ||
   process.env.EXPO_PUBLIC_KAKAO_MAP_API_KEY;
-const MEMBER_COLORS = [
-  '#2E8BFF',
-  '#8B5CF6',
-  '#F97316',
-  '#14B8A6',
-  '#EC4899',
-  '#6366F1',
-  '#D97706',
-  '#0891B2',
-  '#65A30D',
-  '#DC2626',
-];
 const MIXED_AREA_COLOR = '#64748B';
 const UNASSIGNED_COLOR = '#94A3B8';
 const isPersonalGroup = (group) =>
@@ -224,25 +213,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
   const mapAssignments = visibleAssignments;
 
   const memberColors = useMemo(() => {
-    const memberIds = Array.from(new Set([
-      ...groupMembers.map((member) => String(member.userId)),
-      ...resolvedAssignments
-        .map((item) => String(item.assigneeUserId || 'unknown'))
-        .filter((id) => id !== 'unknown'),
-    ])).sort((left, right) => {
-      const leftNumber = Number(left);
-      const rightNumber = Number(right);
-      if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
-        return leftNumber - rightNumber;
-      }
-      return left.localeCompare(right);
-    });
-
-    const result = { unknown: UNASSIGNED_COLOR };
-    memberIds.forEach((id, index) => {
-      result[id] = MEMBER_COLORS[index % MEMBER_COLORS.length];
-    });
-    return result;
+    return { unknown: UNASSIGNED_COLOR, ...buildMemberColors(groupMembers, resolvedAssignments) };
   }, [resolvedAssignments, groupMembers]);
 
   const counts = useMemo(() => {

@@ -82,13 +82,16 @@ export default function App() {
   const [mapInitialized, setMapInitialized] = useState(false);
   const [selectedDong, setSelectedDong] = useState(null);
   const selectedDongDayRef = useRef(getLocalDateKey());
+  const selectedDongVersionRef = useRef(0);
   const [transferTargetMember, setTransferTargetMember] = useState(null);
+  const [transferRequestsOnly, setTransferRequestsOnly] = useState(false);
 
   useEffect(() => {
     let active = true;
+    const version = selectedDongVersionRef.current;
     AsyncStorage.getItem('pang3:selectedDong')
       .then((value) => {
-        if (!active || !value) return;
+        if (!active || version !== selectedDongVersionRef.current || !value) return;
         try {
           const parsed = JSON.parse(value);
           if (parsed?.day === getLocalDateKey() && parsed?.feature?.type === 'Feature') {
@@ -106,6 +109,7 @@ export default function App() {
   const updateSelectedDong = useCallback((feature) => {
     if (!feature) return;
     const day = getLocalDateKey();
+    selectedDongVersionRef.current += 1;
     selectedDongDayRef.current = day;
     setSelectedDong(feature);
     AsyncStorage.setItem('pang3:selectedDong', JSON.stringify({ day, feature })).catch(() => {});
@@ -113,6 +117,7 @@ export default function App() {
   const [calendarDayKey, setCalendarDayKey] = useState(getLocalDateKey());
   useEffect(() => {
     if (selectedDongDayRef.current === calendarDayKey) return;
+    selectedDongVersionRef.current += 1;
     selectedDongDayRef.current = calendarDayKey;
     setSelectedDong(null);
     AsyncStorage.removeItem('pang3:selectedDong').catch(() => {});
@@ -199,6 +204,10 @@ export default function App() {
       return;
     }
     setActiveGroup(group || null);
+    selectedDongVersionRef.current += 1;
+    selectedDongDayRef.current = getLocalDateKey();
+    setSelectedDong(null);
+    AsyncStorage.removeItem('pang3:selectedDong').catch(() => {});
     setGroupAssignments([]);
     setTodayLocationsLoaded(false);
     setRouteLocations([]);
@@ -289,8 +298,26 @@ export default function App() {
     const legacyPersonalKey = isPersonalGroup(activeGroup) && personalGroupId
       ? `${WORKSPACE_LOCATIONS_KEY_PREFIX}_${user.userId}_group_${personalGroupId}`
       : null;
+    const acceptedTransfersKey = `${cacheKey}_accepted_transfer_ids`;
+    const loadAcceptedTransferIds = async () => {
+      if (isPersonalGroup(activeGroup)) return new Set();
+      try {
+        const transfers = await groupApi(`/api/groups/${activeGroup.groupId}/transfers?userId=${user.userId}`);
+        const ids = (Array.isArray(transfers) ? transfers : [])
+          .filter((request) => request.status === 'ACCEPTED'
+            && Number(request.recipientUserId) === Number(user.userId))
+          .flatMap((request) => request.taskIds || [])
+          .map(String);
+        AsyncStorage.setItem(acceptedTransfersKey, JSON.stringify(ids)).catch(() => {});
+        return new Set(ids);
+      } catch (error) {
+        const cached = await AsyncStorage.getItem(acceptedTransfersKey).catch(() => null);
+        try { return new Set(cached ? JSON.parse(cached) : []); }
+        catch { return new Set(); }
+      }
+    };
     setTodayLocationsLoaded(false);
-    const restoreRows = async (rows, legacyRows = []) => {
+    const restoreRows = async (rows, legacyRows = [], heldTransferIds = new Set()) => {
       await routeSaveQueueRef.current;
       let session = null;
       try {
@@ -311,7 +338,7 @@ export default function App() {
       if (loadedWorkspaceKeyRef.current === cacheKey) session = currentRouteRef.current;
       const personalWorkspace = true;
       const plan = splitWorkPlan(rows, choices, calendarDayKey, savedPlan ? [] : legacyRows,
-        { autoAddToday: personalWorkspace });
+        { autoAddToday: personalWorkspace, holdUntilSelected: heldTransferIds });
       plan.map = numberVisits(plan.map, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])));
       // Personal visits scheduled for today go straight onto their owner's map.
       const autoAdded = personalWorkspace
@@ -344,7 +371,7 @@ export default function App() {
 
     try {
       const path = `/api/groups/${encodeURIComponent(activeGroup.groupId)}/assignments/mine?userId=${encodeURIComponent(user.userId)}`;
-      const data = await groupApi(path);
+      const [data, heldTransferIds] = await Promise.all([groupApi(path), loadAcceptedTransferIds()]);
       const rows = (Array.isArray(data) ? data : []).map((item) => ({
         ...item,
         id: item.id ?? item.taskId ?? item.locationId ?? item.task_id,
@@ -364,7 +391,7 @@ export default function App() {
       if (requestId !== workspaceLoadIdRef.current) return;
       const previous = cacheKey ? await AsyncStorage.getItem(cacheKey) ||
         (legacyPersonalKey ? await AsyncStorage.getItem(legacyPersonalKey) : null) : null;
-      await restoreRows(rows, previous ? JSON.parse(previous) : []);
+      await restoreRows(rows, previous ? JSON.parse(previous) : [], heldTransferIds);
 
       if (cacheKey) {
         await AsyncStorage.setItem(`${cacheKey}_all_work`, JSON.stringify(rows));
@@ -379,9 +406,14 @@ export default function App() {
           await AsyncStorage.getItem(cacheKey) ||
           (legacyPersonalKey ? await AsyncStorage.getItem(legacyPersonalKey) : null) : null;
         const parsed = cached ? JSON.parse(cached) : [];
+        const acceptedIds = await AsyncStorage.getItem(acceptedTransfersKey).catch(() => null);
+        let heldTransferIds = new Set();
+        try { heldTransferIds = new Set(acceptedIds ? JSON.parse(acceptedIds) : []); }
+        catch {}
         if (requestId !== workspaceLoadIdRef.current) return;
         await restoreRows(
-          Array.isArray(parsed) ? parsed : [], Array.isArray(parsed) ? parsed.filter(isTodayWork) : []
+          Array.isArray(parsed) ? parsed : [], Array.isArray(parsed) ? parsed.filter(isTodayWork) : [],
+          heldTransferIds
         );
       } catch {
         if (requestId !== workspaceLoadIdRef.current) return;
@@ -396,14 +428,18 @@ export default function App() {
   }, [user?.userId, activeGroup?.groupId, availableGroups, workspaceCacheKey, calendarDayKey, workspaceReady]);
 
   const addWorkToMap = async (items) => {
-    if (planBusyRef.current || workPlanRef.current.key !== workspaceCacheKey()) return false;
+    if (planBusyRef.current) return false;
     planBusyRef.current = true;
-    const { rows, choices, key } = workPlanRef.current;
-    const updated = { ...choices };
-    items.filter((row) => row.status !== 'complete').forEach((row) => {
-      updated[assignmentKey(row)] = calendarDayKey;
-    });
     try {
+      const key = workspaceCacheKey();
+      if (!key) return false;
+      if (workPlanRef.current.key !== key) await loadWorkspaceLocations();
+      if (workPlanRef.current.key !== key || workspaceCacheKey() !== key) return false;
+      const { rows, choices } = workPlanRef.current;
+      const updated = { ...choices };
+      items.filter((row) => row.status !== 'complete').forEach((row) => {
+        updated[assignmentKey(row)] = calendarDayKey;
+      });
       await AsyncStorage.setItem(`${key}_work_plan`, JSON.stringify(updated));
       if (workPlanRef.current.key !== key) return false;
       workPlanRef.current = { rows, choices: updated, key };
@@ -916,7 +952,10 @@ export default function App() {
               }
               onOpenGroup={(group) => {
                 rememberAvailableGroup(group);
-                selectActiveGroup(group);
+                if (String(group?.groupId) !== String(activeGroup?.groupId)) {
+                  selectActiveGroup(group);
+                  return;
+                }
                 setGroupWorkspaceTab('status');
                 go(isPersonalGroup(group) ? 'workStatus' : 'groupWorkspace');
               }}
@@ -967,7 +1006,13 @@ export default function App() {
               onBack={() => goBack('groupHome')}
               onMembers={() => go('groupMembers')}
               onTransfer={(member) => {
+                setTransferRequestsOnly(false);
                 setTransferTargetMember(member || null);
+                go('transfer');
+              }}
+              onReceivedRequests={() => {
+                setTransferRequestsOnly(true);
+                setTransferTargetMember(null);
                 go('transfer');
               }}
               onReports={() => go('groupReports')}
@@ -1002,6 +1047,7 @@ export default function App() {
                 }}
                 onWorkStatus={() => { refreshCurrentWorkspace(); go('workStatus'); }}
                 onTransfer={(member) => {
+                setTransferRequestsOnly(false);
                 setTransferTargetMember(member || null);
                 go('transfer');
               }}
@@ -1106,8 +1152,10 @@ export default function App() {
               group={activeGroup}
               initialRecipientId={transferTargetMember?.userId || null}
               initialRecipientName={transferTargetMember?.name || transferTargetMember?.loginId || ''}
+              requestsOnly={transferRequestsOnly}
               onBack={() => {
                 setTransferTargetMember(null);
+                setTransferRequestsOnly(false);
                 goBack('groupWorkspace');
               }}
               onChanged={refreshCurrentWorkspace}
@@ -1236,6 +1284,7 @@ export default function App() {
           {screen === 'reportList' && (
             <ReportListScreen
               locations={routeLocations}
+              selectedDong={selectedDong}
               loading={!todayLocationsLoaded}
               user={user}
               activeGroup={activeGroup}
@@ -1271,6 +1320,7 @@ export default function App() {
             <GroupReportsScreen
               group={activeGroup}
               user={user}
+              selectedDong={selectedDong}
               onBack={() => goBack('groupWorkspace')}
               onOpenReport={(report) => {
                 setDownloadInfo({ progressId: report.progressId, reportDownloadUrl: report.reportDownloadUrl });

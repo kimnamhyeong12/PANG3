@@ -11,9 +11,9 @@ export function ScreenHeader({ title, subtitle, onBack, right, compact = false }
   return <View style={[styles.headerWrap, compact && styles.headerWrapCompact]}><View style={styles.header}>{onBack ? <BackButton onPress={onBack} /> : null}<View style={styles.headerText}><Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>{subtitle ? <Text style={styles.headerSubtitle} numberOfLines={2}>{subtitle}</Text> : null}</View>{right || null}</View></View>;
 }
 
-export function CardTitle({ icon, title, suffix, actionLabel, onAction, tone = 'blue' }) {
+export function CardTitle({ icon, title, suffix, actionLabel, actionIcon = 'add', onAction, tone = 'blue' }) {
   const teal = tone === 'teal';
-  return <View style={styles.cardTitleRow}><View style={[styles.cardTitleIcon, teal && styles.cardTitleIconTeal]}><Ionicons name={icon} size={20} color="#FFFFFF" /></View><Text style={styles.cardTitle}>{title}</Text>{suffix ? <Text style={styles.cardSuffix}>{suffix}</Text> : null}<View style={{ flex: 1 }} />{actionLabel ? <TouchableOpacity style={styles.outlineAction} onPress={onAction} activeOpacity={0.72}><Ionicons name="add" size={18} color={colors.primary} /><Text style={styles.outlineActionText}>{actionLabel}</Text></TouchableOpacity> : null}</View>;
+  return <View style={styles.cardTitleRow}><View style={[styles.cardTitleIcon, teal && styles.cardTitleIconTeal]}><Ionicons name={icon} size={20} color="#FFFFFF" /></View><Text style={styles.cardTitle}>{title}</Text>{suffix ? <Text style={styles.cardSuffix}>{suffix}</Text> : null}<View style={{ flex: 1 }} />{actionLabel ? <TouchableOpacity style={styles.outlineAction} onPress={onAction} activeOpacity={0.72}><Ionicons name={actionIcon} size={18} color={colors.primary} /><Text style={styles.outlineActionText}>{actionLabel}</Text></TouchableOpacity> : null}</View>;
 }
 
 export function PrimaryButton({ title, onPress, disabled, icon, style, tone = 'blue' }) {

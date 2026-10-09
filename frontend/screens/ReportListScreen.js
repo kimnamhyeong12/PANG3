@@ -1,5 +1,5 @@
 import { showAlert } from '../components/CustomAlert';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   View,
@@ -42,13 +42,7 @@ const getTaskId = (loc) =>
   loc?.task_id ??
   null;
 
-const getGroupName = (loc, activeGroup, assignment) =>
-  loc?.groupName ||
-  loc?.group_name ||
-  loc?.group?.groupName ||
-  assignment?.groupName ||
-  activeGroup?.groupName ||
-  '팀';
+const dongName = (value) => String(value || '').trim().split(/\s+/).pop().replace(/제(?=\d+동$)/, '') || '행정동 미확인';
 
 const isPersonalGroup = (group) =>
   Boolean(
@@ -60,6 +54,7 @@ const isPersonalGroup = (group) =>
 export default function ReportListScreen({
   locations = [],
   loading = false,
+  selectedDong,
   user,
   activeGroup,
   groupAssignments = [],
@@ -98,7 +93,21 @@ export default function ReportListScreen({
     selectedIds.includes(getTaskId(loc))
   );
 
-  const workspaceName = user?.name || user?.loginId || '나';
+  const selectedDongName = selectedDong
+    ? dongName(selectedDong.properties?.adm_nm || selectedDong.properties?.name)
+    : '';
+  const groupedLocations = useMemo(() => {
+    const groups = new Map();
+    locations.forEach((loc, index) => {
+      const name = dongName(loc.adminDong || loc.admin_dong);
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name).push({ loc, index });
+    });
+    return Array.from(groups, ([name, entries]) => ({ name, entries }))
+      .sort((a, b) => Number(b.name === selectedDongName) - Number(a.name === selectedDongName)
+        || a.name.localeCompare(b.name, 'ko'));
+  }, [locations, selectedDongName]);
+
   const personalWorkspace = true;
 
   const handleCreateReport = () => {
@@ -142,7 +151,9 @@ export default function ReportListScreen({
             </Text>
           </View>
         ) : (
-          locations.map((loc, index) => {
+          groupedLocations.map(({ name, entries }) => <View key={name} style={styles.dongGroup}>
+            <Text style={styles.dongGroupTitle}>{name}</Text>
+            {entries.map(({ loc, index }) => {
             const reportable =
               isReportable(loc);
 
@@ -158,14 +169,6 @@ export default function ReportListScreen({
 
             // 이제 1인 그룹도 groupId와 담당자 배정을 가지므로 현재 그룹 유형으로 구분한다.
             const isTeamLocation = !personalWorkspace;
-
-            const groupName = isTeamLocation
-              ? getGroupName(
-                  loc,
-                  activeGroup,
-                  assignment
-                )
-              : null;
 
             return (
               <View
@@ -230,45 +233,6 @@ export default function ReportListScreen({
                         loc.roadAddress ||
                         '이름 없음'}
                     </Text>
-
-                    <View style={styles.scopeRow}>
-                      <View
-                        style={[
-                          styles.scopeBadge,
-                          isTeamLocation
-                            ? styles.teamScopeBadge
-                            : styles.personalScopeBadge,
-                        ]}
-                      >
-                        <Ionicons
-                          name={
-                            isTeamLocation
-                              ? 'people'
-                              : 'person'
-                          }
-                          size={11}
-                          color={
-                            isTeamLocation
-                              ? '#2477F3'
-                              : '#475569'
-                          }
-                        />
-
-                        <Text
-                          style={[
-                            styles.scopeBadgeText,
-                            isTeamLocation
-                              ? styles.teamScopeText
-                              : styles.personalScopeText,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {isTeamLocation
-                            ? `팀 · ${groupName}`
-                            : `1인 · ${workspaceName}`}
-                        </Text>
-                      </View>
-                    </View>
 
                     <View style={styles.taskMetaRow}>
                       {formatShortDate(getWorkDateKey(loc)) ? (
@@ -376,7 +340,8 @@ export default function ReportListScreen({
 
               </View>
             );
-          })
+          })}
+          </View>)
         )}
       </ScrollView>
 
@@ -409,6 +374,8 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 120,
   },
+  dongGroup: { gap: 8 },
+  dongGroupTitle: { color: colors.text, fontSize: 13, fontWeight: '900', marginTop: 4 },
 
   emptyBox: {
     backgroundColor: '#FFFFFF',
@@ -494,48 +461,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
     color: colors.text,
-  },
-
-  scopeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
-  },
-
-  scopeBadge: {
-    maxWidth: '100%',
-    minHeight: 25,
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderWidth: 1,
-  },
-
-  teamScopeBadge: {
-    backgroundColor: '#E8F2FF',
-    borderColor: '#C7D7E6',
-  },
-
-  personalScopeBadge: {
-    backgroundColor: '#F1F5F9',
-    borderColor: '#D7DEE7',
-  },
-
-  scopeBadgeText: {
-    flexShrink: 1,
-    fontSize: 9,
-    fontWeight: '900',
-  },
-
-  teamScopeText: {
-    color: '#2477F3',
-  },
-
-  personalScopeText: {
-    color: '#475569',
   },
 
   taskMetaRow: {

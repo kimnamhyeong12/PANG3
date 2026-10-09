@@ -9,11 +9,23 @@ import { colors } from '../constants/design';
 const dongName = (value) => String(value || '').trim().split(/\s+/).pop() || '';
 const taskIdOf = (task) => Number(task?.id ?? task?.taskId ?? task?.task_id);
 
+const formatTransferTime = (value) => {
+  if (!value) return '';
+  // Older server responses had no offset, but transfer times were stored in UTC.
+  const timestamp = String(value);
+  const instant = new Date(/[zZ]|[+-]\d\d:\d\d$/.test(timestamp) ? timestamp : `${timestamp}Z`);
+  if (Number.isNaN(instant.getTime())) return timestamp;
+  const seoul = new Date(instant.getTime() + 9 * 60 * 60 * 1000);
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${seoul.getUTCFullYear()}-${pad(seoul.getUTCMonth() + 1)}-${pad(seoul.getUTCDate())} ${pad(seoul.getUTCHours())}:${pad(seoul.getUTCMinutes())}`;
+};
+
 export default function TransferScreen({
   user,
   group,
   onBack,
   onChanged,
+  requestsOnly = false,
   initialRecipientId = null,
   initialRecipientName = '',
 }) {
@@ -24,6 +36,13 @@ export default function TransferScreen({
   const [selectedTaskIds, setSelectedTaskIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  const visibleRequests = useMemo(() => requestsOnly
+    ? requests.filter((request) => Number(request.recipientUserId) === Number(user?.userId))
+        .sort((a, b) => Number(b.status === 'PENDING') - Number(a.status === 'PENDING'))
+    : requests.filter((request) => Number(request.senderUserId) === Number(user?.userId)
+        && (!recipientId || Number(request.recipientUserId) === Number(recipientId))),
+  [requestsOnly, requests, user?.userId, recipientId]);
 
   const load = useCallback(async () => {
     if (!group?.groupId || !user?.userId) return;
@@ -116,8 +135,17 @@ export default function TransferScreen({
         method: 'POST', body: JSON.stringify({ userId: user.userId }),
       });
       await load();
-      onChanged?.();
-      showAlert(accept ? '이관 수락' : '이관 거절', accept ? '방문지 담당자가 변경되었습니다.' : '기존 담당자가 유지됩니다.');
+      if (accept) {
+        try {
+          await onChanged?.();
+        } catch (refreshError) {
+          console.log('이관받은 업무 목록 갱신 실패:', refreshError);
+        }
+        showAlert('이관 수락', '지도에서 행정동을 선택해 방문지를 추가하세요.');
+      } else {
+        onChanged?.();
+        showAlert('이관 거절', '기존 담당자가 유지됩니다.');
+      }
     } catch (error) {
       showAlert('요청 처리 실패', error.message);
     } finally {
@@ -126,10 +154,10 @@ export default function TransferScreen({
   };
 
   return <View style={styles.root}>
-    <ScreenHeader title={recipientName ? `${recipientName}에게 업무 이관` : '업무 이관'} onBack={onBack} />
+    <ScreenHeader title={requestsOnly ? '받은 요청' : recipientName ? `${recipientName}에게 업무 이관` : '업무 이관'} onBack={onBack} />
     {loading ? <ActivityIndicator style={{ marginTop: 32 }} color={colors.primary} /> :
       <ScrollView contentContainerStyle={styles.body}>
-        {!initialRecipientId && <>
+        {!requestsOnly && !initialRecipientId && <>
           <Text style={styles.title}>받는 팀원</Text>
           <Text style={styles.hint}>업무를 넘길 팀원을 먼저 선택하세요.</Text>
           {members.filter((member) => Number(member.userId) !== Number(user.userId)).map((member) =>
@@ -140,7 +168,7 @@ export default function TransferScreen({
           )}
         </>}
 
-        {recipientId ? <>
+        {!requestsOnly && recipientId ? <>
           <View style={styles.recipientCard}>
             <View style={styles.recipientIcon}><Ionicons name="person-outline" size={20} color={colors.primary} /></View>
             <View style={{ flex: 1 }}>
@@ -149,8 +177,7 @@ export default function TransferScreen({
             </View>
           </View>
 
-          <Text style={styles.title}>넘길 방문지</Text>
-          <Text style={styles.hint}>행정동 단위로 한꺼번에 선택하거나 방문지를 하나씩 선택할 수 있습니다.</Text>
+          <Text style={styles.title}>이관할 방문지</Text>
 
           {groupedMine.length === 0 ? <Text style={styles.empty}>이관할 수 있는 본인 담당 방문지가 없습니다.</Text> : groupedMine.map((groupRow) => {
             const groupIds = groupRow.rows.map(taskIdOf).filter(Number.isFinite);
@@ -180,12 +207,12 @@ export default function TransferScreen({
           </TouchableOpacity>
         </> : null}
 
-        <Text style={styles.title}>이관 요청과 이력</Text>
-        {requests.length === 0 ? <Text style={styles.empty}>요청 내역이 없습니다.</Text> : requests.map((request) => {
+        <Text style={styles.title}>{requestsOnly ? '받은 이관 요청' : '보낸 요청과 이력'}</Text>
+        {visibleRequests.length === 0 ? <Text style={styles.empty}>요청 내역이 없습니다.</Text> : visibleRequests.map((request) => {
           const incoming = Number(request.recipientUserId) === Number(user.userId);
           return <View key={request.id} style={styles.request}>
             <Text style={styles.rowTitle}>{request.senderName} → {request.recipientName} · {request.taskIds?.length || 0}건</Text>
-            <Text style={styles.hint}>{request.status === 'PENDING' ? '응답 대기' : request.status === 'ACCEPTED' ? '수락' : '거절'} · {String(request.requestedAt || '').slice(0, 16).replace('T', ' ')}</Text>
+            <Text style={styles.hint}>{request.status === 'PENDING' ? '응답 대기' : request.status === 'ACCEPTED' ? '수락' : '거절'} · {formatTransferTime(request.requestedAt)}</Text>
             <Text style={styles.hint}>{(request.taskIds || []).map((id) => {
               const task = tasks.find((item) => Number(item.id ?? item.taskId) === Number(id));
               return task ? `${dongName(task.adminDong) || '지역 미확인'} ${task.detailAddress || task.roadAddress || `#${id}`}` : `방문지 #${id}`;

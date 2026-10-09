@@ -24,7 +24,7 @@ const CAPTURE_SCALE = PixelRatio.get();
 const MAX_W = Math.min(SCREEN.width - 24, 520);
 const MAX_H = Math.min(SCREEN.height * 0.56, 520);
 
-const HANDLE_VISUAL_SIZE = 26;
+const HANDLE_VISUAL_SIZE = 24;
 const HANDLE_HIT_RADIUS = 54;
 const MIN_CROP = 56;
 
@@ -99,6 +99,9 @@ export default function PhotoMarkupEditor({
   const [penMode, setPenMode] =
     useState(false);
 
+  const [cropMode, setCropMode] =
+    useState(false);
+
   const [paths, setPaths] =
     useState([]);
 
@@ -135,21 +138,11 @@ export default function PhotoMarkupEditor({
     w = displaySize.width,
     h = displaySize.height
   ) => {
-    const inset = 12;
-
     const nextCrop = {
-      left: inset,
-      top: inset,
-
-      right: Math.max(
-        inset + MIN_CROP,
-        w - inset
-      ),
-
-      bottom: Math.max(
-        inset + MIN_CROP,
-        h - inset
-      ),
+      left: 0,
+      top: 0,
+      right: w,
+      bottom: h,
     };
 
     cropRef.current = nextCrop;
@@ -166,6 +159,7 @@ export default function PhotoMarkupEditor({
     setPaths([]);
     setActivePath([]);
     setPenMode(false);
+    setCropMode(false);
 
     Image.getSize(
       uri,
@@ -730,25 +724,19 @@ export default function PhotoMarkupEditor({
     crop.bottom -
     crop.top;
 
-  const Corner = ({
-    left,
-    top,
-  }) => (
+  const Corner = ({ left, top, horizontal, vertical }) => (
     <View
       pointerEvents="none"
       style={[
         styles.handleVisual,
 
         {
-          left:
-            left -
-            HANDLE_VISUAL_SIZE /
-              2,
-
-          top:
-            top -
-            HANDLE_VISUAL_SIZE /
-              2,
+          left: horizontal === 'left' ? left : left - HANDLE_VISUAL_SIZE,
+          top: vertical === 'top' ? top : top - HANDLE_VISUAL_SIZE,
+          borderLeftWidth: horizontal === 'left' ? 4 : 0,
+          borderRightWidth: horizontal === 'right' ? 4 : 0,
+          borderTopWidth: vertical === 'top' ? 4 : 0,
+          borderBottomWidth: vertical === 'bottom' ? 4 : 0,
         },
       ]}
     />
@@ -915,7 +903,7 @@ export default function PhotoMarkupEditor({
               </Svg>
             </View>
 
-            {!penMode && (
+            {cropMode && !penMode && (
               <View
                 style={[
                   styles.cropLayer,
@@ -1014,6 +1002,8 @@ export default function PhotoMarkupEditor({
                   top={
                     crop.top
                   }
+                  horizontal="left"
+                  vertical="top"
                 />
 
                 <Corner
@@ -1023,6 +1013,8 @@ export default function PhotoMarkupEditor({
                   top={
                     crop.top
                   }
+                  horizontal="right"
+                  vertical="top"
                 />
 
                 <Corner
@@ -1032,6 +1024,8 @@ export default function PhotoMarkupEditor({
                   top={
                     crop.bottom
                   }
+                  horizontal="left"
+                  vertical="bottom"
                 />
 
                 <Corner
@@ -1041,6 +1035,8 @@ export default function PhotoMarkupEditor({
                   top={
                     crop.bottom
                   }
+                  horizontal="right"
+                  vertical="bottom"
                 />
               </View>
             )}
@@ -1068,8 +1064,19 @@ export default function PhotoMarkupEditor({
                 styles.toolText
               }
             >
-              ↻ 90° 회전
+              ↻ 회전
             </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.toolButton, cropMode && styles.toolButtonActive]}
+            onPress={() => {
+              setCropMode((value) => !value);
+              setPenMode(false);
+            }}
+            disabled={saving}
+          >
+            <Text style={[styles.toolText, cropMode && styles.toolTextActive]}>자르기</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1079,11 +1086,10 @@ export default function PhotoMarkupEditor({
               penMode &&
                 styles.toolButtonActive,
             ]}
-            onPress={() =>
-              setPenMode(
-                (v) => !v
-              )
-            }
+            onPress={() => {
+              setPenMode((v) => !v);
+              setCropMode(false);
+            }}
             disabled={
               saving
             }
@@ -1267,17 +1273,8 @@ const styles =
       height:
         HANDLE_VISUAL_SIZE,
 
-      borderRadius:
-        HANDLE_VISUAL_SIZE /
-        2,
-
-      backgroundColor:
-        'white',
-
-      borderWidth: 4,
-
       borderColor:
-        '#10285B',
+        'white',
 
       zIndex: 20,
     },

@@ -21,8 +21,7 @@ import {
 } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
 import { colors, shadow } from '../constants/design';
-
-const AVATAR_COLORS = ['#DDEEFF', '#E4F8F3', '#FFF0D8', '#FCE7EF'];
+import { buildMemberColors, softMemberColor } from '../utils/memberColors';
 
 const DISTRICTS = [
   '중구',
@@ -171,6 +170,7 @@ export default function GroupDetailScreen({
   };
 
   const members = detail?.members || [];
+  const memberColors = buildMemberColors(members, sharedTasks);
   const assignments = sharedTasks;
 
 
@@ -311,11 +311,8 @@ export default function GroupDetailScreen({
                     style={[
                       styles.avatar,
                       {
-                        backgroundColor:
-                          AVATAR_COLORS[
-                            index %
-                              AVATAR_COLORS.length
-                          ],
+                        backgroundColor: softMemberColor(memberColors[String(member.userId)]),
+                        borderColor: memberColors[String(member.userId)] || '#DCE7F5',
                       },
                     ]}
                   >
