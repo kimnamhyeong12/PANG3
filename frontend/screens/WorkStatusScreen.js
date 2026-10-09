@@ -9,11 +9,13 @@ import {
   View,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { Ionicons } from '@expo/vector-icons';
 import { BackButton } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
 import { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
 import { koreaDayKey, isCurrentWork } from '../utils/completionDay';
 import { buildMemberColors } from '../utils/memberColors';
+import GroupDashboardScreen from './GroupDashboardScreen';
 
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const KAKAO_JAVASCRIPT_KEY =
@@ -93,12 +95,13 @@ kakao.maps.load(function(){
 });
 </script></body></html>`;
 
-export default function WorkStatusScreen({ user, group, assignments = [], onBack, onRefresh, embedded = false }) {
+export default function WorkStatusScreen({ user, group, assignments = [], onBack, onRefresh, embedded = false, showDashboard = false }) {
   const [loadingBoundary, setLoadingBoundary] = useState(true);
   const [boundaryError, setBoundaryError] = useState('');
   const [boundaries, setBoundaries] = useState({ type: 'FeatureCollection', features: [] });
   const [resolvedAssignments, setResolvedAssignments] = useState(assignments);
   const [selectedMemberId, setSelectedMemberId] = useState(null);
+  const [memberPickerOpen, setMemberPickerOpen] = useState(false);
   const [selectedAreaKey, setSelectedAreaKey] = useState(null);
   const [focusedAreaBounds, setFocusedAreaBounds] = useState(null);
   const [mapInteracting, setMapInteracting] = useState(false);
@@ -224,6 +227,18 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
 
   const memberProgress = useMemo(() => {
     const members = new Map();
+    groupMembers.forEach((person) => {
+      const id = String(person.userId);
+      members.set(id, {
+        id,
+        name: person.name || person.loginId || '팀원',
+        total: 0,
+        pending: 0,
+        working: 0,
+        complete: 0,
+        color: memberColors[id] || '#2E8BFF',
+      });
+    });
     visibleAssignments.forEach((item) => {
       const id = String(item.assigneeUserId || 'unknown');
       if (!members.has(id)) {
@@ -231,6 +246,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
           id,
           name: item.assigneeName || item.assigneeLoginId || '담당자 미지정',
           total: 0,
+          pending: 0,
           working: 0,
           complete: 0,
           color: memberColors[id] || '#2E8BFF',
@@ -241,7 +257,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
       member[normalizeStatus(item.status || item.taskStatus)] += 1;
     });
     return Array.from(members.values());
-  }, [visibleAssignments, memberColors]);
+  }, [visibleAssignments, memberColors, groupMembers]);
 
   const mapHtml = useMemo(() => buildMapHtml({
     boundaries,
@@ -250,6 +266,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
     selectedMemberId,
     focusedAreaBounds,
   }), [boundaries, mapAssignments, memberColors, selectedMemberId, focusedAreaBounds]);
+  const selectedMember = memberProgress.find((member) => member.id === selectedMemberId);
 
   return (
     <View style={styles.container}>
@@ -325,11 +342,42 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
             <View style={styles.legendDivider} />
             <View style={styles.legendRow}><View style={[styles.legendArea, { backgroundColor: MIXED_AREA_COLOR }]} /><Text style={styles.legendText}>공동 담당 구역</Text></View>
           </View>
+          {!personalWorkspace && <View style={styles.mapMemberPicker}>
+            <TouchableOpacity style={styles.mapMemberToggle} onPress={() => setMemberPickerOpen((open) => !open)} accessibilityRole="button" accessibilityLabel="팀원 현황 선택">
+              <Text style={styles.mapMemberToggleText} numberOfLines={1}>팀원 현황{selectedMember ? ` · ${selectedMember.name}` : ''}</Text>
+              <Ionicons name={memberPickerOpen ? 'chevron-up' : 'chevron-down'} size={15} color="#1769A0" />
+            </TouchableOpacity>
+            {memberPickerOpen && <ScrollView style={styles.mapMemberList} nestedScrollEnabled>
+              {memberProgress.map((member) => (
+                <TouchableOpacity
+                  key={member.id}
+                  style={[styles.mapMemberRow, selectedMemberId === member.id && styles.mapMemberRowSelected]}
+                  onPress={() => {
+                    setSelectedMemberId(selectedMemberId === member.id ? null : member.id);
+                    setSelectedAreaKey(null);
+                    setFocusedAreaBounds(null);
+                    setMemberPickerOpen(false);
+                  }}
+                >
+                  <View style={[styles.ownerDot, { backgroundColor: member.color }]} />
+                  <Text style={styles.mapMemberName} numberOfLines={1}>{member.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>}
+          </View>}
+          {!personalWorkspace && selectedMember && <View style={styles.mapMemberDetail}>
+            <Text style={styles.mapMemberDetailTitle}>{selectedMember.name}</Text>
+            <Text style={styles.mapMemberDetailText}>
+              작업 전 {selectedMember.pending}곳 · 작업 중 {selectedMember.working}곳 · 완료 {selectedMember.complete}곳
+            </Text>
+          </View>}
         </View>
 
         {!!boundaryError && <Text style={styles.boundaryWarning}>경계 표시 오류: {boundaryError}</Text>}
 
-        <View style={styles.memberCard}>
+        {showDashboard && <GroupDashboardScreen assignments={assignments} group={group} embedded />}
+
+        {personalWorkspace && <View style={styles.memberCard}>
           <View style={styles.memberHeader}>
             <Text style={styles.memberTitle}>
               {personalWorkspace ? '내 진행 현황' : '팀원별 진행 현황'}
@@ -378,7 +426,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
               })}
             </ScrollView>
           )}
-        </View>
+        </View>}
       </ScrollView>
     </View>
   );
@@ -412,6 +460,16 @@ const styles = StyleSheet.create({
   summaryLabel: { color: '#BFD0DE', fontSize: 9, fontWeight: '800', marginTop: 4 },
   summaryDivider: { width: 1, height: 36, backgroundColor: '#2F725E' },
   mapCard: { height: 430, overflow: 'hidden', borderRadius: 20, borderWidth: 1, borderColor: '#DCE5E0', backgroundColor: '#EAF0F5' },
+  mapMemberPicker: { position: 'absolute', top: 10, right: 10, width: 185, zIndex: 8, alignItems: 'flex-end' },
+  mapMemberToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 185, backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: 14, paddingHorizontal: 11, paddingVertical: 8, elevation: 4 },
+  mapMemberToggleText: { flexShrink: 1, fontSize: 11, fontWeight: '800', color: '#15231D' },
+  mapMemberList: { width: 185, maxHeight: 190, marginTop: 5, backgroundColor: '#FFFFFF', borderRadius: 12, elevation: 5 },
+  mapMemberRow: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 11, borderBottomWidth: 1, borderBottomColor: '#EEF3F0' },
+  mapMemberRowSelected: { backgroundColor: '#F0F7FC' },
+  mapMemberName: { flex: 1, fontSize: 11, fontWeight: '800', color: '#15231D' },
+  mapMemberDetail: { position: 'absolute', left: 10, right: 105, bottom: 10, backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: 12, padding: 10 },
+  mapMemberDetailTitle: { fontSize: 12, fontWeight: '900', color: '#15231D' },
+  mapMemberDetailText: { fontSize: 10, color: '#475569', marginTop: 3 },
   map: { flex: 1, backgroundColor: '#EAF0F5' },
   mapState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
   mapStateText: { fontSize: 11, color: '#637269' },

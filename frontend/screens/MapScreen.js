@@ -83,6 +83,10 @@ const getStatusLabel = (status) => {
   return '작업 전';
 };
 
+const isCompleted = (item) => ['complete', 'completed', 'done'].includes(
+  String(item?.status ?? item?.taskStatus ?? item?.task_status ?? '').toLowerCase()
+);
+
 const cleanLocation = (loc, fallbackName = '위치') => {
   if (!loc) return null;
 
@@ -248,8 +252,11 @@ function NormalMapScreen({
   const [pendingSelected, setPendingSelected] = useState([]);
   const [pendingBusy, setPendingBusy] = useState(false);
   const [dongOpen, setDongOpen] = useState(false);
+  const [myDongPanelOpen, setMyDongPanelOpen] = useState(false);
+  const [favoriteDongNames, setFavoriteDongNames] = useState([]);
   const [dongOptions, setDongOptions] = useState([]);
   const [dongLoading, setDongLoading] = useState(false);
+  const dongLoadIdRef = useRef(0);
   const [dongAdding, setDongAdding] = useState(false);
   const dongAddingRef = useRef(false);
   dongAddingRef.current = dongAdding;
@@ -264,9 +271,12 @@ function NormalMapScreen({
   const { dongWorkCounts, totalRemainingWork } = useMemo(() => {
     const counts = new Map();
     const seen = new Set();
-    [...(locations || []), ...pendingWork].forEach((item) => {
-      if (item.status === 'complete') return;
-      const id = String(item.id ?? item.taskId ?? item.task_id ?? locationKey(item));
+    const rows = [...(locations || []), ...pendingWork];
+    const rowId = (item) => String(item.id ?? item.taskId ?? item.task_id ?? locationKey(item));
+    const completedIds = new Set(rows.filter(isCompleted).map(rowId));
+    rows.forEach((item) => {
+      const id = rowId(item);
+      if (completedIds.has(id)) return;
       if (seen.has(id)) return;
       seen.add(id);
       const name = dongName(item.adminDong || item.admin_dong);
@@ -274,21 +284,58 @@ function NormalMapScreen({
     });
     return { dongWorkCounts: counts, totalRemainingWork: seen.size };
   }, [locations, pendingWork]);
+  const favoriteDongKey = `pang3:favorite-dongs:${user?.userId || 'guest'}:${activeGroup?.groupId || 'personal'}`;
+  useEffect(() => {
+    let active = true;
+    setFavoriteDongNames([]);
+    setDongOptions([]);
+    setDongOpen(false);
+    setDongLoading(false);
+    setMyDongPanelOpen(false);
+    dongLoadIdRef.current += 1;
+    AsyncStorage.getItem(favoriteDongKey).then((raw) => {
+      if (!active) return;
+      try {
+        const names = JSON.parse(raw || '[]');
+        setFavoriteDongNames(Array.isArray(names) ? names.filter((name) => typeof name === 'string') : []);
+      } catch {
+        setFavoriteDongNames([]);
+      }
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [favoriteDongKey]);
+  const toggleFavoriteDong = (name) => {
+    setFavoriteDongNames((previous) => {
+      const next = previous.includes(name)
+        ? previous.filter((item) => item !== name)
+        : [...previous, name];
+      AsyncStorage.setItem(favoriteDongKey, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  };
+  const myDongNames = useMemo(() => Array.from(dongWorkCounts.keys()).sort((left, right) =>
+    (dongWorkCounts.get(right) || 0) - (dongWorkCounts.get(left) || 0)
+    || left.localeCompare(right, 'ko')
+  ), [dongWorkCounts]);
+  const MyDongListContainer = myDongNames.length > 6 ? ScrollView : View;
   const sortedDongOptions = useMemo(() => [...dongOptions].sort((left, right) => {
     const leftName = dongName(left.properties?.adm_nm || left.properties?.name);
     const rightName = dongName(right.properties?.adm_nm || right.properties?.name);
     const leftCount = dongWorkCounts.get(leftName) || 0;
     const rightCount = dongWorkCounts.get(rightName) || 0;
-    return Number(rightCount > 0) - Number(leftCount > 0)
+    return Number(favoriteDongNames.includes(rightName)) - Number(favoriteDongNames.includes(leftName))
+      || Number(rightCount > 0) - Number(leftCount > 0)
       || rightCount - leftCount
       || leftName.localeCompare(rightName, 'ko');
-  }), [dongOptions, dongWorkCounts]);
+  }), [dongOptions, dongWorkCounts, favoriteDongNames]);
 
   const sheetY = useRef(new Animated.Value(0)).current;
   const publicSheetY = useRef(new Animated.Value(0)).current;
   const pendingSheetY = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (!dongOpen) dongSheetY.setValue(0);
+    if (!dongOpen) {
+      dongSheetY.setValue(0);
+    }
   }, [dongOpen, dongSheetY]);
   useEffect(() => {
     if (!isActive) setDongOpen(false);
@@ -379,33 +426,44 @@ function NormalMapScreen({
     }, 350);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [mapSelectMode, directCenter?.lat, directCenter?.lng]);
-  const loadDongs = async () => {
-    const admCode = user?.workSido === '부산광역시'
-      ? BUSAN_DISTRICT_CODES[user?.workSigungu]
-      : activeGroup?.regionAdmCode;
+  const loadDongs = async (openSheet = true) => {
+    const requestId = ++dongLoadIdRef.current;
+    const teamDistrict = locationScope === 'team' ? activeGroup?.regionSigungu : null;
+    const admCode = teamDistrict
+      ? ((activeGroup?.regionSido || '').includes('부산')
+        ? BUSAN_DISTRICT_CODES[teamDistrict]
+        : null) || activeGroup?.regionAdmCode
+      : user?.workSido === '부산광역시'
+        ? BUSAN_DISTRICT_CODES[user?.workSigungu]
+        : activeGroup?.regionAdmCode;
     if (!admCode) {
+      setDongLoading(false);
       showAlert('지역 정보 필요', '설정에서 근무 시·군·구를 선택해주세요.');
       return;
     }
-    setPendingOpen(false);
-    setDongOpen(true);
+    if (openSheet) {
+      setPendingOpen(false);
+      setDongOpen(true);
+    }
     try {
       setDongLoading(true);
       const response = await fetch(`${API_BASE_URL}/api/sgis/boundaries?admCode=${encodeURIComponent(admCode)}`);
       if (!response.ok) throw new Error('경계를 불러오지 못했습니다.');
       const data = await response.json();
-      setDongOptions(Array.isArray(data?.features) ? data.features : []);
+      if (requestId === dongLoadIdRef.current) {
+        setDongOptions(Array.isArray(data?.features) ? data.features : []);
+      }
     } catch (error) {
-      showAlert('행정동 조회 실패', error.message);
+      if (requestId === dongLoadIdRef.current) showAlert('행정동 조회 실패', error.message);
     } finally {
-      setDongLoading(false);
+      if (requestId === dongLoadIdRef.current) setDongLoading(false);
     }
   };
   const selectDong = async (feature) => {
     if (dongAdding) return;
     const name = dongName(feature.properties?.adm_nm || feature.properties?.name);
     const remaining = pendingWork.filter((item) =>
-      item.status !== 'complete' && dongName(item.adminDong || item.admin_dong) === name
+      !isCompleted(item) && dongName(item.adminDong || item.admin_dong) === name
     );
     setDongAdding(true);
     try {
@@ -420,6 +478,7 @@ function NormalMapScreen({
       }
       onSelectedDongChange?.(feature);
       setDongOpen(false);
+      setMyDongPanelOpen(false);
       if (remaining.length && onAddWork) {
         const added = await onAddWork(remaining);
         if (added === false) throw new Error('방문지를 등록하지 못했습니다. 잠시 후 다시 선택해 주세요.');
@@ -460,7 +519,7 @@ function NormalMapScreen({
     return numbered;
   }, [locations, selectedDongName, user?.userId, activeGroup?.groupId, locationScope, priorityMap]);
   const markers = useMemo(() => [...routeMarkers].sort((a, b) => a.markerNumber - b.markerNumber), [routeMarkers]);
-  const orderedMarkers = useMemo(() => routeMarkers.filter((item) => item.status !== 'complete'), [routeMarkers]);
+  const orderedMarkers = useMemo(() => routeMarkers.filter((item) => !isCompleted(item)), [routeMarkers]);
 
   // Priority markers always occupy the front slots. Non-priority markers continue
   // with normal numbers immediately after P1, P2, ... so the visible order is
@@ -485,11 +544,12 @@ function NormalMapScreen({
   // the item back into the normal marker-number order, and the remaining labels
   // close the gap automatically.
   const visitDisplayMarkers = useMemo(() => {
-    const prioritized = markers
+    const unfinished = markers.filter((item) => !isCompleted(item));
+    const prioritized = unfinished
       .filter((item) => Number.isFinite(Number(item.priority)) && Number(item.priority) > 0)
       .sort((a, b) => Number(a.priority) - Number(b.priority));
     const prioritizedKeys = new Set(prioritized.map(locationKey));
-    const normal = markers
+    const normal = unfinished
       .filter((item) => !prioritizedKeys.has(locationKey(item)))
       .sort((a, b) => Number(a.markerNumber || 0) - Number(b.markerNumber || 0));
     const priorityCount = prioritized.length;
@@ -497,10 +557,11 @@ function NormalMapScreen({
     return [
       ...prioritized.map((item) => ({ ...item, displayMarkerLabel: `P${Number(item.priority)}` })),
       ...normal.map((item, index) => ({ ...item, displayMarkerLabel: String(priorityCount + index + 1) })),
+      ...markers.filter(isCompleted).map((item) => ({ ...item, displayMarkerLabel: String(item.markerNumber || '') })),
     ];
   }, [markers]);
   const completedDisplayMarkers = useMemo(() => markers
-    .filter((item) => item.status === 'complete')
+    .filter(isCompleted)
     .map((item) => ({ ...item, markerLabel: String(item.markerNumber || '') })), [markers]);
   const returnDisplayMarker = useMemo(() => {
     if (!returnLocation || !Number.isFinite(Number(returnLocation.lat)) || !Number.isFinite(Number(returnLocation.lng))) return null;
@@ -793,7 +854,8 @@ function NormalMapScreen({
 
   const dongSheetPanResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gesture) => gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        !dongAddingRef.current && gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
       onPanResponderTerminationRequest: () => false,
       onPanResponderMove: (_, gesture) => dongSheetY.setValue(Math.max(0, gesture.dy)),
       onPanResponderRelease: (_, gesture) => {
@@ -2184,7 +2246,7 @@ function NormalMapScreen({
         <Pressable style={[StyleSheet.absoluteFill, { zIndex: 19 }]}
           accessibilityLabel="방문지 추가 메뉴 닫기" onPress={() => setAddMenuOpen(false)} />
       )}
-      <View style={styles.topOverlay}>
+      <View style={styles.topOverlay} pointerEvents="box-none">
         <View style={styles.searchControlRow}>
           <TouchableOpacity
             style={styles.smallTopButton}
@@ -2307,7 +2369,7 @@ function NormalMapScreen({
                     : null
                 );
                 setCenterAddress(returnLocation?.detailAddress || '');
-                setLocationSettingMode(false);
+                setLocationSettingMode(true);
                 setMapSelectMode(true);
                 searchInputRef.current?.blur();
               }}
@@ -2350,7 +2412,7 @@ function NormalMapScreen({
                 setCoordSheetOpen(false);
                 setDirectCenter(null);
                 setCenterAddress('');
-                setLocationSettingMode(false);
+                setLocationSettingMode(true);
                 setSelectionPurpose('visit');
                 setMapSelectMode(true);
                 searchInputRef.current?.blur();
@@ -2503,7 +2565,7 @@ function NormalMapScreen({
         {visitListOpen && markers.length > 0 && (
           <View style={styles.visitListCard}>
             <View style={styles.visitListHead}>
-              <Text style={styles.visitCount}>방문지 {markers.length}개</Text>
+              <Text style={styles.visitCount}>방문지 {orderedMarkers.length}개</Text>
 
               <TouchableOpacity onPress={() => setVisitListOpen(false)}>
                 <Text style={styles.foldText}>접기</Text>
@@ -2652,6 +2714,36 @@ function NormalMapScreen({
             >
               <Ionicons name="chevron-forward" size={16} color="#FFFFFF" />
             </TouchableOpacity>
+          </View>
+        )}
+        {!addressSearchMode && !addMenuOpen && !mapSelectMode && !publicFacilityMode && !searchedPlace && !coordSheetOpen && !pendingOpen && !dongOpen && !visitListOpen && (
+          <View style={styles.myDongPanel}>
+            <TouchableOpacity
+              style={styles.myDongPanelToggle}
+              onPress={() => {
+                if (!myDongPanelOpen && dongOptions.length === 0) loadDongs(false);
+                setMyDongPanelOpen((value) => !value);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="담당 행정동 목록"
+            >
+              <Text style={styles.myDongPanelToggleText}>담당 행정동 {dongWorkCounts.size}</Text>
+              <Ionicons name={myDongPanelOpen ? 'chevron-up' : 'chevron-down'} size={14} color="#2477F3" />
+            </TouchableOpacity>
+            {myDongPanelOpen && <MyDongListContainer
+              style={[styles.myDongPanelList, myDongNames.length > 6 && styles.myDongPanelListScrollable]}
+              {...(myDongNames.length > 6 ? { nestedScrollEnabled: true } : {})}
+            >
+              {myDongNames.length ? myDongNames.map((name) => {
+                const feature = dongOptions.find((item) => dongName(item.properties?.adm_nm || item.properties?.name) === name);
+                return <View key={name} style={styles.myDongPanelRow}>
+                  <TouchableOpacity style={styles.myDongPanelName} onPress={() => feature ? selectDong(feature) : loadDongs()}>
+                    <Text style={styles.myDongPanelNameText} numberOfLines={1}>{name}</Text>
+                    <Text style={styles.myDongPanelCount}>{dongWorkCounts.get(name) || 0}건</Text>
+                  </TouchableOpacity>
+                </View>;
+              }) : <Text style={styles.myDongPanelEmpty}>맡은 행정동이 없습니다.</Text>}
+            </MyDongListContainer>}
           </View>
         )}
       </View>
@@ -2879,11 +2971,8 @@ function NormalMapScreen({
         </Animated.View>
       )}
 
-      <Modal visible={dongOpen && isActive} transparent animationType="none"
-        onRequestClose={() => { if (!dongAdding) setDongOpen(false); }}>
-        <View style={styles.dongModalLayer}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => { if (!dongAdding) setDongOpen(false); }} />
-          <Animated.View style={[styles.publicFacilitySheet, styles.dongModalSheet, { transform: [{ translateY: dongSheetY }] }]}>
+      {dongOpen && isActive && (
+        <Animated.View style={[styles.publicFacilitySheet, { transform: [{ translateY: dongSheetY }] }]}>
           <View style={styles.publicFacilityHandleArea} {...dongSheetPanResponder.panHandlers}>
             <View style={styles.publicFacilityHandle} />
             <View style={styles.publicFacilityHeader}>
@@ -2898,25 +2987,27 @@ function NormalMapScreen({
                 const name = dongName(feature.properties?.adm_nm || feature.properties?.name);
                 const count = dongWorkCounts.get(name) || 0;
                 const selected = name === selectedDongName;
-                return <TouchableOpacity
+                return <View
                   key={feature.properties?.adm_cd || index}
-                  disabled={dongAdding}
                   style={[styles.dongOption, count > 0 && styles.dongOptionWithWork, selected && styles.dongOptionSelected]}
-                  onPress={() => selectDong(feature)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${name} ${count}건${selected ? ', 현재 선택' : ''}`}
                 >
-                  <Text style={[styles.dongOptionText, count > 0 && styles.dongOptionTextWithWork]}>{name || `행정동 ${index + 1}`}</Text>
+                  <TouchableOpacity style={styles.dongOptionMain} disabled={dongAdding} onPress={() => selectDong(feature)}
+                    accessibilityRole="button" accessibilityLabel={`${name} ${count}건${selected ? ', 현재 선택' : ''}`}>
+                    <Text style={[styles.dongOptionText, count > 0 && styles.dongOptionTextWithWork]}>{name || `행정동 ${index + 1}`}</Text>
+                  </TouchableOpacity>
                   <View style={styles.dongOptionEnd}>
                     {count > 0 ? <Text style={styles.dongWorkCount}>{count}건</Text> : null}
                     {selected ? <Ionicons name="checkmark-circle" size={17} color="#2477F3" /> : null}
+                    <TouchableOpacity onPress={() => toggleFavoriteDong(name)} disabled={dongAdding}
+                      accessibilityRole="button" accessibilityLabel={`${name} 즐겨찾기`}>
+                      <Ionicons name={favoriteDongNames.includes(name) ? 'star' : 'star-outline'} size={18} color="#2477F3" />
+                    </TouchableOpacity>
                   </View>
-                </TouchableOpacity>;
+                </View>;
               }) : <Text style={styles.publicFacilityEmpty}>표시할 행정동이 없습니다.</Text>}
           </ScrollView>
-          </Animated.View>
-        </View>
-      </Modal>
+        </Animated.View>
+      )}
 
       {(optimizing || segmentChanging) && (
         <View style={styles.loadingOverlay}>
@@ -3264,7 +3355,7 @@ const styles = StyleSheet.create({
   },
 
   chipRowWrap: {
-    marginTop: 12,
+    marginTop: 5,
     minHeight: 48,
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
@@ -3342,7 +3433,7 @@ const styles = StyleSheet.create({
   },
 
   visitListCard: {
-    marginTop: 8,
+    marginTop: 5,
     backgroundColor: '#FFFFFF',
     borderRadius: 15,
     padding: 13,
@@ -3430,7 +3521,7 @@ const styles = StyleSheet.create({
   },
 
   doneRow: {
-    marginTop: 8,
+    marginTop: 5,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -3481,7 +3572,7 @@ const styles = StyleSheet.create({
   },
 
   segmentControlBar: {
-    marginTop: 8,
+    marginTop: 5,
     backgroundColor: 'rgba(18, 57, 91, 0.95)',
     borderRadius: 12,
     paddingHorizontal: 8,
@@ -3873,12 +3964,20 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     elevation: 7,
   },
-  dongModalLayer: { flex: 1 },
-  dongModalSheet: { bottom: 82 },
   publicFacilityHandleArea: { minHeight: 48, paddingTop: 5, paddingBottom: 6, justifyContent: 'center' },
   publicFacilityHandle: { width: 34, height: 4, borderRadius: 2, backgroundColor: '#CAD8E8', alignSelf: 'center', marginBottom: 8 },
   publicFacilityCollapsed: { position: 'absolute', bottom: 16, alignSelf: 'center', zIndex: 48, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE7F5', paddingHorizontal: 16, paddingVertical: 10, elevation: 7 },
   publicFacilityCollapsedText: { color: '#2477F3', fontSize: 12, fontWeight: '800' },
+  myDongPanel: { alignSelf: 'flex-end', alignItems: 'flex-end', marginTop: 5, zIndex: 25 },
+  myDongPanelToggle: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE7F5', borderRadius: 15, paddingHorizontal: 10, paddingVertical: 8, elevation: 5 },
+  myDongPanelToggleText: { color: '#2477F3', fontSize: 11, fontWeight: '800' },
+  myDongPanelList: { width: 170, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE7F5', borderRadius: 13, marginTop: 5, elevation: 5, overflow: 'hidden' },
+  myDongPanelListScrollable: { height: 6 * 39 + 2 },
+  myDongPanelRow: { minHeight: 39, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#EEF2F6', paddingHorizontal: 9, gap: 5 },
+  myDongPanelName: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
+  myDongPanelNameText: { color: '#10285B', fontSize: 11, fontWeight: '800', flex: 1 },
+  myDongPanelCount: { color: '#2477F3', fontSize: 10, fontWeight: '800' },
+  myDongPanelEmpty: { color: '#607195', fontSize: 11, padding: 12 },
   publicFacilityHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3895,6 +3994,7 @@ const styles = StyleSheet.create({
   publicFacilityAddress: { color: '#607195', fontSize: 9, marginTop: 2 },
   publicFacilityEmpty: { color: '#607195', fontSize: 11, textAlign: 'center', paddingVertical: 18 },
   dongOption: { minHeight: 48, paddingHorizontal: 8, borderTopWidth: 1, borderColor: '#EEF2F6', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dongOptionMain: { flex: 1, minHeight: 48, justifyContent: 'center' },
   dongOptionWithWork: { backgroundColor: '#E8F1FF' },
   dongOptionSelected: { borderLeftWidth: 3, borderLeftColor: '#2477F3' },
   dongOptionEnd: { flexDirection: 'row', alignItems: 'center', gap: 7 },

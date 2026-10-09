@@ -78,13 +78,12 @@ const isTodayWork = (item) => {
 
 export default function App() {
   const [screen, setScreen] = useState('login');
-  const [groupWorkspaceTab, setGroupWorkspaceTab] = useState('status');
+  const [groupWorkspaceTab, setGroupWorkspaceTab] = useState('dashboard');
   const [mapInitialized, setMapInitialized] = useState(false);
   const [selectedDong, setSelectedDong] = useState(null);
   const selectedDongDayRef = useRef(getLocalDateKey());
   const selectedDongVersionRef = useRef(0);
   const [transferTargetMember, setTransferTargetMember] = useState(null);
-  const [transferRequestsOnly, setTransferRequestsOnly] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -813,7 +812,7 @@ export default function App() {
     setPendingWork([]);
     setMapInitialized(false);
     setUser(null);
-    setGroupWorkspaceTab('status');
+    setGroupWorkspaceTab('dashboard');
     setActiveGroup(null);
     setAvailableGroups([]);
     setGroupAssignments([]);
@@ -843,6 +842,18 @@ export default function App() {
     historyRef.current = [];
     screenRef.current = 'login';
     setScreen('login');
+  };
+
+  const handleLeaveGroup = async (leftGroupId) => {
+    const refreshed = await refreshAvailableGroups();
+    const groups = refreshed.length
+      ? refreshed
+      : availableGroups.filter((item) => Number(item.groupId) !== Number(leftGroupId));
+    setAvailableGroups(groups);
+    const nextGroup = groups.find(isPersonalGroup) || groups[0] || null;
+    await selectActiveGroup(nextGroup);
+    historyRef.current = [];
+    go('groupHome', { replace: true });
   };
 
 
@@ -956,7 +967,7 @@ export default function App() {
                   selectActiveGroup(group);
                   return;
                 }
-                setGroupWorkspaceTab('status');
+                setGroupWorkspaceTab('dashboard');
                 go(isPersonalGroup(group) ? 'workStatus' : 'groupWorkspace');
               }}
             />
@@ -971,7 +982,7 @@ export default function App() {
               onCreated={(group) => {
                 rememberAvailableGroup(group);
                 selectActiveGroup(group);
-                setGroupWorkspaceTab('status');
+                setGroupWorkspaceTab('dashboard');
                 go('groupWorkspace');
               }}
             />
@@ -986,7 +997,7 @@ export default function App() {
               onAccepted={(group) => {
                 rememberAvailableGroup(group);
                 selectActiveGroup(group);
-                setGroupWorkspaceTab('status');
+                setGroupWorkspaceTab('dashboard');
                 go('groupWorkspace');
               }}
             />
@@ -1000,19 +1011,13 @@ export default function App() {
               tab={groupWorkspaceTab}
               onTabChange={(nextTab) => {
                 setGroupWorkspaceTab(nextTab);
-                if (nextTab === 'dashboard' || nextTab === 'status') refreshGroupAssignments();
+                if (nextTab === 'dashboard' || nextTab === 'transfer') refreshGroupAssignments();
               }}
               onRefresh={refreshCurrentWorkspace}
               onBack={() => goBack('groupHome')}
               onMembers={() => go('groupMembers')}
               onTransfer={(member) => {
-                setTransferRequestsOnly(false);
                 setTransferTargetMember(member || null);
-                go('transfer');
-              }}
-              onReceivedRequests={() => {
-                setTransferRequestsOnly(true);
-                setTransferTargetMember(null);
                 go('transfer');
               }}
               onReports={() => go('groupReports')}
@@ -1030,6 +1035,7 @@ export default function App() {
                 rememberAvailableGroup(group);
                 selectActiveGroup(group);
               }}
+              onLeaveGroup={handleLeaveGroup}
             />
           )}
 
@@ -1045,9 +1051,9 @@ export default function App() {
                   rememberAvailableGroup(group);
                   selectActiveGroup(group);
                 }}
+                onLeaveGroup={handleLeaveGroup}
                 onWorkStatus={() => { refreshCurrentWorkspace(); go('workStatus'); }}
                 onTransfer={(member) => {
-                setTransferRequestsOnly(false);
                 setTransferTargetMember(member || null);
                 go('transfer');
               }}
@@ -1152,10 +1158,8 @@ export default function App() {
               group={activeGroup}
               initialRecipientId={transferTargetMember?.userId || null}
               initialRecipientName={transferTargetMember?.name || transferTargetMember?.loginId || ''}
-              requestsOnly={transferRequestsOnly}
               onBack={() => {
                 setTransferTargetMember(null);
-                setTransferRequestsOnly(false);
                 goBack('groupWorkspace');
               }}
               onChanged={refreshCurrentWorkspace}
@@ -1169,6 +1173,7 @@ export default function App() {
               onBack={() => go('dashboard')}
               onUpdatedUser={setUser}
               onLogout={handleLogout}
+              onDeleteAccount={handleLogout}
             />
           )}
 

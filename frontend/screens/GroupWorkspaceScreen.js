@@ -10,8 +10,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import WorkStatusScreen from './WorkStatusScreen';
-import GroupDashboardScreen from './GroupDashboardScreen';
+import { formatTransferTime } from './TransferScreen';
 import { CardTitle, ScreenHeader } from '../components/ui';
+import { showAlert } from '../components/CustomAlert';
 import { colors, shadow } from '../constants/design';
 import { groupApi } from '../utils/groupApi';
 import { buildMemberColors, softMemberColor } from '../utils/memberColors';
@@ -25,7 +26,11 @@ const shortDong = (value) => {
 
 
 function buildMemberTransferRows(members, items) {
-  const tasks = Array.isArray(items) ? items : [];
+  const tasks = (Array.isArray(items) ? items : []).filter((item) =>
+    !['complete', 'completed', 'done'].includes(
+      String(item.status ?? item.taskStatus ?? item.task_status ?? '').toLowerCase()
+    )
+  );
   return (Array.isArray(members) ? members : []).map((member) => {
     const memberTasks = tasks.filter(
       (item) => Number(item.assigneeUserId) === Number(member.userId)
@@ -53,18 +58,18 @@ export default function GroupWorkspaceScreen({
   assignments,
   onRefresh,
   onBack,
-  tab = 'status',
+  tab = 'dashboard',
   onTabChange,
   onMembers,
   onTransfer,
-  onReceivedRequests,
   onReports,
 }) {
   const [detail, setDetail] = useState(group || null);
   const [sharedTasks, setSharedTasks] = useState(Array.isArray(assignments) ? assignments : []);
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [reportCount, setReportCount] = useState(null);
-  const [receivedRequestCount, setReceivedRequestCount] = useState(0);
+  const [transferRequests, setTransferRequests] = useState([]);
+  const [respondingRequestId, setRespondingRequestId] = useState(null);
   const [teamAlerts, setTeamAlerts] = useState(true);
   const [activityAlerts, setActivityAlerts] = useState(true);
 
@@ -77,7 +82,7 @@ export default function GroupWorkspaceScreen({
   }, [assignments]);
 
   const loadSettings = useCallback(async () => {
-    if (tab !== 'settings' || !group?.groupId || !user?.userId) return;
+    if (!['settings', 'transfer'].includes(tab) || !group?.groupId || !user?.userId) return;
 
     try {
       setLoadingSettings(true);
@@ -92,14 +97,12 @@ export default function GroupWorkspaceScreen({
       setDetail(groupDetail || group);
       setSharedTasks(Array.isArray(locations) ? locations : []);
       setReportCount(Array.isArray(reports) ? reports.length : 0);
-      setReceivedRequestCount(Array.isArray(transfers) ? transfers.filter((request) =>
-        Number(request.recipientUserId) === Number(user.userId) && request.status === 'PENDING'
-      ).length : 0);
+      setTransferRequests(Array.isArray(transfers) ? transfers : []);
     } catch (error) {
       setDetail(group || null);
       setSharedTasks(Array.isArray(assignments) ? assignments : []);
       setReportCount(null);
-      setReceivedRequestCount(0);
+      setTransferRequests([]);
     } finally {
       setLoadingSettings(false);
     }
@@ -117,6 +120,39 @@ export default function GroupWorkspaceScreen({
 
   const transferRows = useMemo(() => buildMemberTransferRows(members, sharedTasks), [members, sharedTasks]);
   const memberColors = useMemo(() => buildMemberColors(members, sharedTasks), [members, sharedTasks]);
+  const receivedRequests = useMemo(() => transferRequests
+    .filter((request) => Number(request.recipientUserId) === Number(user?.userId))
+    .sort((a, b) => Number(b.status === 'PENDING') - Number(a.status === 'PENDING')
+      || new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()),
+  [transferRequests, user?.userId]);
+
+  const respondToRequest = async (request, accept) => {
+    if (respondingRequestId != null) return;
+    try {
+      setRespondingRequestId(request.id);
+      const result = await groupApi(`/api/groups/${group.groupId}/transfers/${request.id}/${accept ? 'accept' : 'reject'}`, {
+        method: 'POST',
+        body: JSON.stringify({ userId: user.userId }),
+      });
+      await loadSettings();
+      if (accept && result?.status !== 'ACCEPTED') {
+        showAlert('이관 불가', '방문지가 완료됐거나 담당자가 바뀌어 요청을 종료했습니다.');
+        return;
+      }
+      try {
+        await onRefresh?.();
+      } catch (refreshError) {
+        console.log('이관 후 업무 목록 갱신 실패:', refreshError);
+      }
+      showAlert(accept ? '이관 수락' : '이관 거절', accept
+        ? '지도에서 행정동을 선택해 방문지를 추가하세요.'
+        : '기존 담당자가 유지됩니다.');
+    } catch (error) {
+      showAlert('요청 처리 실패', error.message);
+    } finally {
+      setRespondingRequestId(null);
+    }
+  };
 
   return (
     <View style={styles.root}>
@@ -124,16 +160,16 @@ export default function GroupWorkspaceScreen({
 
       <View style={styles.tabs}>
         <TouchableOpacity
-          style={[styles.tab, tab === 'status' && styles.activeTab]}
-          onPress={() => onTabChange?.('status')}
-        >
-          <Text style={[styles.tabText, tab === 'status' && styles.activeText]}>작업현황</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
           style={[styles.tab, tab === 'dashboard' && styles.activeTab]}
           onPress={() => onTabChange?.('dashboard')}
         >
           <Text style={[styles.tabText, tab === 'dashboard' && styles.activeText]}>대시보드</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, tab === 'transfer' && styles.activeTab]}
+          onPress={() => onTabChange?.('transfer')}
+        >
+          <Text style={[styles.tabText, tab === 'transfer' && styles.activeText]}>업무 이관</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, tab === 'settings' && styles.activeTab]}
@@ -143,18 +179,18 @@ export default function GroupWorkspaceScreen({
         </TouchableOpacity>
       </View>
 
-      {tab === 'status' ? (
+      {tab === 'dashboard' ? (
         <WorkStatusScreen
           user={user}
           group={group}
           assignments={assignments}
           onRefresh={onRefresh}
           embedded
+          showDashboard
         />
-      ) : tab === 'dashboard' ? (
-        <GroupDashboardScreen assignments={assignments} group={group} />
       ) : (
         <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+        {tab === 'settings' ? <>
           <View style={styles.card}>
             <CardTitle icon="people" title="기본 정보" />
             <InfoRow icon="pricetag" label="그룹명" value={groupName} />
@@ -232,13 +268,12 @@ export default function GroupWorkspaceScreen({
             )}
           </View>
 
-          <View style={styles.card}>
+          </> : null}
+
+          {tab === 'transfer' && <View style={styles.card}>
             <CardTitle
               icon="swap-horizontal"
               title="업무 이관"
-              actionLabel={`받은 요청 ${receivedRequestCount}`}
-              actionIcon="mail-outline"
-              onAction={onReceivedRequests}
             />
             {transferRows.length === 0 ? (
               <Text style={styles.emptyText}>표시할 팀원이 없습니다.</Text>
@@ -274,8 +309,35 @@ export default function GroupWorkspaceScreen({
                 })}
               </View>
             )}
-          </View>
+          </View>}
 
+          {tab === 'transfer' && <View style={styles.card}>
+            <CardTitle icon="mail-outline" title="이관 신청" suffix={`${receivedRequests.length}건`} />
+            {loadingSettings && receivedRequests.length === 0 ? (
+              <View style={styles.loadingBox}><ActivityIndicator color={colors.primary} /></View>
+            ) : receivedRequests.length === 0 ? (
+              <Text style={styles.emptyText}>받은 이관 신청이 없습니다.</Text>
+            ) : receivedRequests.map((request, index) => (
+              <View key={request.id} style={[styles.requestRow, index > 0 && styles.requestDivider]}>
+                <Text style={styles.requestTitle}>{request.senderName || '팀원'} → {request.recipientName || '나'} · {request.taskIds?.length || 0}건</Text>
+                <Text style={styles.requestMeta}>{request.status === 'PENDING' ? '응답 대기' : request.status === 'ACCEPTED' ? '수락' : '거절'} · {formatTransferTime(request.requestedAt)}</Text>
+                <Text style={styles.requestMeta}>{(request.taskIds || []).map((id) => {
+                  const task = sharedTasks.find((item) => Number(item.id ?? item.taskId ?? item.task_id) === Number(id));
+                  return task ? `${shortDong(task.adminDong || task.admin_dong) || '지역 미확인'} ${task.detailAddress || task.roadAddress || `#${id}`}` : `방문지 #${id}`;
+                }).join(', ')}</Text>
+                {request.status === 'PENDING' && <View style={styles.requestActions}>
+                  <TouchableOpacity style={[styles.requestAction, styles.requestReject]} disabled={respondingRequestId != null} onPress={() => respondToRequest(request, false)}>
+                    <Text style={[styles.requestActionText, styles.requestRejectText]}>거절</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.requestAction} disabled={respondingRequestId != null} onPress={() => respondToRequest(request, true)}>
+                    <Text style={styles.requestActionText}>수락</Text>
+                  </TouchableOpacity>
+                </View>}
+              </View>
+            ))}
+          </View>}
+
+          {tab === 'settings' && <>
           <TouchableOpacity style={styles.card} activeOpacity={0.78} onPress={onReports}>
             <CardTitle icon="document-text" title="그룹 보고서 모아보기" />
             <View style={styles.reportBar}>
@@ -311,6 +373,7 @@ export default function GroupWorkspaceScreen({
               last
             />
           </View>
+          </>}
         </ScrollView>
       )}
     </View>
@@ -432,6 +495,15 @@ const styles = StyleSheet.create({
   transferMemberTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   transferMemberName: { color: colors.text, fontSize: 13, fontWeight: '900' },
   transferMemberDongs: { color: colors.textSoft, fontSize: 10.5, lineHeight: 15, marginTop: 4 },
+  requestRow: { paddingVertical: 12 },
+  requestDivider: { borderTopWidth: 1, borderTopColor: colors.line },
+  requestTitle: { color: colors.text, fontSize: 13, fontWeight: '800' },
+  requestMeta: { color: colors.textSoft, fontSize: 11, lineHeight: 16, marginTop: 4 },
+  requestActions: { flexDirection: 'row', gap: 9, marginTop: 10 },
+  requestAction: { paddingVertical: 8, paddingHorizontal: 17, borderRadius: 8, backgroundColor: colors.primarySoft },
+  requestActionText: { color: colors.primary, fontWeight: '800' },
+  requestReject: { backgroundColor: '#FDE9EB' },
+  requestRejectText: { color: '#B94D59' },
   meBadge: { color: colors.textSoft, fontSize: 9.5, fontWeight: '800', backgroundColor: colors.surfaceMuted, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999 },
   reportBar: {
     marginTop: 4,

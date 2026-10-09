@@ -12,7 +12,7 @@ const isWorking = (item) =>
     String(item.status ?? item.taskStatus ?? item.task_status ?? '').toLowerCase()
   );
 
-export default function GroupDashboardScreen({ assignments = [], group }) {
+export default function GroupDashboardScreen({ assignments = [], group, embedded = false }) {
   const [today, setToday] = useState(() => koreaDayKey());
 
   useEffect(() => {
@@ -55,8 +55,8 @@ export default function GroupDashboardScreen({ assignments = [], group }) {
     };
   }, [assignments, today]);
 
-  return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+  const content = (
+    <>
       <Text style={styles.heading}>{group?.groupName || '그룹'} 누적 업무</Text>
 
       <View style={styles.summaryGrid}>
@@ -78,8 +78,11 @@ export default function GroupDashboardScreen({ assignments = [], group }) {
           </View>
         ))}
       </View>
-    </ScrollView>
+    </>
   );
+  return embedded
+    ? <View style={styles.embeddedBody}>{content}</View>
+    : <ScrollView style={styles.root} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>{content}</ScrollView>;
 }
 
 function Stat({ label, value }) {
@@ -94,6 +97,7 @@ function Stat({ label, value }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   body: { padding: 14, paddingBottom: 36, gap: 14 },
+  embeddedBody: { gap: 10 },
   heading: { color: colors.text, fontSize: 18, fontWeight: '900' },
   summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   statCard: { width: '48%', flexGrow: 1, padding: 16, borderRadius: 16, backgroundColor: colors.surface, ...shadow },

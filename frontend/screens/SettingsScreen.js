@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -150,6 +151,7 @@ export default function SettingsScreen({
   onBack,
   onUpdatedUser,
   onLogout,
+  onDeleteAccount,
 }) {
   const [workSido, setWorkSido] = useState(
     user?.workSido || '부산광역시'
@@ -161,6 +163,9 @@ export default function SettingsScreen({
 
   const [picker, setPicker] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const [
     notificationEnabled,
@@ -393,6 +398,27 @@ export default function SettingsScreen({
     { text: '로그아웃', style: 'destructive', onPress: onLogout },
   ]);
 
+  const deleteAccount = async () => {
+    if (!deletePassword || deleting) return;
+    setDeleting(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/account`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loginId: user.loginId, password: deletePassword }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.message || '계정 탈퇴에 실패했습니다.');
+      setDeleteOpen(false);
+      setDeletePassword('');
+      onDeleteAccount?.();
+    } catch (error) {
+      showAlert('계정 탈퇴 실패', error.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const options =
     picker === 'sido'
       ? REGIONS
@@ -588,7 +614,47 @@ export default function SettingsScreen({
             로그아웃
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.deleteAccountButton}
+          onPress={() => setDeleteOpen(true)}
+        >
+          <Text style={styles.deleteAccountText}>계정 탈퇴</Text>
+        </TouchableOpacity>
       </ScrollView>
+
+      <Modal
+        visible={deleteOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteOpen(false)}
+      >
+        <View style={styles.backdrop}>
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>계정 탈퇴</Text>
+            <Text style={styles.deleteDescription}>
+              로그인할 수 없게 되며, 그룹의 업무·보고서는 ‘탈퇴한 사용자’ 기록으로 남습니다. 비밀번호를 입력해 주세요.
+            </Text>
+            <TextInput
+              style={styles.deletePasswordInput}
+              value={deletePassword}
+              onChangeText={setDeletePassword}
+              placeholder="현재 비밀번호"
+              secureTextEntry
+              autoCapitalize="none"
+            />
+            <View style={styles.deleteActions}>
+              <TouchableOpacity onPress={() => { setDeleteOpen(false); setDeletePassword(''); }}>
+                <Text style={styles.deleteCancel}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={deleteAccount} disabled={!deletePassword || deleting}>
+                <Text style={[styles.deleteConfirm, (!deletePassword || deleting) && styles.muted]}>
+                  {deleting ? '처리 중...' : '계정 탈퇴'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* 지역 선택 모달 */}
 
@@ -906,6 +972,41 @@ const styles =
       fontSize: 13,
       fontWeight: '900',
     },
+
+    deleteAccountButton: {
+      alignSelf: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      marginTop: 2,
+    },
+    deleteAccountText: {
+      color: colors.textFaint,
+      fontSize: 11,
+    },
+    deleteDescription: {
+      color: colors.textSoft,
+      fontSize: 13,
+      lineHeight: 20,
+      marginBottom: 16,
+    },
+    deletePasswordInput: {
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 14,
+      marginBottom: 20,
+      color: colors.text,
+    },
+    deleteActions: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 24,
+      alignItems: 'center',
+    },
+    deleteCancel: { color: colors.textSoft, fontSize: 14 },
+    deleteConfirm: { color: colors.danger, fontSize: 14, fontWeight: '800' },
 
     backdrop: {
       flex: 1,

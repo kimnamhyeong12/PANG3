@@ -69,6 +69,7 @@ export default function GroupDetailScreen({
   onTransfer,
   onReports,
   onUpdatedGroup,
+  onLeaveGroup,
   mode = 'all',
 }) {
   const [detail, setDetail] = useState(group || null);
@@ -81,6 +82,9 @@ export default function GroupDetailScreen({
   const [activityAlerts, setActivityAlerts] = useState(true);
   const [regionOpen, setRegionOpen] = useState(false);
   const [regionSaving, setRegionSaving] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [leavePassword, setLeavePassword] = useState('');
   const [draftDistrict, setDraftDistrict] = useState(
     group?.regionSigungu || ''
   );
@@ -166,6 +170,24 @@ export default function GroupDetailScreen({
       showAlert('활동지역 변경 실패', error.message);
     } finally {
       setRegionSaving(false);
+    }
+  };
+
+  const leaveGroup = async () => {
+    if (!leavePassword || leaving) return;
+    setLeaving(true);
+    try {
+      await groupApi(`/api/groups/${group.groupId}/members/me`, {
+        method: 'DELETE',
+        body: JSON.stringify({ userId: user.userId, password: leavePassword }),
+      });
+      setLeaveOpen(false);
+      setLeavePassword('');
+      onLeaveGroup?.(group.groupId);
+    } catch (error) {
+      showAlert('그룹 탈퇴 실패', error.message);
+    } finally {
+      setLeaving(false);
     }
   };
 
@@ -461,7 +483,45 @@ export default function GroupDetailScreen({
               last
             />
           </View>}
+        {(mode === 'all' || mode === 'settings') && !detail?.personal && (
+          <TouchableOpacity
+            style={styles.leaveButton}
+            onPress={() => setLeaveOpen(true)}
+            disabled={leaving}
+          >
+            <Text style={styles.leaveText}>{leaving ? '탈퇴 중...' : '그룹 탈퇴'}</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
+
+      <Modal visible={leaveOpen} transparent animationType="fade" onRequestClose={() => setLeaveOpen(false)}>
+        <View style={styles.leaveBackdrop}>
+          <View style={styles.leaveSheet}>
+            <Text style={styles.leaveTitle}>그룹 탈퇴</Text>
+            <Text style={styles.leaveDescription}>
+              맡은 방문지는 남은 팀원에게 넘어갑니다. 비밀번호를 입력해 주세요.
+            </Text>
+            <TextInput
+              style={styles.leaveInput}
+              value={leavePassword}
+              onChangeText={setLeavePassword}
+              placeholder="현재 비밀번호"
+              secureTextEntry
+              autoCapitalize="none"
+            />
+            <View style={styles.leaveActions}>
+              <TouchableOpacity onPress={() => { setLeaveOpen(false); setLeavePassword(''); }}>
+                <Text style={styles.leaveCancel}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={leaveGroup} disabled={!leavePassword || leaving}>
+                <Text style={[styles.leaveConfirm, (!leavePassword || leaving) && styles.leaveDisabled]}>
+                  {leaving ? '처리 중...' : '그룹 탈퇴'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={regionOpen}
@@ -660,6 +720,35 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingBottom: 27,
   },
+
+  leaveButton: {
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginTop: 6,
+  },
+  leaveText: {
+    color: colors.textFaint,
+    fontSize: 12,
+  },
+  leaveSheet: {
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    padding: 20,
+    marginHorizontal: 24,
+  },
+  leaveBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 35, 72, 0.34)',
+    justifyContent: 'center',
+  },
+  leaveTitle: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 10 },
+  leaveDescription: { color: colors.textSoft, fontSize: 13, lineHeight: 20, marginBottom: 16 },
+  leaveInput: { borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 12, marginBottom: 18 },
+  leaveActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 24 },
+  leaveCancel: { color: colors.textSoft, fontSize: 14 },
+  leaveConfirm: { color: colors.danger, fontSize: 14, fontWeight: '800' },
+  leaveDisabled: { color: colors.textFaint },
 
   loading: {
     flex: 1,

@@ -8,8 +8,11 @@ import { colors } from '../constants/design';
 
 const dongName = (value) => String(value || '').trim().split(/\s+/).pop() || '';
 const taskIdOf = (task) => Number(task?.id ?? task?.taskId ?? task?.task_id);
+const isComplete = (task) => ['complete', 'completed', 'done'].includes(
+  String(task?.status ?? task?.taskStatus ?? task?.task_status ?? '').toLowerCase()
+);
 
-const formatTransferTime = (value) => {
+export const formatTransferTime = (value) => {
   if (!value) return '';
   // Older server responses had no offset, but transfer times were stored in UTC.
   const timestamp = String(value);
@@ -69,9 +72,14 @@ export default function TransferScreen({
     setSelectedTaskIds([]);
   }, [initialRecipientId]);
 
+  const pendingTaskIds = useMemo(() => new Set(requests
+    .filter((request) => request.status === 'PENDING' && Number(request.senderUserId) === Number(user?.userId))
+    .flatMap((request) => request.taskIds || []).map(Number)), [requests, user?.userId]);
   const mine = useMemo(() => tasks.filter((task) =>
     Number(task.assigneeUserId) === Number(user?.userId)
-  ), [tasks, user?.userId]);
+      && !isComplete(task)
+      && !pendingTaskIds.has(taskIdOf(task))
+  ), [tasks, user?.userId, pendingTaskIds]);
 
   const groupedMine = useMemo(() => {
     const grouped = new Map();
@@ -131,10 +139,14 @@ export default function TransferScreen({
     if (busy) return;
     try {
       setBusy(true);
-      await groupApi(`/api/groups/${group.groupId}/transfers/${request.id}/${accept ? 'accept' : 'reject'}`, {
+      const result = await groupApi(`/api/groups/${group.groupId}/transfers/${request.id}/${accept ? 'accept' : 'reject'}`, {
         method: 'POST', body: JSON.stringify({ userId: user.userId }),
       });
       await load();
+      if (accept && result?.status !== 'ACCEPTED') {
+        showAlert('이관 불가', '방문지가 완료됐거나 담당자가 바뀌어 요청을 종료했습니다.');
+        return;
+      }
       if (accept) {
         try {
           await onChanged?.();
