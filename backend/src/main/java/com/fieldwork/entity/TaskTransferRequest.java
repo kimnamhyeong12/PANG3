@@ -2,6 +2,7 @@ package com.fieldwork.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,7 +34,7 @@ public class TaskTransferRequest {
     private String status = "PENDING";
 
     @Column(name = "requested_at", nullable = false)
-    private LocalDateTime requestedAt = LocalDateTime.now();
+    private LocalDateTime requestedAt = LocalDateTime.now(ZoneOffset.UTC);
 
     @Column(name = "responded_at")
     private LocalDateTime respondedAt;

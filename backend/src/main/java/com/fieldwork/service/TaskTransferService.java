@@ -12,6 +12,7 @@ import com.fieldwork.repository.WorkGroupRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -118,7 +119,7 @@ public class TaskTransferService {
             tasks.saveAll(selected);
         }
         request.setStatus(accept ? "ACCEPTED" : "REJECTED");
-        request.setRespondedAt(LocalDateTime.now());
+        request.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
         return toMap(requests.save(request));
     }
 
@@ -167,8 +168,8 @@ public class TaskTransferService {
             });
         }
         map.put("status", request.getStatus());
-        map.put("requestedAt", request.getRequestedAt());
-        map.put("respondedAt", request.getRespondedAt());
+        map.put("requestedAt", request.getRequestedAt().atOffset(ZoneOffset.UTC).toString());
+        map.put("respondedAt", request.getRespondedAt() == null ? null : request.getRespondedAt().atOffset(ZoneOffset.UTC).toString());
         return map;
     }
 

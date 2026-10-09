@@ -14,8 +14,7 @@ import GroupDashboardScreen from './GroupDashboardScreen';
 import { CardTitle, ScreenHeader } from '../components/ui';
 import { colors, shadow } from '../constants/design';
 import { groupApi } from '../utils/groupApi';
-
-const AVATAR_COLORS = ['#DDEEFF', '#E4F8F3', '#FFF0D8', '#FCE7EF'];
+import { buildMemberColors, softMemberColor } from '../utils/memberColors';
 
 const shortDong = (value) => {
   const text = String(value || '').trim();
@@ -58,12 +57,14 @@ export default function GroupWorkspaceScreen({
   onTabChange,
   onMembers,
   onTransfer,
+  onReceivedRequests,
   onReports,
 }) {
   const [detail, setDetail] = useState(group || null);
   const [sharedTasks, setSharedTasks] = useState(Array.isArray(assignments) ? assignments : []);
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [reportCount, setReportCount] = useState(null);
+  const [receivedRequestCount, setReceivedRequestCount] = useState(0);
   const [teamAlerts, setTeamAlerts] = useState(true);
   const [activityAlerts, setActivityAlerts] = useState(true);
 
@@ -81,19 +82,24 @@ export default function GroupWorkspaceScreen({
     try {
       setLoadingSettings(true);
       const base = `/api/groups/${group.groupId}`;
-      const [groupDetail, locations, reports] = await Promise.all([
+      const [groupDetail, locations, reports, transfers] = await Promise.all([
         groupApi(`${base}?userId=${user.userId}`),
         groupApi(`/api/locations/group/${group.groupId}?userId=${user.userId}`),
         groupApi(`${base}/reports?userId=${user.userId}`).catch(() => []),
+        groupApi(`${base}/transfers?userId=${user.userId}`).catch(() => []),
       ]);
 
       setDetail(groupDetail || group);
       setSharedTasks(Array.isArray(locations) ? locations : []);
       setReportCount(Array.isArray(reports) ? reports.length : 0);
+      setReceivedRequestCount(Array.isArray(transfers) ? transfers.filter((request) =>
+        Number(request.recipientUserId) === Number(user.userId) && request.status === 'PENDING'
+      ).length : 0);
     } catch (error) {
       setDetail(group || null);
       setSharedTasks(Array.isArray(assignments) ? assignments : []);
       setReportCount(null);
+      setReceivedRequestCount(0);
     } finally {
       setLoadingSettings(false);
     }
@@ -110,6 +116,7 @@ export default function GroupWorkspaceScreen({
     .join(' · ');
 
   const transferRows = useMemo(() => buildMemberTransferRows(members, sharedTasks), [members, sharedTasks]);
+  const memberColors = useMemo(() => buildMemberColors(members, sharedTasks), [members, sharedTasks]);
 
   return (
     <View style={styles.root}>
@@ -173,6 +180,7 @@ export default function GroupWorkspaceScreen({
             ) : (
               <View style={styles.memberList}>
                 {members.map((member, index) => {
+                  const memberColor = memberColors[String(member.userId)];
                   const memberTasks = sharedTasks.filter(
                     (item) => Number(item.assigneeUserId) === Number(member.userId)
                   );
@@ -198,7 +206,7 @@ export default function GroupWorkspaceScreen({
                       <View
                         style={[
                           styles.avatar,
-                          { backgroundColor: AVATAR_COLORS[index % AVATAR_COLORS.length] },
+                          { backgroundColor: softMemberColor(memberColor), borderColor: memberColor || '#DCE7F5' },
                         ]}
                       >
                         <Text style={styles.avatarText}>
@@ -225,8 +233,13 @@ export default function GroupWorkspaceScreen({
           </View>
 
           <View style={styles.card}>
-            <CardTitle icon="swap-horizontal" title="업무 이관" />
-            <Text style={styles.cardDescription}>팀원을 선택한 뒤 넘길 방문지를 직접 고릅니다.</Text>
+            <CardTitle
+              icon="swap-horizontal"
+              title="업무 이관"
+              actionLabel={`받은 요청 ${receivedRequestCount}`}
+              actionIcon="mail-outline"
+              onAction={onReceivedRequests}
+            />
             {transferRows.length === 0 ? (
               <Text style={styles.emptyText}>표시할 팀원이 없습니다.</Text>
             ) : (
@@ -265,7 +278,6 @@ export default function GroupWorkspaceScreen({
 
           <TouchableOpacity style={styles.card} activeOpacity={0.78} onPress={onReports}>
             <CardTitle icon="document-text" title="그룹 보고서 모아보기" />
-            <Text style={styles.cardDescription}>팀 전체 보고서를 한 번에 확인합니다.</Text>
             <View style={styles.reportBar}>
               <View style={styles.reportSummary}>
                 <Ionicons name="document-text-outline" size={22} color={colors.primary} />
