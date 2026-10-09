@@ -98,8 +98,8 @@ export default function ReportListScreen({
     selectedIds.includes(getTaskId(loc))
   );
 
-  const workspaceName = activeGroup?.groupName || user?.name || user?.loginId || '나';
-  const personalWorkspace = !activeGroup || isPersonalGroup(activeGroup);
+  const workspaceName = user?.name || user?.loginId || '나';
+  const personalWorkspace = true;
 
   const handleCreateReport = () => {
     if (selectedLocations.length === 0) {

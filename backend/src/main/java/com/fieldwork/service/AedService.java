@@ -382,43 +382,16 @@ public class AedService {
 
 
         /*
-         * SGIS에서 해당 행정동의 이름을 가져온다.
+         * 이미 조회해 둔 상위 경계 캐시에서 해당 행정동의 이름을 가져온다.
+         * (행정동 코드를 그대로 getAdministrativeBoundaries에 넘기면 "그 행정동의 하위"를
+         *  요청하는 셈이 되어 매번 빈 결과가 와서 실패했던 버그 — resolveAdministrativeDongName 참고)
          */
-        JsonNode boundary =
-                sgisBoundaryService
-                        .getAdministrativeBoundaries(
-                                admCode
-                        );
+        String admName = sgisBoundaryService.resolveAdministrativeDongName(admCode);
 
-
-        String admName = null;
-
-
-        for (JsonNode feature :
-                boundary.path("features")) {
-
-            admName =
-                    feature
-                            .path("properties")
-                            .path("adm_nm")
-                            .asText(null);
-
-
-            if (admName != null
-                    && !admName.isBlank()) {
-
-                break;
-            }
-        }
-
-
-        if (admName == null
-                || admName.isBlank()) {
-
+        if (admName == null || admName.isBlank()) {
             throw new IllegalStateException(
-                    "SGIS 응답에서 행정동 이름을 찾을 수 없습니다. "
-                            + "admCode: "
-                            + admCode
+                    "행정동 이름을 찾을 수 없습니다. 행정동 경계를 먼저 조회했는지 확인해 주세요. "
+                            + "admCode: " + admCode
             );
         }
 

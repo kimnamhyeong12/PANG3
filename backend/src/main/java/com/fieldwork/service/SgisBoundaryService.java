@@ -81,6 +81,38 @@ public class SgisBoundaryService {
     }
 
     /**
+     * 행정동(leaf) 코드로 그 행정동 자신의 이름(예: "부산광역시 사하구 당리동")을 찾는다.
+     *
+     * getAdministrativeBoundaries(admCode)는 항상 low_search=1, 즉 "그 코드 한 단계 아래"를
+     * SGIS에 요청한다. 시·군·구 코드를 넣으면 하위 행정동 목록이 오지만, 이미 leaf인
+     * 행정동 코드를 그대로 넣으면 "그 행정동의 하위"를 요청하는 셈이라 features가 항상 비어
+     * 돌아온다 (행정동은 최하위 단위라 더 아래가 없음) — AedService/BusStopService가 이
+     * 메서드 대신 getAdministrativeBoundaries(dongCode)를 직접 호출했을 때 행정동 조회가
+     * 매번 실패하던 원인이 이것이다.
+     *
+     * 이미 캐시된 상위(시·군·구) 경계 응답들 안에서 행정동 코드를 찾아 이름을 돌려주므로,
+     * 화면에서 상위 경계를 먼저 조회해 둔 보통의 흐름에서는 SGIS를 추가로 호출하지 않는다.
+     */
+    public String resolveAdministrativeDongName(String dongAdmCode) {
+        String normalized = dongAdmCode == null ? "" : dongAdmCode.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        for (JsonNode cached : cachedBoundaries.values()) {
+            for (JsonNode feature : cached.path("features")) {
+                String code = feature.path("properties").path("adm_cd").asText(null);
+                if (normalized.equals(code)) {
+                    String name = feature.path("properties").path("adm_nm").asText(null);
+                    if (name != null && !name.isBlank()) {
+                        return name;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * 사용자의 근무 시·도 전체를 행정동 단위로 내려준다.
      * 시·도(2자리)에서 시군구를 한 단계, 행정동을 두 단계 내려가므로 low_search=2를 사용한다.
      */

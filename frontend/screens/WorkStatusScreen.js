@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,6 +11,8 @@ import {
 import { WebView } from 'react-native-webview';
 import { BackButton } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
+import { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
+import { koreaDayKey, isCurrentWork } from '../utils/completionDay';
 
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const KAKAO_JAVASCRIPT_KEY =
@@ -76,7 +79,7 @@ function esc(v){return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 function post(v){window.ReactNativeWebView.postMessage(JSON.stringify(v))}
 kakao.maps.load(function(){
  const map=new kakao.maps.Map(document.getElementById('map'),{center:new kakao.maps.LatLng(35.1046,128.9747),level:7});
- const bounds=new kakao.maps.LatLngBounds();let hasBounds=false;const byArea={};
+ const bounds=new kakao.maps.LatLngBounds();let hasBounds=false;const regionBounds=new kakao.maps.LatLngBounds();let hasRegionBounds=false;const byArea={};
  assignments.forEach(i=>{const a=shortName(i.adminDong||i.admin_dong);if(a)(byArea[a]||(byArea[a]=[])).push(i)});
  function addRing(feature,ring,areaBounds,areaKey){
   const area=shortName(feature.properties&&feature.properties.adm_nm),items=byArea[area]||[];if(!items.length||!Array.isArray(ring))return;
@@ -90,15 +93,18 @@ kakao.maps.load(function(){
    post({type:'AREA_SELECT',areaKey,memberId:ownerId,bounds:{south:sw.getLat(),west:sw.getLng(),north:ne.getLat(),east:ne.getLng()}});
   });
  }
- (boundaries.features||[]).forEach((f,index)=>{const g=f.geometry||{},rings=[];if(g.type==='Polygon'&&g.coordinates&&g.coordinates[0])rings.push(g.coordinates[0]);else if(g.type==='MultiPolygon')(g.coordinates||[]).forEach(p=>p[0]&&rings.push(p[0]));if(!rings.length)return;const areaBounds=new kakao.maps.LatLngBounds(),properties=f.properties||{},areaKey=String(properties.adm_cd||properties.adm_nm||index);rings.forEach(r=>r.forEach(p=>areaBounds.extend(new kakao.maps.LatLng(Number(p[1]),Number(p[0])))));rings.forEach(r=>addRing(f,r,areaBounds,areaKey));});
+ (boundaries.features||[]).forEach((f,index)=>{const g=f.geometry||{},rings=[];if(g.type==='Polygon'&&g.coordinates&&g.coordinates[0])rings.push(g.coordinates[0]);else if(g.type==='MultiPolygon')(g.coordinates||[]).forEach(p=>p[0]&&rings.push(p[0]));if(!rings.length)return;const areaBounds=new kakao.maps.LatLngBounds(),properties=f.properties||{},areaKey=String(properties.adm_cd||properties.adm_nm||index);rings.forEach(r=>r.forEach(p=>{const ll=new kakao.maps.LatLng(Number(p[1]),Number(p[0]));areaBounds.extend(ll);regionBounds.extend(ll);hasRegionBounds=true;}));rings.forEach(r=>addRing(f,r,areaBounds,areaKey));});
  let openedCallout=null,openedMarkerKey=null;
  assignments.forEach((i,index)=>{const lat=Number(i.lat!=null?i.lat:i.latitude),lng=Number(i.lng!=null?i.lng:i.longitude);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;const s=statusOf(i.status||i.taskStatus),ownerId=String(i.assigneeUserId||'unknown'),ownerColor=memberColors[ownerId]||'${UNASSIGNED_COLOR}',markerKey=String(i.taskId||i.assignmentId||i.id||index),dimmed=selectedMemberId&&selectedMemberId!==ownerId,position=new kakao.maps.LatLng(lat,lng);bounds.extend(position);hasBounds=true;const content=document.createElement('div');content.className='pin';content.style.opacity=dimmed?'.22':'1';content.innerHTML='<div class="pin-body" style="background:'+statusColors[s]+';border-color:'+ownerColor+'"></div>';const markerOverlay=new kakao.maps.CustomOverlay({map,position,content,yAnchor:1,zIndex:5});content.onclick=(event)=>{event.stopPropagation();if(openedMarkerKey===markerKey){if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;return;}if(openedCallout)openedCallout.setMap(null);const box=document.createElement('div');box.className='place-callout';const title=document.createElement('div');title.className='place-title';title.textContent=i.detailAddress||i.roadAddress||('방문지 '+i.taskId);const address=document.createElement('div');address.className='place-address';address.textContent=i.roadAddress||i.detailAddress||'주소 정보 없음';const assignee=document.createElement('div');assignee.className='place-assignee';assignee.style.color=ownerColor;assignee.textContent='담당자: '+(i.assigneeName||i.assigneeLoginId||'미배정');const status=document.createElement('span');status.className='place-status';status.style.background=statusColors[s];status.textContent=s==='complete'?'완료':s==='working'?'작업 중':'작업 전';box.appendChild(title);box.appendChild(address);box.appendChild(assignee);box.appendChild(status);openedCallout=new kakao.maps.CustomOverlay({map,position,content:box,yAnchor:1.65,zIndex:10});openedMarkerKey=markerKey;};});
  kakao.maps.event.addListener(map,'click',()=>{if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;});
- if(focusedAreaBounds&&Number.isFinite(Number(focusedAreaBounds.south))&&Number.isFinite(Number(focusedAreaBounds.west))&&Number.isFinite(Number(focusedAreaBounds.north))&&Number.isFinite(Number(focusedAreaBounds.east))){const focused=new kakao.maps.LatLngBounds(new kakao.maps.LatLng(Number(focusedAreaBounds.south),Number(focusedAreaBounds.west)),new kakao.maps.LatLng(Number(focusedAreaBounds.north),Number(focusedAreaBounds.east)));map.setBounds(focused,35,35,35,35);}else if(hasBounds)map.setBounds(bounds,35,35,35,35);
+ // 사용자가 행정동을 직접 눌렀을 때만 해당 동으로 확대한다.
+ // 그 외 최초 진입/재진입은 SGIS 시군구 전체 경계를 최우선으로 사용한다.
+ // 방문지 좌표 bounds는 SGIS 경계를 못 불러온 경우에만 최후의 fallback이다.
+ if(focusedAreaBounds&&Number.isFinite(Number(focusedAreaBounds.south))&&Number.isFinite(Number(focusedAreaBounds.west))&&Number.isFinite(Number(focusedAreaBounds.north))&&Number.isFinite(Number(focusedAreaBounds.east))){const focused=new kakao.maps.LatLngBounds(new kakao.maps.LatLng(Number(focusedAreaBounds.south),Number(focusedAreaBounds.west)),new kakao.maps.LatLng(Number(focusedAreaBounds.north),Number(focusedAreaBounds.east)));map.setBounds(focused,35,35,35,35);}else if(hasRegionBounds)map.setBounds(regionBounds,35,35,35,35);else if(hasBounds)map.setBounds(bounds,35,35,35,35);
 });
 </script></body></html>`;
 
-export default function WorkStatusScreen({ user, group, assignments = [], onBack, onRefresh }) {
+export default function WorkStatusScreen({ user, group, assignments = [], onBack, onRefresh, embedded = false }) {
   const [loadingBoundary, setLoadingBoundary] = useState(true);
   const [boundaryError, setBoundaryError] = useState('');
   const [boundaries, setBoundaries] = useState({ type: 'FeatureCollection', features: [] });
@@ -107,32 +113,80 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
   const [selectedAreaKey, setSelectedAreaKey] = useState(null);
   const [focusedAreaBounds, setFocusedAreaBounds] = useState(null);
   const [mapInteracting, setMapInteracting] = useState(false);
-  const isLeader = group?.role === 'LEADER';
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [today, setToday] = useState(() => koreaDayKey());
   const personalWorkspace = isPersonalGroup(group);
+
+  useEffect(() => {
+    const updateToday = () => setToday(koreaDayKey());
+    const timer = setInterval(updateToday, 60 * 1000);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') updateToday();
+    });
+    return () => { clearInterval(timer); subscription.remove(); };
+  }, []);
 
   const loadBoundaries = useCallback(async () => {
     setLoadingBoundary(true);
     setBoundaryError('');
     try {
-      if (!group?.regionAdmCode) {
+      // 그룹 업무현황의 최초 지도 범위는 '방문지 좌표'가 아니라
+      // 그룹에 설정된 시/군/구 전체 SGIS 경계를 기준으로 잡는다.
+      //
+      // 중요: group.regionAdmCode가 행정동 코드로 저장돼 있을 수 있으므로
+      // 사하구/영도구 같은 regionSigungu 값이 있으면 반드시 구·군 코드를 우선한다.
+      const districtCode =
+        ((!group?.regionSido || String(group.regionSido).includes('부산'))
+          ? BUSAN_DISTRICT_CODES[group?.regionSigungu]
+          : null) ||
+        (personalWorkspace && (!user?.workSido || String(user.workSido).includes('부산'))
+          ? BUSAN_DISTRICT_CODES[user?.workSigungu]
+          : null);
+
+      const primaryCode = districtCode || group?.regionAdmCode || null;
+
+      const fallbackCodes = assignments.map((item) =>
+        (!item.sido || String(item.sido).includes('부산'))
+          ? BUSAN_DISTRICT_CODES[item.sigungu]
+          : null
+      ).filter(Boolean);
+
+      // 그룹 시군구가 정해져 있으면 그 경계 하나만 요청한다.
+      // 방문지 데이터에 잘못된 시군구/좌표가 섞여도 최초 화면 범위에 영향을 주지 않는다.
+      const codes = Array.from(
+        new Set((primaryCode ? [primaryCode] : fallbackCodes).filter(Boolean))
+      );
+      if (!codes.length) {
         setBoundaries({ type: 'FeatureCollection', features: [] });
         if (!personalWorkspace) {
-          setBoundaryError('그룹 활동 구·군을 먼저 설정해주세요.');
+          setBoundaryError('표시할 행정동 경계를 찾지 못했습니다.');
         }
         return;
       }
-      const data = await groupApi(
-        `/api/sgis/boundaries?admCode=${encodeURIComponent(group.regionAdmCode)}`
-      );
-      setBoundaries(data?.type === 'FeatureCollection' ? data : { type: 'FeatureCollection', features: [] });
+      const results = await Promise.allSettled(codes.map((code) => groupApi(
+        `/api/sgis/boundaries?admCode=${encodeURIComponent(code)}`
+      )));
+      const features = results.flatMap((result) => result.status === 'fulfilled' && result.value?.type === 'FeatureCollection'
+        ? result.value.features || [] : []);
+      setBoundaries({ type: 'FeatureCollection', features });
+      if (features.length === 0) setBoundaryError('행정동 경계를 불러오지 못했습니다.');
     } catch (error) {
       setBoundaryError(error.message || '행정동 경계를 불러오지 못했습니다.');
     } finally {
       setLoadingBoundary(false);
     }
-  }, [group?.regionAdmCode, personalWorkspace]);
+  }, [group?.regionAdmCode, group?.regionSido, group?.regionSigungu, personalWorkspace, user?.workSido, user?.workSigungu, assignments]);
 
-  useEffect(() => { onRefresh?.(); loadBoundaries(); }, [loadBoundaries, onRefresh]);
+  useEffect(() => { onRefresh?.(); }, [onRefresh]);
+  useEffect(() => { loadBoundaries(); }, [loadBoundaries]);
+  useEffect(() => {
+    if (!group?.groupId || !user?.userId) return undefined;
+    let active = true;
+    groupApi(`/api/groups/${group.groupId}/members?userId=${user.userId}`)
+      .then((rows) => { if (active) setGroupMembers(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (active) setGroupMembers([]); });
+    return () => { active = false; };
+  }, [group?.groupId, user?.userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,18 +218,18 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
 
   const visibleAssignments = useMemo(() => {
     const source = Array.isArray(resolvedAssignments) ? resolvedAssignments : [];
-    return isLeader ? source : source.filter((i) => Number(i.assigneeUserId) === Number(user?.userId));
-  }, [resolvedAssignments, isLeader, user?.userId]);
+    return source.filter((item) => isCurrentWork(item, today));
+  }, [resolvedAssignments, today]);
+
+  const mapAssignments = visibleAssignments;
 
   const memberColors = useMemo(() => {
-    const leaderId = String(group?.leaderUserId || '');
-    const memberIds = Array.from(new Set(
-      resolvedAssignments
+    const memberIds = Array.from(new Set([
+      ...groupMembers.map((member) => String(member.userId)),
+      ...resolvedAssignments
         .map((item) => String(item.assigneeUserId || 'unknown'))
-        .filter((id) => id !== 'unknown')
-    )).sort((left, right) => {
-      if (left === leaderId) return -1;
-      if (right === leaderId) return 1;
+        .filter((id) => id !== 'unknown'),
+    ])).sort((left, right) => {
       const leftNumber = Number(left);
       const rightNumber = Number(right);
       if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
@@ -189,7 +243,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
       result[id] = MEMBER_COLORS[index % MEMBER_COLORS.length];
     });
     return result;
-  }, [resolvedAssignments, group?.leaderUserId]);
+  }, [resolvedAssignments, groupMembers]);
 
   const counts = useMemo(() => {
     const value = { pending: 0, working: 0, complete: 0 };
@@ -220,26 +274,26 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
 
   const mapHtml = useMemo(() => buildMapHtml({
     boundaries,
-    assignments: visibleAssignments,
+    assignments: mapAssignments,
     memberColors,
     selectedMemberId,
     focusedAreaBounds,
-  }), [boundaries, visibleAssignments, memberColors, selectedMemberId, focusedAreaBounds]);
+  }), [boundaries, mapAssignments, memberColors, selectedMemberId, focusedAreaBounds]);
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      {!embedded && <View style={styles.header}>
         <BackButton onPress={onBack} />
         <View style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>업무 현황</Text>
           <Text style={styles.title}>
-            {personalWorkspace ? '내 업무 현황' : isLeader ? '팀 작업현황' : '내 담당 업무'}
+            {personalWorkspace ? '내 업무 현황' : '팀 작업현황'}
           </Text>
           <Text style={styles.desc}>
-            {group?.groupName || '현재 그룹'} · {personalWorkspace ? '1인 그룹' : isLeader ? '팀장 화면' : '팀원 화면'}
+            {group?.groupName || '현재 그룹'} · {personalWorkspace ? '개인 업무' : '팀 전체 현황'}
           </Text>
         </View>
-      </View>
+      </View>}
 
       <ScrollView
         style={styles.screenScroll}
@@ -317,7 +371,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
           </View>
           {memberProgress.length === 0 ? (
             <Text style={styles.emptyText}>
-              {personalWorkspace ? '등록된 업무가 없습니다.' : '배정된 팀 업무가 없습니다.'}
+              {personalWorkspace ? '등록된 업무가 없습니다.' : '공유된 팀원 업무가 없습니다.'}
             </Text>
           ) : (
             <ScrollView style={styles.memberList} nestedScrollEnabled showsVerticalScrollIndicator={false}>

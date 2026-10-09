@@ -31,6 +31,7 @@ import {
 
 const KAKAO_JAVASCRIPT_KEY =
   process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY || '';
+const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY || '';
 
 const PHOTO_TYPES = [
   {
@@ -159,6 +160,37 @@ function getInteractiveMapHtml(latitude, longitude) {
           body {
             background: #E8F2FF;
           }
+          .selected-pin-wrap {
+            position: relative;
+            width: 32px;
+            height: 40px;
+            overflow: visible;
+            pointer-events: none;
+            filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
+          }
+          .selected-location {
+            position: absolute;
+            top: 0;
+            left: 1px;
+            width: 30px;
+            height: 30px;
+            background: #E53935;
+            border-radius: 50% 50% 50% 0;
+            border: 4px solid #94A3B8;
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.95);
+            box-sizing: border-box;
+            transform: rotate(-45deg);
+          }
+          .selected-location::after {
+            content: '';
+            position: absolute;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #FFFFFF;
+            left: 8px;
+            top: 8px;
+          }
         </style>
 
         <script
@@ -172,8 +204,11 @@ function getInteractiveMapHtml(latitude, longitude) {
 
         <script>
           var map = null;
-          var marker = null;
           var ready = false;
+          var selectedPosition = null;
+          var selectionMode = false;
+          var selectionDragStarted = false;
+          var selectedOverlay = null;
 
           function postMessage(data) {
             if (!window.ReactNativeWebView) {
@@ -185,11 +220,60 @@ function getInteractiveMapHtml(latitude, longitude) {
             );
           }
 
+          function ensureSelectedOverlay() {
+            if (!map || !selectedPosition || !window.kakao || !window.kakao.maps) {
+              return;
+            }
+
+            if (!selectedOverlay) {
+              var selectedElement = document.createElement('div');
+              selectedElement.className = 'selected-pin-wrap';
+              var selectedBody = document.createElement('div');
+              selectedBody.className = 'selected-location';
+              selectedElement.appendChild(selectedBody);
+
+              selectedOverlay = new window.kakao.maps.CustomOverlay({
+                position: selectedPosition,
+                content: selectedElement,
+                xAnchor: 0.5,
+                yAnchor: 1.0,
+                zIndex: 110
+              });
+            }
+
+            selectedOverlay.setPosition(selectedPosition);
+            selectedOverlay.setMap(map);
+          }
+
+          window.setSelectionMode = function(enabled) {
+            var nextSelectionMode = !!enabled;
+
+            if (nextSelectionMode && map) {
+              selectionMode = true;
+              selectionDragStarted = false;
+
+              // 지도 직접 선택과 동일하게 기존 선택 좌표 하나만 기준으로 사용한다.
+              // ON 할 때 좌표를 다시 계산하지 않고 기존 마커 좌표를 화면 중심으로 맞춘다.
+              if (!selectedPosition) {
+                selectedPosition = map.getCenter();
+              }
+              map.setCenter(selectedPosition);
+              ensureSelectedOverlay();
+              return;
+            }
+
+            // OFF에서는 현재 선택 좌표를 다시 계산하거나 이동시키지 않는다.
+            // 마지막 위치에 동일한 마커를 그대로 고정한다.
+            selectionMode = false;
+            selectionDragStarted = false;
+            ensureSelectedOverlay();
+          };
+
           window.setExternalPosition = function(
             latitude,
             longitude
           ) {
-            if (!ready || !map || !marker) {
+            if (!ready || !map) {
               return;
             }
 
@@ -203,16 +287,21 @@ function getInteractiveMapHtml(latitude, longitude) {
               return;
             }
 
-            var position =
+            // 위치 설정 중에는 dragend에서 정한 WebView 내부 selectedPosition이 단일 기준이다.
+            // React state가 되돌아오면서 pan/setCenter를 다시 실행하면 미세한 왕복 이동이 생길 수 있으므로 무시한다.
+            if (selectionMode) {
+              return;
+            }
+
+            selectedPosition =
               new window.kakao.maps.LatLng(
                 lat,
                 lng
               );
 
-            marker.setPosition(position);
-
             map.relayout();
-            map.panTo(position);
+            map.setCenter(selectedPosition);
+            ensureSelectedOverlay();
           };
 
           function startMap() {
@@ -244,41 +333,52 @@ function getInteractiveMapHtml(latitude, longitude) {
                   }
                 );
 
-              marker =
-                new window.kakao.maps.Marker({
-                  position: initialPosition,
-                  map: map
-                });
-
               ready = true;
+              selectedPosition = initialPosition;
+              ensureSelectedOverlay();
 
               setTimeout(function() {
                 map.relayout();
-                map.setCenter(
-                  initialPosition
-                );
+                map.setCenter(selectedPosition);
+                ensureSelectedOverlay();
               }, 300);
 
-              window.kakao.maps.event.addListener(
-                map,
-                'click',
-                function(mouseEvent) {
-                  var position =
-                    mouseEvent.latLng;
-
-                  marker.setPosition(
-                    position
-                  );
-
-                  map.panTo(position);
-
-                  postMessage({
-                    type: 'LOCATION_SELECTED',
-                    latitude: position.getLat(),
-                    longitude: position.getLng()
-                  });
+              window.kakao.maps.event.addListener(map, 'dragstart', function() {
+                if (selectionMode) {
+                  selectionDragStarted = true;
                 }
-              );
+              });
+
+              window.kakao.maps.event.addListener(map, 'center_changed', function() {
+                if (!selectionMode || !selectionDragStarted) {
+                  return;
+                }
+                selectedPosition = map.getCenter();
+                ensureSelectedOverlay();
+              });
+
+              window.kakao.maps.event.addListener(map, 'dragend', function() {
+                if (!selectionMode || !selectionDragStarted) {
+                  selectionDragStarted = false;
+                  return;
+                }
+
+                selectedPosition = map.getCenter();
+                ensureSelectedOverlay();
+                postMessage({
+                  type: 'LOCATION_SELECTED',
+                  latitude: selectedPosition.getLat(),
+                  longitude: selectedPosition.getLng()
+                });
+                selectionDragStarted = false;
+              });
+
+              window.kakao.maps.event.addListener(map, 'zoom_changed', function() {
+                if (selectionMode && selectedPosition) {
+                  map.setCenter(selectedPosition);
+                  ensureSelectedOverlay();
+                }
+              });
             });
           }
 
@@ -290,6 +390,7 @@ function getInteractiveMapHtml(latitude, longitude) {
 }
 
 export default function FieldActionScreen({
+  user,
   location,
   actionType,
   onBack,
@@ -297,11 +398,15 @@ export default function FieldActionScreen({
 }) {
   const mapRef = useRef(null);
   const mapWrapperRef = useRef(null);
+  const lastMapCoordinateRef = useRef('');
 
   const [
     mapInteracting,
     setMapInteracting,
   ] = useState(false);
+
+  const [locationMoving, setLocationMoving] =
+    useState(false);
 
   const [status, setStatus] =
     useState(
@@ -329,6 +434,8 @@ export default function FieldActionScreen({
         ? String(location.lng)
         : ''
     );
+  const [locationAddress, setLocationAddress] = useState(location?.roadAddress || location?.detailAddress || '');
+  const [editingLocation, setEditingLocation] = useState(false);
 
   const [photos, setPhotos] =
     useState(createEmptyPhotos());
@@ -493,6 +600,7 @@ export default function FieldActionScreen({
               String(data.longitude)
             );
           }
+          if (data.locationAddress) setLocationAddress(data.locationAddress);
 
           const savedPhotos =
             data.fieldPhotos || [];
@@ -584,6 +692,8 @@ export default function FieldActionScreen({
         data.type ===
         'LOCATION_SELECTED'
       ) {
+        lastMapCoordinateRef.current = `${Number(data.latitude).toFixed(6)}:${Number(data.longitude).toFixed(6)}`;
+        if (editingLocation) setMarkedMapUri(null);
         setLatitude(
           String(data.latitude)
         );
@@ -639,18 +749,53 @@ export default function FieldActionScreen({
     };
 
   useEffect(() => {
-    if (!isValidCoordinate(latitude, longitude)) return;
-    const timer = setTimeout(() => { applyCoordinateToMap(); }, 150);
+    if (!mapRef.current) return;
+    mapRef.current.injectJavaScript(`
+      if (window.setSelectionMode) {
+        window.setSelectionMode(${editingLocation ? 'true' : 'false'});
+      }
+      true;
+    `);
+  }, [editingLocation]);
+
+  useEffect(() => {
+    if (!isValidCoordinate(latitude, longitude)) return undefined;
+    const key = `${Number(latitude).toFixed(6)}:${Number(longitude).toFixed(6)}`;
+    if (lastMapCoordinateRef.current === key) return undefined;
+    const timer = setTimeout(() => {
+      lastMapCoordinateRef.current = key;
+      applyCoordinateToMap();
+    }, 150);
     return () => clearTimeout(timer);
+  }, [latitude, longitude]);
+
+  useEffect(() => {
+    if (!KAKAO_REST_API_KEY || !isValidCoordinate(latitude, longitude)) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`https://dapi.kakao.com/v2/local/geo/coord2address.json?x=${encodeURIComponent(longitude)}&y=${encodeURIComponent(latitude)}`, { headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` } });
+        if (!response.ok) throw new Error('주소 조회 실패');
+        const data = await response.json();
+        if (!cancelled) setLocationAddress(data.documents?.[0]?.road_address?.address_name || data.documents?.[0]?.address?.address_name || '주소 확인 불가');
+      } catch {
+        if (!cancelled) setLocationAddress('주소 확인 불가');
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [latitude, longitude]);
 
   const handleMapTouchStart =
     () => {
       setMapInteracting(true);
+      if (editingLocation) {
+        setLocationMoving(true);
+      }
     };
 
   const handleMapTouchEnd =
     () => {
+      setLocationMoving(false);
       setTimeout(() => {
         setMapInteracting(false);
       }, 100);
@@ -737,6 +882,10 @@ export default function FieldActionScreen({
       '사진을 가져올 방법을 선택해주세요.',
       [
         {
+          text: '취소',
+          style: 'cancel',
+        },
+        {
           text: '사진 촬영',
           onPress: () =>
             takePhoto(index),
@@ -747,10 +896,6 @@ export default function FieldActionScreen({
             pickPhotoFromLibrary(
               index
             ),
-        },
-        {
-          text: '취소',
-          style: 'cancel',
         },
       ]
     );
@@ -966,6 +1111,7 @@ export default function FieldActionScreen({
         'taskId',
         String(taskId)
       );
+      if (user?.userId) form.append('userId', String(user.userId));
 
       form.append(
         'latitude',
@@ -976,6 +1122,7 @@ export default function FieldActionScreen({
         'longitude',
         String(longitude || '')
       );
+      form.append('locationAddress', locationAddress || '');
 
       form.append(
         'mainComment',
@@ -1120,10 +1267,15 @@ export default function FieldActionScreen({
           status ||
           savedReport?.progressStatus ||
           'pending',
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        lat: Number(latitude),
+        lng: Number(longitude),
+        locationAddress: locationAddress || '',
       });
 
       showAlert(
-        '보고서가 저장되었고 AI 분석이 완료되었습니다.'
+        '보고서가 저장되었습니다.'
       );
     } catch (error) {
       console.log(error);
@@ -1162,221 +1314,95 @@ export default function FieldActionScreen({
           !mapInteracting
         }
       >
-        {/* 1. 업무 유형 */}
+        {/* 1. 작업 위치 */}
         <View style={styles.card}>
-          <Text
-            style={
-              styles.cardTitle
-            }
-          >
-            업무 유형
-          </Text>
-
-          <Text
-            style={
-              styles.typeText
-            }
-          >
-            {actionType ===
-            'report'
-              ? '보고서 작성'
-              : actionType ===
-                'photo'
-              ? '사진 기록'
-              : actionType ===
-                'memo'
-              ? '메모 작성'
-              : '상태 변경'}
-          </Text>
-        </View>
-
-        {/* 2. 작업 위치 */}
-        <View style={styles.card}>
-          <Text
-            style={
-              styles.cardTitle
-            }
-          >
-            작업 위치
-          </Text>
+          <Text style={styles.cardTitle}>작업 위치</Text>
 
           <View
             ref={mapWrapperRef}
             collapsable={false}
-            style={
-              styles.mapWrapper
-            }
+            pointerEvents="auto"
+            style={styles.mapWrapper}
           >
             <WebView
               ref={mapRef}
-
-              originWhitelist={[
-                '*',
-              ]}
-
+              originWhitelist={['*']}
               source={{
-                html:
-                  initialMapHtml,
-
-                baseUrl:
-                  'https://localhost/',
+                html: initialMapHtml,
+                baseUrl: 'https://localhost/',
               }}
-
-              style={
-                styles.map
-              }
-
+              style={styles.map}
               javaScriptEnabled
               domStorageEnabled
               nestedScrollEnabled
               scrollEnabled
-
-              onTouchStart={
-                handleMapTouchStart
-              }
-
-              onTouchMove={
-                handleMapTouchStart
-              }
-
-              onTouchEnd={
-                handleMapTouchEnd
-              }
-
-              onTouchCancel={
-                handleMapTouchEnd
-              }
-
-              onMessage={
-                handleMapMessage
-              }
-
+              onTouchStart={handleMapTouchStart}
+              onTouchMove={handleMapTouchStart}
+              onTouchEnd={handleMapTouchEnd}
+              onTouchCancel={handleMapTouchEnd}
+              onMessage={handleMapMessage}
               onLoadEnd={() => {
                 setTimeout(() => {
                   applyCoordinateToMap();
+                  mapRef.current?.injectJavaScript(`
+                    if (window.setSelectionMode) {
+                      window.setSelectionMode(${editingLocation ? 'true' : 'false'});
+                    }
+                    true;
+                  `);
                 }, 500);
               }}
-
               overScrollMode="never"
-
-              setBuiltInZoomControls={
-                false
-              }
-
-              setDisplayZoomControls={
-                false
-              }
+              setBuiltInZoomControls={false}
+              setDisplayZoomControls={false}
             />
           </View>
 
-          <Text
-            style={
-              styles.mapGuide
-            }
-          >
-            지도를 움직이거나 터치해서 작업 위치를 선택할 수 있습니다.
+          <Text style={styles.locationMoveStatus}>
+            {locationMoving
+              ? '옮기는 중...'
+              : editingLocation
+                ? '위치 이동 가능 · 지도를 움직여 조정하세요'
+                : '마커 고정됨'}
           </Text>
 
           {markedMapUri ? (
-            <>
-              <Image
-                source={{ uri: markedMapUri }}
-                style={styles.map}
-              />
+            <Image source={{ uri: markedMapUri }} style={styles.mapPreviewImage} />
+          ) : null}
 
-              <View
-                style={[
-                  styles.photoButtonRow,
-                  styles.mapEditButtonSpacing,
-                ]}
-              >
-                <TouchableOpacity
-                  style={styles.photoSmallButton}
-                  onPress={openMapEditor}
-                >
-                  <Text style={styles.photoSmallButtonText}>
-                    다시 편집
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.photoSmallButton}
-                  onPress={() => setMarkedMapUri(null)}
-                >
-                  <Text style={styles.photoSmallButtonText}>
-                    표시 지우기
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : (
+          <View style={styles.locationActionRow}>
             <TouchableOpacity
               style={[
                 styles.photoSmallButton,
-                styles.mapEditButtonSpacing,
+                editingLocation && styles.locationSettingActive,
               ]}
+              onPress={() => {
+                setLocationMoving(false);
+                setEditingLocation((value) => !value);
+              }}
+            >
+              <Text style={styles.photoSmallButtonText}>위치 설정</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.photoSmallButton}
               onPress={openMapEditor}
             >
-              <Text style={styles.photoSmallButtonText}>
-                위치도 편집
-              </Text>
+              <Text style={styles.photoSmallButtonText}>위치도 편집</Text>
             </TouchableOpacity>
-          )}
+          </View>
 
-          <Text
-            style={
-              styles.inputLabel
-            }
-          >
-            위도
-          </Text>
-
-          <TextInput
-            value={latitude}
-
-            onChangeText={
-              setLatitude
-            }
-
-            onEndEditing={
-              applyCoordinateToMap
-            }
-
-            placeholder="예: 35.116234"
-
-            keyboardType="decimal-pad"
-
-            style={styles.input}
-          />
-
-          <Text
-            style={
-              styles.inputLabel
-            }
-          >
-            경도
-          </Text>
-
-          <TextInput
-            value={longitude}
-
-            onChangeText={
-              setLongitude
-            }
-
-            onEndEditing={
-              applyCoordinateToMap
-            }
-
-            placeholder="예: 128.968123"
-
-            keyboardType="decimal-pad"
-
-            style={styles.input}
-          />
+          {markedMapUri ? (
+            <TouchableOpacity
+              style={styles.clearMapMarkupButton}
+              onPress={() => setMarkedMapUri(null)}
+            >
+              <Text style={styles.clearMapMarkupText}>표시 지우기</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
-        {/* 3. 현장 사진 */}
+        {/* 2. 현장 사진 */}
         <View style={styles.card}>
           <Text
             style={
@@ -1547,7 +1573,7 @@ export default function FieldActionScreen({
           )}
         </View>
 
-        {/* 4. 현장 메모 */}
+        {/* 3. 현장 메모 */}
         <View style={styles.card}>
           <Text
             style={
@@ -1572,101 +1598,48 @@ export default function FieldActionScreen({
           />
         </View>
 
-        {/* 5. 처리 상태 */}
+        {/* 4. 상태 */}
         <View style={styles.card}>
-          <Text
-            style={
-              styles.cardTitle
-            }
-          >
-            처리 상태
+          <Text style={styles.cardTitle}>상태</Text>
+
+          <Text style={styles.stateSectionLabel}>업무 유형</Text>
+          <Text style={styles.typeText}>
+            {actionType === 'report'
+              ? '보고서 작성'
+              : actionType === 'photo'
+              ? '사진 기록'
+              : actionType === 'memo'
+              ? '메모 작성'
+              : '상태 변경'}
           </Text>
 
-          <View
-            style={
-              styles.statusRow
-            }
-          >
+          <View style={styles.stateDivider} />
+          <Text style={styles.stateSectionLabel}>처리 상태</Text>
+
+          <View style={styles.statusRow}>
             <TouchableOpacity
-              style={[
-                styles.statusBtn,
-
-                status ===
-                  'pending' &&
-                  styles.statusActive,
-              ]}
-
-              onPress={() =>
-                setStatus(
-                  'pending'
-                )
-              }
+              style={[styles.statusBtn, status === 'pending' && styles.statusActive]}
+              onPress={() => setStatus('pending')}
             >
-              <Text
-                style={[
-                  styles.statusText,
-
-                  status ===
-                    'pending' &&
-                    styles.statusTextActive,
-                ]}
-              >
+              <Text style={[styles.statusText, status === 'pending' && styles.statusTextActive]}>
                 작업 전
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[
-                styles.statusBtn,
-
-                status ===
-                  'working' &&
-                  styles.statusActive,
-              ]}
-
-              onPress={() =>
-                setStatus(
-                  'working'
-                )
-              }
+              style={[styles.statusBtn, status === 'working' && styles.statusActive]}
+              onPress={() => setStatus('working')}
             >
-              <Text
-                style={[
-                  styles.statusText,
-
-                  status ===
-                    'working' &&
-                    styles.statusTextActive,
-                ]}
-              >
+              <Text style={[styles.statusText, status === 'working' && styles.statusTextActive]}>
                 작업 중
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[
-                styles.statusBtn,
-
-                status ===
-                  'complete' &&
-                  styles.statusActive,
-              ]}
-
-              onPress={() =>
-                setStatus(
-                  'complete'
-                )
-              }
+              style={[styles.statusBtn, status === 'complete' && styles.statusActive]}
+              onPress={() => setStatus('complete')}
             >
-              <Text
-                style={[
-                  styles.statusText,
-
-                  status ===
-                    'complete' &&
-                    styles.statusTextActive,
-                ]}
-              >
+              <Text style={[styles.statusText, status === 'complete' && styles.statusTextActive]}>
                 작업 후
               </Text>
             </TouchableOpacity>
@@ -1916,6 +1889,56 @@ const styles =
     // 오도록 위아래 여백을 동일하게 준다.
     mapEditButtonSpacing: {
       marginBottom: 14,
+    },
+
+    locationActionRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 2,
+    },
+
+    locationMoveStatus: {
+      marginTop: 8,
+      color: '#607195',
+      fontSize: 12,
+      fontWeight: '800',
+    },
+
+    locationSettingActive: {
+      backgroundColor: '#10285B',
+    },
+
+    mapPreviewImage: {
+      width: '100%',
+      height: 180,
+      borderRadius: 14,
+      marginBottom: 10,
+      backgroundColor: '#E8F2FF',
+    },
+
+    clearMapMarkupButton: {
+      alignSelf: 'flex-end',
+      paddingVertical: 8,
+      paddingHorizontal: 4,
+    },
+
+    clearMapMarkupText: {
+      color: '#607195',
+      fontSize: 11,
+      fontWeight: '800',
+    },
+
+    stateSectionLabel: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: '#607195',
+      marginBottom: 6,
+    },
+
+    stateDivider: {
+      height: 1,
+      backgroundColor: '#EEF3F9',
+      marginVertical: 14,
     },
 
     photoSmallButton: {

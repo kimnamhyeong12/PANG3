@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import {
-  Alert,
   Linking,
   Modal,
   ScrollView,
@@ -31,7 +30,7 @@ import {
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL;
 
-const REGIONS = [
+export const REGIONS = [
   '부산광역시',
   '서울특별시',
   '대구광역시',
@@ -42,7 +41,7 @@ const REGIONS = [
   '제주특별자치도',
 ];
 
-const DISTRICTS_BY_REGION = {
+export const DISTRICTS_BY_REGION = {
   부산광역시: [
     '중구',
     '서구',
@@ -150,7 +149,6 @@ export default function SettingsScreen({
   activeGroup,
   onBack,
   onUpdatedUser,
-  onDashboard,
   onLogout,
 }) {
   const [workSido, setWorkSido] = useState(
@@ -223,7 +221,7 @@ export default function SettingsScreen({
        * 사용자가 직접 끄거나 세부 설정 가능
        */
       if (notificationEnabled) {
-        Alert.alert(
+        showAlert(
           '업무 알림',
           '현재 알림이 허용되어 있습니다.',
           [
@@ -245,7 +243,7 @@ export default function SettingsScreen({
       /*
        * 아직 허용 안 된 경우
        */
-      Alert.alert(
+      showAlert(
         '업무 알림 사용',
         '새 업무 배정, 업무 우선순위 변경, 오늘 업무 요약, 미완료 업무 및 경로 안내를 받으려면 알림 권한이 필요합니다.',
         [
@@ -281,7 +279,7 @@ export default function SettingsScreen({
               if (
                 result.canAskAgain === false
               ) {
-                Alert.alert(
+                showAlert(
                   '알림 권한 필요',
                   '휴대폰 설정에서 외근도우미 알림을 허용해주세요.',
                   [
@@ -409,7 +407,6 @@ export default function SettingsScreen({
     <View style={styles.container}>
       <ScreenHeader
         title="설정"
-        subtitle="계정과 근무지역을 관리합니다"
         onBack={onBack}
       />
 
@@ -475,13 +472,6 @@ export default function SettingsScreen({
               setPicker('sigungu')
             }
           />
-
-          <Text style={styles.help}>
-            개인 공공업무는 이 구·군의
-            행정동을 사용하며, 팀 업무는
-            각 그룹의 활동지역을
-            따릅니다.
-          </Text>
 
           <PrimaryButton
             title={
@@ -568,51 +558,6 @@ export default function SettingsScreen({
                 : 'OFF'}
             </Text>
           </View>
-        </TouchableOpacity>
-
-        {/* 업무 도구 */}
-
-        <SectionTitle title="업무 도구" />
-
-        <TouchableOpacity
-          style={styles.menuRow}
-          onPress={onDashboard}
-        >
-          <View
-            style={
-              styles.itemIcon
-            }
-          >
-            <Ionicons
-              name="stats-chart-outline"
-              size={21}
-              color={colors.primary}
-            />
-          </View>
-
-          <View style={{ flex: 1 }}>
-            <Text
-              style={styles.itemValue}
-            >
-              외근 분석
-            </Text>
-
-            <Text
-              style={styles.itemLabel}
-            >
-              {activeGroup?.groupName ||
-                '현재 업무공간'}{' '}
-              현황 보기
-            </Text>
-          </View>
-
-          <Ionicons
-            name="chevron-forward"
-            size={18}
-            color={
-              colors.textFaint
-            }
-          />
         </TouchableOpacity>
 
         {/* 로그아웃 */}
@@ -792,6 +737,7 @@ const styles =
       flex: 1,
       backgroundColor:
         colors.background,
+      transform: [{ translateY: -15 }],
     },
 
     body: {
@@ -894,12 +840,6 @@ const styles =
     muted: {
       color:
         colors.textFaint,
-    },
-
-    help: {
-      color: colors.textSoft,
-      fontSize: 10,
-      lineHeight: 16,
     },
 
     menuRow: {

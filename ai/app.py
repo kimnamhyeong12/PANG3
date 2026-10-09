@@ -222,8 +222,6 @@ def create_fieldwork_report(report_data: dict, output_filename: str) -> str:
     location_name = str(report_data.get("location_name") or "사하구 관내")
     task_category = str(report_data.get("task_category") or "현장 점검")
     main_comment = str(report_data.get("main_comment") or "")
-    latitude = report_data.get("latitude")
-    longitude = report_data.get("longitude")
     map_image = report_data.get("map_image_path")
     photo_groups = report_data.get("photo_groups") or []
     ai_refined = report_data.get("ai_refined_content") or ""
@@ -246,16 +244,12 @@ def create_fieldwork_report(report_data: dict, output_filename: str) -> str:
     meta_p = doc.add_paragraph()
     meta_p.add_run(f"작성일자: {date.today().strftime('%Y-%m-%d')}", size=9, color="#6B7280", font="Malgun Gothic")
     
-    # 3-1. 작업 위치(주소 · 좌표) 추가
+    # 3-1. 작업 위치(주소) 추가 — 위도/경도 숫자는 보고서를 보는 담당자에게 필요 없어 표시하지 않는다
     heading_loc_p = doc.add_paragraph()
     heading_loc_p.add_run("■ 작업 위치", bold=True, size=12, color="#153B5C", font="Malgun Gothic")
 
     loc_p = doc.add_paragraph()
     loc_p.add_run(f"주소: {location_name}", size=10, color="#27384A", font="Malgun Gothic")
-
-    if latitude is not None and longitude is not None and str(latitude) != "" and str(longitude) != "":
-        coord_p = doc.add_paragraph()
-        coord_p.add_run(f"좌표(위도/경도): {latitude}, {longitude}", size=10, color="#27384A", font="Malgun Gothic")
 
     # 공백 문단 추가
     doc.add_paragraph()
@@ -522,8 +516,6 @@ def run_pipeline(payload: dict) -> dict:
             "map_image_path": map_sanitized,
             "photo_groups": groups,
             "ai_refined_content": ai_refined_content,
-            "latitude": payload.get("latitude"),
-            "longitude": payload.get("longitude"),
         },
         str(output_dir / report_name),
     )

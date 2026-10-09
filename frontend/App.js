@@ -11,24 +11,26 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import RegisterScreen from './screens/RegisterScreen';
 import LoginScreen from './screens/LoginScreen';
-import MainScreen from './screens/MainScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import MapScreen from './screens/MapScreen';
 import FieldActionScreen from './screens/FieldActionScreen';
 import ReportScreen from './screens/ReportScreen';
 import DownloadScreen from './screens/DownloadScreen';
 import ReportListScreen from './screens/ReportListScreen';
+import GroupReportsScreen from './screens/GroupReportsScreen';
 import GroupScreen from './screens/GroupScreen';
 import GroupCreateScreen from './screens/GroupCreateScreen';
 import GroupInvitationsScreen from './screens/GroupInvitationsScreen';
 import GroupDetailScreen from './screens/GroupDetailScreen';
+import GroupWorkspaceScreen from './screens/GroupWorkspaceScreen';
 import AssignmentScreen from './screens/AssignmentScreen';
 import WorkStatusScreen from './screens/WorkStatusScreen';
+import TransferScreen from './screens/TransferScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import { groupApi } from './utils/groupApi';
 import { CustomAlertHost, showAlert } from './components/CustomAlert';
@@ -76,8 +78,45 @@ const isTodayWork = (item) => {
 
 export default function App() {
   const [screen, setScreen] = useState('login');
+  const [groupWorkspaceTab, setGroupWorkspaceTab] = useState('status');
   const [mapInitialized, setMapInitialized] = useState(false);
+  const [selectedDong, setSelectedDong] = useState(null);
+  const selectedDongDayRef = useRef(getLocalDateKey());
+  const [transferTargetMember, setTransferTargetMember] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem('pang3:selectedDong')
+      .then((value) => {
+        if (!active || !value) return;
+        try {
+          const parsed = JSON.parse(value);
+          if (parsed?.day === getLocalDateKey() && parsed?.feature?.type === 'Feature') {
+            selectedDongDayRef.current = parsed.day;
+            setSelectedDong(parsed.feature);
+          } else {
+            AsyncStorage.removeItem('pang3:selectedDong').catch(() => {});
+          }
+        } catch {}
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  const updateSelectedDong = useCallback((feature) => {
+    if (!feature) return;
+    const day = getLocalDateKey();
+    selectedDongDayRef.current = day;
+    setSelectedDong(feature);
+    AsyncStorage.setItem('pang3:selectedDong', JSON.stringify({ day, feature })).catch(() => {});
+  }, []);
   const [calendarDayKey, setCalendarDayKey] = useState(getLocalDateKey());
+  useEffect(() => {
+    if (selectedDongDayRef.current === calendarDayKey) return;
+    selectedDongDayRef.current = calendarDayKey;
+    setSelectedDong(null);
+    AsyncStorage.removeItem('pang3:selectedDong').catch(() => {});
+  }, [calendarDayKey]);
   const [user, setUser] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [actionType, setActionType] = useState(null);
@@ -159,18 +198,16 @@ export default function App() {
       setActiveGroup(group || null);
       return;
     }
-    setTodayLocationsLoaded(false);
     setActiveGroup(group || null);
-    setPendingWork([]);
-    workPlanRef.current = { rows: [], choices: {}, key: null };
     setGroupAssignments([]);
+    setTodayLocationsLoaded(false);
     setRouteLocations([]);
-    setRoadPath([]);
+    setPendingWork([]);
     setRouteSegments([]);
+    setRoadPath([]);
     setCurrentSegmentIndex(0);
     setOptimized(false);
     setIsGuiding(false);
-    setTotalDuration(null);
 
     if (targetUser?.userId) {
       try {
@@ -235,38 +272,44 @@ export default function App() {
 
   const workspaceCacheKey = useCallback((targetUser = user, group = activeGroup) => {
     if (!targetUser?.userId) return null;
-    const scope = group?.groupId ? `group_${group.groupId}` : 'unselected';
-    return `${WORKSPACE_LOCATIONS_KEY_PREFIX}_${targetUser.userId}_${scope}`;
-  }, [activeGroup?.groupId, user?.userId]);
+    return `${WORKSPACE_LOCATIONS_KEY_PREFIX}_${targetUser.userId}_${isPersonalGroup(group) ? 'personal' : `group_${group?.groupId || 'none'}`}`;
+  }, [user?.userId, activeGroup]);
 
   const loadWorkspaceLocations = useCallback(async () => {
     const requestId = ++workspaceLoadIdRef.current;
 
-    if (!user?.userId || !workspaceReady) {
+    if (!user?.userId || !workspaceReady || !activeGroup?.groupId) {
       setRouteLocations([]);
       setTodayLocationsLoaded(false);
       return;
     }
 
     const cacheKey = workspaceCacheKey();
+    const personalGroupId = availableGroups.find(isPersonalGroup)?.groupId;
+    const legacyPersonalKey = isPersonalGroup(activeGroup) && personalGroupId
+      ? `${WORKSPACE_LOCATIONS_KEY_PREFIX}_${user.userId}_group_${personalGroupId}`
+      : null;
     setTodayLocationsLoaded(false);
     const restoreRows = async (rows, legacyRows = []) => {
       await routeSaveQueueRef.current;
       let session = null;
       try {
-        const saved = await AsyncStorage.getItem(`${cacheKey}_route`);
+        const saved = await AsyncStorage.getItem(`${cacheKey}_route`) ||
+          (legacyPersonalKey ? await AsyncStorage.getItem(`${legacyPersonalKey}_route`) : null);
         session = loadedWorkspaceKeyRef.current === cacheKey ? currentRouteRef.current : saved ? JSON.parse(saved) : null;
       } catch (error) {
         console.log('저장 경로 복원 실패:', error);
       }
       if (requestId !== workspaceLoadIdRef.current) return;
-      const savedPlan = await AsyncStorage.getItem(`${cacheKey}_work_plan`);
+      const newPlan = await AsyncStorage.getItem(`${cacheKey}_work_plan`);
+      const savedPlan = newPlan || (legacyPersonalKey ? await AsyncStorage.getItem(`${legacyPersonalKey}_work_plan`) : null);
+      if (!newPlan && savedPlan) await AsyncStorage.setItem(`${cacheKey}_work_plan`, savedPlan);
       if (requestId !== workspaceLoadIdRef.current) return;
       const choices = savedPlan ? JSON.parse(savedPlan) : {};
       // A refresh may overlap optimization or guidance. Use the latest in-memory
       // session after storage reads rather than overwriting it with an older snapshot.
       if (loadedWorkspaceKeyRef.current === cacheKey) session = currentRouteRef.current;
-      const personalWorkspace = isPersonalGroup(activeGroup);
+      const personalWorkspace = true;
       const plan = splitWorkPlan(rows, choices, calendarDayKey, savedPlan ? [] : legacyRows,
         { autoAddToday: personalWorkspace });
       plan.map = numberVisits(plan.map, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])));
@@ -300,12 +343,7 @@ export default function App() {
     };
 
     try {
-      // 그룹에서는 홈의 '내 담당 업무'와 같은 담당자 배정 데이터를 사용한다.
-      // 이전 데이터에 task.group_id가 비어 있어도 task_assignments가 있으면
-      // 지도와 보고서에 동일하게 표시된다.
-      const path = activeGroup?.groupId
-        ? `/api/groups/${activeGroup.groupId}/assignments/mine?userId=${encodeURIComponent(user.userId)}`
-        : `/api/locations?userId=${encodeURIComponent(user.userId)}`;
+      const path = `/api/groups/${encodeURIComponent(activeGroup.groupId)}/assignments/mine?userId=${encodeURIComponent(user.userId)}`;
       const data = await groupApi(path);
       const rows = (Array.isArray(data) ? data : []).map((item) => ({
         ...item,
@@ -324,7 +362,8 @@ export default function App() {
           null,
       }));
       if (requestId !== workspaceLoadIdRef.current) return;
-      const previous = cacheKey ? await AsyncStorage.getItem(cacheKey) : null;
+      const previous = cacheKey ? await AsyncStorage.getItem(cacheKey) ||
+        (legacyPersonalKey ? await AsyncStorage.getItem(legacyPersonalKey) : null) : null;
       await restoreRows(rows, previous ? JSON.parse(previous) : []);
 
       if (cacheKey) {
@@ -335,7 +374,10 @@ export default function App() {
 
       // 네트워크가 잠시 끊겼을 때만 마지막 DB 조회 결과를 임시로 보여준다.
       try {
-        const cached = cacheKey ? await AsyncStorage.getItem(`${cacheKey}_all_work`) || await AsyncStorage.getItem(cacheKey) : null;
+        const cached = cacheKey ? await AsyncStorage.getItem(`${cacheKey}_all_work`) ||
+          (legacyPersonalKey ? await AsyncStorage.getItem(`${legacyPersonalKey}_all_work`) : null) ||
+          await AsyncStorage.getItem(cacheKey) ||
+          (legacyPersonalKey ? await AsyncStorage.getItem(legacyPersonalKey) : null) : null;
         const parsed = cached ? JSON.parse(cached) : [];
         if (requestId !== workspaceLoadIdRef.current) return;
         await restoreRows(
@@ -351,8 +393,7 @@ export default function App() {
         setTodayLocationsLoaded(true);
       }
     }
-  }, [activeGroup?.groupId, activeGroup?.personalWorkspace, activeGroup?.personal,
-    activeGroup?.workspaceType, user?.userId, workspaceCacheKey, calendarDayKey, workspaceReady]);
+  }, [user?.userId, activeGroup?.groupId, availableGroups, workspaceCacheKey, calendarDayKey, workspaceReady]);
 
   const addWorkToMap = async (items) => {
     if (planBusyRef.current || workPlanRef.current.key !== workspaceCacheKey()) return false;
@@ -379,7 +420,10 @@ export default function App() {
   useEffect(() => {
     if (!user?.userId) return;
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') loadWorkspaceLocations();
+      if (state === 'active') {
+        setCalendarDayKey(getLocalDateKey());
+        loadWorkspaceLocations();
+      }
     });
     const timer = setInterval(() => {
       if (AppState.currentState === 'active' && ['main', 'mapDirect'].includes(screenRef.current)) loadWorkspaceLocations();
@@ -425,6 +469,10 @@ export default function App() {
       'hardwareBackPress',
       () => {
         if (screen === 'login') {
+          return false;
+        }
+
+        if (screen === 'mapDirect' && historyRef.current.length === 0) {
           return false;
         }
 
@@ -482,8 +530,9 @@ export default function App() {
     }
 
     try {
+      const path = `/api/locations/group/${activeGroup.groupId}?userId=${user.userId}`;
       const data = await groupApi(
-        `/api/groups/${activeGroup.groupId}/assignments?userId=${user.userId}`
+        path
       );
 
       setGroupAssignments(
@@ -728,6 +777,7 @@ export default function App() {
     setPendingWork([]);
     setMapInitialized(false);
     setUser(null);
+    setGroupWorkspaceTab('status');
     setActiveGroup(null);
     setAvailableGroups([]);
     setGroupAssignments([]);
@@ -766,12 +816,23 @@ export default function App() {
     type
   ) => {
     setSelectedLocation(loc);
+    if (loc?.status === 'complete') {
+      setReportTargets([loc]);
+      go('report');
+      return;
+    }
     setActionType(type);
     go('fieldAction');
   };
 
   const openWorkspaceMap = () => {
     go('mapDirect');
+  };
+
+  const openGroupWorkspace = () => {
+    // 하단 '그룹' 탭은 항상 그룹 선택 화면부터 연다.
+    // 사용자가 '내 그룹'에서 그룹을 선택한 뒤에만 업무현황으로 진입한다.
+    go('groupHome');
   };
 
   const openTeamMap = async () => {
@@ -786,6 +847,7 @@ export default function App() {
   };
 
   return (
+    <SafeAreaProvider>
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <View
         style={styles.app}
@@ -812,7 +874,7 @@ export default function App() {
                 historyRef.current = [];
 
                 go(
-                  'main',
+                  'mapDirect',
                   {
                     replace: true,
                   }
@@ -831,39 +893,11 @@ export default function App() {
               }
             />
           )}
-
-        {screen === 'main' && (
-          <MainScreen
+        {(screen === 'main' || screen === 'dashboard') && (
+          <DashboardScreen
             user={user}
-            activeGroup={activeGroup}
-            availableGroups={availableGroups}
-            groupAssignments={groupAssignments}
-            onRoute={openWorkspaceMap}
-            onReport={() =>
-              go('reportList')
-            }
-            onGroup={() =>
-              go('groupHome')
-            }
-            onSelectWorkspace={(group) => selectActiveGroup(group)}
-            onRefreshWorkspaces={refreshAvailableGroups}
-            onWorkStatus={() =>
-              go('workStatus')
-            }
-            onDashboard={() =>
-              go('dashboard')
-            }
-            onSettings={() =>
-              go('settings')
-            }
-            onPublicData={() =>
-              go('publicDataAssignment')
-            }
-            locations={routeLocations}
-            setLocations={setRouteLocations}
-            onRefreshAssignments={refreshCurrentWorkspace}
-            pendingWork={pendingWork}
-            onAddWork={addWorkToMap}
+            onBack={() => goBack('mapDirect')}
+            onSettings={() => go('settings')}
           />
         )}
 
@@ -872,7 +906,7 @@ export default function App() {
               user={user}
               activeGroup={activeGroup}
               onBack={() =>
-                go('main')
+                goBack('mapDirect')
               }
               onCreate={() =>
                 go('groupCreate')
@@ -883,7 +917,8 @@ export default function App() {
               onOpenGroup={(group) => {
                 rememberAvailableGroup(group);
                 selectActiveGroup(group);
-                go(isPersonalGroup(group) ? 'main' : 'groupDetail');
+                setGroupWorkspaceTab('status');
+                go(isPersonalGroup(group) ? 'workStatus' : 'groupWorkspace');
               }}
             />
           )}
@@ -897,7 +932,8 @@ export default function App() {
               onCreated={(group) => {
                 rememberAvailableGroup(group);
                 selectActiveGroup(group);
-                go('groupDetail');
+                setGroupWorkspaceTab('status');
+                go('groupWorkspace');
               }}
             />
           )}
@@ -911,7 +947,43 @@ export default function App() {
               onAccepted={(group) => {
                 rememberAvailableGroup(group);
                 selectActiveGroup(group);
-                go('groupDetail');
+                setGroupWorkspaceTab('status');
+                go('groupWorkspace');
+              }}
+            />
+          )}
+
+          {screen === 'groupWorkspace' && activeGroup && !isPersonalGroup(activeGroup) && (
+            <GroupWorkspaceScreen
+              user={user}
+              group={activeGroup}
+              assignments={groupAssignments}
+              tab={groupWorkspaceTab}
+              onTabChange={(nextTab) => {
+                setGroupWorkspaceTab(nextTab);
+                if (nextTab === 'dashboard' || nextTab === 'status') refreshGroupAssignments();
+              }}
+              onRefresh={refreshCurrentWorkspace}
+              onBack={() => goBack('groupHome')}
+              onMembers={() => go('groupMembers')}
+              onTransfer={(member) => {
+                setTransferTargetMember(member || null);
+                go('transfer');
+              }}
+              onReports={() => go('groupReports')}
+              onSettings={() => go('groupSettings')}
+            />
+          )}
+
+          {['groupMembers', 'groupSettings'].includes(screen) && activeGroup && (
+            <GroupDetailScreen
+              user={user}
+              group={activeGroup}
+              mode={screen === 'groupMembers' ? 'members' : 'settings'}
+              onBack={() => goBack('groupWorkspace')}
+              onUpdatedGroup={(group) => {
+                rememberAvailableGroup(group);
+                selectActiveGroup(group);
               }}
             />
           )}
@@ -928,25 +1000,20 @@ export default function App() {
                   rememberAvailableGroup(group);
                   selectActiveGroup(group);
                 }}
-                onAssign={(group) => {
-                  selectActiveGroup(group);
-                  go('assignment');
-                }}
-                onTeamLocations={(group) => {
-                  selectActiveGroup(group);
-                  loadTeamLocations(group);
-                  go('teamLocations');
-                }}
-                onPublicData={(group) => {
-                  selectActiveGroup(group);
-                  go('publicDataAssignment');
-                }}
+                onWorkStatus={() => { refreshCurrentWorkspace(); go('workStatus'); }}
+                onTransfer={(member) => {
+                setTransferTargetMember(member || null);
+                go('transfer');
+              }}
+                onReports={() => go('groupReports')}
               />
             )}
 
         {screen === 'publicDataAssignment' && activeGroup && (
           <MapScreen
             user={user}
+            selectedDong={selectedDong}
+            onSelectedDongChange={updateSelectedDong}
             activeGroup={activeGroup}
             publicDataMode
             locations={routeLocations}
@@ -978,6 +1045,8 @@ export default function App() {
         {screen === 'teamLocations' && activeGroup && (
           <MapScreen
             user={user}
+            selectedDong={selectedDong}
+            onSelectedDongChange={updateSelectedDong}
             locations={teamLocations}
             setLocations={setTeamLocations}
             activeGroup={activeGroup}
@@ -1026,16 +1095,22 @@ export default function App() {
                 user={user}
                 group={activeGroup}
                 assignments={groupAssignments}
-                onBack={() => goBack('main')}
+                onBack={() => go('groupHome')}
                 onRefresh={refreshCurrentWorkspace}
               />
             )}
 
-          {screen === 'dashboard' && (
-            <DashboardScreen
+          {screen === 'transfer' && activeGroup && !isPersonalGroup(activeGroup) && (
+            <TransferScreen
               user={user}
-              activeGroup={activeGroup}
-              onBack={() => goBack('main')}
+              group={activeGroup}
+              initialRecipientId={transferTargetMember?.userId || null}
+              initialRecipientName={transferTargetMember?.name || transferTargetMember?.loginId || ''}
+              onBack={() => {
+                setTransferTargetMember(null);
+                goBack('groupWorkspace');
+              }}
+              onChanged={refreshCurrentWorkspace}
             />
           )}
 
@@ -1043,9 +1118,8 @@ export default function App() {
             <SettingsScreen
               user={user}
               activeGroup={activeGroup}
-              onBack={() => goBack('main')}
+              onBack={() => go('dashboard')}
               onUpdatedUser={setUser}
-              onDashboard={() => go('dashboard')}
               onLogout={handleLogout}
             />
           )}
@@ -1064,14 +1138,16 @@ export default function App() {
           >
             <MapScreen
               user={user}
+              selectedDong={selectedDong}
+              onSelectedDongChange={updateSelectedDong}
               locations={routeLocations}
               setLocations={
                 setRouteLocations
               }
-              previewMarkers={leaderMapMarkers}
-              previewOnlyRegistrations={Boolean(activeGroup && !isPersonalGroup(activeGroup))}
+              previewMarkers={[]}
+              previewOnlyRegistrations={false}
               activeGroup={activeGroup}
-              locationScope={!activeGroup || isPersonalGroup(activeGroup) ? 'personal' : 'team'}
+              locationScope="personal"
               groupAssignments={activeGroup?.groupId ? groupAssignments : []}
               onBack={() =>
                 goBack('main')
@@ -1111,12 +1187,15 @@ export default function App() {
               isActive={screen === 'mapDirect'}
               persistNormalMap
               routeResumeToken={routeResumeToken}
+              pendingWork={pendingWork}
+              onAddWork={addWorkToMap}
             />
           </View>
         )}
 
           {screen === 'fieldAction' && (
             <FieldActionScreen
+              user={user}
               location={selectedLocation}
               actionType={actionType}
               onBack={() =>
@@ -1133,6 +1212,14 @@ export default function App() {
                           savedReport.progressStatus ||
                           savedReport.status ||
                           loc.status,
+                        latitude:
+                          savedReport.latitude ?? loc.latitude,
+                        longitude:
+                          savedReport.longitude ?? loc.longitude,
+                        lat:
+                          savedReport.latitude ?? savedReport.lat ?? loc.lat ?? loc.latitude,
+                        lng:
+                          savedReport.longitude ?? savedReport.lng ?? loc.lng ?? loc.longitude,
                       }
                       : loc
                   );
@@ -1160,8 +1247,13 @@ export default function App() {
               }
               onSelectLocation={(loc) => {
                 setSelectedLocation(loc);
-                setActionType('report');
-                go('fieldAction');
+                if (loc.status === 'complete') {
+                  setReportTargets([loc]);
+                  go('report');
+                } else {
+                  setActionType('report');
+                  go('fieldAction');
+                }
               }}
               onCreateReport={(
                 selectedLocations
@@ -1171,6 +1263,18 @@ export default function App() {
                 );
 
                 go('report');
+              }}
+            />
+          )}
+
+          {screen === 'groupReports' && activeGroup && (
+            <GroupReportsScreen
+              group={activeGroup}
+              user={user}
+              onBack={() => goBack('groupWorkspace')}
+              onOpenReport={(report) => {
+                setDownloadInfo({ progressId: report.progressId, reportDownloadUrl: report.reportDownloadUrl });
+                go('download');
               }}
             />
           )}
@@ -1193,7 +1297,7 @@ export default function App() {
           {screen === 'download' && (
             <DownloadScreen
               onBack={() =>
-                goBack('main')
+                goBack('groupReports')
               }
               downloadInfo={
                 downloadInfo
@@ -1204,27 +1308,28 @@ export default function App() {
         </View>
 
         {user &&
-          !['login', 'register', 'dashboard', 'settings'].includes(screen) && (
+          !['login', 'register', 'settings'].includes(screen) && (
             <BottomNavigation
               screen={screen}
-              onHome={() => go('main')}
+              onDashboard={() => go('dashboard')}
               // 하단 메뉴도 홈에서 선택한 현재 작업공간을 그대로 따른다.
               onMap={openWorkspaceMap}
               onReport={() => go('reportList')}
-              onGroup={() => go('groupHome')}
+              onGroup={openGroupWorkspace}
             />
           )}
 
         <CustomAlertHost />
       </View>
     </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
 
 function BottomNavigation({
   screen,
-  onHome,
+  onDashboard,
   onMap,
   onReport,
   onGroup,
@@ -1246,24 +1351,19 @@ function BottomNavigation({
           'groupCreate',
           'groupInvitations',
           'groupDetail',
+          'groupWorkspace',
+          'groupMembers',
+          'groupSettings',
+          'groupReports',
+          'transfer',
+          'workStatus',
           'assignment',
         ].includes(screen)
           ? 'group'
-          : 'home';
+          : 'dashboard';
 
   return (
     <View style={styles.bottomNav}>
-      <BottomNavItem
-        icon={
-          activeTab === 'home'
-            ? 'home'
-            : 'home-outline'
-        }
-        label="홈"
-        active={activeTab === 'home'}
-        onPress={onHome}
-      />
-
       <BottomNavItem
         icon={
           activeTab === 'map'
@@ -1295,6 +1395,12 @@ function BottomNavigation({
         label="그룹"
         active={activeTab === 'group'}
         onPress={onGroup}
+      />
+      <BottomNavItem
+        icon={activeTab === 'dashboard' ? 'settings' : 'settings-outline'}
+        label="대시보드"
+        active={activeTab === 'dashboard'}
+        onPress={onDashboard}
       />
     </View>
   );

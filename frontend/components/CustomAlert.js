@@ -163,7 +163,7 @@ export function CustomAlertHost() {
           >
             {alertData.buttons.map((button, index) => {
               const isCancel = button.style === 'cancel';
-              const isDestructive = button.style === 'destructive';
+              const isDestructive = button.style === 'destructive' && alertData.buttons.length !== 2;
               const isPrimary = !isCancel && !isDestructive;
 
               return (
@@ -275,10 +275,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   cancelButton: {
-    backgroundColor: colors.primarySoft,
+    backgroundColor: '#FDE9EB',
   },
   destructiveButton: {
-    backgroundColor: colors.primarySoft,
+    backgroundColor: '#FCE3E6',
   },
   buttonPressed: {
     opacity: 0.78,
@@ -291,10 +291,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   cancelButtonText: {
-    color: colors.primaryDark,
+    color: '#B94D59',
   },
   destructiveButtonText: {
-    color: colors.primaryDark,
+    color: '#AD3444',
   },
 });
 
