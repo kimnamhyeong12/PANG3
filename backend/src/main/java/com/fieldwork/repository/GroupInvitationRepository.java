@@ -22,4 +22,10 @@ public interface GroupInvitationRepository
             User invitee,
             String status
     );
+
+    List<GroupInvitation> findByGroupAndStatus(WorkGroup group, String status);
+
+    List<GroupInvitation> findByInviterAndStatus(User inviter, String status);
+
+    List<GroupInvitation> findByInviteeAndStatus(User invitee, String status);
 }

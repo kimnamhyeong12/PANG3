@@ -513,8 +513,12 @@ public class TaskService {
     }
 
     private User getUser(Long userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("?ъ슜?먮? 李얠쓣 ???놁뒿?덈떎."));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+        if ("DELETED".equals(user.getRole())) {
+            throw new IllegalArgumentException("탈퇴한 계정입니다.");
+        }
+        return user;
     }
 
     private WorkGroup getGroup(Long groupId) {

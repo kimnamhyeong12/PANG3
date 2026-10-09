@@ -35,4 +35,9 @@ public class AuthController {
 
         return authService.login(loginId, password);
     }
+
+    @DeleteMapping("/account")
+    public Map<String, Object> deleteAccount(@RequestBody Map<String, String> body) {
+        return authService.deleteAccount(body.get("loginId"), body.get("password"));
+    }
 }

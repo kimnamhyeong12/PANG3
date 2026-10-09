@@ -24,6 +24,9 @@ public class UserController {
             @RequestBody Map<String, String> body) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+        if ("DELETED".equals(user.getRole())) {
+            throw new IllegalArgumentException("탈퇴한 계정입니다.");
+        }
 
         String workSido = body.get("workSido");
         if (workSido == null || workSido.isBlank()) {

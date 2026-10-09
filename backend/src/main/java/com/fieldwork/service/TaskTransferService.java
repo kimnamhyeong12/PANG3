@@ -18,6 +18,8 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 @Service
 public class TaskTransferService {
@@ -51,6 +53,7 @@ public class TaskTransferService {
 
         List<Map<String, Object>> senderTasks = taskService.getGroupLocations(groupId, senderId).stream()
                 .filter(task -> senderId.equals(number(task.get("assigneeUserId"))))
+                .filter(task -> !isComplete(task.get("status")))
                 .toList();
 
         List<Long> selectedIds;
@@ -77,12 +80,22 @@ public class TaskTransferService {
 
         if (selectedIds.isEmpty()) throw new IllegalArgumentException("이관할 방문지를 선택해주세요.");
         for (Long taskId : selectedIds) {
-            Task task = tasks.findById(taskId)
+            Task task = tasks.findByIdForUpdate(taskId)
                     .orElseThrow(() -> new IllegalArgumentException("방문지를 찾을 수 없습니다."));
+            if (isComplete(task.getTaskStatus())) {
+                throw new IllegalArgumentException("완료한 방문지는 이관할 수 없습니다.");
+            }
             User owner = taskService.currentAssignee(task);
             if (owner == null || !senderId.equals(owner.getUserId())) {
                 throw new IllegalArgumentException("본인 담당 방문지만 이관할 수 있습니다.");
             }
+        }
+        Set<Long> selectedSet = new HashSet<>(selectedIds);
+        boolean pendingDuplicate = requests.findByGroupAndSenderAndStatus(group, sender, "PENDING")
+                .stream()
+                .anyMatch(existing -> existing.getTaskIds().stream().anyMatch(selectedSet::contains));
+        if (pendingDuplicate) {
+            throw new IllegalArgumentException("이미 이관 요청 중인 방문지가 포함되어 있습니다.");
         }
         TaskTransferRequest request = new TaskTransferRequest();
         request.setGroup(group);
@@ -99,8 +112,15 @@ public class TaskTransferService {
         if (!groupId.equals(request.getGroup().getGroupId())) {
             throw new IllegalArgumentException("다른 그룹의 이관 요청입니다.");
         }
-        if (!recipientId.equals(request.getRecipient().getUserId()) || !"PENDING".equals(request.getStatus())) {
+        if (!recipientId.equals(request.getRecipient().getUserId())) {
             throw new IllegalArgumentException("처리할 수 없는 이관 요청입니다.");
+        }
+        if ((accept && "ACCEPTED".equals(request.getStatus()))
+                || (!accept && "REJECTED".equals(request.getStatus()))) {
+            return toMap(request);
+        }
+        if (!"PENDING".equals(request.getStatus())) {
+            throw new IllegalArgumentException("이미 처리된 이관 요청입니다.");
         }
         member(request.getGroup(), recipientId);
         member(request.getGroup(), request.getSender().getUserId());
@@ -109,14 +129,30 @@ public class TaskTransferService {
             for (Long taskId : request.getTaskIds().stream().sorted(Comparator.naturalOrder()).toList()) {
                 Task task = tasks.findByIdForUpdate(taskId)
                         .orElseThrow(() -> new IllegalArgumentException("방문지를 찾을 수 없습니다."));
+                if (isComplete(task.getTaskStatus())) {
+                    request.setStatus("REJECTED");
+                    request.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+                    return toMap(request);
+                }
                 User owner = taskService.currentAssignee(task);
                 if (owner == null || !owner.getUserId().equals(request.getSender().getUserId())) {
-                    throw new IllegalArgumentException("담당자가 변경된 방문지가 있어 이관할 수 없습니다.");
+                    request.setStatus("REJECTED");
+                    request.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+                    return toMap(request);
                 }
                 selected.add(task);
             }
             for (Task task : selected) task.setCurrentAssignee(request.getRecipient());
             tasks.saveAll(selected);
+            Set<Long> acceptedIds = new HashSet<>(request.getTaskIds());
+            requests.findByGroupAndSenderAndStatus(request.getGroup(), request.getSender(), "PENDING")
+                    .stream()
+                    .filter(other -> !other.getId().equals(request.getId()))
+                    .filter(other -> other.getTaskIds().stream().anyMatch(acceptedIds::contains))
+                    .forEach(other -> {
+                        other.setStatus("REJECTED");
+                        other.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+                    });
         }
         request.setStatus(accept ? "ACCEPTED" : "REJECTED");
         request.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
@@ -175,6 +211,11 @@ public class TaskTransferService {
 
     private Long number(Object value) {
         return value instanceof Number number ? number.longValue() : null;
+    }
+
+    private boolean isComplete(Object value) {
+        String status = String.valueOf(value).trim().toLowerCase();
+        return "complete".equals(status) || "completed".equals(status) || "done".equals(status);
     }
 
     private boolean sameArea(Map<String, Object> task, String sido, String sigungu, String dong) {

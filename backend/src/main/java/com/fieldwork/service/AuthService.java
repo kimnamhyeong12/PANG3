@@ -2,12 +2,15 @@ package com.fieldwork.service;
 
 import com.fieldwork.entity.User;
 import com.fieldwork.repository.UserRepository;
+import com.fieldwork.repository.PushTokenRepository;
+import com.fieldwork.repository.GroupInvitationRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class AuthService {
@@ -15,14 +18,20 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final GroupService groupService;
+    private final PushTokenRepository pushTokenRepository;
+    private final GroupInvitationRepository groupInvitationRepository;
 
     public AuthService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
-            GroupService groupService) {
+            GroupService groupService,
+            PushTokenRepository pushTokenRepository,
+            GroupInvitationRepository groupInvitationRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.groupService = groupService;
+        this.pushTokenRepository = pushTokenRepository;
+        this.groupInvitationRepository = groupInvitationRepository;
     }
 
     @Transactional
@@ -52,7 +61,8 @@ public class AuthService {
         User user = userRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new RuntimeException("아이디 또는 비밀번호가 틀렸습니다."));
 
-        if (!passwordEncoder.matches(password, user.getPassword())) {
+        if ("DELETED".equals(user.getRole()) || password == null
+                || !passwordEncoder.matches(password, user.getPassword())) {
             throw new RuntimeException("아이디 또는 비밀번호가 틀렸습니다.");
         }
 
@@ -69,5 +79,33 @@ public class AuthService {
         result.put("workSigungu", user.getWorkSigungu());
 
         return result;
+    }
+
+    @Transactional
+    public Map<String, Object> deleteAccount(String loginId, String password) {
+        User user = userRepository.findByLoginId(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("아이디 또는 비밀번호가 틀렸습니다."));
+        if ("DELETED".equals(user.getRole()) || password == null
+                || !passwordEncoder.matches(password, user.getPassword())) {
+            throw new IllegalArgumentException("아이디 또는 비밀번호가 틀렸습니다.");
+        }
+
+        groupService.leaveAllGroupsForDeletedUser(user);
+        groupInvitationRepository.findByInviterAndStatus(user, "PENDING")
+                .forEach(invitation -> invitation.setStatus("REJECTED"));
+        groupInvitationRepository.findByInviteeAndStatus(user, "PENDING")
+                .forEach(invitation -> invitation.setStatus("REJECTED"));
+        pushTokenRepository.findByUserAndActiveTrue(user)
+                .forEach(token -> token.setActive(false));
+
+        // 기존 업무와 보고서의 작성자 FK는 유지하고 계정 정보만 익명화한다.
+        user.setLoginId("deleted-" + user.getUserId() + "-" + UUID.randomUUID());
+        user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
+        user.setName("탈퇴한 사용자");
+        user.setWorkSido(null);
+        user.setWorkSigungu(null);
+        user.setRole("DELETED");
+
+        return Map.of("message", "계정 탈퇴가 완료되었습니다.");
     }
 }

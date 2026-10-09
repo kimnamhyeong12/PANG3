@@ -4,21 +4,26 @@ import com.fieldwork.entity.GroupInvitation;
 import com.fieldwork.entity.GroupMember;
 import com.fieldwork.entity.LocationAssignment;
 import com.fieldwork.entity.Task;
+import com.fieldwork.entity.TaskTransferRequest;
 import com.fieldwork.entity.User;
 import com.fieldwork.entity.WorkGroup;
 import com.fieldwork.repository.GroupInvitationRepository;
 import com.fieldwork.repository.GroupMemberRepository;
 import com.fieldwork.repository.LocationAssignmentRepository;
 import com.fieldwork.repository.TaskRepository;
+import com.fieldwork.repository.TaskTransferRequestRepository;
 import com.fieldwork.repository.UserRepository;
 import com.fieldwork.repository.WorkGroupRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 @Service
 public class GroupService {
@@ -35,7 +40,9 @@ public class GroupService {
     private final LocationAssignmentRepository locationAssignmentRepository;
     private final UserRepository userRepository;
     private final TaskRepository taskRepository;
+    private final TaskTransferRequestRepository taskTransferRequestRepository;
     private final PushNotificationService pushNotificationService;
+    private final PasswordEncoder passwordEncoder;
 
     public GroupService(
             WorkGroupRepository workGroupRepository,
@@ -44,14 +51,18 @@ public class GroupService {
             LocationAssignmentRepository locationAssignmentRepository,
             UserRepository userRepository,
             TaskRepository taskRepository,
-            PushNotificationService pushNotificationService) {
+            TaskTransferRequestRepository taskTransferRequestRepository,
+            PushNotificationService pushNotificationService,
+            PasswordEncoder passwordEncoder) {
         this.workGroupRepository = workGroupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.groupInvitationRepository = groupInvitationRepository;
         this.locationAssignmentRepository = locationAssignmentRepository;
         this.userRepository = userRepository;
         this.taskRepository = taskRepository;
+        this.taskTransferRequestRepository = taskTransferRequestRepository;
         this.pushNotificationService = pushNotificationService;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional
@@ -79,10 +90,10 @@ public class GroupService {
         GroupMember leaderMember = new GroupMember();
         leaderMember.setGroup(savedGroup);
         leaderMember.setUser(leader);
-        leaderMember.setRole(ROLE_MEMBER);
+        leaderMember.setRole(ROLE_LEADER);
         groupMemberRepository.save(leaderMember);
 
-        Map<String, Object> result = groupSummary(savedGroup, ROLE_MEMBER);
+        Map<String, Object> result = groupSummary(savedGroup, ROLE_LEADER);
         result.put("message", "洹몃９???앹꽦?섏뿀?듬땲??");
         return result;
     }
@@ -112,7 +123,8 @@ public class GroupService {
         group.setRegionAdmCode(regionAdmCode.trim());
 
         WorkGroup saved = workGroupRepository.save(group);
-        Map<String, Object> result = groupSummary(saved, ROLE_MEMBER);
+        Map<String, Object> result = groupSummary(saved,
+                saved.getLeader().getUserId().equals(leaderUserId) ? ROLE_LEADER : ROLE_MEMBER);
         result.put("message", "?쒕룞吏??씠 蹂寃쎈릺?덉뒿?덈떎.");
         return result;
     }
@@ -174,7 +186,9 @@ public class GroupService {
                 .sorted((left, right) -> Boolean.compare(
                         right.getGroup().isPersonal(),
                         left.getGroup().isPersonal()))
-                .map(member -> groupSummary(member.getGroup(), member.getRole()))
+                .map(member -> groupSummary(member.getGroup(),
+                        member.getGroup().getLeader().getUserId().equals(member.getUser().getUserId())
+                                ? ROLE_LEADER : ROLE_MEMBER))
                 .toList();
     }
 
@@ -184,12 +198,109 @@ public class GroupService {
         GroupMember requester = requireMember(group, userId);
         synchronizeAssignedTaskGroups(group);
 
-        Map<String, Object> result = groupSummary(group, requester.getRole());
+        Map<String, Object> result = groupSummary(group,
+                group.getLeader().getUserId().equals(requester.getUser().getUserId())
+                        ? ROLE_LEADER : ROLE_MEMBER);
         result.put("members", groupMemberRepository.findByGroupOrderByJoinedAtAsc(group)
                 .stream()
                 .map(this::memberMap)
                 .toList());
         return result;
+    }
+
+    @Transactional
+    public Map<String, Object> leaveGroup(Long groupId, Long userId, String password) {
+        WorkGroup group = getGroup(groupId);
+        if (group.isPersonal()) {
+            throw new IllegalArgumentException("개인 업무공간에서는 탈퇴할 수 없습니다.");
+        }
+        GroupMember member = requireMember(group, userId);
+        if (password == null || !passwordEncoder.matches(password, member.getUser().getPassword())) {
+            throw new IllegalArgumentException("비밀번호가 올바르지 않습니다.");
+        }
+        List<GroupMember> remaining = groupMemberRepository.findByGroupOrderByJoinedAtAsc(group)
+                .stream()
+                .filter(item -> !item.getUser().getUserId().equals(userId))
+                .toList();
+        if (remaining.isEmpty()) {
+            throw new IllegalArgumentException("다른 팀원을 초대하고 나서 그룹을 탈퇴할 수 있습니다.");
+        }
+
+        User successor = remaining.get(0).getUser();
+        if (group.getLeader().getUserId().equals(userId)) {
+            group.setLeader(successor);
+            remaining.get(0).setRole(ROLE_LEADER);
+        }
+        releaseMemberWork(group, member.getUser(), successor);
+        groupMemberRepository.delete(member);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("message", "그룹에서 탈퇴했습니다.");
+        result.put("groupId", groupId);
+        return result;
+    }
+
+    @Transactional
+    public void leaveAllGroupsForDeletedUser(User user) {
+        for (GroupMember member : groupMemberRepository.findByUserOrderByJoinedAtDesc(user)) {
+            WorkGroup group = member.getGroup();
+            if (group.isPersonal()) {
+                groupMemberRepository.delete(member);
+                group.setName("탈퇴한 사용자의 업무공간");
+                continue;
+            }
+            List<GroupMember> remaining = groupMemberRepository.findByGroupOrderByJoinedAtAsc(group)
+                    .stream()
+                    .filter(item -> !item.getUser().getUserId().equals(user.getUserId()))
+                    .toList();
+            User successor = remaining.isEmpty() ? null : remaining.get(0).getUser();
+            if (group.getLeader().getUserId().equals(user.getUserId()) && successor != null) {
+                group.setLeader(successor);
+                remaining.get(0).setRole(ROLE_LEADER);
+            }
+            releaseMemberWork(group, user, successor);
+            groupMemberRepository.delete(member);
+        }
+    }
+
+    private void releaseMemberWork(WorkGroup group, User departing, User successor) {
+        for (Task task : taskRepository.findByGroupOrderByTaskIdDesc(group)) {
+            if (task.getCurrentAssignee() != null
+                    && task.getCurrentAssignee().getUserId().equals(departing.getUserId())) {
+                task.setCurrentAssignee(successor);
+            }
+        }
+        for (LocationAssignment assignment : locationAssignmentRepository
+                .findByGroupAndAssigneeOrderByAssignedAtDesc(group, departing)) {
+            if (successor == null) {
+                locationAssignmentRepository.delete(assignment);
+                if (assignment.getTask().getCurrentAssignee() != null
+                        && assignment.getTask().getCurrentAssignee().getUserId().equals(departing.getUserId())) {
+                    assignment.getTask().setCurrentAssignee(null);
+                }
+            } else {
+                assignment.setAssignee(successor);
+                if (assignment.getTask().getCurrentAssignee() != null
+                        && assignment.getTask().getCurrentAssignee().getUserId().equals(departing.getUserId())) {
+                    assignment.getTask().setCurrentAssignee(successor);
+                }
+            }
+        }
+        for (TaskTransferRequest request : taskTransferRequestRepository
+                .findByGroupAndSenderAndStatus(group, departing, INVITE_PENDING)) {
+            request.setStatus("REJECTED");
+            request.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+        }
+        for (TaskTransferRequest request : taskTransferRequestRepository
+                .findByGroupAndRecipientAndStatus(group, departing, INVITE_PENDING)) {
+            request.setStatus("REJECTED");
+            request.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+        }
+        for (GroupInvitation invitation : groupInvitationRepository.findByGroupAndStatus(group, INVITE_PENDING)) {
+            if (invitation.getInviter().getUserId().equals(departing.getUserId())) {
+                invitation.setStatus(INVITE_REJECTED);
+            }
+        }
     }
 
     @Transactional(readOnly = true)
@@ -525,8 +636,12 @@ public class GroupService {
             throw new RuntimeException("?ъ슜???뺣낫媛 ?놁뒿?덈떎.");
         }
 
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("?ъ슜?먮? 李얠쓣 ???놁뒿?덈떎."));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+        if ("DELETED".equals(user.getRole())) {
+            throw new IllegalArgumentException("탈퇴한 계정입니다.");
+        }
+        return user;
     }
 
     private WorkGroup getGroup(Long groupId) {
@@ -552,8 +667,7 @@ public class GroupService {
     private User requireLeader(WorkGroup group, Long userId) {
         GroupMember member = requireMember(group, userId);
 
-        if (!ROLE_LEADER.equals(member.getRole()) ||
-                !group.getLeader().getUserId().equals(member.getUser().getUserId())) {
+        if (!group.getLeader().getUserId().equals(member.getUser().getUserId())) {
             throw new RuntimeException("??λ쭔 ?섑뻾?????덈뒗 ?묒뾽?낅땲??");
         }
 
@@ -644,7 +758,7 @@ public class GroupService {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("groupId", group.getGroupId());
         map.put("groupName", group.getName());
-        map.put("role", ROLE_MEMBER);
+        map.put("role", group.isPersonal() ? ROLE_MEMBER : role);
         map.put("personal", group.isPersonal());
         map.put("personalWorkspace", group.isPersonal());
         map.put("workspaceType", group.isPersonal() ? "PERSONAL" : "TEAM");
@@ -665,7 +779,8 @@ public class GroupService {
         map.put("name", user.getName());
         map.put("workSido", user.getWorkSido());
         map.put("workSigungu", user.getWorkSigungu());
-        map.put("role", ROLE_MEMBER);
+        map.put("role", member.getGroup().getLeader().getUserId().equals(user.getUserId())
+                ? ROLE_LEADER : ROLE_MEMBER);
         map.put("joinedAt", member.getJoinedAt());
         return map;
     }

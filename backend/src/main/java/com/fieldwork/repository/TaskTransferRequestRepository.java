@@ -17,4 +17,8 @@ public interface TaskTransferRequestRepository extends JpaRepository<TaskTransfe
     Optional<TaskTransferRequest> findByIdForUpdate(@Param("requestId") Long requestId);
     List<TaskTransferRequest> findByGroupAndRecipientOrderByRequestedAtDesc(WorkGroup group, User recipient);
     List<TaskTransferRequest> findByGroupAndSenderOrderByRequestedAtDesc(WorkGroup group, User sender);
+
+    List<TaskTransferRequest> findByGroupAndSenderAndStatus(WorkGroup group, User sender, String status);
+
+    List<TaskTransferRequest> findByGroupAndRecipientAndStatus(WorkGroup group, User recipient, String status);
 }
