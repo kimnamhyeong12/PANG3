@@ -1,6 +1,7 @@
 package expo.modules.kakaonavigation
 
 import android.content.Context
+import android.graphics.Color
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.TextView
@@ -23,6 +24,7 @@ import com.kakaomobility.knsdk.guidance.knguidance.safetyguide.objects.KNSafety
 import com.kakaomobility.knsdk.guidance.knguidance.voiceguide.KNGuide_Voice
 import com.kakaomobility.knsdk.trip.kntrip.KNTrip
 import com.kakaomobility.knsdk.trip.kntrip.knroute.KNRoute
+import com.kakaomobility.knsdk.map.uicustomsupport.renewal.theme.base.KNMapRouteTheme
 import com.kakaomobility.knsdk.ui.view.KNNaviView
 import com.kakaomobility.knsdk.ui.view.KNNaviView_GuideStateDelegate
 import expo.modules.kotlin.AppContext
@@ -135,9 +137,27 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
       removeAllViews()
       addView(view, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
       view.guideStateDelegate = this
+      // The UI SDK switches themes between driving/overview and day/night.
+      // Keep traffic colors in all four themes so starting guidance cannot hide them.
+      view.mapComponent.setRouteTheme(
+        trafficTheme(false), trafficTheme(true), trafficTheme(false), trafficTheme(true)
+      )
       view.initWithGuidance(guidance, trip, priority, avoidOptions)
     }
     guidance.startWithTrip(trip, priority, avoidOptions)
+  }
+
+  private fun trafficTheme(night: Boolean): KNMapRouteTheme {
+    return (if (night) KNMapRouteTheme.trafficNight() else KNMapRouteTheme.trafficDay()).apply {
+      lineColors.apply {
+        normal = Color.parseColor("#16A34A")
+        trafficJamModerate = Color.parseColor("#FACC15")
+        trafficJamHeavy = Color.parseColor("#F97316")
+        trafficJamVeryHeavy = Color.parseColor("#DC2626")
+        unknown = Color.parseColor("#9CA3AF")
+        blocked = Color.parseColor("#64748B")
+      }
+    }
   }
 
   private fun showLoading() {
