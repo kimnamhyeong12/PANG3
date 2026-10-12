@@ -150,7 +150,7 @@ export default function App() {
   const planBusyRef = useRef(false);
   const workPlanRef = useRef({ rows: [], choices: {}, key: null });
   const currentRouteRef = useRef(null);
-  currentRouteRef.current = { day: calendarDayKey, order: routeLocations.map(locationKey), visitNumbers: Object.fromEntries(routeLocations.map((row) => [locationKey(row), row.markerNumber])), locations: routeLocations, routeSegments, currentSegmentIndex, optimized, isGuiding };
+  currentRouteRef.current = { visitOrderVersion: routeLocations.every((row) => row.visitOrderVersion === 2) ? 2 : null, day: calendarDayKey, order: routeLocations.map(locationKey), visitNumbers: Object.fromEntries(routeLocations.map((row) => [locationKey(row), row.markerNumber])), locations: routeLocations, routeSegments, currentSegmentIndex, optimized, isGuiding };
 
   // 앱을 자정 넘겨 계속 켜둔 경우에도 오늘 업무/미처리 업무 기준을 자동 갱신한다.
   useEffect(() => {
@@ -191,6 +191,7 @@ export default function App() {
   const teamSaveQueueRef = useRef(Promise.resolve());
   const teamSessionRef = useRef(null);
   teamSessionRef.current = {
+    visitOrderVersion: teamLocations.every((row) => row.visitOrderVersion === 2) ? 2 : null,
     day: calendarDayKey, order: teamLocations.map(locationKey),
     visitNumbers: Object.fromEntries(teamLocations.map((row) => [locationKey(row), row.markerNumber])),
     locations: teamLocations, routeSegments: teamRouteSegments,
@@ -338,7 +339,7 @@ export default function App() {
       const personalWorkspace = true;
       const plan = splitWorkPlan(rows, choices, calendarDayKey, savedPlan ? [] : legacyRows,
         { autoAddToday: personalWorkspace, holdUntilSelected: heldTransferIds });
-      plan.map = numberVisits(plan.map, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])));
+      plan.map = numberVisits(plan.map, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])), { visitOrderVersion: session?.visitOrderVersion });
       // Personal visits scheduled for today go straight onto their owner's map.
       const autoAdded = personalWorkspace
         ? plan.map.filter((row) => row.status !== 'complete' && !choices[assignmentKey(row)])
@@ -354,10 +355,10 @@ export default function App() {
       workPlanRef.current = { rows, choices, key: cacheKey };
       setPendingWork(plan.pending);
       const sameMap = loadedWorkspaceKeyRef.current === cacheKey &&
-        JSON.stringify(plan.map.map((row) => [locationKey(row), row.status]).sort()) ===
-        JSON.stringify((currentRouteRef.current.locations || []).map((row) => [locationKey(row), row.status]).sort());
+        JSON.stringify(plan.map.map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort()) ===
+        JSON.stringify((currentRouteRef.current.locations || []).map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort());
       if (sameMap && (session?.routeSegments?.length || 0) <= plan.map.filter((row) => row.status !== 'complete').length) return;
-      const restored = restoreRouteSession(plan.map, session, calendarDayKey);
+      const restored = restoreRouteSession(plan.map, session, calendarDayKey, { singleDestinationOnly: true });
       setRouteLocations(restored?.locations || plan.map);
       setRouteSegments(restored?.segments || []);
       setRoadPath(restored?.segments.slice(restored.currentSegmentIndex).flatMap((segment) => segment?.path || []) || []);
@@ -486,6 +487,7 @@ export default function App() {
     if (!cacheKey || loadedWorkspaceKeyRef.current !== cacheKey) return;
     const session = JSON.stringify({
       day: calendarDayKey,
+      visitOrderVersion: routeLocations.every((row) => row.visitOrderVersion === 2) ? 2 : null,
       order: routeLocations.map(locationKey),
       visitNumbers: Object.fromEntries(routeLocations.map((row) => [locationKey(row), row.markerNumber])),
       routeSegments, currentSegmentIndex, optimized, isGuiding,
@@ -626,12 +628,12 @@ export default function App() {
       const saved = await AsyncStorage.getItem(key);
       if (requestId !== teamLoadIdRef.current) return;
       const session = teamLoadedKeyRef.current === key ? teamSessionRef.current : saved ? JSON.parse(saved) : null;
-      const numbered = numberVisits(rows, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])));
+      const numbered = numberVisits(rows, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])), { visitOrderVersion: session?.visitOrderVersion });
       const sameMap = teamLoadedKeyRef.current === key &&
-        JSON.stringify(numbered.map((row) => [locationKey(row), row.status]).sort()) ===
-        JSON.stringify((teamSessionRef.current.locations || []).map((row) => [locationKey(row), row.status]).sort());
+        JSON.stringify(numbered.map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort()) ===
+        JSON.stringify((teamSessionRef.current.locations || []).map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort());
       if (sameMap && (session?.routeSegments?.length || 0) <= numbered.filter((row) => row.status !== 'complete').length) return;
-      const restored = restoreRouteSession(numbered, session, calendarDayKey);
+      const restored = restoreRouteSession(numbered, session, calendarDayKey, { singleDestinationOnly: true });
       setTeamLocations(restored?.locations || numbered);
       setTeamRouteSegments(restored?.segments || []);
       setTeamRoadPath(restored?.segments.slice(restored.currentSegmentIndex).flatMap((segment) => segment?.path || []) || []);

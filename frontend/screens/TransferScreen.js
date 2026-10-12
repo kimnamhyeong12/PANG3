@@ -153,7 +153,7 @@ export default function TransferScreen({
         } catch (refreshError) {
           console.log('이관받은 업무 목록 갱신 실패:', refreshError);
         }
-        showAlert('이관 수락', '지도에서 행정동을 선택해 방문지를 추가하세요.');
+        showAlert('이관 수락', '지도의 미처리 업무 목록에서 이관받은 방문지를 선택해 지도에 표시하세요.');
       } else {
         onChanged?.();
         showAlert('이관 거절', '기존 담당자가 유지됩니다.');

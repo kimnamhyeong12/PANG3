@@ -1,0 +1,223 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const babel = require('../node_modules/@babel/core');
+
+// Run the screen's hooks and rendered event handlers with native surfaces mocked.
+// GPS, backend responses, and workspace refreshes are controlled by each scenario.
+function createScreen() {
+  let slots = [], cursor = 0, effects = [], dirty = true, tree;
+  const calls = [], alerts = [], requests = [], storage = new Map();
+  const same = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
+  const react = {
+    useState(initial) {
+      const index = cursor++;
+      if (!slots[index]) slots[index] = { value: typeof initial === 'function' ? initial() : initial };
+      return [slots[index].value, next => {
+        const value = typeof next === 'function' ? next(slots[index].value) : next;
+        if (!Object.is(value, slots[index].value)) { slots[index].value = value; dirty = true; }
+      }];
+    },
+    useRef(initial) { const index = cursor++; return slots[index] ||= { current: initial }; },
+    useMemo(fn, deps) {
+      const index = cursor++;
+      if (!slots[index] || !same(slots[index].deps, deps)) slots[index] = { value: fn(), deps };
+      return slots[index].value;
+    },
+    useEffect(fn, deps) {
+      const index = cursor++;
+      if (!slots[index] || !same(slots[index].deps, deps)) {
+        effects.push(() => { slots[index]?.cleanup?.(); slots[index] = { deps, cleanup: fn() }; });
+      }
+    },
+  };
+  const jsx = (type, props) => ({ type, props: props || {} });
+  const emptySubscription = () => ({ remove() {} });
+  class AnimatedValue { setValue() {} }
+  const native = { Platform: { OS: 'test' }, StyleSheet: { create: s => s, absoluteFill: {}, absoluteFillObject: {} },
+    Animated: { Value: AnimatedValue, View: 'AnimatedView', timing: () => ({ start(cb) { cb?.({ finished: true }); } }), spring: () => ({ start() {} }) },
+    PanResponder: { create: handlers => ({ panHandlers: handlers }) },
+    Keyboard: { addListener: emptySubscription }, BackHandler: { addEventListener: emptySubscription } };
+  for (const name of ['View', 'Text', 'TextInput', 'TouchableOpacity', 'Pressable', 'FlatList', 'ScrollView', 'Modal', 'ActivityIndicator']) native[name] = name;
+  const cache = new Map();
+  function load(file) {
+    file = path.resolve(file);
+    if (cache.has(file)) return cache.get(file).exports;
+    const module = { exports: {} };
+    cache.set(file, module);
+    const code = babel.transformSync(fs.readFileSync(file, 'utf8'), { configFile: false, babelrc: false,
+      plugins: [[require('../node_modules/@babel/plugin-transform-react-jsx'), { runtime: 'automatic' }], require('../node_modules/@babel/plugin-transform-modules-commonjs')] }).code;
+    const requireMock = name => {
+      if (name === 'react') return react;
+      if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'Fragment' };
+      if (name === 'react-native') return native;
+      if (name === '@expo/vector-icons') return { Ionicons: 'Icon' };
+      if (name === '@react-native-async-storage/async-storage') return { getItem: async key => storage.get(key) || null,
+        setItem: async (key, value) => storage.set(key, value), removeItem: async key => storage.delete(key) };
+      if (name.includes('CustomAlert')) return { showAlert: (...args) => alerts.push(args) };
+      if (name.includes('KakaoMapWebView')) return { __esModule: true, default: 'MapCanvas' };
+      if (name.includes('kakao-navigation')) return { KakaoNavigationView: 'Navigation', isKakaoNavigationAvailable: () => false };
+      if (name.includes('PublicDataMapMode')) return { BUSAN_DISTRICT_CODES: { '사하구': '21100' } };
+      if (name.includes('notificationService')) return { stopRouteNotification: async () => {}, updateRouteNotification: async () => {} };
+      if (name.startsWith('.')) return load(path.resolve(path.dirname(file), name.endsWith('.js') ? name : `${name}.js`));
+      throw Error('Unexpected import: ' + name);
+    };
+    const context = { module, exports: module.exports, require: requireMock, console, URLSearchParams, setTimeout, clearTimeout,
+      process: { env: { EXPO_PUBLIC_API_BASE_URL: 'https://backend.test', EXPO_PUBLIC_KAKAO_REST_API_KEY: 'test' } },
+      fetch: (url, options = {}) => new Promise((resolve, reject) => requests.push({ url, options, resolve, reject })) };
+    vm.runInNewContext(code, context, { filename: file });
+    return module.exports;
+  }
+  const Screen = load(path.join(__dirname, '../screens/MapScreen.js')).default;
+  const props = { user: { userId: 1, workSido: '부산광역시', workSigungu: '사하구' },
+    activeGroup: { groupId: 1, personalWorkspace: true }, locationScope: 'personal', locations: [], pendingWork: [],
+    roadPath: [], routeSegments: [], currentSegmentIndex: 0, optimized: false, isGuiding: false,
+    onLocationClick: (...args) => calls.push(args), onDataChanged: async () => {}, setPanelOpen() {}, onAddWork: async () => true };
+  for (const [setter, key] of Object.entries({ setLocations: 'locations', setRoadPath: 'roadPath', setRouteSegments: 'routeSegments',
+    setCurrentSegmentIndex: 'currentSegmentIndex', setOptimized: 'optimized', setIsGuiding: 'isGuiding', setTotalDuration: 'totalDuration' })) {
+    props[setter] = value => { props[key] = typeof value === 'function' ? value(props[key]) : value; dirty = true; };
+  }
+  function render() {
+    let rounds = 0;
+    do {
+      if (++rounds > 30) throw Error('Render loop');
+      dirty = false; cursor = 0; effects = [];
+      tree = Screen(props);
+      while (typeof tree?.type === 'function') tree = tree.type(tree.props);
+      const queued = effects;
+      queued.forEach(effect => effect());
+    } while (dirty);
+    return tree;
+  }
+  function nodes(node) {
+    if (arguments.length === 0) node = tree;
+    if (!node || typeof node !== 'object') return [];
+    if (Array.isArray(node)) return node.flatMap(nodes);
+    return [node, ...nodes(node.props?.children)];
+  }
+  const text = node => typeof node === 'string' ? node : Array.isArray(node) ? node.map(text).join('') : node?.props ? text(node.props.children) : '';
+  const find = (type, label) => nodes().find(node => node.type === type &&
+    (!label || text(node).includes(label) || node.props.accessibilityLabel === label));
+  async function settle() { for (let i = 0; i < 3; i++) { await new Promise(setImmediate); if (dirty) render(); } }
+  function response(request, data) { request.resolve({ ok: true, text: async () => JSON.stringify(data), json: async () => data }); }
+  return { props, render, settle, find, nodes, requests, response, calls, alerts };
+}
+
+const visit = (id, lng) => ({ id, lat: 35, lng, detailAddress: `장소 ${id}`, adminDong: `동 ${id}`, status: 'pending', markerNumber: id, visitOrderVersion: 2 });
+const route = (target) => ({ segments: [{ path: [{ lat: 35, lng: 129 }, { lat: target.lat, lng: target.lng }] }], totalDistance: 1000, totalDuration: 600 });
+
+(async () => {
+  const app = createScreen();
+  app.props.locations = [visit(1, 129.01), visit(2, 129.02), visit(3, 129.03)];
+  app.render();
+  app.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 });
+  app.render();
+  assert.equal(app.find('MapCanvas').props.locations.length, 3, 'all administrative dongs appear together');
+  assert.equal(app.requests.length, 0, 'registration/GPS never requests a full road route');
+
+  app.find('MapCanvas').props.onMarkerClick(app.props.locations[2]);
+  app.render();
+  const first = app.requests.shift();
+  assert(first.url.endsWith('/api/routes/segment'));
+  app.response(first, route(app.props.locations[2])); await app.settle();
+  assert.deepEqual(app.props.locations.map(row => row.id), [1, 2, 3], 'preview preserves numbering');
+  assert.equal(app.props.routeSegments.length, 0, 'preview does not change active guidance');
+  app.find('MapCanvas').props.onMarkerClick(app.props.locations[2]);
+  assert.equal(app.calls.length, 1, 'second press opens report');
+
+  const begin = app.find('TouchableOpacity', '안내 시작').props.onPress();
+  app.render();
+  app.response(app.requests.shift(), route(app.props.locations[2])); await begin; await app.settle();
+  assert.deepEqual(Array.from(app.props.locations, row => row.id), [3, 1, 2]);
+  assert.deepEqual(Array.from(app.props.locations, row => row.markerNumber), [1, 2, 3]);
+  assert.equal(app.props.routeSegments.length, 1);
+  assert.equal(app.props.routeSegments[0].destinationKey, '3');
+  assert.equal(app.props.isGuiding, true);
+
+  app.find('MapCanvas').props.onMarkerClick(app.props.locations[1]); app.render();
+  app.response(app.requests.shift(), route(app.props.locations[1])); await app.settle();
+  assert.equal(app.props.routeSegments[0].destinationKey, '3', 'browsing during guidance preserves destination');
+  assert.equal(app.props.locations[0].id, 3);
+  assert.equal(app.find('MapCanvas').props.guideTarget.id, 3, 'arrival detection follows committed destination');
+  assert.equal(app.find('MapCanvas').props.previewRouteSegment.destinationKey, '1');
+
+  app.props.locations = app.props.locations.filter(row => row.id !== 3); app.render();
+  assert.equal(app.props.isGuiding, false, 'transferring out the destination stops guidance');
+  assert.equal(app.props.routeSegments.length, 0);
+
+  // Latest selection wins even when backend responses arrive out of order.
+  app.find('MapCanvas').props.onMarkerClick(app.props.locations[1]); app.render();
+  const slow = app.requests.shift();
+  app.find('MapCanvas').props.onMarkerClick(app.props.locations[0]); app.render();
+  const fast = app.requests.shift();
+  app.response(fast, route(app.props.locations[0])); await app.settle();
+  app.response(slow, route(app.props.locations[1])); await app.settle();
+  assert.equal(app.find('MapCanvas').props.previewRouteSegment.destinationKey, '1');
+
+  // Facility selection remains inside the same map and asks for a dong first.
+  app.find('TextInput').props.onFocus(); app.render();
+  app.find('TouchableOpacity', '공공시설물').props.onPress(); app.render();
+  const region = app.requests.shift();
+  assert(region.url.includes('/api/sgis/boundaries'));
+  assert(!app.requests.some(request => request.url.includes('/api/public-data')));
+  const dongA = { properties: { adm_nm: '부산광역시 사하구 A동', adm_cd: '2110010' },
+    geometry: { type: 'Polygon', coordinates: [[[129.1, 35.1], [129.2, 35.2], [129.1, 35.1]]] } };
+  const dongB = { properties: { adm_nm: '부산광역시 사하구 B동', adm_cd: '2110020' } };
+  app.response(region, { features: [dongA, dongB] }); await app.settle();
+  app.find('TouchableOpacity', 'A동').props.onPress(); app.render();
+  assert.equal(app.find('MapCanvas').props.focusCoordinates.length, 2, 'facility dong moves the camera without drawing SGIS polygons');
+  assert.equal(app.find('MapCanvas').props.boundaries, undefined);
+  assert.equal(app.requests.length, 0, 'no facility request until category selection');
+  app.find('TouchableOpacity', '심폐제세동기').props.onPress(); app.render();
+  const facilities = app.requests.shift();
+  assert(facilities.url.includes('category=aed') && facilities.url.includes(encodeURIComponent('A동')));
+  app.response(facilities, { items: [] }); await app.settle();
+  const regionButton = app.nodes().find(node => node.props?.accessibilityLabel === '공공시설물 조회 지역 선택');
+  regionButton.props.onPress(); app.render();
+  app.response(app.requests.shift(), { features: [dongA, dongB] }); await app.settle();
+  app.find('TouchableOpacity', 'B동').props.onPress(); app.render();
+  const nextFacilities = app.requests.shift();
+  assert(nextFacilities.url.includes('category=aed') && nextFacilities.url.includes(encodeURIComponent('B동')));
+  assert.equal(app.find('MapCanvas').props.locations.length, 2, 'facility dong does not hide registered visits');
+  const facility = { id: 'aed-b', lat: 35, lng: 129.04, detailAddress: 'B동 AED', adminDong: 'B동', task: 'AED' };
+  app.response(nextFacilities, { items: [facility] }); await app.settle();
+  app.find('TouchableOpacity', 'B동 AED').props.onPress(); app.render();
+  const register = app.find('TouchableOpacity', '1건 등록').props.onPress(); app.render();
+  const saving = app.requests.shift();
+  assert(saving.url.endsWith('/api/locations'));
+  assert.equal(JSON.parse(saving.options.body).adminDong, 'B동');
+  app.response(saving, { ...facility, id: 99, status: 'pending' }); await register; await app.settle();
+  assert.equal(app.find('MapCanvas').props.locations.length, 3, 'facility registration joins visits from other dongs');
+  assert.equal(app.requests.length, 0, 'facility registration changes numbers without drawing a route');
+
+  const failure = createScreen();
+  failure.props.locations = [visit(1, 129.01), visit(2, 129.02), visit(3, 129.03)];
+  failure.render();
+  failure.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 }); failure.render();
+  failure.find('MapCanvas').props.onMarkerClick(failure.props.locations[2]); failure.render();
+  failure.response(failure.requests.shift(), route(failure.props.locations[2])); await failure.settle();
+  const unsuccessful = failure.find('TouchableOpacity', '안내 시작').props.onPress(); failure.render();
+  failure.requests.shift().reject(new Error('offline')); await unsuccessful; await failure.settle();
+  assert.deepEqual(Array.from(failure.props.locations, row => row.id), [1, 2, 3], 'failed guidance never renumbers');
+  assert.equal(failure.props.isGuiding, false);
+  const successful = failure.find('TouchableOpacity', '안내 시작').props.onPress(); failure.render();
+  failure.response(failure.requests.shift(), route(failure.props.locations[2])); await successful; await failure.settle();
+  failure.props.locations = [...failure.props.locations, { ...visit(4, 129.001), visitOrderVersion: undefined }]; failure.render();
+  assert.equal(failure.props.locations[0].id, 3, 'new nearby visit cannot displace the active destination');
+  const pinnedOrder = Array.from(failure.props.locations, row => row.id);
+  failure.find('MapCanvas').props.onCurrentLocationChange({ lat: 35.005, lng: 129.02 }); failure.render();
+  assert.deepEqual(Array.from(failure.props.locations, row => row.id), pinnedOrder, 'GPS movement preserves numbers');
+  const target = failure.props.locations.find(row => row.id === 2);
+  failure.find('MapCanvas').props.onMarkerClick(target); failure.render();
+  failure.response(failure.requests.shift(), route(target)); await failure.settle();
+  assert.equal(failure.props.locations[0].id, 3);
+  const change = failure.find('TouchableOpacity', '이곳으로 안내 변경').props.onPress(); failure.render();
+  failure.response(failure.requests.shift(), route(target)); await change; await failure.settle();
+  assert.deepEqual(Array.from(failure.props.locations, row => row.id), [2, ...pinnedOrder.filter(id => id !== 2)]);
+  assert.equal(failure.props.routeSegments.length, 1);
+  failure.props.locations = failure.props.locations.map(row => row.id === 2 ? { ...row, status: 'complete' } : row); failure.render();
+  assert.equal(failure.props.isGuiding, false, 'report completion ends the single destination guidance');
+  assert.equal(failure.find('MapCanvas').props.locations.find(row => row.id === 2).markerLabel, '✓');
+  console.log('Single-place map interaction checks passed');
+})().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,6 +1,16 @@
 export const locationKey = (location) => String(location.id ?? `${location.lat},${location.lng},${location.detailAddress}`);
 
-export function numberVisits(rows, savedNumbers = {}) {
+export function numberVisits(rows, savedNumbers = {}, { visitOrderVersion } = {}) {
+  if (visitOrderVersion === 2) {
+    rows = rows.map((row) => Object.prototype.hasOwnProperty.call(savedNumbers, locationKey(row))
+      ? { ...row, visitOrderVersion: 2, markerNumber: savedNumbers[locationKey(row)] }
+      : row);
+  }
+  if (rows.length && rows.every((row) => row.visitOrderVersion === 2)) {
+    let next = 0;
+    return [...rows].sort((a, b) => (a.markerNumber || Infinity) - (b.markerNumber || Infinity))
+      .map((row) => ({ ...row, markerNumber: row.status === 'complete' ? null : ++next }));
+  }
   const numbers = { ...savedNumbers };
   rows.forEach((row) => {
     if (Number.isInteger(row.markerNumber) && row.markerNumber > 0) numbers[locationKey(row)] = row.markerNumber;
@@ -24,8 +34,25 @@ export function numberOptimizedVisits(optimized, completed) {
 }
 
 // Server task status remains authoritative; the session only owns visit order and geometry.
-export function restoreRouteSession(rows, session, day) {
+export function restoreRouteSession(rows, session, day, { singleDestinationOnly = false } = {}) {
   if (!session || session.day !== day || !session.optimized || !Array.isArray(session.order) || !Array.isArray(session.routeSegments)) return null;
+  const segment = session.routeSegments[0];
+  if (segment?.destinationKey) {
+    const target = rows.find((row) => locationKey(row) === segment.destinationKey);
+    if (!target || ['complete', 'completed', 'done'].includes(String(target.status).toLowerCase())) return null;
+    const numbers = session.visitNumbers || {};
+    const ordered = [...rows].sort((a, b) =>
+      (a.markerNumber || numbers[locationKey(a)] || Infinity) - (b.markerNumber || numbers[locationKey(b)] || Infinity));
+    let next = 0;
+    return {
+      locations: ordered.map((row) => ({ ...row, priority: null,
+        markerNumber: row.status === 'complete' ? null : ++next })),
+      segments: [segment], currentSegmentIndex: 0,
+      isGuiding: Boolean(session.isGuiding), optimized: true,
+    };
+  }
+  // Legacy routes cover all visits. Do not resume those in the single-place UI.
+  if (singleDestinationOnly) return null;
   rows = numberVisits(rows, session.visitNumbers || Object.fromEntries(session.order.map((id, index) => [id, index + 1])));
   const byId = new Map(rows.map((row) => [locationKey(row), row]));
   const remaining = session.order.flatMap((id, index) => {
