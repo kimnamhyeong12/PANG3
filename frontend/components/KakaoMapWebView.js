@@ -95,6 +95,19 @@ const buildKakaoMapHtml = (
     background: #EAF1F7;
   }
 
+  .route-direction-arrow {
+    width: 12px;
+    height: 12px;
+    pointer-events: none;
+    filter: drop-shadow(0 0 1px #475569);
+  }
+
+  .route-direction-arrow svg {
+    display: block;
+    width: 12px;
+    height: 12px;
+  }
+
   /*
    * ===============================
    * 일반 방문지 마커
@@ -368,7 +381,11 @@ const buildKakaoMapHtml = (
   var renderedBoundaryCount = 0;
 
   var roadLine = null;
+  var activeOutline = null;
   var activeLine = null;
+  var trafficLines = [];
+  var directionOverlays = [];
+  var displayedActivePath = [];
   var connectorLines = [];
   var entranceOverlays = [];
 
@@ -493,6 +510,16 @@ const buildKakaoMapHtml = (
       activeLine.setMap(null);
       activeLine = null;
     }
+    if (activeOutline) {
+      activeOutline.setMap(null);
+      activeOutline = null;
+    }
+    trafficLines.forEach(function (line) { line.setMap(null); });
+    trafficLines = [];
+
+    directionOverlays.forEach(function (overlay) { overlay.setMap(null); });
+    directionOverlays = [];
+    displayedActivePath = [];
 
     connectorLines.forEach(function (line) { line.setMap(null); });
     connectorLines = [];
@@ -921,9 +948,9 @@ const buildKakaoMapHtml = (
           strokeWeight: 5,
 
           strokeColor:
-            "#12395B",
+            "#2D72F6",
 
-          strokeOpacity: 0.25,
+          strokeOpacity: 0.12,
 
           strokeStyle:
             "solid"
@@ -932,7 +959,7 @@ const buildKakaoMapHtml = (
       roadLine.setMap(map);
     }
 
-    updateActivePath(data.activePath);
+    updateActivePath(data.activePath, data.activeTrafficPaths);
 
     (data.connectorPaths || []).forEach(function (connector) {
       if (!Array.isArray(connector) || connector.length < 2) return;
@@ -970,21 +997,123 @@ const buildKakaoMapHtml = (
     }
   }
 
-  function updateActivePath(path) {
+  function trafficColor(state) {
+    var colors = {
+      1: "#DC2626", // 정체
+      2: "#F97316", // 지체
+      3: "#FACC15", // 서행
+      4: "#16A34A", // 원활
+      6: "#64748B"  // 통행 불가
+    };
+    return colors[Number(state)] || "#2D72F6"; // 교통 정보 없음
+  }
+
+  function updateActivePath(path, trafficPaths) {
     if (!map) return;
+    displayedActivePath = Array.isArray(path) ? path : [];
+    if (activeOutline) {
+      activeOutline.setMap(null);
+      activeOutline = null;
+    }
     if (activeLine) {
       activeLine.setMap(null);
       activeLine = null;
     }
-    if (!Array.isArray(path) || path.length < 2) return;
+    trafficLines.forEach(function (line) { line.setMap(null); });
+    trafficLines = [];
+    if (displayedActivePath.length < 2) {
+      renderDirectionArrows();
+      return;
+    }
+    activeOutline = new window.kakao.maps.Polyline({
+      path: displayedActivePath.map(toLatLng),
+      strokeWeight: 11,
+      strokeColor: "#FFFFFF",
+      strokeOpacity: 0.95,
+      strokeStyle: "solid"
+    });
+    activeOutline.setMap(map);
     activeLine = new window.kakao.maps.Polyline({
-      path: path.map(toLatLng),
-      strokeWeight: 9,
-      strokeColor: "#12395B",
+      path: displayedActivePath.map(toLatLng),
+      strokeWeight: 7,
+      strokeColor: "#2D72F6",
       strokeOpacity: 1,
       strokeStyle: "solid"
     });
     activeLine.setMap(map);
+    (trafficPaths || []).forEach(function (section) {
+      if (!Array.isArray(section.path) || section.path.length < 2) return;
+      var line = new window.kakao.maps.Polyline({
+        path: section.path.map(toLatLng),
+        strokeWeight: 7,
+        strokeColor: trafficColor(section.trafficState),
+        strokeOpacity: 1,
+        strokeStyle: "solid"
+      });
+      line.setMap(map);
+      trafficLines.push(line);
+    });
+    renderDirectionArrows();
+  }
+
+  function routePoint(point) {
+    return {
+      lat: Number(point.latitude != null ? point.latitude : point.lat != null ? point.lat : point.y),
+      lng: Number(point.longitude != null ? point.longitude : point.lng != null ? point.lng : point.x)
+    };
+  }
+
+  function routeDistance(a, b) {
+    var north = (b.lat - a.lat) * 111320;
+    var east = (b.lng - a.lng) * 111320 * Math.cos((a.lat + b.lat) * Math.PI / 360);
+    return Math.sqrt(north * north + east * east);
+  }
+
+  function renderDirectionArrows() {
+    directionOverlays.forEach(function (overlay) { overlay.setMap(null); });
+    directionOverlays = [];
+    if (!map || displayedActivePath.length < 2 || map.getLevel() > 5) return;
+
+    var points = displayedActivePath.map(routePoint);
+    var totalDistance = 0;
+    for (var i = 1; i < points.length; i++) {
+      totalDistance += routeDistance(points[i - 1], points[i]);
+    }
+    var spacing = Math.max(45, Math.min(90, totalDistance / 4), totalDistance / 30);
+    var nextArrowAt = spacing / 2;
+    var travelled = 0;
+
+    for (var index = 1; index < points.length && directionOverlays.length < 30; index++) {
+      var start = points[index - 1];
+      var end = points[index];
+      var length = routeDistance(start, end);
+      if (!Number.isFinite(length) || length < 0.1) continue;
+      var east = (end.lng - start.lng) * Math.cos((start.lat + end.lat) * Math.PI / 360);
+      var north = end.lat - start.lat;
+      var angle = Math.atan2(east, north) * 180 / Math.PI;
+
+      while (nextArrowAt <= travelled + length && directionOverlays.length < 30) {
+        var fraction = (nextArrowAt - travelled) / length;
+        var arrow = document.createElement("div");
+        arrow.className = "route-direction-arrow";
+        arrow.style.transform = "rotate(" + angle + "deg)";
+        arrow.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1 L10 10 L6 8 L2 10 Z" fill="#FFFFFF"/></svg>';
+        var overlay = new window.kakao.maps.CustomOverlay({
+          position: new window.kakao.maps.LatLng(
+            start.lat + (end.lat - start.lat) * fraction,
+            start.lng + (end.lng - start.lng) * fraction
+          ),
+          content: arrow,
+          xAnchor: 0.5,
+          yAnchor: 0.5,
+          zIndex: 90
+        });
+        overlay.setMap(map);
+        directionOverlays.push(overlay);
+        nextArrowAt += spacing;
+      }
+      travelled += length;
+    }
   }
 
   /*
@@ -1286,6 +1415,7 @@ const buildKakaoMapHtml = (
       );
 
       window.kakao.maps.event.addListener(map, "zoom_changed", function () {
+        renderDirectionArrows();
         // 줌은 선택 위도/경도를 바꾸지 않는다. 위치 설정 중이면 같은 좌표를 중심으로만 유지한다.
         if (selectionMode && selectionSessionActive && selectedCenter) {
           map.setCenter(selectedCenter);
@@ -2930,6 +3060,8 @@ export default function KakaoMapWebView({
           isGuiding
             ? remainingActivePath
             : activePath,
+        activeTrafficPaths: isGuiding ? [] : routeSegments.flatMap((segment) =>
+          Array.isArray(segment?.trafficSections) ? segment.trafficSections : []),
       },
     });
   }, [

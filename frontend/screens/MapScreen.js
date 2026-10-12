@@ -11,6 +11,7 @@ import {
   Keyboard,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,6 +21,7 @@ import {
   View,
 } from 'react-native';
 import KakaoMapWebView from '../components/KakaoMapWebView';
+import { KakaoNavigationView, isKakaoNavigationAvailable } from '../modules/kakao-navigation';
 import { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
 import { locationKey, numberVisits, numberOptimizedVisits } from '../utils/routeSession';
 import {
@@ -213,6 +215,7 @@ function NormalMapScreen({
   const [transportMode, setTransportMode] = useState('car');
   const [segmentChanging, setSegmentChanging] = useState(false);
   const [guideStartOpen, setGuideStartOpen] = useState(false);
+  const [kakaoDestination, setKakaoDestination] = useState(null);
 
   const [keyword, setKeyword] = useState('');
   const [searchedPlace, setSearchedPlace] = useState(null);
@@ -1867,6 +1870,16 @@ function NormalMapScreen({
       setRouteSegments(updatedSegments);
       setCurrentSegmentIndex(targetIndex);
       setRoadPath(updatedSegments.slice(targetIndex).flatMap((segment) => segment?.path || []));
+      if (mode !== 'car') {
+        setKakaoDestination(null);
+      } else if (isGuiding && Platform.OS === 'android' && isKakaoNavigationAvailable()) {
+        setKakaoDestination({
+          lat: Number(target.lat), lng: Number(target.lng),
+          name: target.detailAddress || target.roadAddress || '다음 방문지',
+          address: target.roadAddress || target.detailAddress || '',
+          startLat: Number(currentLocation.lat), startLng: Number(currentLocation.lng),
+        });
+      }
 
       if (data.totalDuration !== undefined && data.totalDuration !== null) {
         setTotalDuration(data.totalDuration);
@@ -1985,6 +1998,10 @@ function NormalMapScreen({
   };
 
   const handleStartGuidance = async () => {
+    if (transportMode === 'car' && Platform.OS === 'android' && isKakaoNavigationAvailable()) {
+      await handleStartKakaoGuidance();
+      return;
+    }
     const firstIndex = getNextIncompleteIndex(0);
 
     if (firstIndex < 0) {
@@ -2005,7 +2022,30 @@ function NormalMapScreen({
     await updateGuideTargetSegment(firstIndex);
   };
 
+  const handleStartKakaoGuidance = async () => {
+    const targetIndex = isGuiding ? currentSegmentIndex : getNextIncompleteIndex(0);
+    const target = guideTargets[targetIndex];
+    if (!target) {
+      showAlert('안내할 업무 없음', '모든 방문지가 완료되었습니다.');
+      return;
+    }
+    if (!currentLocation?.lat || !currentLocation?.lng) {
+      showAlert('현재 위치 확인 중', '위치를 확인한 뒤 다시 시도해 주세요.');
+      return;
+    }
+    setGuideStartOpen(false);
+    setIsGuiding(true);
+    setKakaoDestination({
+      lat: Number(target.lat), lng: Number(target.lng),
+      name: target.detailAddress || target.roadAddress || '다음 방문지',
+      address: target.roadAddress || target.detailAddress || '',
+      startLat: Number(currentLocation.lat), startLng: Number(currentLocation.lng),
+    });
+    if (!isGuiding) await updateGuideTargetSegment(targetIndex);
+  };
+
   const handleStopGuidance = async () => {
+    setKakaoDestination(null);
     setIsGuiding(false);
     await stopRouteNotification();
   };
@@ -2166,6 +2206,17 @@ function NormalMapScreen({
         ))}
         onRerouteRequest={handleReroute}
       />
+      {kakaoDestination && (
+        <KakaoNavigationView
+          style={StyleSheet.absoluteFillObject}
+          destination={kakaoDestination}
+          onError={(event) => {
+            setKakaoDestination(null);
+            showAlert('카카오 길안내 오류', event.nativeEvent?.message || '길안내를 시작하지 못했습니다.');
+          }}
+          onEnded={() => setKakaoDestination(null)}
+        />
+      )}
 
       {mapSelectMode && <View style={{ position: 'absolute', left: 16, right: 16, bottom: 16, zIndex: 46, backgroundColor: '#FFFFFF', padding: 14, borderRadius: 14, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, elevation: 6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
@@ -3797,6 +3848,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginTop: 12,
+  },
+
+  nativeGuideButton: {
+    marginTop: 10,
+    backgroundColor: '#2477F3',
+    borderRadius: 14,
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+
+  nativeGuideButtonLabel: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
   },
 
   sheetButton: {
