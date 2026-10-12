@@ -247,6 +247,7 @@ public class RouteService {
             totalDuration += leg.duration();
             fullPath.addAll(leg.path());
             Map<String, Object> segment = makeSegment(i, start, end, leg.path(), "car");
+            segment.put("trafficSections", leg.trafficSections());
             segments.add(segment);
         }
 
@@ -259,13 +260,15 @@ public class RouteService {
         return result;
     }
 
-    private record RoadLeg(List<Map<String, Double>> path, int distance, int duration) {}
+    private record RoadLeg(List<Map<String, Double>> path,
+                           List<Map<String, Object>> trafficSections,
+                           int distance, int duration) {}
 
     private RoadLeg requestRoadLeg(Map<String, Object> start, Map<String, Object> end) {
         String url = "https://apis-navi.kakaomobility.com/v1/directions"
                 + "?origin=" + getLng(start) + "," + getLat(start)
                 + "&destination=" + getLng(end) + "," + getLat(end)
-                + "&priority=RECOMMEND";
+                + "&priority=RECOMMEND&summary=false";
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "KakaoAK " + kakaoRestApiKey);
         Map<String, Object> body = restTemplate.exchange(url, HttpMethod.GET,
@@ -279,6 +282,7 @@ public class RouteService {
         Map<String, Object> summary = (Map<String, Object>) route.get("summary");
         List<Map<String, Object>> sections = (List<Map<String, Object>>) route.get("sections");
         List<Map<String, Double>> path = new ArrayList<>();
+        List<Map<String, Object>> trafficSections = new ArrayList<>();
         if (sections != null) {
             for (Map<String, Object> section : sections) {
                 List<Map<String, Object>> roads = (List<Map<String, Object>>) section.get("roads");
@@ -286,9 +290,18 @@ public class RouteService {
                 for (Map<String, Object> road : roads) {
                     List<Number> vertices = (List<Number>) road.get("vertexes");
                     if (vertices == null) continue;
+                    List<Map<String, Double>> roadPath = new ArrayList<>();
                     for (int j = 0; j < vertices.size() - 1; j += 2) {
-                        path.add(Map.of("latitude", vertices.get(j + 1).doubleValue(),
-                                "longitude", vertices.get(j).doubleValue()));
+                        Map<String, Double> point = Map.of("latitude", vertices.get(j + 1).doubleValue(),
+                                "longitude", vertices.get(j).doubleValue());
+                        path.add(point);
+                        roadPath.add(point);
+                    }
+                    if (roadPath.size() >= 2) {
+                        Map<String, Object> trafficSection = new HashMap<>();
+                        trafficSection.put("path", roadPath);
+                        trafficSection.put("trafficState", road.get("traffic_state"));
+                        trafficSections.add(trafficSection);
                     }
                 }
             }
@@ -297,7 +310,7 @@ public class RouteService {
         if (end.containsKey("markerLatitude") && !endsNearEntrance(path, end)) {
             throw new IllegalStateException("차량 경로가 출입구 근처에 연결되지 않았습니다.");
         }
-        return new RoadLeg(path,
+        return new RoadLeg(path, trafficSections,
                 summary == null ? 0 : ((Number) summary.getOrDefault("distance", 0)).intValue(),
                 summary == null ? 0 : ((Number) summary.getOrDefault("duration", 0)).intValue());
     }
