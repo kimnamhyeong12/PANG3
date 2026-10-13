@@ -4,8 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
   ActivityIndicator,
+  Animated,
   BackHandler,
   FlatList,
   Keyboard,
@@ -20,20 +20,21 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import KakaoMapWebView from '../components/KakaoMapWebView';
 import PlaceSearchOverlay from '../components/PlaceSearchOverlay';
 import SearchResultSheet from '../components/SearchResultSheet';
 import WorkplaceField from '../components/WorkplaceField';
-import { placeLocation, isRegisteredPlace } from '../utils/placeSearch';
-import KakaoMapWebView from '../components/KakaoMapWebView';
-import { KakaoNavigationView, isKakaoNavigationAvailable, beginRouteSession } from '../modules/kakao-navigation';
-import { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
-import { locationKey } from '../utils/routeSession';
-import { hasVisitCoordinates, recommendVisitOrder, promoteVisit, visitSetKey } from '../utils/visitOrder';
+import { KakaoNavigationView, beginRouteSession, isKakaoNavigationAvailable } from '../modules/kakao-navigation';
 import {
   stopRouteNotification,
   updateRouteNotification,
 } from '../services/notificationService';
-
+import { isRegisteredPlace, placeLocation } from '../utils/placeSearch';
+import { locationKey } from '../utils/routeSession';
+import { hasVisitCoordinates, promoteVisit, recommendVisitOrder, visitSetKey } from '../utils/visitOrder';
+import { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
+// 엑셀,csv 데이터 업로드
+import BulkUploadModal from '../components/BulkUploadModal';
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const EMPTY_MARKERS = [];
@@ -119,6 +120,7 @@ const cleanLocation = (loc, fallbackName = '위치') => {
     priority: loc.priority ?? null,
   };
 };
+
 
 function NormalMapScreen({
   isActive = true,
@@ -215,6 +217,8 @@ function NormalMapScreen({
   const [selectedDong, setSelectedDong] = useState(null);
   const selectedDongName = dongName(selectedDong?.properties?.adm_nm || selectedDong?.properties?.name);
   const favoriteDongKey = `pang3:favorite-dongs:${user?.userId || 'guest'}:${activeGroup?.groupId || 'personal'}`;
+  // 엑셀, csv 데이터 업로드
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   useEffect(() => {
     let active = true;
     setFavoriteDongNames([]);
@@ -1265,6 +1269,7 @@ function NormalMapScreen({
     if (cardTarget) previewVisit(cardTarget, mode);
   };
 
+  
   useEffect(() => {
     if (!isGuiding || !activeTarget || !activeSegment) { stopRouteNotification(); return; }
     updateRouteNotification({ from: '현재 위치', to: activeTarget.detailAddress || activeTarget.roadAddress || '방문지',
@@ -1485,9 +1490,18 @@ function NormalMapScreen({
               <Ionicons name="business-outline" size={18} color="#2477F3" />
               <View><Text style={styles.addMenuTitle}>공공시설물</Text><Text style={styles.addMenuDesc}>행정동을 선택해 AED · 버스정류장 조회</Text></View>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.addMenuItem} onPress={() => { setAddMenuOpen(false); showAlert('준비 중', '엑셀 일괄 등록은 후속 개발 예정입니다.'); }}>
+            <TouchableOpacity 
+              style={styles.addMenuItem} 
+              onPress={() => { 
+                setAddMenuOpen(false); 
+                setBulkUploadOpen(true);
+              }}
+            >
               <Ionicons name="grid-outline" size={18} color="#2477F3" />
-              <View><Text style={styles.addMenuTitle}>엑셀 일괄 등록</Text><Text style={styles.addMenuDesc}>후속 개발 예정</Text></View>
+              <View>
+                <Text style={styles.addMenuTitle}>엑셀 일괄 등록</Text>
+                <Text style={styles.addMenuDesc}>xcel · CSV 파일 불러오기</Text>
+              </View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.addMenuItemLast} onPress={() => { setAddMenuOpen(false); showAlert('준비 중', '사진으로 등록은 후속 개발 예정입니다.'); }}>
               <Ionicons name="image-outline" size={18} color="#2477F3" />
@@ -1979,7 +1993,14 @@ function NormalMapScreen({
           <TouchableOpacity disabled={workplaceBusy} onPress={() => setWorkplaceOpen(false)} style={{ padding: 14, alignItems: 'center' }}><Text>닫기</Text></TouchableOpacity>
         </View></View>
       </Modal>
-
+      <BulkUploadModal
+        visible={bulkUploadOpen}
+        userId={user?.userId}
+        groupId={activeGroup?.groupId ?? null}
+        onDataChanged={onDataChanged}
+        apiBaseUrl={API_BASE_URL}
+        onClose={() => setBulkUploadOpen(false)}
+      />
     </View>
   );
 }
