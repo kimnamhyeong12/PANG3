@@ -797,7 +797,7 @@ const buildKakaoMapHtml = (
   /*
    * 여러 좌표가 모두 보이도록 화면 맞춤.
    */
-  function fitCoordinates(coordinates) {
+  function fitCoordinates(coordinates, padding) {
     if (
       !map ||
       !coordinates ||
@@ -815,12 +815,19 @@ const buildKakaoMapHtml = (
       );
     });
 
+    // A single result needs a readable street view, not maximum zoom.
+    if (coordinates.length === 1) {
+      var centerPoint = toLatLng(coordinates[0]);
+      bounds.extend(new window.kakao.maps.LatLng(centerPoint.getLat() - 0.0015, centerPoint.getLng() - 0.0015));
+      bounds.extend(new window.kakao.maps.LatLng(centerPoint.getLat() + 0.0015, centerPoint.getLng() + 0.0015));
+    }
+
     map.setBounds(
       bounds,
-      40,
-      40,
-      40,
-      40
+      padding?.top || 40,
+      padding?.right || 40,
+      padding?.bottom || 40,
+      padding?.left || 40
     );
   }
 
@@ -1283,7 +1290,7 @@ const buildKakaoMapHtml = (
       commandData.type === "FIT"
     ) {
       fitCoordinates(
-        commandData.coordinates
+        commandData.coordinates, commandData.padding
       );
 
       return;
@@ -1481,6 +1488,8 @@ export default function KakaoMapWebView({
   previewRouteSegment = null,
   highlightedLocationKey = null,
   focusCoordinates = null,
+  focusToken = 0,
+  focusPadding = null,
 
   searchedPlace,
   clearSearchMarkerSignal,
@@ -1755,8 +1764,11 @@ export default function KakaoMapWebView({
   const focusCoordinatesKey = JSON.stringify(focusCoordinates || []);
   useEffect(() => {
     if (!focusCoordinates?.length) return;
-    sendMapCommand({ type: "FIT", coordinates: focusCoordinates });
-  }, [focusCoordinatesKey]);
+    followModeRef.current = false;
+    if (segmentFocusTimerRef.current) { clearTimeout(segmentFocusTimerRef.current); segmentFocusTimerRef.current = null; }
+    if (panReturnTimerRef.current) { clearTimeout(panReturnTimerRef.current); panReturnTimerRef.current = null; }
+    sendMapCommand({ type: "FIT", coordinates: focusCoordinates, padding: focusPadding });
+  }, [focusCoordinatesKey, focusToken]);
 
   /*
    * ===============================

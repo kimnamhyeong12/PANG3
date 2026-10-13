@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { showAlert } from '../components/CustomAlert';
 import { PrimaryButton, ScreenHeader } from '../components/ui';
 import { colors, radius, shadow } from '../constants/design';
+import WorkplaceField from '../components/WorkplaceField';
 import { REGIONS, DISTRICTS_BY_REGION } from './SettingsScreen';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
@@ -15,11 +16,12 @@ export default function RegisterScreen({ onBack }) {
   const [showPwConfirm, setShowPwConfirm] = useState(false);
   const [workSido, setWorkSido] = useState('부산광역시');
   const [workSigungu, setWorkSigungu] = useState('');
+  const [workplace, setWorkplace] = useState(null);
   const [regionOpen, setRegionOpen] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const passwordMatches = Boolean(pw) && pw === pwConfirm;
-  const canSubmit = Boolean(loginId.trim() && pw && pwConfirm && passwordMatches && workSigungu && !loading);
+  const canSubmit = Boolean(loginId.trim() && pw && pwConfirm && passwordMatches && workSigungu && workplace && !loading);
 
   const register = async () => {
     if (!loginId.trim() || !pw || !pwConfirm || loading) return;
@@ -29,7 +31,7 @@ export default function RegisterScreen({ onBack }) {
       const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ loginId: loginId.trim(), password: pw, name: loginId.trim(), workSido, workSigungu }),
+        body: JSON.stringify({ loginId: loginId.trim(), password: pw, name: loginId.trim(), workSido, workSigungu, ...workplace }),
       });
       if (!res.ok) throw new Error('회원가입 실패');
       showAlert('가입 완료', '등록한 계정으로 로그인할 수 있습니다.');
@@ -65,6 +67,8 @@ export default function RegisterScreen({ onBack }) {
           <Ionicons name="chevron-down" size={19} color={colors.textSoft} />
         </TouchableOpacity>
         <View style={styles.infoRow}><Ionicons name="information-circle" size={17} color={colors.primary} /><Text style={styles.infoText}>행정동은 가입 후 지도에서 선택할 수 있습니다.</Text></View>
+
+        <WorkplaceField value={workplace} onChange={setWorkplace} disabled={loading} required />
 
         <PrimaryButton title={loading ? '가입 중...' : '회원가입'} icon="arrow-forward" onPress={register} disabled={!canSubmit} style={styles.submit} />
         <TouchableOpacity style={styles.loginLink} onPress={onBack}><Text style={styles.loginMuted}>이미 계정이 있나요?</Text><Text style={styles.loginText}>로그인</Text></TouchableOpacity>

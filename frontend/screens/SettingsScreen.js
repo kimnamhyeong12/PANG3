@@ -20,6 +20,7 @@ import {
   SectionTitle,
 } from '../components/ui';
 
+import WorkplaceField from '../components/WorkplaceField';
 import { colors, radius } from '../constants/design';
 
 import {
@@ -160,6 +161,20 @@ export default function SettingsScreen({
   const [workSigungu, setWorkSigungu] = useState(
     user?.workSigungu || ''
   );
+
+  const [workplace, setWorkplace] = useState({ workplaceAddress: user?.workplaceAddress || '', workplaceLat: user?.workplaceLat, workplaceLng: user?.workplaceLng });
+  const [workplaceSaving, setWorkplaceSaving] = useState(false);
+  const saveWorkplace = async () => {
+    if (!workplace?.workplaceAddress || workplaceSaving) return;
+    setWorkplaceSaving(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/users/${user.userId}/workplace`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(workplace) });
+      if (!response.ok) throw new Error('근무지를 저장하지 못했습니다.');
+      onUpdatedUser?.({ ...user, ...(await response.json()) });
+      showAlert('저장 완료', '근무지 주소를 변경했습니다.');
+    } catch (error) { showAlert('저장 실패', error.message); }
+    finally { setWorkplaceSaving(false); }
+  };
 
   const [picker, setPicker] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -512,6 +527,12 @@ export default function SettingsScreen({
               !workSigungu
             }
           />
+        </View>
+
+        <SectionTitle title="근무지" />
+        <View style={styles.card}>
+          <WorkplaceField value={workplace} onChange={setWorkplace} userId={user?.userId} disabled={workplaceSaving} />
+          <PrimaryButton title={workplaceSaving ? '저장 중...' : '근무지 저장'} onPress={saveWorkplace} disabled={workplaceSaving || !workplace.workplaceAddress || (workplace.workplaceAddress === user?.workplaceAddress && workplace.workplaceLat === user?.workplaceLat && workplace.workplaceLng === user?.workplaceLng)} />
         </View>
 
         {/* 알림 설정 */}

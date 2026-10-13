@@ -123,6 +123,7 @@ export default function App() {
     setSelectedDong(null);
     AsyncStorage.removeItem('pang3:selectedDong').catch(() => {});
   }, [calendarDayKey]);
+  const [mapSearchVisible, setMapSearchVisible] = useState(false);
   const [user, setUser] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [actionType, setActionType] = useState(null);
@@ -1085,6 +1086,8 @@ export default function App() {
         {screen === 'publicDataAssignment' && activeGroup && (
           <MapScreen
             user={user}
+            onUpdatedUser={setUser}
+            onSearchVisibilityChange={setMapSearchVisible}
             selectedDong={selectedDong}
             onSelectedDongChange={updateSelectedDong}
             activeGroup={activeGroup}
@@ -1118,6 +1121,8 @@ export default function App() {
         {screen === 'teamLocations' && activeGroup && (
           <MapScreen
             user={user}
+            onUpdatedUser={setUser}
+            onSearchVisibilityChange={setMapSearchVisible}
             selectedDong={selectedDong}
             onSelectedDongChange={updateSelectedDong}
             locations={teamLocations}
@@ -1264,6 +1269,8 @@ export default function App() {
               recordReturn={mapRecordReturn?.workspace === workspaceCacheKey() && mapRecordReturn?.day === calendarDayKey ? mapRecordReturn : null}
               pendingWork={pendingWork}
               onAddWork={addWorkToMap}
+              onUpdatedUser={setUser}
+              onSearchVisibilityChange={setMapSearchVisible}
             />
           </View>
         )}
@@ -1401,6 +1408,7 @@ export default function App() {
         </View>
 
         {user &&
+          !(['mapDirect', 'teamLocations', 'publicDataAssignment'].includes(screen) && mapSearchVisible) &&
           !['login', 'register', 'settings'].includes(screen) && (
             <BottomNavigation
               screen={screen}

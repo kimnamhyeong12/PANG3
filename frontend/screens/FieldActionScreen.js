@@ -1268,14 +1268,14 @@ export default function FieldActionScreen({
                 setEditingLocation((value) => !value);
               }}
             >
-              <Text style={styles.photoSmallButtonText}>위치 설정</Text>
+              <Ionicons name="location-outline" size={16} color="#FFFFFF" /><Text style={styles.photoSmallButtonText}>위치 바꾸기</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.photoSmallButton}
               onPress={openMapEditor}
             >
-              <Text style={styles.photoSmallButtonText}>위치도 편집</Text>
+              <Ionicons name="create-outline" size={16} color="#FFFFFF" /><Text style={styles.photoSmallButtonText}>{markedMapUri ? '위치도 수정하기' : '위치도 표시하기'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -1833,6 +1833,9 @@ const styles =
 
     photoSmallButton: {
       flex: 1,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 5,
 
       backgroundColor:
         '#2477F3',
