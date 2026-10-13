@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import VoiceTextInput from './VoiceTextInput';
 import { searchPlaces, isRegisteredPlace } from '../utils/placeSearch';
 
 export function HighlightedPlace({ text = '', query = '' }) {
@@ -68,19 +68,24 @@ export default function PlaceSearchOverlay({ userId, center, onClose, onResults,
     if (text === query) return;
     sequence.current++; controller.current?.abort(); setResults([]); setError(''); setCompletedQuery(null); setLoading(false); setQuery(text);
   };
-  const pick = (place, add) => { remember(query.trim() || place.place_name, place); Keyboard.dismiss(); (add ? onAdd : onPick)?.(place); };
+  const pick = (place, add) => {
+    remember(query.trim() || place.place_name, place);
+    if (!add && !onPick) { changeQuery(place.place_name || place.address_name); return; }
+    Keyboard.dismiss(); (add ? onAdd : onPick)?.(place);
+  };
   return <KeyboardAvoidingView style={s.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <SafeAreaView edges={['top']} style={{ flex: 1 }}>
     <View style={s.header}>
       <TouchableOpacity onPress={() => { Keyboard.dismiss(); onClose(); }} style={s.icon} accessibilityLabel="검색 닫기"><Ionicons name="chevron-back" size={26} /></TouchableOpacity>
-      <View style={{ flex: 1 }}><VoiceTextInput value={query} onChangeText={changeQuery} replaceTranscript multiline={false} placeholder="주소 또는 방문지 검색" inputStyle={s.input} autoFocus returnKeyType="search" onSubmitEditing={() => run(query, true)} /></View>
+      <TextInput style={[s.input, { flex: 1 }]} value={query} onChangeText={changeQuery} multiline={false} placeholder="주소 또는 방문지 검색" placeholderTextColor="#9AA6B2" autoFocus returnKeyType="search" onSubmitEditing={() => run(query, true)} />
       {!!query && <TouchableOpacity onPress={() => changeQuery('')} style={s.icon} accessibilityLabel="검색어 지우기"><Ionicons name="close-circle" size={20} color="#9AA6B2" /></TouchableOpacity>}
       <TouchableOpacity onPress={() => run(query, true)} style={s.icon} accessibilityLabel="지도에서 검색 결과 보기"><Ionicons name="search" size={24} color="#2477F3" /></TouchableOpacity>
     </View>
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+    <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
       {!query.trim() && history && <>
         <View style={s.recentHeader}><Text style={s.title}>최근 검색</Text><TouchableOpacity onPress={() => saveRecent([])} accessibilityLabel="최근 검색 전체 삭제"><Text style={s.address}>전체 삭제</Text></TouchableOpacity></View>
         {!recent.length && <Text style={s.empty}>최근 검색 기록이 없습니다.</Text>}
-        {recent.map(item => <View style={s.row} key={item.id}><TouchableOpacity style={s.rowMain} onPress={() => { if (item.place) { remember(item.query, item.place); Keyboard.dismiss(); onPick?.(item.place); } else changeQuery(item.query); }}><Ionicons name={item.place ? 'location-outline' : 'time-outline'} size={20} color="#8B98A5" /><View style={{ flex: 1 }}><Text style={s.name}>{item.place?.place_name || item.query}</Text>{item.place && <Text style={s.address}>{item.place.road_address_name || item.place.address_name}</Text>}</View></TouchableOpacity><TouchableOpacity style={s.icon} onPress={() => saveRecent(recentRef.current.filter(row => row.id !== item.id))} accessibilityLabel={`${item.query} 기록 삭제`}><Ionicons name="close" size={20} color="#8B98A5" /></TouchableOpacity></View>)}
+        {recent.map(item => <View style={s.row} key={item.id}><TouchableOpacity style={s.rowMain} onPress={() => { if (item.place) { if (onPick) { remember(item.query, item.place); Keyboard.dismiss(); onPick(item.place); } else changeQuery(item.place.place_name || item.query); } else changeQuery(item.query); }}><Ionicons name={item.place ? 'location-outline' : 'time-outline'} size={20} color="#8B98A5" /><View style={{ flex: 1 }}><Text style={s.name}>{item.place?.place_name || item.query}</Text>{item.place && <Text style={s.address}>{item.place.road_address_name || item.place.address_name}</Text>}</View></TouchableOpacity><TouchableOpacity style={s.icon} onPress={() => saveRecent(recentRef.current.filter(row => row.id !== item.id))} accessibilityLabel={`${item.query} 기록 삭제`}><Ionicons name="close" size={20} color="#8B98A5" /></TouchableOpacity></View>)}
       </>}
       {loading && <ActivityIndicator style={{ margin: 20 }} color="#2477F3" />}
       {!!error && <Text style={s.empty}>{error}</Text>}
@@ -88,6 +93,7 @@ export default function PlaceSearchOverlay({ userId, center, onClose, onResults,
       {query.trim().length === 1 && completedQuery !== query.trim() && <Text style={s.empty}>두 글자 이상 입력해 주세요. 검색 버튼으로 바로 검색할 수도 있습니다.</Text>}
       {results.map(place => <PlaceRow key={`${place.id}:${place.x}:${place.y}`} place={place} query={query} onPress={() => pick(place, false)} onAdd={onAdd ? () => pick(place, true) : null} registered={isRegisteredPlace(place, locations)} />)}
     </ScrollView>
+    </SafeAreaView>
   </KeyboardAvoidingView>;
 }
-const s = StyleSheet.create({ overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#FFFFFF', zIndex: 100, elevation: 30 }, header: { flexDirection: 'row', alignItems: 'center', padding: 8, gap: 2, borderBottomWidth: 1, borderColor: '#E9EDF2' }, icon: { padding: 8, minHeight: 44, justifyContent: 'center' }, input: { height: 48, color: '#101820', fontSize: 17, paddingLeft: 6 }, row: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderColor: '#E9EDF2', paddingHorizontal: 14, minHeight: 84 }, rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 }, name: { color: '#101820', fontSize: 16, fontWeight: '600' }, address: { color: '#7C8794', fontSize: 12, marginTop: 4 }, add: { alignItems: 'center', justifyContent: 'center', minWidth: 52, minHeight: 52, marginLeft: 8, borderRadius: 12, backgroundColor: '#EAF4FF' }, recentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 }, title: { color: '#101820', fontWeight: '700', fontSize: 18 }, empty: { padding: 24, color: '#7C8794', textAlign: 'center' } });
+const s = StyleSheet.create({ overlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', zIndex: 100, elevation: 30 }, header: { flexDirection: 'row', alignItems: 'center', padding: 8, gap: 2, borderBottomWidth: 1, borderColor: '#E9EDF2' }, icon: { padding: 8, minHeight: 44, justifyContent: 'center' }, input: { height: 48, color: '#101820', fontSize: 17, paddingLeft: 6 }, row: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderColor: '#E9EDF2', paddingHorizontal: 14, minHeight: 84 }, rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 }, name: { color: '#101820', fontSize: 16, fontWeight: '600' }, address: { color: '#7C8794', fontSize: 12, marginTop: 4 }, add: { alignItems: 'center', justifyContent: 'center', minWidth: 52, minHeight: 52, marginLeft: 8, borderRadius: 12, backgroundColor: '#EAF4FF' }, recentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 }, title: { color: '#101820', fontWeight: '700', fontSize: 18 }, empty: { padding: 24, color: '#7C8794', textAlign: 'center' } });

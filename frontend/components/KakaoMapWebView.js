@@ -161,6 +161,16 @@ const buildKakaoMapHtml = (
     box-shadow: 0 0 0 3px #FFFFFF, 0 0 0 5px #2477F3;
   }
 
+  .marker-wrap.search-selected {
+    transform: scale(1.3);
+    transform-origin: 50% 100%;
+  }
+
+  .marker-wrap.search-selected .marker {
+    border-color: #F97316;
+    box-shadow: 0 0 0 3px #FFFFFF, 0 0 0 5px #F97316;
+  }
+
   /*
    * ===============================
    * 목적지 접근 파동
@@ -623,7 +633,8 @@ const buildKakaoMapHtml = (
     color,
     pulse,
     label,
-    highlighted
+    highlighted,
+    selectedSearch
   ) {
     var wrapper =
       document.createElement("div");
@@ -631,7 +642,8 @@ const buildKakaoMapHtml = (
     wrapper.className =
       "marker-wrap" +
       (pulse ? " near" : "") +
-      (highlighted ? " highlighted" : "");
+      (highlighted ? " highlighted" : "") +
+      (selectedSearch ? " search-selected" : "");
 
     var waveOne =
       document.createElement("div");
@@ -876,7 +888,8 @@ const buildKakaoMapHtml = (
             location.color,
             !!location.pulse,
             location.markerLabel,
-            !!location.highlighted
+            !!location.highlighted,
+            !!location.isSelectedSearch
           );
 
         var overlay =
@@ -885,7 +898,7 @@ const buildKakaoMapHtml = (
             content: markerElement,
             xAnchor: 0.5,
             yAnchor: 1,
-            zIndex: 20 + index
+            zIndex: location.isSelectedSearch ? 150 : 20 + index
           });
 
         overlay.setMap(map);

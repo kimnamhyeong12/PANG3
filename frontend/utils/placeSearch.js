@@ -23,21 +23,21 @@ export function mergePlaceResults(addresses, places, query, center, limit = 7) {
   }).map((item, index) => ({ ...item, distanceValue: distanceMeters(center, { lat: item.y, lng: item.x }), rank: index }))
     .sort((a, b) => {
       const matches = item => Boolean(region && (item.address_name || item.road_address_name || '').startsWith(region));
-      const exact = item => item.place_name.replace(/\s/g, '') === query.replace(/\s/g, '');
-      return Number(matches(b)) - Number(matches(a)) || Number(exact(b)) - Number(exact(a)) ||
-        ((!region && center) ? (a.distanceValue ?? Infinity) - (b.distanceValue ?? Infinity) : 0) || a.rank - b.rank;
+      // Preserve the provider's relevance order within the requested region.
+      // Distance is display information, not a replacement for relevance.
+      return Number(matches(b)) - Number(matches(a)) || a.rank - b.rank;
     }).slice(0, limit);
 }
 export async function searchPlaces(query, { center, signal, limit = 7 } = {}) {
   const key = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
   if (!key) throw new Error('검색 서비스를 사용할 수 없습니다.');
   const q = query.trim();
-  const coords = center && Number.isFinite(Number(center.lat)) && Number.isFinite(Number(center.lng)) ? center : null;
-  const keywordUrl = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=15`;
+  const coords = center && [center.lat, center.lng].every(value => value != null && value !== '' && Number.isFinite(Number(value))) ? center : null;
+  const keywordUrl = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=15&sort=accuracy`;
   const urls = [`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(q)}&size=15&analyze_type=similar`, keywordUrl];
-  // Keep accurate matches even when the intended destination is far away.
-  // Nearby candidates are fetched separately, then merged and ranked locally.
-  if (coords && !explicitRegion(q)) urls.push(`${keywordUrl}&x=${coords.lng}&y=${coords.lat}&sort=distance`);
+  // Search the local area by relevance, then supplement with national results.
+  // Explicitly named regions take precedence over the user's current location.
+  if (coords && !explicitRegion(q)) urls.push(`${keywordUrl}&x=${coords.lng}&y=${coords.lat}&radius=20000`);
   const responses = await Promise.allSettled(urls.map(async url => {
     const response = await fetch(url, { signal, headers: { Authorization: `KakaoAK ${key}` } });
     if (!response.ok) throw new Error('검색 결과를 불러오지 못했습니다.');
@@ -45,7 +45,8 @@ export async function searchPlaces(query, { center, signal, limit = 7 } = {}) {
   }));
   if (signal?.aborted) throw new Error('검색 취소');
   if (responses.every(result => result.status === 'rejected')) throw new Error('검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
-  return mergePlaceResults(responses[0].value || [], responses.slice(1).flatMap(result => result.value || []), q, coords, limit);
+  const places = [...(responses[2]?.value || []), ...(responses[1].value || [])];
+  return mergePlaceResults(responses[0].value || [], places, q, coords, limit);
 }
 export function placeLocation(place) {
   return { detailAddress: place.place_name || place.address_name, roadAddress: place.road_address_name || place.address_name || '', lat: Number(place.y), lng: Number(place.x) };

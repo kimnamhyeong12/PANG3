@@ -154,6 +154,7 @@ function NormalMapScreen({
   const [searchInitialQuery, setSearchInitialQuery] = useState('');
   const [resultsMode, setResultsMode] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
+  const [selectedSearchPinId, setSelectedSearchPinId] = useState(null);
   const [resultQuery, setResultQuery] = useState('');
   const [mapHeight, setMapHeight] = useState(600);
   const [focusRequest, setFocusRequest] = useState({ coordinates: [], token: 0 });
@@ -265,19 +266,11 @@ function NormalMapScreen({
   useEffect(() => {
     if (!pendingOpen) pendingSheetY.setValue(0);
   }, [pendingOpen, pendingSheetY]);
-  const returnStorageKey = `pang3:return-location:${user?.userId || 'guest'}`;
-
   useEffect(() => {
-    let active = true;
-    setReturnLocation(null);
-    if (user?.workplaceAddress && user?.workplaceLat != null && user?.workplaceLng != null) {
-      setReturnLocation({ detailAddress: '근무지', roadAddress: user.workplaceAddress, lat: Number(user.workplaceLat), lng: Number(user.workplaceLng), isReturnLocation: true });
-    } else AsyncStorage.getItem(returnStorageKey).then(raw => {
-      if (!active || !raw) return;
-      try { const old = JSON.parse(raw); if (hasVisitCoordinates(old)) setWorkplaceCandidate({ workplaceAddress: old.roadAddress || old.detailAddress, workplaceLat: Number(old.lat), workplaceLng: Number(old.lng) }); } catch {}
-    }).catch(() => {});
-    return () => { active = false; };
-  }, [returnStorageKey, user?.workplaceAddress, user?.workplaceLat, user?.workplaceLng]);
+    setReturnLocation(user?.workplaceAddress && user?.workplaceLat != null && user?.workplaceLng != null
+      ? { detailAddress: '근무지', roadAddress: user.workplaceAddress, lat: Number(user.workplaceLat), lng: Number(user.workplaceLng), isReturnLocation: true }
+      : null);
+  }, [user?.userId, user?.workplaceAddress, user?.workplaceLat, user?.workplaceLng]);
 
   useEffect(() => {
     if (!mapSelectMode || !directCenter || !KAKAO_REST_API_KEY) return undefined;
@@ -373,7 +366,10 @@ function NormalMapScreen({
   }, [publicItems, publicSelectedIds, publicCategory]);
   const displayLocations = useMemo(() => [...activeDisplayMarkers, ...completedDisplayMarkers,
     ...(returnDisplayMarker ? [returnDisplayMarker] : [])], [activeDisplayMarkers, completedDisplayMarkers, returnDisplayMarker]);
-  const searchPins = resultsMode ? searchResults.map((place, index) => ({ ...placeLocation(place), id: `search:${place.id}:${index}`, isSearchResult: true, markerLabel: '⌕', markerColor: '#168DE2', status: 'search' })) : [];
+  const searchPins = resultsMode ? searchResults.map((place, index) => {
+    const id = `search:${place.id}:${index}`; const selected = id === selectedSearchPinId;
+    return { ...placeLocation(place), id, isSearchResult: true, isSelectedSearch: selected, markerLabel: selected ? '✓' : '⌕', markerColor: selected ? '#F97316' : '#168DE2', status: 'search' };
+  }) : [];
   const displayOnlyLocations = [...mapOnlyMarkers, ...publicDisplayItems, ...searchPins];
   const publicViewCoordinates = useMemo(() => publicFacilityMode && selectedDong
     ? facilityViewCoordinates(selectedDong, publicItems) : [], [publicFacilityMode, selectedDong, publicItems]);
@@ -721,10 +717,10 @@ function NormalMapScreen({
 
   const openSearch = () => { setSearchInitialQuery(resultsMode ? resultQuery : ''); resetAddModes(); setAddMenuOpen(false); setResultsMode(false); setSearchOpen(true); };
   const showResults = (rows, query) => {
+    setSelectedSearchPinId(null);
     setSearchResults(rows); setResultQuery(query); setKeyword(query); setResultsMode(true); setSearchOpen(false);
     focusPlaces(rows.map(placeLocation));
   };
-  const inspectPlace = (place) => showResults([place], place.place_name || place.address_name);
   const addSearchPlace = (place) => {
     if (isRegisteredPlace(place, locations || [])) return;
     setSearchOpen(false); setResultsMode(false); setNextPlace(place);
@@ -736,7 +732,7 @@ function NormalMapScreen({
       const response = await fetch(`${API_BASE_URL}/api/users/${user.userId}/workplace`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(workplaceCandidate) });
       if (!response.ok) throw new Error('근무지를 저장하지 못했습니다.');
       onUpdatedUser?.({ ...user, ...(await response.json()) }); setWorkplaceOpen(false);
-      showAlert('등록 완료', '근무지를 등록했습니다. 근무지 버튼으로 복귀 안내를 시작할 수 있습니다.');
+      showAlert('등록 완료', '근무지를 등록했습니다. 메뉴의 근무지 복귀로 안내를 시작할 수 있습니다.');
     } catch (error) { showAlert('저장 실패', error.message); }
     finally { setWorkplaceBusy(false); }
   };
@@ -1161,7 +1157,7 @@ function NormalMapScreen({
   };
 
   const handleVisitPress = (target) => {
-    if (target?.isSearchResult) { focusPlaces([target]); return; }
+    if (target?.isSearchResult) { setSelectedSearchPinId(target.id); focusPlaces([target]); return; }
     if (target?.isPublicFacility) { togglePublicFacility(target); return; }
     if (publicFacilityMode) return;
     if (isCompleted(target)) { onLocationClick?.(target, 'report'); return; }
@@ -1291,10 +1287,10 @@ function NormalMapScreen({
         guideTarget={activeTarget}
         onReturnArrival={handleStopGuidance}
         previewRouteSegment={preview?.segment || null}
-        highlightedLocationKey={cardTarget ? locationKey(cardTarget) : null}
+        highlightedLocationKey={resultsMode ? selectedSearchPinId : cardTarget ? locationKey(cardTarget) : null}
         focusCoordinates={publicFacilityMode ? publicViewCoordinates : focusRequest.coordinates}
         focusToken={focusRequest.token}
-        focusPadding={resultsMode ? { top: 120, bottom: mapHeight * 0.43, left: 40, right: 40 } : { top: 160, bottom: 140, left: 40, right: 40 }}
+        focusPadding={resultsMode ? { top: 120, bottom: mapHeight * 0.53, left: 40, right: 40 } : { top: 160, bottom: 140, left: 40, right: 40 }}
         roadPath={isGuiding ? roadPath : []}
         routeSegments={activeSegment ? routeSegments : EMPTY_MARKERS}
         currentSegmentIndex={0}
@@ -1415,13 +1411,14 @@ function NormalMapScreen({
           </TouchableOpacity>}
           <View style={styles.searchBox}>
             <TouchableOpacity onPress={() => { resetAddModes(); setAddMenuOpen(value => !value); }} accessibilityLabel="방문지 추가 방법"><Ionicons name="menu" size={21} color="#2477F3" /></TouchableOpacity>
-            <TouchableOpacity style={{ flex: 1, justifyContent: 'center', height: 46 }} onPress={() => {
-              if (publicFacilityMode) { if (!selectedDong) loadDongs(); else setPublicCategoryOpen(value => !value); }
-              else openSearch();
-            }} accessibilityLabel="주소 또는 방문지 검색">
-              <Text style={styles.searchInput} numberOfLines={1}>{publicFacilityMode ? (PUBLIC_FACILITY_CATEGORIES.find(item => item.key === publicCategory)?.label || '공공시설물 카테고리 선택') : resultsMode ? resultQuery : '주소 또는 방문지 검색'}</Text>
+            <TouchableOpacity style={{ flex: 1, height: 44 }} disabled={publicFacilityMode || resultsMode}
+              onPress={() => { resetAddModes(); setAddMenuOpen(value => !value); }}
+              accessibilityRole="button" accessibilityLabel="방문지 추가 방법" accessible={!publicFacilityMode && !resultsMode}>
+              <View pointerEvents="none" style={{ flex: 1 }}>
+                <TextInput style={styles.searchInput} value={publicFacilityMode ? (PUBLIC_FACILITY_CATEGORIES.find(item => item.key === publicCategory)?.label || '') : resultsMode ? resultQuery : ''} placeholder={publicFacilityMode ? '공공시설물 카테고리 선택' : '방문지를 추가해주세요'} placeholderTextColor="#9AA6B2" editable={false} accessible={publicFacilityMode || resultsMode} />
+              </View>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => { if (resultsMode) { setResultsMode(false); setKeyword(''); } else if (publicFacilityMode) { if (!selectedDong) loadDongs(); else setPublicCategoryOpen(value => !value); } else openSearch(); }} accessibilityLabel={resultsMode ? '검색 결과 닫기' : '검색 열기'}><Ionicons name={resultsMode ? 'close' : publicFacilityMode ? 'chevron-down' : 'search'} size={23} color="#2477F3" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => { if (resultsMode) { setResultsMode(false); setKeyword(''); } else if (publicFacilityMode) { if (!selectedDong) loadDongs(); else setPublicCategoryOpen(value => !value); } else setAddMenuOpen(value => !value); }} accessibilityLabel={resultsMode ? '검색 결과 닫기' : '방문지 추가 방법'}><Ionicons name={resultsMode ? 'close' : publicFacilityMode ? 'chevron-down' : 'search'} size={23} color="#2477F3" /></TouchableOpacity>
           </View>
 
           {publicFacilityMode && <TouchableOpacity style={styles.smallTopButton}
@@ -1429,9 +1426,6 @@ function NormalMapScreen({
             <Ionicons name="close" size={20} color="#2477F3" />
           </TouchableOpacity>}
         </View>
-        {!publicFacilityMode && !resultsMode && !mapSelectMode && <TouchableOpacity style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 9, paddingHorizontal: 14, minHeight: 40, borderRadius: 20, backgroundColor: '#FFFFFF', elevation: 3 }} onPress={() => returnDisplayMarker ? handleStartGuidance(returnDisplayMarker) : setWorkplaceOpen(true)} disabled={segmentChanging} accessibilityLabel="근무지 복귀 안내">
-          <Ionicons name="home-outline" size={20} color="#2477F3" /><Text style={{ color: '#10285B', fontWeight: '700' }}>근무지</Text>
-        </TouchableOpacity>}
         {addMenuOpen && (
           <View style={styles.addMenuBox}>
             <TouchableOpacity style={styles.addMenuItem} onPress={() => { setAddMenuOpen(false); returnDisplayMarker ? handleStartGuidance(returnDisplayMarker) : setWorkplaceOpen(true); }}><Ionicons name="home-outline" size={18} color="#2477F3" /><View style={{ flex: 1 }}><Text style={styles.addMenuTitle}>근무지 복귀</Text><Text style={styles.addMenuDesc}>{user?.workplaceAddress || '근무지를 등록하고 복귀 안내 시작'}</Text></View></TouchableOpacity>
@@ -1970,8 +1964,12 @@ function NormalMapScreen({
         </View>
       )}
 
-      {resultsMode && !searchedPlace && <SearchResultSheet height={mapHeight} results={searchResults} query={resultQuery} locations={locations || []} onPick={place => focusPlaces([placeLocation(place)])} onAdd={addSearchPlace} />}
-      {searchOpen && isActive && <PlaceSearchOverlay userId={user?.userId} initialQuery={searchInitialQuery} center={currentLocation || returnLocation} locations={locations || []} onClose={() => setSearchOpen(false)} onResults={showResults} onPick={inspectPlace} onAdd={addSearchPlace} />}
+      {resultsMode && !searchedPlace && <SearchResultSheet height={mapHeight} results={searchResults} query={resultQuery} locations={locations || []} onPick={place => {
+        const index = searchResults.indexOf(place);
+        setSelectedSearchPinId(`search:${place.id}:${index}`);
+        focusPlaces([placeLocation(place)]);
+      }} onAdd={addSearchPlace} />}
+      {searchOpen && isActive && <PlaceSearchOverlay userId={user?.userId} initialQuery={searchInitialQuery} center={currentLocation || returnLocation} locations={locations || []} onClose={() => setSearchOpen(false)} onResults={showResults} onAdd={addSearchPlace} />}
       <Modal visible={workplaceOpen} transparent animationType="fade" onRequestClose={() => !workplaceBusy && setWorkplaceOpen(false)}>
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.35)' }}><View style={{ padding: 20, borderRadius: 18, backgroundColor: '#FFFFFF' }}>
           <Text style={{ fontSize: 18, fontWeight: '700', color: '#10285B' }}>근무지 등록</Text>
@@ -1980,6 +1978,7 @@ function NormalMapScreen({
           <TouchableOpacity disabled={workplaceBusy} onPress={() => setWorkplaceOpen(false)} style={{ padding: 14, alignItems: 'center' }}><Text>닫기</Text></TouchableOpacity>
         </View></View>
       </Modal>
+
     </View>
   );
 }
