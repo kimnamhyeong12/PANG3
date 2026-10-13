@@ -36,6 +36,7 @@ import { groupApi } from './utils/groupApi';
 import { CustomAlertHost, showAlert } from './components/CustomAlert';
 import { colors } from './constants/design';
 import { locationKey, numberVisits, restoreRouteSession } from './utils/routeSession';
+import { wasRouteTaskRemoved } from './modules/kakao-navigation';
 import { assignmentKey, splitWorkPlan } from './utils/workPlan';
 import {
   NOTIFICATION_TYPES,
@@ -377,7 +378,8 @@ export default function App() {
       const sameMap = loadedWorkspaceKeyRef.current === cacheKey &&
         JSON.stringify(plan.map.map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort()) ===
         JSON.stringify((currentRouteRef.current.locations || []).map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort());
-      if (sameMap && (session?.routeSegments?.length || 0) <= plan.map.filter((row) => row.status !== 'complete').length) return;
+      if (wasRouteTaskRemoved() && session) session = { ...session, isGuiding: false, routeSegments: [], optimized: false };
+      if (!wasRouteTaskRemoved() && sameMap && (session?.routeSegments?.length || 0) <= plan.map.filter((row) => row.status !== 'complete').length) return;
       const restored = restoreRouteSession(plan.map, session, calendarDayKey, { singleDestinationOnly: true });
       setRouteLocations(restored?.locations || plan.map);
       setRouteSegments(restored?.segments || []);
@@ -647,12 +649,13 @@ export default function App() {
       await teamSaveQueueRef.current;
       const saved = await AsyncStorage.getItem(key);
       if (requestId !== teamLoadIdRef.current) return;
-      const session = teamLoadedKeyRef.current === key ? teamSessionRef.current : saved ? JSON.parse(saved) : null;
+      let session = teamLoadedKeyRef.current === key ? teamSessionRef.current : saved ? JSON.parse(saved) : null;
+      if (wasRouteTaskRemoved() && session) session = { ...session, isGuiding: false, routeSegments: [], optimized: false };
       const numbered = numberVisits(rows, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])), { visitOrderVersion: session?.visitOrderVersion });
       const sameMap = teamLoadedKeyRef.current === key &&
         JSON.stringify(numbered.map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort()) ===
         JSON.stringify((teamSessionRef.current.locations || []).map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort());
-      if (sameMap && (session?.routeSegments?.length || 0) <= numbered.filter((row) => row.status !== 'complete').length) return;
+      if (!wasRouteTaskRemoved() && sameMap && (session?.routeSegments?.length || 0) <= numbered.filter((row) => row.status !== 'complete').length) return;
       const restored = restoreRouteSession(numbered, session, calendarDayKey, { singleDestinationOnly: true });
       setTeamLocations(restored?.locations || numbered);
       setTeamRouteSegments(restored?.segments || []);

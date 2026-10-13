@@ -1,6 +1,8 @@
 import { showAlert } from '../components/CustomAlert';
 import React, { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { File } from 'expo-file-system';
+import { fetch as expoFetch } from 'expo/fetch';
 
 import {
   View,
@@ -1083,14 +1085,14 @@ export default function FieldActionScreen({
         )
       );
 
-      const appendImage = (name, uri, filename) => {
-        form.append(name, { uri, type: 'image/jpeg', name: filename });
+      const appendImage = (name, uri) => {
+        form.append(name, new File(uri));
       };
-      for (const photo of uploadPhotos) appendImage('fieldPhotos', photo.uri, `${photo.type}.jpg`);
-      if (mapImageUri) appendImage('mapImage', mapImageUri, 'map.jpg');
+      for (const photo of uploadPhotos) appendImage('fieldPhotos', photo.uri);
+      if (mapImageUri) appendImage('mapImage', mapImageUri);
 
       const res =
-        await fetch(
+        await expoFetch(
           `${API_BASE_URL}/api/task-progress`,
           {
             method: 'POST',

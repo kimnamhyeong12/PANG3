@@ -1,12 +1,14 @@
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { showNativeRouteNotification, stopNativeRouteNotification } from '../modules/kakao-navigation';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 const ROUTE_NOTIFICATION_ID = 'fieldwork-route-guidance';
 const TASK_CHANNEL_ID = 'task';
 const ROUTE_CHANNEL_ID = 'route';
+let routeNotificationVersion = 0;
 
 export const NOTIFICATION_TYPES = {
   TASK_ASSIGNED: 'TASK_ASSIGNED',
@@ -333,10 +335,11 @@ export async function showRouteNotification({
   distance,
   remainingCount,
 }) {
+  const version = ++routeNotificationVersion;
   try {
     const granted = await checkNotificationPermission();
 
-    if (!granted) {
+    if (version !== routeNotificationVersion) {
       return false;
     }
 
@@ -350,6 +353,10 @@ export async function showRouteNotification({
         ? Number(remainingCount)
         : 0;
 
+    if (showNativeRouteNotification('📍 외근도우미 · 경로 안내 중',
+      `${safeFrom} → ${safeTo}\n예상 ${safeDuration} · ${safeDistance}\n남은 방문지 ${count}곳`)) return true;
+    if (!granted) return false;
+
     try {
       await Notifications.dismissNotificationAsync(
         ROUTE_NOTIFICATION_ID
@@ -358,6 +365,7 @@ export async function showRouteNotification({
       // 기존 경로 알림이 없으면 무시
     }
 
+    if (version !== routeNotificationVersion) return false;
     await Notifications.scheduleNotificationAsync({
       identifier: ROUTE_NOTIFICATION_ID,
 
@@ -400,7 +408,9 @@ export async function updateRouteNotification(data) {
 }
 
 export async function stopRouteNotification() {
+  routeNotificationVersion++;
   try {
+    stopNativeRouteNotification();
     await Notifications.dismissNotificationAsync(
       ROUTE_NOTIFICATION_ID
     );

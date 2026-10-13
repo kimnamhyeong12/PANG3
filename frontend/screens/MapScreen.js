@@ -25,7 +25,7 @@ import SearchResultSheet from '../components/SearchResultSheet';
 import WorkplaceField from '../components/WorkplaceField';
 import { placeLocation, isRegisteredPlace } from '../utils/placeSearch';
 import KakaoMapWebView from '../components/KakaoMapWebView';
-import { KakaoNavigationView, isKakaoNavigationAvailable } from '../modules/kakao-navigation';
+import { KakaoNavigationView, isKakaoNavigationAvailable, beginRouteSession } from '../modules/kakao-navigation';
 import { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
 import { locationKey } from '../utils/routeSession';
 import { hasVisitCoordinates, recommendVisitOrder, promoteVisit, visitSetKey } from '../utils/visitOrder';
@@ -1215,6 +1215,7 @@ function NormalMapScreen({
       setTransportMode(mode);
       resumedRouteRef.current = `${scopeKey}:${routeResumeToken}:${targetKey}`;
       setOptimized(true);
+      beginRouteSession();
       setIsGuiding(true);
       previewRequestRef.current += 1;
       setPreview(null);

@@ -14,6 +14,15 @@ export function isKakaoNavigationAvailable() {
   return Boolean(NativeNavigationView);
 }
 
+export function wasRouteTaskRemoved() { return nativeModule?.wasRouteTaskRemoved?.() || false; }
+export function beginRouteSession() { nativeModule?.beginRouteSession?.(); }
+export function showNativeRouteNotification(title, body) {
+  if (!nativeModule?.showRouteNotification) return false;
+  nativeModule.showRouteNotification(title, body);
+  return true;
+}
+export function stopNativeRouteNotification() { nativeModule?.stopRouteNotification?.(); }
+
 export function KakaoNavigationView(props) {
   return NativeNavigationView
     ? <NativeNavigationView {...props} />

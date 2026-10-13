@@ -61,6 +61,11 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
   }
 
   fun start(destination: Map<String, Any?>) {
+    if (RouteGuidanceService.wasTaskRemoved(context)) {
+      release()
+      onEnded(mapOf("reason" to "task_removed"))
+      return
+    }
     if (destination == lastDestination) return
     lastDestination = destination
     released = false
