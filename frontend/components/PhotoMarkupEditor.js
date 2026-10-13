@@ -61,6 +61,7 @@ export default function PhotoMarkupEditor({
   uri,
   onCancel,
   onComplete,
+  onUseOriginal,
 }) {
   const stageRef = useRef(null);
 
@@ -785,6 +786,9 @@ export default function PhotoMarkupEditor({
           >
             사진 편집
           </Text>
+          {onUseOriginal && <TouchableOpacity onPress={() => onUseOriginal(uri)} disabled={saving} style={styles.headerTouch}>
+            <Text style={styles.headerButton}>원본 사용</Text>
+          </TouchableOpacity>}
 
           <TouchableOpacity
             onPress={save}

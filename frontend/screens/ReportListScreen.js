@@ -61,21 +61,28 @@ export default function ReportListScreen({
   onBack,
   onSelectLocation,
   onCreateReport,
+  selectedIds: selection,
+  onSelectionChange,
 }) {
-  const [selectedIds, setSelectedIds] = useState([]);
+  const [localSelectedIds, setLocalSelectedIds] = useState([]);
+  const selectedIds = selection ?? localSelectedIds;
+  const setSelectedIds = (next) => {
+    if (onSelectionChange) onSelectionChange(typeof next === 'function' ? next(selectedIds) : next);
+    else setLocalSelectedIds(next);
+  };
 
   const assignmentMap = new Map(
     groupAssignments.map((item) => [Number(item.taskId), item])
   );
 
   const isReportable = (loc) =>
-    loc.status === 'working' || loc.status === 'complete';
+    getTaskId(loc) != null;
 
   const toggleSelect = (loc) => {
     if (!isReportable(loc)) {
       showAlert(
         '선택 불가',
-        '작업 전 방문지는 보고서에 포함할 수 없습니다.'
+        '방문지 정보를 확인할 수 없습니다.'
       );
       return;
     }

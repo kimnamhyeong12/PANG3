@@ -140,6 +140,7 @@ function NormalMapScreen({
   setTotalDuration,
   setPanelOpen,
   routeResumeToken = 0,
+  recordReturn,
   pendingWork = [],
   onAddWork,
 }) {
@@ -1215,6 +1216,7 @@ function NormalMapScreen({
   const handleVisitPress = (target) => {
     if (target?.isPublicFacility) { togglePublicFacility(target); return; }
     if (publicFacilityMode) return;
+    if (isCompleted(target)) { onLocationClick?.(target, 'report'); return; }
     if (locationKey(target) === routeVisibleKey && !target.isReturnLocation) {
       onLocationClick?.(target, 'report');
       return;
@@ -1222,6 +1224,24 @@ function NormalMapScreen({
     if (preview?.loading && preview.targetKey === locationKey(target)) return;
     previewVisit(target);
   };
+
+  const handledRecordRef = useRef(null);
+  const [recordNextOffer, setRecordNextOffer] = useState(null);
+  const nextVisit = (excluded) => markers.find((row) => !isCompleted(row) && !row.isReturnLocation &&
+    locationKey(row) !== String(excluded) && hasVisitCoordinates(row));
+  useEffect(() => {
+    if (!isActive || !recordReturn || recordReturn.token === handledRecordRef.current) return;
+    handledRecordRef.current = recordReturn.token;
+    clearGuidance();
+    previewRequestRef.current += 1; setPreview(null);
+    const next = nextVisit(recordReturn.taskId);
+    if (recordReturn.status === 'complete') {
+      setRecordNextOffer(null);
+      if (next) previewVisit(next);
+    } else if (recordReturn.status === 'working') {
+      setRecordNextOffer({ taskId: recordReturn.taskId, scope: scopeKey });
+    } else setRecordNextOffer(null);
+  }, [isActive, recordReturn?.token, scopeKey]);
 
   const handleStartGuidance = async () => {
     const target = cardTarget;
@@ -1310,6 +1330,12 @@ function NormalMapScreen({
 
   return (
     <View style={styles.container}>
+      {recordNextOffer?.scope === scopeKey && isActive && nextVisit(recordNextOffer.taskId) && <TouchableOpacity
+        accessibilityRole="button" accessibilityLabel="다음 방문지 경로 보기"
+        style={{ position: 'absolute', top: 110, right: 16, zIndex: 20, backgroundColor: '#FFFFFF', padding: 12, borderRadius: 12 }}
+        onPress={() => { const next = nextVisit(recordNextOffer.taskId); setRecordNextOffer(null); if (next) previewVisit(next); }}>
+        <Text style={{ color: '#2477F3', fontWeight: '700' }}>다음 방문지</Text>
+      </TouchableOpacity>}
       <KakaoMapWebView
         locations={displayLocations}
         displayOnlyLocations={displayOnlyLocations}

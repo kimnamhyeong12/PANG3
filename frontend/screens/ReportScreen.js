@@ -1,18 +1,60 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PrimaryButton, ScreenHeader } from '../components/ui';
-import { API_BASE_URL } from '../utils/api';
+import { API_BASE_URL, resolveApiUrl } from '../utils/api';
 import { colors, radius } from '../constants/design';
-const statusLabel = (status) => status === 'complete' ? '완료' : status === 'working' ? '진행 중' : '진행 전';
+import { restorePhotos } from '../utils/reportPhotos';
+
+const statusLabel = (status) => status === 'complete' ? '작업 후' : status === 'working' ? '작업 중' : '작업 전';
 export default function ReportScreen({ locations = [], onBack, onDownload }) {
-  const [rows, setRows] = useState([]); const [loading, setLoading] = useState(true);
-  useEffect(() => { (async () => { if (!API_BASE_URL || !locations.length) { setRows([]); setLoading(false); return; } try { const result = await Promise.all(locations.map(async (loc) => { const response = await fetch(`${API_BASE_URL}/api/task-progress/task/${loc.id ?? loc.taskId}`); return { loc, progress: response.ok ? await response.json() : null }; })); setRows(result); } catch { setRows(locations.map((loc) => ({ loc, progress: null }))); } finally { setLoading(false); } })(); }, [locations]);
-  const complete = locations.filter((item) => item.status === 'complete').length; const working = locations.filter((item) => item.status === 'working').length; const first = rows.find((item) => item.progress?.reportDownloadUrl);
-  return <View style={styles.container}><ScreenHeader title="보고서 미리보기" onBack={onBack} /><ScrollView contentContainerStyle={styles.body}>
-    <View style={styles.summary}><View><Text style={styles.summaryLabel}>선택 업무</Text><Text style={styles.summaryValue}>{locations.length}건</Text></View><View style={styles.summaryLine} /><View><Text style={styles.summaryLabel}>진행 중</Text><Text style={styles.summaryValue}>{working}건</Text></View><View style={styles.summaryLine} /><View><Text style={styles.summaryLabel}>완료</Text><Text style={styles.summaryValue}>{complete}건</Text></View></View>
-    <View style={styles.paper}><View style={styles.paperTitleRow}><View style={styles.docIcon}><Ionicons name="document-text-outline" size={23} color={colors.primary} /></View><Text style={styles.title}>외근 업무 결과 보고서</Text></View>{loading ? <ActivityIndicator color={colors.primary} style={{ marginVertical: 30 }} /> : !rows.length ? <Text style={styles.empty}>선택된 방문지가 없습니다.</Text> : rows.map(({ loc, progress }, index) => <View key={loc.id ?? index} style={styles.item}><View style={styles.number}><Text style={styles.numberText}>{index + 1}</Text></View><View style={{ flex: 1 }}><Text style={styles.itemTitle}>{loc.detailAddress || loc.roadAddress || '이름 없음'}</Text><Text style={styles.itemMeta}>{loc.task || loc.taskCategory || '업무 미지정'} · {statusLabel(loc.status)}</Text>{progress?.mainComment ? <Text style={styles.comment}>{progress.mainComment}</Text> : null}{progress?.aiRefinedContent ? <View style={styles.aiBox}><Text style={styles.aiLabel}>AI 정리</Text><Text style={styles.aiText}>{progress.aiRefinedContent}</Text></View> : null}</View></View>)}</View>
-    <PrimaryButton title="보고서 파일 열기" icon="download-outline" onPress={() => onDownload?.({ progressId: first?.progress?.progressId, reportDownloadUrl: first?.progress?.reportDownloadUrl })} />
-  </ScrollView></View>;
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all(locations.map(async (loc) => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/task-progress/task/${loc.id ?? loc.taskId}`);
+        if (!response.ok) throw new Error();
+        const text = await response.text();
+        return { loc, progress: text.trim() ? JSON.parse(text) : null };
+      } catch { return { loc, progress: null, error: true }; }
+    })).then((result) => { if (active) setRows(result); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [locations, reload]);
+  const available = rows.filter((row) => row.progress?.progressId);
+  return <View style={styles.container}>
+    <ScreenHeader title="선택한 보고서 확인" onBack={onBack} />
+    <ScrollView contentContainerStyle={styles.body}>
+      <Text style={styles.title}>선택 {locations.length}건 · 저장된 보고서 {available.length}건</Text>
+      <Text style={styles.meta}>내용을 확인한 뒤 개별 파일 또는 선택한 보고서를 모은 HWPX를 열 수 있습니다.</Text>
+      {loading ? <ActivityIndicator color={colors.primary} /> : rows.map(({ loc, progress, error }, index) => <View key={loc.id ?? loc.taskId ?? index} style={styles.card}>
+        <Text style={styles.title}>{loc.detailAddress || loc.roadAddress || '방문지'}</Text>
+        <Text style={styles.meta}>{statusLabel(progress?.progressStatus || loc.status)} · {String(progress?.createdAt || '').slice(0, 10)}</Text>
+        {!progress ? <Text style={styles.meta}>{error ? '조회하지 못했습니다. 다시 불러와 주세요.' : '저장된 보고서가 없습니다.'}</Text> : <>
+          {!!progress.fieldMemo && <Text style={styles.memo}>{progress.fieldMemo}</Text>}
+          {!!progress.mainComment && <Text style={styles.memo}>{progress.mainComment}</Text>}
+          {restorePhotos(progress.fieldPhotos, resolveApiUrl).filter((photo) => photo.uri).map((photo) => <View key={photo.type} style={{ gap: 6 }}>
+            <Text style={styles.meta}>{photo.label}</Text>
+            <Image source={{ uri: photo.uri }} style={styles.photo} resizeMode="contain" />
+            {!!photo.comment && <Text style={styles.memo}>{photo.comment}</Text>}
+          </View>)}
+          <PrimaryButton title="이 보고서 HWPX 열기" icon="document-text-outline" onPress={() => onDownload?.({ progressId: progress.progressId })} />
+        </>}
+      </View>)}
+      {!loading && !rows.length && <Text style={styles.meta}>선택한 방문지가 없습니다.</Text>}
+      {!loading && rows.some((row) => row.error) && <PrimaryButton title="다시 불러오기" onPress={() => setReload((value) => value + 1)} />}
+      {!loading && available.length > 0 && <PrimaryButton
+        title={`선택 ${locations.length}건 모아 HWPX 만들기`} icon="download-outline"
+        disabled={available.length !== locations.length}
+        onPress={() => onDownload?.({ progressIds: available.map((row) => row.progress.progressId) })} />}
+      {!loading && available.length < locations.length && <Text style={styles.meta}>선택한 모든 방문지의 기록이 저장·조회되어야 통합 파일을 만들 수 있습니다.</Text>}
+    </ScrollView>
+  </View>;
 }
-const styles = StyleSheet.create({ container: { flex: 1, backgroundColor: colors.background, transform: [{ translateY: -15 }], }, body: { padding: 20, gap: 14, paddingBottom: 34 }, summary: { backgroundColor: colors.primaryDark, borderRadius: radius.large, padding: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' }, summaryLabel: { color: '#DCEBFF', fontSize: 9, textAlign: 'center' }, summaryValue: { color: '#FFFFFF', fontSize: 19, fontWeight: '900', marginTop: 4 }, summaryLine: { width: 1, height: 38, backgroundColor: 'rgba(255,255,255,0.18)' }, paper: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: radius.large, padding: 17 }, paperTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingBottom: 14 }, docIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }, title: { color: colors.text, fontSize: 16, fontWeight: '900' }, meta: { color: colors.textSoft, fontSize: 10, marginTop: 4 }, item: { flexDirection: 'row', gap: 10, borderTopWidth: 1, borderTopColor: colors.line, paddingVertical: 14 }, number: { width: 28, height: 28, borderRadius: 9, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' }, numberText: { color: colors.primary, fontSize: 10, fontWeight: '900' }, itemTitle: { color: colors.text, fontSize: 13, fontWeight: '900' }, itemMeta: { color: colors.textSoft, fontSize: 10, marginTop: 4 }, comment: { color: colors.textSoft, fontSize: 10, lineHeight: 16, marginTop: 7 }, aiBox: { backgroundColor: colors.primarySoft, borderRadius: 12, padding: 10, marginTop: 9 }, aiLabel: { color: colors.primary, fontSize: 9, fontWeight: '900' }, aiText: { color: colors.text, fontSize: 10, lineHeight: 16, marginTop: 4 }, empty: { color: colors.textSoft, textAlign: 'center', paddingVertical: 30 } });
+const styles = StyleSheet.create({ container: { flex: 1, backgroundColor: colors.background }, body: { padding: 20, gap: 14, paddingBottom: 34 },
+  card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: radius.large, padding: 16, gap: 10 },
+  title: { color: colors.text, fontSize: 15, fontWeight: '800' }, meta: { color: colors.textSoft, fontSize: 12, lineHeight: 18 },
+  memo: { color: colors.text, fontSize: 13, lineHeight: 20 }, photo: { width: '100%', height: 200, backgroundColor: colors.surfaceMuted } });

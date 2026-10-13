@@ -78,6 +78,8 @@ const isTodayWork = (item) => {
 
 export default function App() {
   const [screen, setScreen] = useState('login');
+  const [mapRecordReturn, setMapRecordReturn] = useState(null);
+  const [reportSelections, setReportSelections] = useState({});
   const [groupWorkspaceTab, setGroupWorkspaceTab] = useState('dashboard');
   const [mapInitialized, setMapInitialized] = useState(false);
   const [selectedDong, setSelectedDong] = useState(null);
@@ -256,7 +258,24 @@ export default function App() {
     }
   }, []);
 
-  const go = (next, options = {}) => {
+  const navigationGuardRef = useRef(null);
+  const navigationBusyRef = useRef(false);
+  const navigationRequestRef = useRef(0);
+  const registerNavigationGuard = useCallback((guard) => {
+    navigationGuardRef.current = guard;
+    return () => { if (navigationGuardRef.current === guard) navigationGuardRef.current = null; };
+  }, []);
+  const navigateSafely = async (move, bypass = false) => {
+    if (navigationBusyRef.current && !bypass) return;
+    const request = ++navigationRequestRef.current;
+    navigationBusyRef.current = true;
+    try {
+      if (!bypass && screenRef.current === 'fieldAction' && navigationGuardRef.current && !await navigationGuardRef.current()) return;
+      if (request !== navigationRequestRef.current) return;
+      move();
+    } finally { if (request === navigationRequestRef.current) navigationBusyRef.current = false; }
+  };
+  const go = (next, options = {}) => navigateSafely(() => {
     if (next === screenRef.current) return;
 
     if (next === 'mapDirect') {
@@ -264,20 +283,20 @@ export default function App() {
     }
 
     if (!options.replace) {
-      historyRef.current.push(screen);
+      historyRef.current.push(screenRef.current);
     }
 
     screenRef.current = next;
     setScreen(next);
-  };
+  }, options.bypass);
 
-  const goBack = (fallback = 'main') => {
+  const goBack = (fallback = 'main', options = {}) => navigateSafely(() => {
     const previous = historyRef.current.pop();
     const next = previous || fallback;
 
     screenRef.current = next;
     setScreen(next);
-  };
+  }, options.bypass);
 
   const workspaceCacheKey = useCallback((targetUser = user, group = activeGroup) => {
     if (!targetUser?.userId) return null;
@@ -779,8 +798,11 @@ export default function App() {
           refreshCurrentWorkspace();
 
           // 알림을 눌렀을 때 현재 업무공간 홈으로 이동한다.
-          historyRef.current = [];
-          go('main', { replace: true });
+          navigateSafely(() => {
+            historyRef.current = [];
+            screenRef.current = 'main';
+            setScreen('main');
+          });
         }
       });
 
@@ -823,6 +845,8 @@ export default function App() {
     setRouteLocations([]);
     setReportTargets([]);
     setDownloadInfo(null);
+    setMapRecordReturn(null);
+    setReportSelections({});
     setRoadPath([]);
     setRouteSegments([]);
     setCurrentSegmentIndex(0);
@@ -865,11 +889,6 @@ export default function App() {
     type
   ) => {
     setSelectedLocation(loc);
-    if (loc?.status === 'complete') {
-      setReportTargets([loc]);
-      go('report');
-      return;
-    }
     setActionType(type);
     go('fieldAction');
   };
@@ -1242,6 +1261,7 @@ export default function App() {
               isActive={screen === 'mapDirect'}
               persistNormalMap
               routeResumeToken={routeResumeToken}
+              recordReturn={mapRecordReturn?.workspace === workspaceCacheKey() && mapRecordReturn?.day === calendarDayKey ? mapRecordReturn : null}
               pendingWork={pendingWork}
               onAddWork={addWorkToMap}
             />
@@ -1250,6 +1270,10 @@ export default function App() {
 
           {screen === 'fieldAction' && (
             <FieldActionScreen
+              key={`${selectedLocation?.id ?? selectedLocation?.taskId}:${selectedLocation?.newReport ? 'new' : selectedLocation?.reportProgressId || 'latest'}`}
+              workspaceKey={workspaceCacheKey()}
+              registerNavigationGuard={registerNavigationGuard}
+              onNewReport={() => navigateSafely(() => setSelectedLocation((previous) => ({ ...previous, newReport: true, reportProgressId: null })))}
               user={user}
               location={selectedLocation}
               actionType={actionType}
@@ -1264,17 +1288,17 @@ export default function App() {
                       ? {
                         ...loc,
                         status:
-                          savedReport.progressStatus ||
+                          savedReport.taskStatus || savedReport.progressStatus ||
                           savedReport.status ||
                           loc.status,
                         latitude:
-                          savedReport.latitude ?? loc.latitude,
+                          savedReport.taskLatitude ?? savedReport.latitude ?? loc.latitude,
                         longitude:
-                          savedReport.longitude ?? loc.longitude,
+                          savedReport.taskLongitude ?? savedReport.longitude ?? loc.longitude,
                         lat:
-                          savedReport.latitude ?? savedReport.lat ?? loc.lat ?? loc.latitude,
+                          savedReport.taskLatitude ?? savedReport.latitude ?? savedReport.lat ?? loc.lat ?? loc.latitude,
                         lng:
-                          savedReport.longitude ?? savedReport.lng ?? loc.lng ?? loc.longitude,
+                          savedReport.taskLongitude ?? savedReport.longitude ?? savedReport.lng ?? loc.lng ?? loc.longitude,
                       }
                       : loc
                   );
@@ -1283,13 +1307,19 @@ export default function App() {
                 setTeamLocations(applySavedStatus);
                 refreshCurrentWorkspace();
 
-                goBack('reportList');
+                if (!selectedLocation?.reportProgressId) {
+                  setMapRecordReturn({ taskId: String(selectedLocation?.id ?? selectedLocation?.taskId),
+                    status: savedReport.taskStatus || savedReport.progressStatus, workspace: workspaceCacheKey(), day: getLocalDateKey(), token: Date.now() });
+                }
+                goBack('reportList', { bypass: true });
               }}
             />
           )}
 
           {screen === 'reportList' && (
             <ReportListScreen
+              selectedIds={reportSelections[workspaceCacheKey()] || []}
+              onSelectionChange={(ids) => setReportSelections((previous) => ({ ...previous, [workspaceCacheKey()]: ids }))}
               locations={routeLocations}
               selectedDong={selectedDong}
               loading={!todayLocationsLoaded}
@@ -1303,13 +1333,8 @@ export default function App() {
               }
               onSelectLocation={(loc) => {
                 setSelectedLocation(loc);
-                if (loc.status === 'complete') {
-                  setReportTargets([loc]);
-                  go('report');
-                } else {
-                  setActionType('report');
-                  go('fieldAction');
-                }
+                setActionType('report');
+                go('fieldAction');
               }}
               onCreateReport={(
                 selectedLocations
@@ -1323,17 +1348,28 @@ export default function App() {
             />
           )}
 
-          {screen === 'groupReports' && activeGroup && (
+          {activeGroup && user && ['groupReports', 'download', 'fieldAction'].includes(screen) && (
+            <View style={[styles.persistentMapLayer, screen !== 'groupReports' && styles.hiddenMapLayer]}
+              pointerEvents={screen === 'groupReports' ? 'auto' : 'none'} accessibilityElementsHidden={screen !== 'groupReports'}>
             <GroupReportsScreen
+              key={`${user.userId}:${activeGroup.groupId}`}
+              isActive={screen === 'groupReports'}
               group={activeGroup}
               user={user}
               selectedDong={selectedDong}
               onBack={() => goBack('groupWorkspace')}
+              onEditReport={(report) => {
+                setSelectedLocation({ id: report.taskId, status: report.taskStatus || report.progressStatus,
+                  lat: report.latitude, lng: report.longitude, detailAddress: report.detailAddress,
+                  roadAddress: report.roadAddress, reportProgressId: report.progressId });
+                setActionType('report'); go('fieldAction');
+              }}
               onOpenReport={(report) => {
-                setDownloadInfo({ progressId: report.progressId, reportDownloadUrl: report.reportDownloadUrl });
+                setDownloadInfo({ progressId: report.progressId, reportDownloadUrl: report.reportDownloadUrl, userId: user.userId });
                 go('download');
               }}
             />
+            </View>
           )}
 
           {screen === 'report' && (
@@ -1345,7 +1381,7 @@ export default function App() {
                 goBack('reportList')
               }
               onDownload={(info) => {
-                setDownloadInfo(info);
+                setDownloadInfo({ ...info, userId: user.userId });
                 go('download');
               }}
             />

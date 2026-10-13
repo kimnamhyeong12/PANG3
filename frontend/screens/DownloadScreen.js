@@ -1,9 +1,50 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { showAlert } from '../components/CustomAlert';
 import { PrimaryButton, ScreenHeader, SecondaryButton } from '../components/ui';
-import { resolveApiUrl } from '../utils/api';
+import { API_BASE_URL, resolveApiUrl } from '../utils/api';
 import { colors, radius } from '../constants/design';
-export default function DownloadScreen({ onBack, downloadInfo }) { const open = async () => { const url = resolveApiUrl(downloadInfo?.reportDownloadUrl); if (!url) return showAlert('파일 없음', '현장 기록을 먼저 저장한 뒤 다시 시도하세요.'); try { await Linking.openURL(url); } catch { showAlert('열기 실패', '보고서 파일을 열지 못했습니다.'); } }; return <View style={styles.container}><ScreenHeader title="보고서 파일" onBack={onBack} /><View style={styles.center}><View style={styles.icon}><Ionicons name="checkmark" size={32} color="#FFFFFF" /></View><Text style={styles.title}>보고서가 준비되었습니다</Text><Text style={styles.description}>HWPX 지원 앱 또는 브라우저에서 파일을 확인할 수 있습니다.</Text><View style={styles.card}><Ionicons name="document-text-outline" size={26} color={colors.primary} /><View style={{ flex: 1 }}><Text style={styles.fileName}>외근 업무 결과 보고서</Text><Text style={styles.fileType}>HWPX 문서</Text></View></View><PrimaryButton title="파일 열기" icon="open-outline" onPress={open} style={{ width: '100%' }} /><SecondaryButton title="홈으로 돌아가기" onPress={onBack} style={{ width: '100%' }} /></View></View>; }
-const styles = StyleSheet.create({ container: { flex: 1, backgroundColor: colors.background, transform: [{ translateY: -15 }], }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 13 }, icon: { width: 70, height: 70, borderRadius: 23, backgroundColor: colors.success, alignItems: 'center', justifyContent: 'center', marginBottom: 8 }, title: { color: colors.text, fontSize: 22, fontWeight: '900' }, description: { color: colors.textSoft, fontSize: 11, lineHeight: 18, textAlign: 'center', marginBottom: 8 }, card: { width: '100%', minHeight: 72, borderRadius: radius.medium, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 11, marginBottom: 6 }, fileName: { color: colors.text, fontSize: 13, fontWeight: '900' }, fileType: { color: colors.textSoft, fontSize: 10, marginTop: 4 } });
+
+export default function DownloadScreen({ onBack, downloadInfo }) {
+  const [preparing, setPreparing] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState('');
+  const mounted = useRef(true);
+  const busy = useRef(false);
+  useEffect(() => () => { mounted.current = false; }, []);
+  const count = downloadInfo?.progressIds?.length || 1;
+  const canOpen = !!downloadInfo?.userId && (!!downloadInfo?.progressId || !!downloadInfo?.progressIds?.length);
+  const open = async () => {
+    if (busy.current || !canOpen) return;
+    busy.current = true; setPreparing(true); setError('');
+    try {
+      const combined = !!downloadInfo.progressIds;
+      const response = await fetch(combined ? `${API_BASE_URL}/api/task-progress/reports/prepare` :
+        `${API_BASE_URL}/api/task-progress/${downloadInfo.progressId}/report/prepare?userId=${downloadInfo.userId}`, {
+        method: 'POST', ...(combined ? { headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ progressIds: downloadInfo.progressIds, userId: downloadInfo.userId }) } : {}),
+      });
+      if (!response.ok) throw new Error('보고서 파일을 만들지 못했습니다. 다시 시도해 주세요.');
+      const result = await response.json();
+      const url = resolveApiUrl(result.reportDownloadUrl);
+      if (!url) throw new Error('보고서 파일이 없습니다. 다시 시도해 주세요.');
+      if (!mounted.current) return;
+      setReady(true);
+      await Linking.openURL(url);
+    } catch (failure) { if (mounted.current) setError(failure.message || '파일을 열지 못했습니다.'); }
+    finally { busy.current = false; if (mounted.current) setPreparing(false); }
+  };
+  return <View style={styles.container}><ScreenHeader title="보고서 파일" onBack={onBack} />
+    <View style={styles.center}>
+      <View style={styles.icon}><Ionicons name={ready ? 'checkmark' : 'document-text-outline'} size={32} color="#FFFFFF" /></View>
+      <Text style={styles.title}>{preparing ? 'HWPX를 만드는 중입니다' : ready ? '보고서 파일이 준비되었습니다' : '보고서 파일 만들기'}</Text>
+      <Text style={styles.description}>{canOpen ? `${count}건의 저장된 보고서를 HWPX로 확인합니다. 파일 열기를 누르면 생성합니다.` : '저장된 보고서를 먼저 선택해 주세요.'}</Text>
+      {!!error && <Text style={styles.error}>{error}</Text>}
+      <PrimaryButton title={preparing ? '파일 생성 중…' : '파일 열기'} icon="open-outline" disabled={preparing || !canOpen} onPress={open} style={{ width: '100%' }} />
+      <SecondaryButton title="이전 화면으로" onPress={onBack} style={{ width: '100%' }} />
+    </View>
+  </View>;
+}
+const styles = StyleSheet.create({ container: { flex: 1, backgroundColor: colors.background }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 16 },
+  icon: { width: 70, height: 70, borderRadius: radius.large, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  title: { color: colors.text, fontSize: 20, fontWeight: '800' }, description: { color: colors.textSoft, fontSize: 13, lineHeight: 20, textAlign: 'center' }, error: { color: '#DC2626', fontSize: 13 } });
