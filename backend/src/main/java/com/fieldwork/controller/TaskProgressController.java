@@ -16,6 +16,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping("/api/task-progress")
@@ -23,6 +26,9 @@ import java.util.Map;
 public class TaskProgressController {
 
     private final TaskProgressService taskProgressService;
+    private record CombinedFile(Long userId, String path) {}
+    public record ReportBatchRequest(Long userId, List<Long> progressIds) {}
+    private final Map<String, CombinedFile> combinedFiles = new ConcurrentHashMap<>();
 
     public TaskProgressController(TaskProgressService taskProgressService) {
         this.taskProgressService = taskProgressService;
@@ -41,6 +47,45 @@ public class TaskProgressController {
     @GetMapping("/task/{taskId}")
     public Map<String, Object> getProgressByTaskId(@PathVariable Long taskId) {
         return taskProgressService.getLatestByTaskId(taskId);
+    }
+
+    @GetMapping("/{progressId}")
+    public Map<String, Object> getReport(@PathVariable Long progressId, @RequestParam Long userId) {
+        TaskProgress progress = taskProgressService.getById(progressId);
+        taskProgressService.validateReader(progress.getTask(), userId);
+        return taskProgressService.toResponseMap(progress, progress.getTask());
+    }
+
+    @PostMapping("/{progressId}/report/prepare")
+    public Map<String, Object> prepare(@PathVariable Long progressId, @RequestParam Long userId) {
+        return taskProgressService.prepareReport(progressId, userId);
+    }
+
+    @PostMapping("/reports/prepare")
+    public Map<String, Object> prepareCombined(@RequestBody ReportBatchRequest body) throws Exception {
+        Long userId = body.userId();
+        List<Long> ids = body.progressIds();
+        if (userId == null || ids == null || ids.isEmpty() || ids.stream().anyMatch(id -> id == null || id <= 0)) {
+            throw new IllegalArgumentException("사용자와 선택한 보고서를 확인하세요.");
+        }
+        String file = taskProgressService.prepareCombined(ids, userId);
+        String key = UUID.randomUUID().toString();
+        combinedFiles.put(key, new CombinedFile(userId, file));
+        return Map.of("reportDownloadUrl", "/api/task-progress/reports/" + key + "/download?userId=" + userId,
+                "reportCount", ids.stream().distinct().count());
+    }
+
+    @GetMapping("/reports/{key}/download")
+    public ResponseEntity<Resource> downloadCombined(@PathVariable String key, @RequestParam Long userId) {
+        CombinedFile file = combinedFiles.get(key);
+        if (file == null || !file.userId().equals(userId)) return ResponseEntity.notFound().build();
+        return downloadFile(file.path(), "combined_report.hwpx");
+    }
+
+    private ResponseEntity<Resource> downloadFile(String reportPath, String filename) {
+        if (reportPath == null || !Paths.get(reportPath).toFile().isFile()) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM).body(new FileSystemResource(Paths.get(reportPath)));
     }
 
     @GetMapping("/{progressId}/report/download")

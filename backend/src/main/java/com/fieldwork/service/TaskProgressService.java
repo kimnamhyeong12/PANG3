@@ -6,6 +6,7 @@ import com.fieldwork.entity.Task;
 import com.fieldwork.entity.TaskProgress;
 import com.fieldwork.repository.TaskProgressRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 
@@ -35,22 +36,25 @@ public class TaskProgressService {
         this.aiReportService = aiReportService;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> saveFromMultipart(MultipartHttpServletRequest request) throws Exception {
         Long taskId = Long.valueOf(request.getParameter("taskId"));
         Task task = taskService.getById(taskId);
         Long performerId = parseLong(request.getParameter("userId"));
         validateEditor(task, performerId);
 
-        TaskProgress progress = new TaskProgress();
+        TaskProgress progress = editableProgress(task, parseLong(request.getParameter("progressId")));
+        validateRevision(progress, request.getParameter("expectedRevision"));
+        List<Map<String, Object>> previousPhotos = progress.getFieldPhotos();
         progress.setTask(task);
-        progress.setPerformedByUserId(performerId);
+        if (progress.getProgressId() == null) progress.setPerformedByUserId(performerId);
         progress.setLatitude(parseDouble(request.getParameter("latitude")));
         progress.setLongitude(parseDouble(request.getParameter("longitude")));
         progress.setLocationAddress(request.getParameter("locationAddress"));
         progress.setMainComment(request.getParameter("mainComment"));
         progress.setFieldMemo(request.getParameter("fieldMemo"));
         progress.setProgressStatus(request.getParameter("progressStatus"));
-        syncTaskLocation(task, progress.getLatitude(), progress.getLongitude());
+        if (isCurrentRecord(task, progress)) syncTaskLocation(task, progress.getLatitude(), progress.getLongitude());
 
         MultipartFile mapImage = request.getFile("mapImage");
         if (mapImage != null && !mapImage.isEmpty()) {
@@ -74,31 +78,38 @@ public class TaskProgressService {
             fieldPhotos.add(item);
         }
 
+        String slots = request.getParameter("photoSlots");
+        if (slots != null) {
+            List<Map<String, Object>> manifest = objectMapper.readValue(slots, new TypeReference<List<Map<String, Object>>>() {});
+            fieldPhotos = PhotoSlots.merge(manifest, previousPhotos, fieldPhotos);
+        }
         progress.setFieldPhotos(fieldPhotos);
-        syncTaskStatus(task, progress.getProgressStatus());
+        syncReportStatus(task, progress);
+        progress.setReportFilePath(null);
+        progress.setAiRefinedContent(null);
 
-        progress = taskProgressRepository.save(progress);
-        runAiIfPossible(task, progress);
-
+        progress = taskProgressRepository.saveAndFlush(progress);
         return toResponseMap(progress, task);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> saveFromJson(Map<String, Object> body) throws Exception {
         Long taskId = Long.valueOf(body.get("taskId").toString());
         Task task = taskService.getById(taskId);
         Long performerId = parseLong(body.get("userId") == null ? null : body.get("userId").toString());
         validateEditor(task, performerId);
 
-        TaskProgress progress = new TaskProgress();
+        TaskProgress progress = editableProgress(task, parseLong(str(body.get("progressId"))));
+        validateRevision(progress, str(body.get("expectedRevision")));
         progress.setTask(task);
-        progress.setPerformedByUserId(performerId);
+        if (progress.getProgressId() == null) progress.setPerformedByUserId(performerId);
         progress.setLatitude(parseDoubleObj(body.get("latitude")));
         progress.setLongitude(parseDoubleObj(body.get("longitude")));
         progress.setLocationAddress(str(body.get("locationAddress")));
         progress.setMainComment(str(body.get("mainComment")));
         progress.setFieldMemo(str(body.get("fieldMemo")));
         progress.setProgressStatus(str(body.get("progressStatus")));
-        syncTaskLocation(task, progress.getLatitude(), progress.getLongitude());
+        if (isCurrentRecord(task, progress)) syncTaskLocation(task, progress.getLatitude(), progress.getLongitude());
 
         Object mapObj = body.get("locationMapImage");
         if (mapObj != null) {
@@ -122,14 +133,10 @@ public class TaskProgressService {
         }
         progress.setFieldPhotos(normalizedPhotos);
 
-        syncTaskStatus(task, progress.getProgressStatus());
-        progress = taskProgressRepository.save(progress);
-
-        boolean hasLocalPhoto = normalizedPhotos.stream()
-                .anyMatch(p -> isLocalPath(str(p.get("path"))));
-        if (hasLocalPhoto || fileStorageService.exists(progress.getLocationMapImage())) {
-            runAiIfPossible(task, progress);
-        }
+        syncReportStatus(task, progress);
+        progress.setReportFilePath(null);
+        progress.setAiRefinedContent(null);
+        progress = taskProgressRepository.saveAndFlush(progress);
 
         return toResponseMap(progress, task);
     }
@@ -147,13 +154,85 @@ public class TaskProgressService {
     }
 
     private void validateEditor(Task task, Long performerId) {
-        if ("complete".equalsIgnoreCase(task.getTaskStatus())) {
-            throw new IllegalArgumentException("완료한 방문지의 자료는 수정할 수 없습니다.");
-        }
         var owner = taskService.currentAssignee(task);
         if (performerId == null || owner == null || !performerId.equals(owner.getUserId())) {
             throw new IllegalArgumentException("현재 담당자만 작업 자료를 등록할 수 있습니다.");
         }
+    }
+
+    private TaskProgress editableProgress(Task task, Long progressId) {
+        if (progressId == null) return new TaskProgress();
+        TaskProgress progress = taskProgressRepository.findLocked(progressId)
+                .orElseThrow(() -> new IllegalArgumentException("보고서를 찾을 수 없습니다."));
+        if (!task.getTaskId().equals(progress.getTask().getTaskId())) {
+            throw new IllegalArgumentException("방문지와 보고서가 일치하지 않습니다.");
+        }
+        return progress;
+    }
+
+    private void validateRevision(TaskProgress progress, String expected) {
+        if (progress.getProgressId() != null && (expected == null ||
+                !revisionOf(progress).equals(expected))) {
+            throw new IllegalArgumentException("다른 곳에서 보고서가 변경되었습니다. 작성 내용은 보관되며, 최신 기록을 확인해야 합니다.");
+        }
+    }
+
+    private String revisionOf(TaskProgress progress) {
+        try {
+            Map<String, Object> data = new java.util.TreeMap<>();
+            data.put("memo", progress.getFieldMemo()); data.put("comment", progress.getMainComment());
+            data.put("lat", progress.getLatitude()); data.put("lng", progress.getLongitude());
+            data.put("address", progress.getLocationAddress()); data.put("map", progress.getLocationMapImage());
+            data.put("status", progress.getProgressStatus());
+            data.put("photos", progress.getFieldPhotos() == null ? List.of() : progress.getFieldPhotos().stream()
+                    .map(photo -> new java.util.TreeMap<>(photo)).toList());
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(objectMapper.writeValueAsBytes(data)));
+        } catch (Exception e) { throw new IllegalStateException("보고서 변경 상태를 확인하지 못했습니다."); }
+    }
+
+    // Correcting a report never reopens a completed task or changes status from an old visit.
+    private void syncReportStatus(Task task, TaskProgress progress) {
+        if ("complete".equalsIgnoreCase(task.getTaskStatus())) return;
+        if (isCurrentRecord(task, progress)) syncTaskStatus(task, progress.getProgressStatus());
+    }
+
+    private boolean isCurrentRecord(Task task, TaskProgress progress) {
+        TaskProgress latest = taskProgressRepository.findTopByTask_TaskIdOrderByCreatedAtDesc(task.getTaskId()).orElse(null);
+        return progress.getProgressId() == null || latest == null || latest.getProgressId().equals(progress.getProgressId());
+    }
+
+    @Transactional
+    public Map<String, Object> prepareReport(Long progressId, Long userId) {
+        TaskProgress progress = taskProgressRepository.findLocked(progressId)
+                .orElseThrow(() -> new IllegalArgumentException("보고서를 찾을 수 없습니다."));
+        validateReader(progress.getTask(), userId);
+        if (progress.getReportFilePath() == null || !fileStorageService.exists(progress.getReportFilePath())) {
+            runAiIfPossible(progress.getTask(), progress);
+        }
+        if (progress.getReportFilePath() == null) throw new IllegalStateException("보고서 파일을 만들지 못했습니다. 다시 시도하세요.");
+        return toResponseMap(progress, progress.getTask());
+    }
+
+    public void validateReader(Task task, Long userId) {
+        if (userId == null) throw new IllegalArgumentException("사용자 정보가 필요합니다.");
+        if (task.getGroup() != null) {
+            boolean allowed = taskService.getGroupLocations(task.getGroup().getGroupId(), userId).stream()
+                    .anyMatch(row -> task.getTaskId().equals(((Number) row.get("id")).longValue()));
+            if (allowed) return;
+        } else if (taskService.currentAssignee(task) != null && userId.equals(taskService.currentAssignee(task).getUserId())) return;
+        throw new IllegalArgumentException("보고서를 확인할 권한이 없습니다.");
+    }
+
+    public String prepareCombined(List<Long> ids, Long userId) throws Exception {
+        if (ids == null || ids.isEmpty()) throw new IllegalArgumentException("보고서를 선택하세요.");
+        List<Map<String, Object>> reports = new ArrayList<>();
+        for (Long id : ids.stream().distinct().toList()) {
+            TaskProgress progress = getById(id);
+            validateReader(progress.getTask(), userId);
+            reports.add(aiReportService.buildPayload(progress.getTask(), progress));
+        }
+        return aiReportService.generateCombined(reports);
     }
 
     private void runAiIfPossible(Task task, TaskProgress progress) {
@@ -184,6 +263,10 @@ public class TaskProgressService {
         Map<String, Object> result = new HashMap<>();
 
         result.put("progressId", progress.getProgressId());
+        result.put("revision", revisionOf(progress));
+        result.put("taskStatus", task.getTaskStatus());
+        result.put("taskLatitude", task.getLat());
+        result.put("taskLongitude", task.getLng());
         result.put("taskId", task.getTaskId());
         result.put("latitude", progress.getLatitude());
         result.put("longitude", progress.getLongitude());

@@ -10,6 +10,7 @@ import re
 import sys
 from datetime import date
 from pathlib import Path
+from uuid import uuid4
 
 from dotenv import load_dotenv
 from google import genai
@@ -218,7 +219,7 @@ def clean_markdown_for_hwp(text: str) -> str:
     return "\n".join(cleaned)
 
 
-def create_fieldwork_report(report_data: dict, output_filename: str) -> str:
+def create_fieldwork_report(report_data: dict, output_filename: str, document=None) -> str:
     location_name = str(report_data.get("location_name") or "사하구 관내")
     task_category = str(report_data.get("task_category") or "현장 점검")
     main_comment = str(report_data.get("main_comment") or "")
@@ -228,7 +229,10 @@ def create_fieldwork_report(report_data: dict, output_filename: str) -> str:
 
     # 1. 템플릿 로드
     template_path = Path(__file__).resolve().parent / "templates" / "template.hwpx"
-    if template_path.exists():
+    if document is not None:
+        doc = document
+        doc.add_paragraph()
+    elif template_path.exists():
         doc = HwpxDocument.open(str(template_path))
     else:
         doc = HwpxDocument.new()
@@ -242,7 +246,9 @@ def create_fieldwork_report(report_data: dict, output_filename: str) -> str:
     
     # 3. 작성일자 추가
     meta_p = doc.add_paragraph()
-    meta_p.add_run(f"작성일자: {date.today().strftime('%Y-%m-%d')}", size=9, color="#6B7280", font="Malgun Gothic")
+    recorded_at = str(report_data.get("recorded_at") or date.today().isoformat())[:10]
+    status = {"pending": "작업 전", "working": "작업 중", "complete": "작업 후"}.get(report_data.get("progress_status"), "")
+    meta_p.add_run(f"작성일자: {recorded_at}" + (f" · {status}" if status else ""), size=9, color="#6B7280", font="Malgun Gothic")
     
     # 3-1. 작업 위치(주소) 추가 — 위도/경도 숫자는 보고서를 보는 담당자에게 필요 없어 표시하지 않는다
     heading_loc_p = doc.add_paragraph()
@@ -340,6 +346,11 @@ def create_fieldwork_report(report_data: dict, output_filename: str) -> str:
         doc.add_paragraph()
 
     # 7. AI 현장 분석 의견 추가
+    field_memo = str(report_data.get("field_memo") or "")
+    if field_memo:
+        doc.add_paragraph().add_run("■ 현장 메모", bold=True, size=12, color="#153B5C", font="Malgun Gothic")
+        for line in field_memo.splitlines():
+            doc.add_paragraph().add_run(line, size=10, color="#27384A", font="Malgun Gothic")
     if ai_refined:
         heading_p = doc.add_paragraph()
         heading_p.add_run("■ AI 현장 분석 의견", bold=True, size=12, color="#153B5C", font="Malgun Gothic")
@@ -429,7 +440,20 @@ def safe_filename(name: str) -> str:
     return re.sub(r'[\\/*?:"<>|]', "_", name).strip() or "report"
 
 
-def run_pipeline(payload: dict) -> dict:
+def run_pipeline(payload: dict, document=None, combined_path=None) -> dict:
+    if "reports" in payload:
+        reports = payload["reports"]
+        if not isinstance(reports, list) or not reports:
+            raise ValueError("보고서가 필요합니다.")
+        output_dir = Path(payload.get("output_dir") or AI_DIR / "output")
+        if not output_dir.is_absolute():
+            output_dir = AI_DIR / output_dir
+        batch_path = str(output_dir / f"외근_통합보고서_{date.today():%Y%m%d}_{uuid4().hex}.hwpx")
+        template = AI_DIR / "templates" / "template.hwpx"
+        doc = HwpxDocument.open(str(template)) if template.exists() else HwpxDocument.new()
+        for report in reports:
+            run_pipeline({**report, "output_dir": str(output_dir)}, document=doc, combined_path=batch_path)
+        return {"ok": True, "report_file": batch_path, "report_count": len(reports)}
     location_name = payload.get("location_name") or "사하구"
     task_category = payload.get("task_category") or "현장 점검"
     field_memo = payload.get("field_memo") or ""
@@ -441,7 +465,7 @@ def run_pipeline(payload: dict) -> dict:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    work_dir = output_dir / "_work"
+    work_dir = output_dir / "_work" / uuid4().hex
     work_dir.mkdir(parents=True, exist_ok=True)
 
     map_sanitized = sanitize_image(
@@ -506,18 +530,22 @@ def run_pipeline(payload: dict) -> dict:
         ai_refined_content = ""
 
     report_name = (
-        f"위치도_및_현장사진_{safe_filename(location_name)}_{date.today():%Y%m%d}.hwpx"
+        f"위치도_및_현장사진_{safe_filename(location_name)}_{payload.get('progress_id', 'new')}_{uuid4().hex}.hwpx"
     )
     report_path = create_fieldwork_report(
         {
             "location_name": location_name,
             "task_category": task_category,
             "main_comment": main_comment,
+            "field_memo": field_memo,
+            "recorded_at": payload.get("recorded_at"),
+            "progress_status": payload.get("progress_status"),
             "map_image_path": map_sanitized,
             "photo_groups": groups,
             "ai_refined_content": ai_refined_content,
         },
-        str(output_dir / report_name),
+        combined_path or str(output_dir / report_name),
+        document=document,
     )
 
     for temp in work_dir.glob("*.jpg"):
@@ -525,6 +553,10 @@ def run_pipeline(payload: dict) -> dict:
             temp.unlink()
         except OSError:
             pass
+    try:
+        work_dir.rmdir()
+    except OSError:
+        pass
 
     return {
         "ok": True,
