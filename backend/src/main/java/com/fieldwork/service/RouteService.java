@@ -236,6 +236,18 @@ public class RouteService {
                 end = entrance;
                 selection = selectRoadLeg(start, end, priority);
             }
+            // A successful route to a building can still stop at its rear wall.
+            // Try the real entrance when the provider's arrival misses it.
+            if (entrance.containsKey("markerLatitude") && end != entrance
+                    && !endsNearEntrance(selection.leg().path(), entrance)) {
+                try {
+                    RoadSelection entranceSelection = selectRoadLeg(start, entrance, priority);
+                    end = entrance;
+                    selection = entranceSelection;
+                } catch (RoadPathUnavailable unavailable) {
+                    // Some recorded entrances are pedestrian-only. Keep the usable road route.
+                }
+            }
             RoadLeg leg = selection.leg();
             totalDistance += leg.distance();
             totalDuration += leg.duration();
@@ -245,6 +257,11 @@ public class RouteService {
             segment.put("totalDistance", leg.distance());
             segment.put("totalDuration", leg.duration());
             segment.put("routePriority", leg.priority());
+            Map<String, Double> navigationEnd = leg.path().get(leg.path().size() - 1);
+            segment.put("navigationDestination", Map.of("lat", navigationEnd.get("latitude"),
+                    "lng", navigationEnd.get("longitude")));
+            segment.put("entranceMatched", entrance.containsKey("markerLatitude")
+                    && endsNearEntrance(leg.path(), entrance));
             segment.put("routeDiagnostics", Map.of(
                     "requestedOrigin", Map.of("latitude", getLat(start), "longitude", getLng(start)),
                     "requestedDestination", Map.of("latitude", getLat(end), "longitude", getLng(end)),

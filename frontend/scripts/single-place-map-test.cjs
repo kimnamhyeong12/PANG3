@@ -232,8 +232,12 @@ const route = (target) => ({ segments: [{ path: [{ lat: 35, lng: 129 }, { lat: t
   assert.equal(JSON.parse(carPreview.options.body).routePriority, 'RECOMMEND');
   car.response(carPreview, route(car.props.locations[0])); await car.settle();
   const carStart = car.find('TouchableOpacity', '안내 시작').props.onPress(); car.render();
-  car.response(car.requests.shift(), route(car.props.locations[0])); await carStart; await car.settle();
+  const entranceRoute = route(car.props.locations[0]);
+  entranceRoute.segments[0].navigationDestination = { lat: 35.0008, lng: 129.01005 };
+  car.response(car.requests.shift(), entranceRoute); await carStart; await car.settle();
   assert.equal(car.find('Navigation').props.destination.destinationKey, '1');
+  assert.equal(car.find('Navigation').props.destination.lat, 35.0008, 'SDK keeps the backend arrival instead of the school centre');
+  assert.equal(car.find('Navigation').props.destination.lng, 129.01005);
   assert.equal(car.find('MapCanvas').props.isGuiding, false, 'WebView must not run a second guidance engine');
   car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: 'old', distance: 10, duration: 5 } }); car.render();
   car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: '1', distance: 500, duration: 300 } }); car.render();

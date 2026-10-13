@@ -1240,7 +1240,8 @@ function NormalMapScreen({
       previewRequestRef.current += 1;
       setPreview(null);
       if (mode === 'car' && Platform.OS === 'android' && isKakaoNavigationAvailable()) {
-        setKakaoDestination({ lat: Number(target.lat), lng: Number(target.lng),
+        const navigationTarget = result.segment.navigationDestination || target;
+        setKakaoDestination({ lat: Number(navigationTarget.lat), lng: Number(navigationTarget.lng),
           name: target.detailAddress || target.roadAddress || '방문지',
           address: target.roadAddress || target.detailAddress || '',
           startLat: Number(currentLocation.lat), startLng: Number(currentLocation.lng), destinationKey: targetKey });
@@ -1280,8 +1281,21 @@ function NormalMapScreen({
     resumedRouteRef.current = key;
     if (activeSegment.mode === 'car') {
       if (!isKakaoNavigationAvailable()) { clearGuidance(); return; }
+      if (!activeSegment.navigationDestination) {
+        const request = ++guideRequestRef.current;
+        fetchRouteSegment(cleanLocation(currentLocation), cleanLocation(activeTarget), 'car').then(result => {
+          if (request !== guideRequestRef.current) return;
+          if (!result.segment.navigationDestination) { clearGuidance(); return; }
+          resumedRouteRef.current = null;
+          setRouteSegments([{ ...result.segment, destinationKey: activeSegment.destinationKey }]);
+          setRoadPath(result.segment.path || []);
+          setTotalDuration(result.totalDuration);
+        }).catch(() => { if (request === guideRequestRef.current) clearGuidance(); });
+        return;
+      }
       setNativeProgress(null);
-      setKakaoDestination({ lat: Number(activeTarget.lat), lng: Number(activeTarget.lng),
+      const navigationTarget = activeSegment.navigationDestination || activeTarget;
+      setKakaoDestination({ lat: Number(navigationTarget.lat), lng: Number(navigationTarget.lng),
         name: activeTarget.detailAddress || activeTarget.roadAddress || '방문지',
         address: activeTarget.roadAddress || activeTarget.detailAddress || '',
         startLat: Number(currentLocation.lat), startLng: Number(currentLocation.lng), destinationKey: activeSegment.destinationKey });
