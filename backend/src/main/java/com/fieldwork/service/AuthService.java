@@ -36,6 +36,15 @@ public class AuthService {
 
     @Transactional
     public User register(String loginId, String password, String name, String workSido, String workSigungu) {
+        return register(loginId, password, name, workSido, workSigungu, null, null, null);
+    }
+
+    @Transactional
+    public User register(String loginId, String password, String name, String workSido, String workSigungu,
+                         String workplaceAddress, Double workplaceLat, Double workplaceLng) {
+        if (workplaceAddress != null || workplaceLat != null || workplaceLng != null) {
+            Workplace.validate(workplaceAddress, workplaceLat, workplaceLng);
+        }
         if (userRepository.existsByLoginId(loginId)) {
             throw new RuntimeException("이미 존재하는 아이디입니다.");
         }
@@ -51,6 +60,9 @@ public class AuthService {
         }
         user.setWorkSigungu(workSigungu.trim());
 
+        user.setWorkplaceAddress(workplaceAddress == null ? null : workplaceAddress.trim());
+        user.setWorkplaceLat(workplaceLat);
+        user.setWorkplaceLng(workplaceLng);
         User savedUser = userRepository.save(user);
         groupService.ensurePersonalGroup(savedUser);
         return savedUser;
@@ -77,6 +89,9 @@ public class AuthService {
         result.put("role", user.getRole());
         result.put("workSido", user.getWorkSido() == null ? "부산광역시" : user.getWorkSido());
         result.put("workSigungu", user.getWorkSigungu());
+        result.put("workplaceAddress", user.getWorkplaceAddress());
+        result.put("workplaceLat", user.getWorkplaceLat());
+        result.put("workplaceLng", user.getWorkplaceLng());
 
         return result;
     }
@@ -104,6 +119,7 @@ public class AuthService {
         user.setName("탈퇴한 사용자");
         user.setWorkSido(null);
         user.setWorkSigungu(null);
+        user.setWorkplaceAddress(null); user.setWorkplaceLat(null); user.setWorkplaceLng(null);
         user.setRole("DELETED");
 
         return Map.of("message", "계정 탈퇴가 완료되었습니다.");
