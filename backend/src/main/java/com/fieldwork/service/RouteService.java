@@ -13,6 +13,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.core.ParameterizedTypeReference;
@@ -27,14 +28,19 @@ public class RouteService {
     @Value("${ors.api-key}")
     private String orsApiKey;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final KakaoWalkingClient walkingClient = new KakaoWalkingClient();
     private static final double MAX_ENTRANCE_SNAP_METERS = 50;
-    private static final double APPROACH_OFFSET_METERS = 10;
-    private static final double MAX_APPROACH_TO_ENTRANCE_METERS = 30;
 
     @Autowired(required = false)
     private BusanEntranceService busanEntranceService;
+
+    public RouteService() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);
+        factory.setReadTimeout(10_000);
+        restTemplate = new RestTemplate(factory);
+    }
 
     public Map<String, Object> optimizeRoute(
             Map<String, Object> currentLocation,
@@ -211,44 +217,41 @@ public class RouteService {
 
         for (int i = 0; i < routePoints.size() - 1; i++) {
             Map<String, Object> start = routePoints.get(i);
-            Map<String, Object> end = routePoints.get(i + 1);
-            Map<String, Object> entrance = end.containsKey("markerLatitude") ? end : null;
-            Map<String, Object> approach = entrance == null ? null : outsideEntrancePoint(entrance);
-            if (approach != null) {
-                end = approach;
-                routePoints.set(i + 1, end);
-            }
-            RoadLeg leg;
+            if (i == 0 && start.containsKey("markerLatitude")) start = originalMarkerPoint(start);
+            Map<String, Object> entrance = routePoints.get(i + 1);
+            // Building-group entrances are not necessarily vehicle entrances. Let Kakao
+            // resolve the original POI first; never invent a road point by extrapolation.
+            Map<String, Object> end = entrance.containsKey("markerLatitude")
+                    ? originalMarkerPoint(entrance) : entrance;
+            RoadSelection selection;
             try {
-                leg = requestRoadLeg(start, end);
-                if (approach != null && !endsWithinMeters(leg.path(), entrance,
-                        MAX_APPROACH_TO_ENTRANCE_METERS)) {
-                    throw new IllegalStateException("차량 경로가 출입구 근처에 연결되지 않았습니다.");
-                }
-            } catch (RuntimeException error) {
-                if (!end.containsKey("markerLatitude")) throw error;
-                if (approach != null) {
-                    try {
-                        end = entrance;
-                        routePoints.set(i + 1, end);
-                        leg = requestRoadLeg(start, end);
-                    } catch (RuntimeException entranceError) {
-                        end = originalMarkerPoint(entrance);
-                        routePoints.set(i + 1, end);
-                        leg = requestRoadLeg(start, end);
-                    }
-                } else {
-                    end = originalMarkerPoint(end);
-                    routePoints.set(i + 1, end);
-                    leg = requestRoadLeg(start, end);
-                }
+                selection = selectRoadLeg(start, end);
+            } catch (RoadPathUnavailable error) {
+                if (!entrance.containsKey("markerLatitude")) throw error;
+                end = entrance;
+                selection = selectRoadLeg(start, end);
             }
+            RoadLeg leg = selection.leg();
             totalDistance += leg.distance();
             totalDuration += leg.duration();
             fullPath.addAll(leg.path());
             Map<String, Object> segment = makeSegment(i, start, end, leg.path(), "car");
             segment.put("trafficSections", leg.trafficSections());
+            segment.put("totalDistance", leg.distance());
+            segment.put("totalDuration", leg.duration());
+            segment.put("routePriority", leg.priority());
+            segment.put("routeDiagnostics", Map.of(
+                    "requestedOrigin", Map.of("latitude", getLat(start), "longitude", getLng(start)),
+                    "requestedDestination", Map.of("latitude", getLat(end), "longitude", getLng(end)),
+                    "destinationSource", end.containsKey("markerLatitude") ? "entranceFallback" : "original",
+                    "candidates", selection.candidates()));
             segments.add(segment);
+            // The next vehicle leg starts at the actual road arrival, not inside the building.
+            Map<String, Double> arrival = leg.path().get(leg.path().size() - 1);
+            Map<String, Object> nextStart = new HashMap<>(end);
+            nextStart.put("lat", arrival.get("latitude"));
+            nextStart.put("lng", arrival.get("longitude"));
+            routePoints.set(i + 1, nextStart);
         }
 
         Map<String, Object> result = new HashMap<>();
@@ -262,22 +265,63 @@ public class RouteService {
 
     private record RoadLeg(List<Map<String, Double>> path,
                            List<Map<String, Object>> trafficSections,
-                           int distance, int duration) {}
+                           int distance, int duration, int toll, String priority) {}
 
-    private RoadLeg requestRoadLeg(Map<String, Object> start, Map<String, Object> end) {
+    private record RoadSelection(RoadLeg leg, List<Map<String, Object>> candidates) {}
+
+    private static class RoadPathUnavailable extends IllegalStateException {
+        RoadPathUnavailable(String message) { super(message); }
+    }
+
+    private RoadSelection selectRoadLeg(Map<String, Object> start, Map<String, Object> end) {
+        if (distanceMeters(getLat(start), getLng(start), getLat(end), getLng(end)) < 1) {
+            Map<String, Double> point = Map.of("latitude", getLat(end), "longitude", getLng(end));
+            return new RoadSelection(new RoadLeg(List.of(point, point), List.of(), 0, 0, 0, "RECOMMEND"), List.of());
+        }
+        RoadLeg selected = null;
+        List<Map<String, Object>> candidates = new ArrayList<>();
+        for (String priority : List.of("RECOMMEND", "TIME", "DISTANCE")) {
+            RoadLeg candidate;
+            try {
+                candidate = requestRoadLeg(start, end, priority);
+            } catch (RoadPathUnavailable error) {
+                candidates.add(Map.of("priority", priority, "available", false));
+                continue;
+            } catch (RuntimeException error) {
+                // A failed optional comparison must not discard a usable recommended route.
+                if (selected == null) throw error;
+                candidates.add(Map.of("priority", priority, "available", false));
+                continue;
+            }
+            candidates.add(Map.of("priority", priority, "available", true,
+                    "distance", candidate.distance(), "duration", candidate.duration(), "toll", candidate.toll()));
+            // Keep the recommendation unless another provider route improves at least one
+            // metric without increasing travel time, distance, or tolls.
+            if (selected == null || (candidate.distance() <= selected.distance()
+                    && candidate.duration() <= selected.duration()
+                    && candidate.toll() >= 0 && selected.toll() >= 0 && candidate.toll() <= selected.toll()
+                    && (candidate.distance() < selected.distance() || candidate.duration() < selected.duration()))) {
+                selected = candidate;
+            }
+        }
+        if (selected == null) throw new RoadPathUnavailable("차량 경로를 찾지 못했습니다.");
+        return new RoadSelection(selected, candidates);
+    }
+
+    private RoadLeg requestRoadLeg(Map<String, Object> start, Map<String, Object> end, String priority) {
         String url = "https://apis-navi.kakaomobility.com/v1/directions"
                 + "?origin=" + getLng(start) + "," + getLat(start)
                 + "&destination=" + getLng(end) + "," + getLat(end)
-                + "&priority=RECOMMEND&summary=false";
+                + "&priority=" + priority + "&summary=false";
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "KakaoAK " + kakaoRestApiKey);
         Map<String, Object> body = restTemplate.exchange(url, HttpMethod.GET,
                 new HttpEntity<Void>(headers), new ParameterizedTypeReference<Map<String, Object>>() {}).getBody();
         List<Map<String, Object>> routes = body == null ? null : (List<Map<String, Object>>) body.get("routes");
-        if (routes == null || routes.isEmpty()) throw new IllegalStateException("차량 경로를 찾지 못했습니다.");
+        if (routes == null || routes.isEmpty()) throw new RoadPathUnavailable("차량 경로를 찾지 못했습니다.");
         Map<String, Object> route = routes.get(0);
         if (route.get("result_code") instanceof Number code && code.intValue() != 0) {
-            throw new IllegalStateException("차량 경로를 찾지 못했습니다.");
+            throw new RoadPathUnavailable("차량 경로를 찾지 못했습니다.");
         }
         Map<String, Object> summary = (Map<String, Object>) route.get("summary");
         List<Map<String, Object>> sections = (List<Map<String, Object>>) route.get("sections");
@@ -306,13 +350,20 @@ public class RouteService {
                 }
             }
         }
-        if (path.size() < 2) throw new IllegalStateException("차량 경로 좌표가 부족합니다.");
+        if (path.size() < 2) throw new RoadPathUnavailable("차량 경로 좌표가 부족합니다.");
         if (end.containsKey("markerLatitude") && !endsNearEntrance(path, end)) {
-            throw new IllegalStateException("차량 경로가 출입구 근처에 연결되지 않았습니다.");
+            throw new RoadPathUnavailable("차량 경로가 출입구 근처에 연결되지 않았습니다.");
         }
+        if (summary == null || !(summary.get("distance") instanceof Number distance)
+                || !(summary.get("duration") instanceof Number duration)
+                || distance.intValue() <= 0 || duration.intValue() < 0) {
+            throw new RoadPathUnavailable("차량 경로 요약 정보가 부족합니다.");
+        }
+        Map<String, Object> fare = (Map<String, Object>) summary.get("fare");
         return new RoadLeg(path, trafficSections,
-                summary == null ? 0 : ((Number) summary.getOrDefault("distance", 0)).intValue(),
-                summary == null ? 0 : ((Number) summary.getOrDefault("duration", 0)).intValue());
+                distance.intValue(), duration.intValue(),
+                fare == null || !(fare.get("toll") instanceof Number)
+                        ? -1 : ((Number) fare.get("toll")).intValue(), priority);
     }
 
     private Map<String, Object> getOrsWalkingPath(
@@ -505,13 +556,19 @@ public class RouteService {
         segment.put("toName", String.valueOf(end.get("name")));
         segment.put("mode", mode);
         segment.put("path", segmentPath);
-        if (end.containsKey("markerLatitude") && end.containsKey("markerLongitude")) {
+        if ("car".equals(mode) || (end.containsKey("markerLatitude") && end.containsKey("markerLongitude"))) {
             Map<String, Double> routeEnd = segmentPath.isEmpty()
                     ? Map.of("latitude", getLat(end), "longitude", getLng(end))
                     : segmentPath.get(segmentPath.size() - 1);
-            segment.put("connectorPath", List.of(routeEnd,
-                    Map.of("latitude", ((Number) end.get("markerLatitude")).doubleValue(),
-                            "longitude", ((Number) end.get("markerLongitude")).doubleValue())));
+            double markerLat = end.containsKey("markerLatitude")
+                    ? ((Number) end.get("markerLatitude")).doubleValue() : getLat(end);
+            double markerLng = end.containsKey("markerLongitude")
+                    ? ((Number) end.get("markerLongitude")).doubleValue() : getLng(end);
+            double gap = distanceMeters(routeEnd.get("latitude"), routeEnd.get("longitude"), markerLat, markerLng);
+            if (!"car".equals(mode) || (gap > 2 && gap <= 500)) {
+                segment.put("connectorPath", List.of(routeEnd,
+                        Map.of("latitude", markerLat, "longitude", markerLng)));
+            }
         }
 
         return segment;
@@ -521,21 +578,6 @@ public class RouteService {
         double north = (lat2 - lat1) * 111_000;
         double east = (lng2 - lng1) * 111_000 * Math.cos(Math.toRadians((lat1 + lat2) / 2));
         return Math.hypot(north, east);
-    }
-
-    private Map<String, Object> outsideEntrancePoint(Map<String, Object> entrance) {
-        double entranceLat = getLat(entrance), entranceLng = getLng(entrance);
-        double markerLat = ((Number) entrance.get("markerLatitude")).doubleValue();
-        double markerLng = ((Number) entrance.get("markerLongitude")).doubleValue();
-        double north = (entranceLat - markerLat) * 111_000;
-        double east = (entranceLng - markerLng) * 111_000 * Math.cos(Math.toRadians(entranceLat));
-        double length = Math.hypot(north, east);
-        if (length < 40 || length > 500) return null;
-        Map<String, Object> approach = new HashMap<>(entrance);
-        approach.put("lat", entranceLat + north / length * APPROACH_OFFSET_METERS / 111_000);
-        approach.put("lng", entranceLng + east / length * APPROACH_OFFSET_METERS /
-                (111_000 * Math.cos(Math.toRadians(entranceLat))));
-        return approach;
     }
 
     private boolean endsNearEntrance(List<Map<String, Double>> path, Map<String, Object> entrance) {
