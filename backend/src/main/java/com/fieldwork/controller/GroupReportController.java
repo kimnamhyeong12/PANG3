@@ -42,7 +42,6 @@ public class GroupReportController {
                 .collect(Collectors.toSet());
         if (taskIds.isEmpty()) return List.of();
         return progressRepository.findByTask_TaskIdInOrderByCreatedAtDesc(taskIds).stream()
-                .filter(progress -> progress.getReportFilePath() != null && !progress.getReportFilePath().isBlank())
                 .map(this::toReportMap)
                 .toList();
     }
@@ -54,6 +53,9 @@ public class GroupReportController {
         result.put("assigneeUserId", owner == null ? null : owner.getUserId());
         result.put("assigneeName", owner == null ? "담당자 확인 불가" : owner.getName());
         result.put("adminDong", progress.getTask().getAdminDong());
+        result.put("taskLatitude", progress.getTask().getLat());
+        result.put("taskLongitude", progress.getTask().getLng());
+        result.put("taskStatus", progress.getTask().getTaskStatus());
         result.put("performedByName", progress.getPerformedByUserId() == null
                 ? "작업자 확인 불가"
                 : users.findById(progress.getPerformedByUserId())

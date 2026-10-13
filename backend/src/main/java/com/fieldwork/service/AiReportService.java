@@ -65,8 +65,21 @@ public class AiReportService {
         payload.put("field_photos", photos);
         payload.put("task_id", task.getTaskId());
         payload.put("progress_id", progress.getProgressId());
+        payload.put("recorded_at", progress.getCreatedAt() == null ? "" : progress.getCreatedAt().toString());
+        payload.put("progress_status", progress.getProgressStatus());
 
         return payload;
+    }
+
+    public String generateCombined(List<Map<String, Object>> reports) throws Exception {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("reports", reports);
+        payload.put("output_dir", ProjectPaths.resolve(properties.getAi().getOutputDir()).toString());
+        Map<String, Object> result = callPythonWithRetry(objectMapper.writeValueAsString(payload));
+        if (result == null || !Boolean.TRUE.equals(result.get("ok")) || result.get("report_file") == null) {
+            throw new IllegalStateException("통합 보고서를 만들지 못했습니다. 다시 시도하세요.");
+        }
+        return result.get("report_file").toString();
     }
 
     public Map<String, Object> generateReport(Task task, TaskProgress progress) throws Exception {
@@ -98,13 +111,18 @@ public class AiReportService {
         int retryDelayMs = 2000;
 
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            Path payloadPath = null;
             try {
                 Path pythonPath = ProjectPaths.resolve(properties.getAi().getPythonPath());
                 Path scriptPath = ProjectPaths.resolve(properties.getAi().getScriptPath());
+                Path outputDir = ProjectPaths.resolve(properties.getAi().getOutputDir());
+                java.nio.file.Files.createDirectories(outputDir);
+                payloadPath = java.nio.file.Files.createTempFile(outputDir, "report-input-", ".json");
+                java.nio.file.Files.writeString(payloadPath, jsonPayload, StandardCharsets.UTF_8);
                 List<String> command = List.of(
                         pythonPath.toString(),
                         scriptPath.toString(),
-                        jsonPayload
+                        payloadPath.toAbsolutePath().toString()
                 );
 
                 ProcessBuilder processBuilder = new ProcessBuilder(command);
@@ -139,6 +157,10 @@ public class AiReportService {
                 }
             } catch (Exception e) {
                 System.out.println("[AI] 시도 " + attempt + " 실패: " + e.getMessage());
+            } finally {
+                if (payloadPath != null) {
+                    try { java.nio.file.Files.deleteIfExists(payloadPath); } catch (Exception ignored) {}
+                }
             }
 
             if (attempt < maxRetries) {
