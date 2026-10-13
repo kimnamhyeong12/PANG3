@@ -207,6 +207,7 @@ public class TaskProgressService {
         TaskProgress progress = taskProgressRepository.findLocked(progressId)
                 .orElseThrow(() -> new IllegalArgumentException("보고서를 찾을 수 없습니다."));
         validateReader(progress.getTask(), userId);
+        validateDownloadable(progress);
         if (progress.getReportFilePath() == null || !fileStorageService.exists(progress.getReportFilePath())) {
             runAiIfPossible(progress.getTask(), progress);
         }
@@ -224,12 +225,21 @@ public class TaskProgressService {
         throw new IllegalArgumentException("보고서를 확인할 권한이 없습니다.");
     }
 
+    public void validateDownloadable(TaskProgress progress) {
+        String status = progress.getProgressStatus();
+        if (!"working".equalsIgnoreCase(status) && !"complete".equalsIgnoreCase(status)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT, "작업 전 보고서는 다운로드할 수 없습니다.");
+        }
+    }
+
     public String prepareCombined(List<Long> ids, Long userId) throws Exception {
         if (ids == null || ids.isEmpty()) throw new IllegalArgumentException("보고서를 선택하세요.");
         List<Map<String, Object>> reports = new ArrayList<>();
         for (Long id : ids.stream().distinct().toList()) {
             TaskProgress progress = getById(id);
             validateReader(progress.getTask(), userId);
+            validateDownloadable(progress);
             reports.add(aiReportService.buildPayload(progress.getTask(), progress));
         }
         return aiReportService.generateCombined(reports);
