@@ -207,6 +207,11 @@ public class RouteService {
             Map<String, Object> currentLocation,
             List<Map<String, Object>> locations
     ) {
+        return getKakaoRoadPath(currentLocation, locations, null);
+    }
+
+    private Map<String, Object> getKakaoRoadPath(Map<String, Object> currentLocation,
+            List<Map<String, Object>> locations, String priority) {
         List<Map<String, Object>> routePoints = makeRoutePoints(currentLocation, locations);
 
         List<Map<String, Double>> fullPath = new ArrayList<>();
@@ -225,11 +230,11 @@ public class RouteService {
                     ? originalMarkerPoint(entrance) : entrance;
             RoadSelection selection;
             try {
-                selection = selectRoadLeg(start, end);
+                selection = selectRoadLeg(start, end, priority);
             } catch (RoadPathUnavailable error) {
                 if (!entrance.containsKey("markerLatitude")) throw error;
                 end = entrance;
-                selection = selectRoadLeg(start, end);
+                selection = selectRoadLeg(start, end, priority);
             }
             RoadLeg leg = selection.leg();
             totalDistance += leg.distance();
@@ -274,13 +279,17 @@ public class RouteService {
     }
 
     private RoadSelection selectRoadLeg(Map<String, Object> start, Map<String, Object> end) {
+        return selectRoadLeg(start, end, null);
+    }
+
+    private RoadSelection selectRoadLeg(Map<String, Object> start, Map<String, Object> end, String requestedPriority) {
         if (distanceMeters(getLat(start), getLng(start), getLat(end), getLng(end)) < 1) {
             Map<String, Double> point = Map.of("latitude", getLat(end), "longitude", getLng(end));
             return new RoadSelection(new RoadLeg(List.of(point, point), List.of(), 0, 0, 0, "RECOMMEND"), List.of());
         }
         RoadLeg selected = null;
         List<Map<String, Object>> candidates = new ArrayList<>();
-        for (String priority : List.of("RECOMMEND", "TIME", "DISTANCE")) {
+        for (String priority : requestedPriority == null ? List.of("RECOMMEND", "TIME", "DISTANCE") : List.of(requestedPriority)) {
             RoadLeg candidate;
             try {
                 candidate = requestRoadLeg(start, end, priority);
@@ -600,16 +609,24 @@ public class RouteService {
     }
 
     public Map<String, Object> getSingleSegmentPath(Map<String, Object> start, Map<String, Object> end, String transportMode, String walkingKey) {
+        return getSingleSegmentPath(start, end, transportMode, walkingKey, null);
+    }
+
+    public Map<String, Object> getSingleSegmentPath(Map<String, Object> start, Map<String, Object> end,
+            String transportMode, String walkingKey, String routePriority) {
+        if (routePriority != null && !"RECOMMEND".equals(routePriority)) {
+            throw new IllegalArgumentException("지원하지 않는 경로 기준입니다.");
+        }
         List<Map<String, Object>> locations = new ArrayList<>();
         locations.add(end);
 
         if ("walk".equalsIgnoreCase(transportMode)) {
-            Map<String, Object> result = getKakaoWalkingPath(start, locations, walkingKey);
+            Map<String, Object> result = getKakaoWalkingPath(start, locations, walkingKey == null ? kakaoRestApiKey : walkingKey);
             result.put("mode", "walk");
             return result;
         }
 
-        Map<String, Object> result = getKakaoRoadPath(start, locations);
+        Map<String, Object> result = getKakaoRoadPath(start, locations, routePriority);
         result.put("mode", "car");
         return result;
     }

@@ -1280,10 +1280,9 @@ export default function App() {
 
           {screen === 'fieldAction' && (
             <FieldActionScreen
-              key={`${selectedLocation?.id ?? selectedLocation?.taskId}:${selectedLocation?.newReport ? 'new' : selectedLocation?.reportProgressId || 'latest'}`}
+              key={`${selectedLocation?.id ?? selectedLocation?.taskId}:${selectedLocation?.reportProgressId || 'latest'}`}
               workspaceKey={workspaceCacheKey()}
               registerNavigationGuard={registerNavigationGuard}
-              onNewReport={() => navigateSafely(() => setSelectedLocation((previous) => ({ ...previous, newReport: true, reportProgressId: null })))}
               user={user}
               location={selectedLocation}
               actionType={actionType}

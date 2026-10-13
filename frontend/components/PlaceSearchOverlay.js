@@ -31,7 +31,7 @@ export function PlaceRow({ place, query, onPress, onAdd, registered }) {
     </TouchableOpacity>}
   </View>;
 }
-export default function PlaceSearchOverlay({ userId, center, onClose, onResults, onPick, onAdd, locations = [], history = true, initialQuery = '' }) {
+export default function PlaceSearchOverlay({ userId, center, districtOnly = false, onClose, onResults, onPick, onAdd, locations = [], history = true, initialQuery = '' }) {
   const [query, setQuery] = useState(initialQuery); const [results, setResults] = useState([]);
   const [recent, setRecent] = useState([]); const [loading, setLoading] = useState(false); const [error, setError] = useState('');
   const [completedQuery, setCompletedQuery] = useState(null);
@@ -56,14 +56,14 @@ export default function PlaceSearchOverlay({ userId, center, onClose, onResults,
     if (!q || (!submit && q.length < 2)) { setResults([]); setError(''); setLoading(false); return; }
     const abort = new AbortController(); controller.current = abort; setLoading(true); setError(''); setResults([]);
     try {
-      const rows = await searchPlaces(q, { center, signal: abort.signal, limit: submit ? 30 : 7 });
+      const rows = await searchPlaces(q, { center, districtOnly, signal: abort.signal, limit: submit ? 30 : 7 });
       if (!mounted.current || request !== sequence.current) return;
       setResults(rows); setCompletedQuery(q);
       if (submit && onResults && rows.length) { remember(q); Keyboard.dismiss(); onResults(rows, q); }
     } catch (err) { if (mounted.current && request === sequence.current && !abort.signal.aborted) setError(err.message); }
     finally { if (mounted.current && request === sequence.current) setLoading(false); }
   };
-  useEffect(() => { debounce.current = setTimeout(() => run(query), 300); return () => clearTimeout(debounce.current); }, [query]);
+  useEffect(() => { debounce.current = setTimeout(() => run(query), 300); return () => clearTimeout(debounce.current); }, [query, center?.lat, center?.lng, districtOnly]);
   const changeQuery = text => {
     if (text === query) return;
     sequence.current++; controller.current?.abort(); setResults([]); setError(''); setCompletedQuery(null); setLoading(false); setQuery(text);

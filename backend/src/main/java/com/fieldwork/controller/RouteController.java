@@ -55,7 +55,7 @@ public class RouteController {
                 body.getOrDefault("transportMode", "car")
         );
 
-        return walkingKey == null ? routeService.getSingleSegmentPath(start, end, transportMode)
-                : routeService.getSingleSegmentPath(start, end, transportMode, walkingKey);
+        String priority = body.get("routePriority") == null ? null : String.valueOf(body.get("routePriority"));
+        return routeService.getSingleSegmentPath(start, end, transportMode, walkingKey, priority);
     }
 }

@@ -24,7 +24,7 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
         method: 'POST', ...(combined ? { headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ progressIds: downloadInfo.progressIds, userId: downloadInfo.userId }) } : {}),
       });
-      if (!response.ok) throw new Error('보고서 파일을 만들지 못했습니다. 다시 시도해 주세요.');
+      if (!response.ok) throw new Error(response.status === 409 ? '작업 전 보고서는 다운로드할 수 없습니다.' : '보고서 파일을 만들지 못했습니다. 다시 시도해 주세요.');
       const result = await response.json();
       const url = resolveApiUrl(result.reportDownloadUrl);
       if (!url) throw new Error('보고서 파일이 없습니다. 다시 시도해 주세요.');

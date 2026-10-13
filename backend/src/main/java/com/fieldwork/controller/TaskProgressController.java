@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TaskProgressController {
 
     private final TaskProgressService taskProgressService;
-    private record CombinedFile(Long userId, String path) {}
+    private record CombinedFile(Long userId, String path, List<Long> progressIds) {}
     public record ReportBatchRequest(Long userId, List<Long> progressIds) {}
     private final Map<String, CombinedFile> combinedFiles = new ConcurrentHashMap<>();
 
@@ -70,7 +70,7 @@ public class TaskProgressController {
         }
         String file = taskProgressService.prepareCombined(ids, userId);
         String key = UUID.randomUUID().toString();
-        combinedFiles.put(key, new CombinedFile(userId, file));
+        combinedFiles.put(key, new CombinedFile(userId, file, List.copyOf(ids)));
         return Map.of("reportDownloadUrl", "/api/task-progress/reports/" + key + "/download?userId=" + userId,
                 "reportCount", ids.stream().distinct().count());
     }
@@ -79,6 +79,11 @@ public class TaskProgressController {
     public ResponseEntity<Resource> downloadCombined(@PathVariable String key, @RequestParam Long userId) {
         CombinedFile file = combinedFiles.get(key);
         if (file == null || !file.userId().equals(userId)) return ResponseEntity.notFound().build();
+        for (Long id : file.progressIds()) {
+            TaskProgress progress = taskProgressService.getById(id);
+            taskProgressService.validateReader(progress.getTask(), userId);
+            taskProgressService.validateDownloadable(progress);
+        }
         return downloadFile(file.path(), "combined_report.hwpx");
     }
 
@@ -91,6 +96,7 @@ public class TaskProgressController {
     @GetMapping("/{progressId}/report/download")
     public ResponseEntity<Resource> downloadReport(@PathVariable Long progressId) {
         TaskProgress progress = taskProgressService.getById(progressId);
+        taskProgressService.validateDownloadable(progress);
         String reportPath = progress.getReportFilePath();
 
         if (reportPath == null || reportPath.isBlank()) {

@@ -15,7 +15,7 @@ class KakaoNavigationModule : Module() {
     Function("stopRouteNotification") { RouteGuidanceService.stop(requireNotNull(appContext.reactContext)) }
 
     View(KakaoNavigationView::class) {
-      Events("onError", "onEnded")
+      Events("onError", "onEnded", "onProgress", "onArrived")
 
       Prop("destination") { view: KakaoNavigationView, destination: Map<String, Any?> ->
         view.start(destination)

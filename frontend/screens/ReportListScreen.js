@@ -76,13 +76,13 @@ export default function ReportListScreen({
   );
 
   const isReportable = (loc) =>
-    getTaskId(loc) != null;
+    getTaskId(loc) != null && ['working', 'complete'].includes(loc.status);
 
   const toggleSelect = (loc) => {
     if (!isReportable(loc)) {
       showAlert(
         '선택 불가',
-        '방문지 정보를 확인할 수 없습니다.'
+        getTaskId(loc) == null ? '방문지 정보를 확인할 수 없습니다.' : '작업 전 방문지는 보고서에 포함할 수 없습니다.'
       );
       return;
     }
@@ -97,7 +97,7 @@ export default function ReportListScreen({
   };
 
   const selectedLocations = locations.filter((loc) =>
-    selectedIds.includes(getTaskId(loc))
+    isReportable(loc) && selectedIds.includes(getTaskId(loc))
   );
 
   const selectedDongName = selectedDong
@@ -167,7 +167,7 @@ export default function ReportListScreen({
             const taskId = getTaskId(loc);
 
             const checked =
-              selectedIds.includes(taskId);
+              reportable && selectedIds.includes(taskId);
 
             const assignment =
               assignmentMap.get(
@@ -184,6 +184,10 @@ export default function ReportListScreen({
               >
                 <TouchableOpacity
                   style={styles.checkArea}
+                  disabled={!reportable}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={`${loc.detailAddress || loc.roadAddress || '방문지'} 보고서 선택`}
+                  accessibilityState={{ disabled: !reportable, checked }}
                   onPress={() =>
                     toggleSelect(loc)
                   }
@@ -332,7 +336,7 @@ export default function ReportListScreen({
                             styles.disabledText
                           }
                         >
-                          보고서 포함 불가
+                          {taskId == null ? '보고서 포함 불가' : '작업 전 · 선택 불가'}
                         </Text>
                       )}
                     </View>

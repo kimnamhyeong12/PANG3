@@ -5,6 +5,7 @@ import { ScreenHeader } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
 import { colors } from '../constants/design';
 import { groupReportsByPlace } from '../utils/reportPhotos';
+import { canDownloadReport } from '../utils/reportAvailability';
 
 const dongName = (value) => String(value || '').trim().split(/\s+/).pop().replace(/제(?=\d+동$)/, '') || '행정동 미확인';
 
@@ -84,9 +85,12 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
               <Text style={styles.title}>{String(item.createdAt || '').slice(0, 16).replace('T', ' ')}</Text>
               <Text style={styles.meta}>{statusLabel(item.progressStatus)} · {item.performedByName || '작업자 확인 불가'}</Text>
               <View style={{ flexDirection: 'row', gap: 20, marginTop: 8 }}>
-                <TouchableOpacity onPress={() => onOpenReport(item)} style={{ paddingVertical: 8 }}><Text style={{ color: colors.primary }}>HWPX 파일 열기</Text></TouchableOpacity>
+                <TouchableOpacity disabled={!canDownloadReport(item)} onPress={() => {
+                  if (canDownloadReport(item)) onOpenReport(item);
+                }} style={{ paddingVertical: 8 }}><Text style={{ color: canDownloadReport(item) ? colors.primary : colors.textSoft }}>HWPX 파일 열기</Text></TouchableOpacity>
                 {Number(item.assigneeUserId) === Number(user.userId) && <TouchableOpacity onPress={() => onEditReport?.(item)} style={{ paddingVertical: 8 }}><Text style={{ color: colors.primary }}>보고서 수정</Text></TouchableOpacity>}
               </View>
+              {!canDownloadReport(item) && <Text style={styles.meta}>작업 전 보고서는 다운로드할 수 없습니다.</Text>}
             </View>
           </View>)}
         </View> : places.length ? places.map((place) => <TouchableOpacity key={place.key} style={styles.card} onPress={() => setSelectedPlace(place.key)}>

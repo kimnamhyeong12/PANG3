@@ -48,11 +48,14 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
 
   private val onError by EventDispatcher<Map<String, String>>()
   private val onEnded by EventDispatcher<Map<String, String>>()
+  private val onProgress by EventDispatcher<Map<String, Any>>()
+  private val onArrived by EventDispatcher<Map<String, String>>()
   private val priority = KNRoutePriority.KNRoutePriority_Recommand
   private val avoidOptions = KNRouteAvoidOption.KNRouteAvoidOption_None.value
   private var naviView: KNNaviView? = null
   private var requestId = 0
   private var released = false
+  private var stopping = false
   private var lastDestination: Map<String, Any?>? = null
 
   init {
@@ -185,6 +188,7 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
   }
 
   private fun stopGuidance() {
+    stopping = true
     KNSDK.sharedGuidance()?.apply {
       stop()
       guideStateDelegate = null
@@ -196,10 +200,13 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
     }
     naviView?.guideStateDelegate = null
     naviView = null
+    stopping = false
   }
 
   override fun naviViewGuideState(state: KNGuideState) = Unit
-  override fun naviViewGuideEnded() { onEnded(mapOf("reason" to "ended")) }
+  override fun naviViewGuideEnded() {
+    if (!released && !stopping) onEnded(mapOf("reason" to "ended", "destinationKey" to lastDestination?.get("destinationKey").toString()))
+  }
   override fun guidanceGuideStarted(guidance: KNGuidance) { naviView?.guidanceGuideStarted(guidance) }
   override fun guidanceCheckingRouteChange(guidance: KNGuidance) { naviView?.guidanceCheckingRouteChange(guidance) }
   override fun guidanceRouteUnchanged(guidance: KNGuidance) { naviView?.guidanceRouteUnchanged(guidance) }
@@ -207,12 +214,26 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
   override fun guidanceOutOfRoute(guidance: KNGuidance) { naviView?.guidanceOutOfRoute(guidance) }
   override fun guidanceRouteChanged(guidance: KNGuidance, before: KNRoute, beforeLocation: KNLocation,
     after: KNRoute, afterLocation: KNLocation, reason: KNGuideRouteChangeReason) { naviView?.guidanceRouteChanged(guidance) }
-  override fun guidanceGuideEnded(guidance: KNGuidance) { naviView?.guidanceGuideEnded(guidance, true) }
+  override fun guidanceGuideEnded(guidance: KNGuidance) {
+    if (released || stopping) return
+    val arrived = guidance.trip?.remainDist()?.let { it in 0..30 } == true
+    if (arrived) onArrived(mapOf("destinationKey" to lastDestination?.get("destinationKey").toString()))
+    else onEnded(mapOf("reason" to "ended", "destinationKey" to lastDestination?.get("destinationKey").toString()))
+  }
   override fun guidanceDidUpdateRoutes(guidance: KNGuidance, routes: List<KNRoute>, multi: KNMultiRouteInfo?) {
     naviView?.guidanceDidUpdateRoutes(guidance, routes, multi)
   }
   override fun guidanceDidUpdateIndoorRoute(guidance: KNGuidance, route: KNRoute?) { naviView?.guidanceDidUpdateIndoorRoute(guidance, route) }
-  override fun guidanceDidUpdateLocation(guidance: KNGuidance, location: KNGuide_Location) { naviView?.guidanceDidUpdateLocation(guidance, location) }
+  override fun guidanceDidUpdateLocation(guidance: KNGuidance, location: KNGuide_Location) {
+    naviView?.guidanceDidUpdateLocation(guidance, location)
+    if (released || stopping || location.location == null) return
+    val trip = guidance.trip ?: return
+    val distance = trip.remainDist()
+    val duration = trip.remainTime()
+    if (distance < 0 || duration < 0) return
+    onProgress(mapOf("destinationKey" to lastDestination?.get("destinationKey").toString(),
+      "distance" to distance, "duration" to duration))
+  }
   override fun guidanceDidUpdateRouteGuide(guidance: KNGuidance, route: KNGuide_Route) { naviView?.guidanceDidUpdateRouteGuide(guidance, route) }
   override fun guidanceDidUpdateSafetyGuide(guidance: KNGuidance, safety: KNGuide_Safety?) { naviView?.guidanceDidUpdateSafetyGuide(guidance, safety) }
   override fun guidanceDidUpdateAroundSafeties(guidance: KNGuidance, safeties: List<KNSafety>?) { naviView?.guidanceDidUpdateAroundSafeties(guidance, safeties) }

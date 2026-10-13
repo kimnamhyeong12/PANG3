@@ -990,7 +990,7 @@ const buildKakaoMapHtml = (
       roadLine.setMap(map);
     }
 
-    updateActivePath(data.activePath, data.activeTrafficPaths);
+    updateActivePath(data.activePath, data.activeTrafficPaths, data.activeMode);
 
     (data.connectorPaths || []).forEach(function (connector) {
       if (!Array.isArray(connector) || connector.length < 2) return;
@@ -1039,7 +1039,7 @@ const buildKakaoMapHtml = (
     return colors[Number(state)] || "#9CA3AF"; // 교통 정보 없음
   }
 
-  function updateActivePath(path, trafficPaths) {
+  function updateActivePath(path, trafficPaths, mode) {
     if (!map) return;
     if (Array.isArray(trafficPaths)) displayedTrafficPaths = trafficPaths;
     displayedActivePath = Array.isArray(path) ? path : [];
@@ -1068,7 +1068,7 @@ const buildKakaoMapHtml = (
     activeLine = new window.kakao.maps.Polyline({
       path: displayedActivePath.map(toLatLng),
       strokeWeight: 7,
-      strokeColor: "#9CA3AF",
+      strokeColor: mode === "walk" ? "#2477F3" : "#9CA3AF",
       strokeOpacity: 1,
       strokeStyle: "solid"
     });
@@ -1171,7 +1171,7 @@ const buildKakaoMapHtml = (
     }
 
     if (commandData.type === "ACTIVE_PATH") {
-      updateActivePath(commandData.path, commandData.trafficPaths);
+      updateActivePath(commandData.path, commandData.trafficPaths, commandData.mode);
       return;
     }
 
@@ -3154,6 +3154,7 @@ export default function KakaoMapWebView({
             ? remainingActivePath
             : activePath,
         activeTrafficPaths: previewRouteSegment ? previewRouteSegment.trafficSections || [] : activeTrafficPaths,
+        activeMode: previewRouteSegment?.mode || routeSegments[currentSegmentIndex]?.mode,
       },
     });
   }, [
@@ -3174,7 +3175,7 @@ export default function KakaoMapWebView({
 
   useEffect(() => {
     if (!isGuiding || previewRouteSegment || !initialMapPositionRef.current) return;
-    sendMapCommand({ type: "ACTIVE_PATH", path: remainingActivePath, trafficPaths: activeTrafficPaths });
+    sendMapCommand({ type: "ACTIVE_PATH", path: remainingActivePath, trafficPaths: activeTrafficPaths, mode: routeSegments[currentSegmentIndex]?.mode });
   }, [isGuiding, remainingActivePath, activeTrafficPaths, previewRouteSegment]);
 
   useEffect(() => {

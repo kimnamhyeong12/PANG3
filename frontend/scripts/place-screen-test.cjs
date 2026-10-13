@@ -27,6 +27,7 @@ function load(file) {
     if (name.includes('kakao-navigation')) return { KakaoNavigationView: Surface, isKakaoNavigationAvailable: () => false };
     if (name.includes('notificationService')) return { stopRouteNotification: noOp, updateRouteNotification: noOp };
     if (name.includes('PublicDataMapMode')) return { BUSAN_DISTRICT_CODES: {} };
+    if (name.includes('BulkUploadModal')) return { __esModule: true, default: Surface };
     if (name.includes('CustomAlert')) return { showAlert: noOp };
     if (name.includes('KakaoMapWebView') || name.includes('VoiceTextInput') || name.includes('WorkplaceField')) return { __esModule: true, default: Surface };
     if (name.startsWith('.')) return load(path.resolve(path.dirname(file), name + '.js'));
@@ -82,4 +83,33 @@ sheetGestures.onPanResponderMove(null, gesture(86));
 assert.equal(sheetPosition.value, 80, 'downward pull from the first row moves the expanded sheet');
 sheetGestures.onPanResponderRelease(null, gesture(86, 0.5));
 assert.equal(sheetPosition.value, 200, 'downward pull settles in the half-height position');
-console.log('Place screen render checks passed: map entry, recent searches, query highlight and result sheet');
+rn.StatusBar = { currentHeight: 0 };
+const ReportList = load(path.join(base, 'screens/ReportListScreen.js')).default;
+let controls = [];
+rn.TouchableOpacity = props => { controls.push(props); return React.createElement(Surface, null, props.children); };
+const reportLocations = [
+  { id: 1, status: 'pending', detailAddress: '작업 전 장소' },
+  { id: 2, status: 'working', detailAddress: '작업 중 장소' },
+  { id: 3, status: 'complete', detailAddress: '작업 후 장소' },
+];
+let selectedRows; let selectionChanges = 0;
+const reportHtml = renderToStaticMarkup(React.createElement(ReportList, {
+  locations: reportLocations, selectedIds: [1, 2, 3],
+  onSelectionChange: () => selectionChanges++, onCreateReport: rows => { selectedRows = rows; },
+}));
+const checkboxes = controls.filter(control => control.accessibilityRole === 'checkbox');
+assert.equal(checkboxes[0].disabled, true);
+assert.equal(checkboxes[0].accessibilityState.checked, false, 'cached pre-work selection must not remain checked');
+assert.equal(checkboxes[1].disabled, false);
+assert.equal(checkboxes[2].disabled, false);
+checkboxes[0].onPress();
+assert.equal(selectionChanges, 0, 'pre-work selection is guarded even if its handler is invoked');
+assert.ok(reportHtml.includes('작업 전 · 선택 불가'));
+const isCreateReportButton = control => React.Children.toArray(control.children)
+  .some(child => child.props?.children === '선택한 방문지로 보고서 만들기');
+controls.find(isCreateReportButton).onPress();
+assert.deepEqual(selectedRows.map(row => row.id), [2, 3], 'cached pre-work IDs must not reach report creation');
+controls = [];
+renderToStaticMarkup(React.createElement(ReportList, { locations: reportLocations.slice(0, 1), selectedIds: [1] }));
+assert.equal(controls.find(isCreateReportButton).disabled, true);
+console.log('Place screen render checks passed: map/search gestures and pre-work report selection guards');

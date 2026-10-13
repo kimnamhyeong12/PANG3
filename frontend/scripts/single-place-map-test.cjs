@@ -6,7 +6,7 @@ const babel = require('../node_modules/@babel/core');
 
 // Run the screen's hooks and rendered event handlers with native surfaces mocked.
 // GPS, backend responses, and workspace refreshes are controlled by each scenario.
-function createScreen() {
+function createScreen({ nativeNavigation = false } = {}) {
   let slots = [], cursor = 0, effects = [], dirty = true, tree;
   const calls = [], alerts = [], requests = [], storage = new Map();
   const same = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
@@ -35,7 +35,7 @@ function createScreen() {
   const jsx = (type, props) => ({ type, props: props || {} });
   const emptySubscription = () => ({ remove() {} });
   class AnimatedValue { setValue() {} }
-  const native = { Platform: { OS: 'test' }, StyleSheet: { create: s => s, absoluteFill: {}, absoluteFillObject: {} },
+  const native = { Platform: { OS: nativeNavigation ? 'android' : 'test' }, StyleSheet: { create: s => s, absoluteFill: {}, absoluteFillObject: {} },
     Animated: { Value: AnimatedValue, View: 'AnimatedView', timing: () => ({ start(cb) { cb?.({ finished: true }); } }), spring: () => ({ start() {} }) },
     PanResponder: { create: handlers => ({ panHandlers: handlers }) },
     Keyboard: { addListener: emptySubscription }, BackHandler: { addEventListener: emptySubscription } };
@@ -52,12 +52,14 @@ function createScreen() {
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'Fragment' };
       if (name === 'react-native') return native;
+      if (name === 'react-native-safe-area-context') return { SafeAreaView: 'SafeAreaView' };
       if (name === '@expo/vector-icons') return { Ionicons: 'Icon' };
       if (name === '@react-native-async-storage/async-storage') return { getItem: async key => storage.get(key) || null,
         setItem: async (key, value) => storage.set(key, value), removeItem: async key => storage.delete(key) };
       if (name.includes('CustomAlert')) return { showAlert: (...args) => alerts.push(args) };
       if (name.includes('KakaoMapWebView')) return { __esModule: true, default: 'MapCanvas' };
-      if (name.includes('kakao-navigation')) return { KakaoNavigationView: 'Navigation', isKakaoNavigationAvailable: () => false };
+      if (name.includes('kakao-navigation')) return { KakaoNavigationView: 'Navigation', isKakaoNavigationAvailable: () => nativeNavigation, beginRouteSession() {} };
+      if (name.includes('BulkUploadModal')) return { __esModule: true, default: 'BulkUpload' };
       if (name.includes('PublicDataMapMode')) return { BUSAN_DISTRICT_CODES: { '사하구': '21100' } };
       if (name.includes('notificationService')) return { stopRouteNotification: async () => {}, updateRouteNotification: async () => {} };
       if (name.startsWith('.')) return load(path.resolve(path.dirname(file), name.endsWith('.js') ? name : `${name}.js`));
@@ -101,14 +103,14 @@ function createScreen() {
     (!label || text(node).includes(label) || node.props.accessibilityLabel === label));
   async function settle() { for (let i = 0; i < 3; i++) { await new Promise(setImmediate); if (dirty) render(); } }
   function response(request, data) { request.resolve({ ok: true, text: async () => JSON.stringify(data), json: async () => data }); }
-  return { props, render, settle, find, nodes, requests, response, calls, alerts };
+  return { props, render, settle, find, nodes, text, requests, response, calls, alerts };
 }
 
 const visit = (id, lng) => ({ id, lat: 35, lng, detailAddress: `장소 ${id}`, adminDong: `동 ${id}`, status: 'pending', markerNumber: id, visitOrderVersion: 2 });
 const route = (target) => ({ segments: [{ path: [{ lat: 35, lng: 129 }, { lat: target.lat, lng: target.lng }] }], totalDistance: 1000, totalDuration: 600 });
 
 (async () => {
-  const app = createScreen();
+  const app = createScreen({ nativeNavigation: true });
   app.props.locations = [visit(1, 129.01), visit(2, 129.02), visit(3, 129.03)];
   app.render();
   app.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 });
@@ -156,7 +158,7 @@ const route = (target) => ({ segments: [{ path: [{ lat: 35, lng: 129 }, { lat: t
   assert.equal(app.find('MapCanvas').props.previewRouteSegment.destinationKey, '1');
 
   // Facility selection remains inside the same map and asks for a dong first.
-  app.find('TextInput').props.onFocus(); app.render();
+  app.find('TouchableOpacity', '방문지 추가 방법').props.onPress(); app.render();
   app.find('TouchableOpacity', '공공시설물').props.onPress(); app.render();
   const region = app.requests.shift();
   assert(region.url.includes('/api/sgis/boundaries'));
@@ -191,7 +193,7 @@ const route = (target) => ({ segments: [{ path: [{ lat: 35, lng: 129 }, { lat: t
   assert.equal(app.find('MapCanvas').props.locations.length, 3, 'facility registration joins visits from other dongs');
   assert.equal(app.requests.length, 0, 'facility registration changes numbers without drawing a route');
 
-  const failure = createScreen();
+  const failure = createScreen({ nativeNavigation: true });
   failure.props.locations = [visit(1, 129.01), visit(2, 129.02), visit(3, 129.03)];
   failure.render();
   failure.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 }); failure.render();
@@ -219,5 +221,42 @@ const route = (target) => ({ segments: [{ path: [{ lat: 35, lng: 129 }, { lat: t
   failure.props.locations = failure.props.locations.map(row => row.id === 2 ? { ...row, status: 'complete' } : row); failure.render();
   assert.equal(failure.props.isGuiding, false, 'report completion ends the single destination guidance');
   assert.equal(failure.find('MapCanvas').props.locations.find(row => row.id === 2).markerLabel, '✓');
-  console.log('Single-place map interaction checks passed');
+  const nativeView = failure.find('Navigation');
+  assert.equal(nativeView, undefined, 'completing the destination releases the SDK view');
+
+  const car = createScreen({ nativeNavigation: true });
+  car.props.locations = [visit(1, 129.01)]; car.render();
+  car.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 }); car.render();
+  car.find('MapCanvas').props.onMarkerClick(car.props.locations[0]); car.render();
+  const carPreview = car.requests.shift();
+  assert.equal(JSON.parse(carPreview.options.body).routePriority, 'RECOMMEND');
+  car.response(carPreview, route(car.props.locations[0])); await car.settle();
+  const carStart = car.find('TouchableOpacity', '안내 시작').props.onPress(); car.render();
+  car.response(car.requests.shift(), route(car.props.locations[0])); await carStart; await car.settle();
+  assert.equal(car.find('Navigation').props.destination.destinationKey, '1');
+  assert.equal(car.find('MapCanvas').props.isGuiding, false, 'WebView must not run a second guidance engine');
+  car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: 'old', distance: 10, duration: 5 } }); car.render();
+  car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: '1', distance: 500, duration: 300 } }); car.render();
+  await car.find('MapCanvas').props.onRerouteRequest({ lat: 35, lng: 129.001 });
+  assert.equal(car.requests.length, 0, 'SDK handles vehicle rerouting without a second REST request');
+  car.find('Navigation').props.onArrived({ nativeEvent: { destinationKey: '1' } }); car.render();
+  assert.equal(car.props.isGuiding, false);
+  car.alerts.at(-1)[2].find(button => button.text === '작업 기록 작성').onPress();
+  assert.equal(car.calls.at(-1)[1], 'report', 'SDK arrival returns to the task report');
+
+  const walk = createScreen();
+  walk.props.locations = [visit(1, 129.01)]; walk.render();
+  walk.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 }); walk.render();
+  walk.find('MapCanvas').props.onMarkerClick(walk.props.locations[0]); walk.render();
+  walk.response(walk.requests.shift(), route(walk.props.locations[0])); await walk.settle();
+  walk.find('TouchableOpacity', '도보 경로').props.onPress(); walk.render();
+  walk.response(walk.requests.shift(), route(walk.props.locations[0])); await walk.settle();
+  const walkStart = walk.find('TouchableOpacity', '안내 시작').props.onPress(); walk.render();
+  walk.response(walk.requests.shift(), route(walk.props.locations[0])); await walkStart; await walk.settle();
+  assert.equal(walk.find('Navigation'), undefined);
+  assert.equal(walk.find('MapCanvas').props.isGuiding, true);
+  walk.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129.005 }); walk.render();
+  assert.ok(walk.nodes().some(node => walk.text(node).includes('500m')), 'walking card shows the remaining half of a route');
+  assert.equal(walk.requests.length, 0, 'GPS progress does not request another route');
+  console.log('Single-place map checks passed: SDK ownership, recommendation, progress, arrival and walking guidance');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -384,7 +384,6 @@ export default function FieldActionScreen({
   onSave,
   workspaceKey,
   registerNavigationGuard,
-  onNewReport,
 }) {
   const mapRef = useRef(null);
   const mapWrapperRef = useRef(null);
@@ -479,12 +478,11 @@ export default function FieldActionScreen({
   const [mainComment, setMainComment] = useState('');
   const [loadingReport, setLoadingReport] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [draftMessage, setDraftMessage] = useState('');
   const readyRef = useRef(false);
   const savedRef = useRef(false);
   const savingRef = useRef(false);
   const key = draftKey(user?.userId, workspaceKey, taskId,
-    location?.newReport ? 'new' : location?.reportProgressId || 'latest');
+    location?.reportProgressId || 'latest');
   const snapshot = { status, latitude, longitude, locationAddress, photos, fieldMemo,
     markedMapUri, progressId, revision, recordedAt, photoEditor, mainComment };
   const currentFormRef = useRef(snapshot);
@@ -514,10 +512,8 @@ export default function FieldActionScreen({
     if (!readyRef.current || savedRef.current) return true;
     try {
       await writeDraft(key, currentFormRef.current);
-      setDraftMessage('작성 내용 임시 보관됨 · 보고서 저장은 별도');
       return true;
     } catch {
-      setDraftMessage('임시 보관 실패 · 보고서 저장을 눌러 주세요');
       return false;
     }
   };
@@ -545,16 +541,13 @@ export default function FieldActionScreen({
     let active = true;
     (async () => {
       try {
-        let data = null;
-        if (!location?.newReport) {
-          const endpoint = location?.reportProgressId
-            ? `/api/task-progress/${location.reportProgressId}?userId=${user.userId}`
-            : `/api/task-progress/task/${taskId}`;
-          const response = await fetch(`${API_BASE_URL}${endpoint}`);
-          if (!response.ok) throw new Error('보고서 조회 실패');
-          const text = await response.text();
-          data = text.trim() ? JSON.parse(text) : null;
-        }
+        const endpoint = location?.reportProgressId
+          ? `/api/task-progress/${location.reportProgressId}?userId=${user.userId}`
+          : `/api/task-progress/task/${taskId}`;
+        const response = await fetch(`${API_BASE_URL}${endpoint}`);
+        if (!response.ok) throw new Error('보고서 조회 실패');
+        const text = await response.text();
+        const data = text.trim() ? JSON.parse(text) : null;
         const local = await readDraft(key);
         if (!active) return;
         const base = { status: location?.reportProgressId ? data?.progressStatus || 'pending' : location?.status || data?.progressStatus || 'pending',
@@ -574,7 +567,6 @@ export default function FieldActionScreen({
         setMainComment(form.mainComment || '');
         setProgressId(form.progressId); setRevision(form.revision); setRecordedAt(form.recordedAt || '');
         setPhotoEditor(form.photoEditor || base.photoEditor);
-        if (local) setDraftMessage('임시 보관한 작성 내용을 복구했습니다.');
         readyRef.current = true;
       } catch {
         // An offline draft is still recoverable; never silently replace saved data with an empty form.
@@ -590,7 +582,6 @@ export default function FieldActionScreen({
           setMainComment(local.mainComment || '');
           setProgressId(local.progressId); setRevision(local.revision); setRecordedAt(local.recordedAt || '');
           setPhotoEditor(local.photoEditor || { visible: false, uri: null, index: null });
-          setDraftMessage('보관한 내용 복구됨 · 서버 조회는 실패했습니다.');
           readyRef.current = true;
         } catch { if (active) setLoadError('저장된 내용을 불러오지 못했습니다. 돌아가서 다시 시도해 주세요.'); }
       } finally { if (active) setLoadingReport(false); }
@@ -1128,7 +1119,7 @@ export default function FieldActionScreen({
       setProgressId(savedReport.progressId);
       setRevision(savedReport.revision);
       savedRef.current = true;
-      try { await clearDraft(key); } catch { setDraftMessage('보고서는 저장되었지만 초안 정리에 실패했습니다.'); }
+      try { await clearDraft(key); } catch (error) { console.warn('보고서 임시 자료 정리 실패', error); }
       onSave?.({
         ...savedReport,
         taskId,
@@ -1180,18 +1171,7 @@ export default function FieldActionScreen({
       {loadingReport ? <ActivityIndicator style={{ padding: 16 }} /> : null}
       {loadError ? <Text style={{ color: '#DC2626', padding: 16 }}>{loadError}</Text> : null}
       {!loadingReport && !loadError && <View style={{ paddingHorizontal: 20, paddingVertical: 8, gap: 6 }}>
-        <Text>{progressId ? `${String(recordedAt).slice(0, 10)} 기록 수정` : '새 방문 기록 작성'}</Text>
-        {!!draftMessage && <Text style={{ fontSize: 12, color: '#64748B' }}>{draftMessage}</Text>}
-        <View style={{ flexDirection: 'row', gap: 18 }}>
-          {progressId && onNewReport && <TouchableOpacity disabled={saving} onPress={onNewReport}><Text style={{ color: '#2477F3', paddingVertical: 8 }}>새 방문 보고서 작성</Text></TouchableOpacity>}
-          <TouchableOpacity disabled={saving} onPress={() => showAlert('초안 버리기', '저장하지 않은 작성 내용을 버리고 나갈까요?', [
-            { text: '계속 작성', style: 'cancel' },
-            { text: '초안 버리기', style: 'destructive', onPress: async () => {
-              try { savedRef.current = true; await clearDraft(key); onBack?.(); }
-              catch { savedRef.current = false; showAlert('삭제 실패', '초안을 지우지 못했습니다. 다시 시도하세요.'); }
-            } },
-          ])}><Text style={{ color: '#64748B', paddingVertical: 8 }}>초안 버리기</Text></TouchableOpacity>
-        </View>
+        <PrimaryButton title={saving ? '저장 중...' : '보고서 저장'} onPress={handleSave} disabled={saving} />
       </View>}
 
       <ScrollView
@@ -1538,18 +1518,6 @@ export default function FieldActionScreen({
           </View>
         </View>
 
-        <PrimaryButton
-          title={
-            saving
-              ? '저장 중...'
-              : '보고서 저장'
-          }
-
-          onPress={
-            handleSave
-          }
-          disabled={saving || loadingReport || !!loadError}
-        />
       </ScrollView>
 
       <PhotoMarkupEditor

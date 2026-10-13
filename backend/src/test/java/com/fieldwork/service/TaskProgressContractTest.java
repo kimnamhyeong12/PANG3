@@ -43,6 +43,19 @@ public class TaskProgressContractTest {
             });
         Tasks tasks=new Tasks(task,owner); Ai ai=new Ai();
         TaskProgressService service=new TaskProgressService(repository,tasks,new FileStorageService(new FieldworkProperties()),ai);
+        for (String status : Arrays.asList("pending", null, "unknown")) {
+            report.setProgressStatus(status);
+            try { service.prepareReport(11L, 7L); throw new AssertionError("Pre-work report must not be generated"); }
+            catch (org.springframework.web.server.ResponseStatusException expected) { assert expected.getStatusCode().value()==409; }
+            try { service.prepareCombined(List.of(11L), 7L); throw new AssertionError("Pre-work report must not enter a combined file"); }
+            catch (org.springframework.web.server.ResponseStatusException expected) { assert expected.getStatusCode().value()==409; }
+            var controller = new com.fieldwork.controller.TaskProgressController(service);
+            try { controller.downloadReport(11L); throw new AssertionError("Direct download must reject pre-work reports"); }
+            catch (org.springframework.web.server.ResponseStatusException expected) { assert expected.getStatusCode().value()==409; }
+        }
+        assert ai.calls==0;
+        report.setProgressStatus("working"); service.validateDownloadable(report);
+        report.setProgressStatus("complete"); service.validateDownloadable(report);
         String revision=service.toResponseMap(report,task).get("revision").toString();
         Map<String,String> params=new HashMap<>(Map.of("taskId","1","userId","7","progressId","11","expectedRevision",revision,
                 "fieldMemo","corrected","progressStatus","complete","photoSlots",

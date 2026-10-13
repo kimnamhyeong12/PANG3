@@ -28,11 +28,63 @@ export function mergePlaceResults(addresses, places, query, center, limit = 7) {
       return Number(matches(b)) - Number(matches(a)) || a.rank - b.rank;
     }).slice(0, limit);
 }
-export async function searchPlaces(query, { center, signal, limit = 7 } = {}) {
+let cachedDistrict = null;
+export function isInDistrict(item, district) {
+  if (item.address?.region_1depth_name && item.address?.region_2depth_name) {
+    return explicitRegion(item.address.region_1depth_name) === explicitRegion(district.region_1depth_name)
+      && item.address.region_2depth_name === district.region_2depth_name;
+  }
+  return [item.address_name, item.road_address_name, item.road_address?.address_name].some(address => {
+    const parts = String(address || '').trim().split(/\s+/);
+    const city = explicitRegion(parts[0]);
+    const expectedCity = explicitRegion(district.region_1depth_name);
+    const area = district.region_2depth_name.trim().split(/\s+/);
+    return Boolean(city && expectedCity && city === expectedCity && area.every((name, index) => parts[index + 1] === name));
+  });
+}
+async function searchCurrentDistrict(q, coords, key, signal, limit) {
+  const request = async url => {
+    const response = await fetch(url, { signal, headers: { Authorization: `KakaoAK ${key}` } });
+    if (!response.ok) throw new Error('현재 구의 검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
+    return response.json();
+  };
+  const position = `${Number(coords.lat).toFixed(5)}:${Number(coords.lng).toFixed(5)}`;
+  let district = cachedDistrict?.position === position ? cachedDistrict.region : null;
+  if (!district) {
+    const data = await request(`https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?x=${encodeURIComponent(coords.lng)}&y=${encodeURIComponent(coords.lat)}`);
+    district = data.documents?.find(item => item.region_type === 'H') || data.documents?.find(item => item.region_type === 'B');
+    if (!district?.region_1depth_name || !district?.region_2depth_name) throw new Error('현재 위치의 시·군·구를 확인하지 못했습니다.');
+    cachedDistrict = { position, region: district };
+  }
+  const query = encodeURIComponent(`${district.region_1depth_name} ${district.region_2depth_name} ${q}`);
+  // Restrict by administrative address rather than a radius, which crosses district borders.
+  const keywordUrl = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${query}&size=15&sort=accuracy`;
+  const initial = await Promise.allSettled([
+    request(`https://dapi.kakao.com/v2/local/search/address.json?query=${query}&size=15&analyze_type=similar`),
+    request(`${keywordUrl}&page=1`),
+  ]);
+  if (signal?.aborted) throw new Error('검색 취소');
+  if (initial.every(result => result.status === 'rejected')) throw new Error('현재 구의 검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
+  const addresses = (initial[0].value?.documents || []).filter(item => isInDistrict(item, district));
+  const places = (initial[1].value?.documents || []).filter(item => isInDistrict(item, district));
+  let lastPage = initial[1].value;
+  let rows = mergePlaceResults(addresses, places, q, coords, limit);
+  for (let page = 2; lastPage && !lastPage.meta?.is_end && page <= 3 && rows.length < limit; page++) {
+    lastPage = await request(`${keywordUrl}&page=${page}`);
+    places.push(...(lastPage.documents || []).filter(item => isInDistrict(item, district)));
+    rows = mergePlaceResults(addresses, places, q, coords, limit);
+  }
+  return rows;
+}
+export async function searchPlaces(query, { center, signal, limit = 7, districtOnly = false } = {}) {
   const key = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
   if (!key) throw new Error('검색 서비스를 사용할 수 없습니다.');
   const q = query.trim();
   const coords = center && [center.lat, center.lng].every(value => value != null && value !== '' && Number.isFinite(Number(value))) ? center : null;
+  if (districtOnly) {
+    if (!coords) throw new Error('현재 위치를 확인한 뒤 검색해 주세요. 위치 권한과 GPS를 확인해 주세요.');
+    return searchCurrentDistrict(q, coords, key, signal, limit);
+  }
   const keywordUrl = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=15&sort=accuracy`;
   const urls = [`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(q)}&size=15&analyze_type=similar`, keywordUrl];
   // Search the local area by relevance, then supplement with national results.

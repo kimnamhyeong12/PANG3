@@ -53,9 +53,9 @@ public class KakaoWalkingContractTest {
         var field = RouteService.class.getDeclaredField("walkingClient"); field.setAccessible(true); field.set(service, new KakaoWalkingClient(new Stub()));
         Map<String,Object> a = new HashMap<>(Map.of("lat",37.0,"lng",127.0,"name","A","status","working","assigneeUserId",7,"priority",1));
         Map<String,Object> b = new HashMap<>(Map.of("lat",37.02,"lng",127.02,"name","B","status","complete","priority",2));
-        // Identical first segment is zero; second performs the stub GET.
+        // Completed visits are excluded; the remaining same-point segment is zero.
         Map<String,Object> optimized = service.optimizeRoute(a,List.of(a,b),"walk","synthetic-test-key");
-        assert ((List<?>)optimized.get("segments")).size() == 2;
+        assert ((List<?>)optimized.get("segments")).size() == 1;
         assert a.get("status").equals("working") && b.get("status").equals("complete");
         assert a.get("assigneeUserId").equals(7);
         System.out.println("PASS walking request, coordinates, summary, statuses, safe errors, same-point, multi-stop and metadata");

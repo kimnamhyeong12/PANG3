@@ -1,0 +1,23 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+(async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../utils/routeProgress.js'), 'utf8');
+  const { remainingRouteProgress } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+  const route = { path: [{ lat: 35, lng: 129 }, { lat: 35, lng: 129.01 }], totalDistance: 1000, totalDuration: 600 };
+  assert.equal(remainingRouteProgress(route, { lat: 35, lng: 129 }).distance, 1000);
+  const half = remainingRouteProgress(route, { latitude: 35, longitude: 129.005 });
+  assert.equal(half.distance, 500); assert.equal(half.duration, 300);
+  assert.equal(remainingRouteProgress(route, { lat: 35, lng: 129.01 }).distance, 0);
+  assert.equal(remainingRouteProgress(route, { lat: 35, lng: 129.02 }).duration, 0);
+  assert.equal(remainingRouteProgress(route, { lat: 35, lng: 128.99 }).distance, 1000);
+  assert.ok(remainingRouteProgress(route, { lat: 35.01, lng: 129.005 }).distanceFromPath > 1000);
+  const corner = { ...route, path: [...route.path, { lat: 35.01, lng: 129.01 }] };
+  const afterTurn = remainingRouteProgress(corner, { lat: 35.005, lng: 129.01 });
+  assert.ok(afterTurn.distance > 250 && afterTurn.distance < 300, 'remaining distance follows the route around its corner');
+  assert.equal(remainingRouteProgress(route, { lat: null, lng: null }), null);
+  assert.equal(remainingRouteProgress({ path: [{ lat: 35, lng: 129 }] }, { lat: 35, lng: 129 }), null);
+  assert.equal(remainingRouteProgress({ path: [{ lat: 35, lng: 129 }, { lat: null, lng: null }] }, { lat: 35, lng: 129 }), null);
+  assert.equal(remainingRouteProgress({ path: [route.path[0], route.path[0]], totalDistance: 0, totalDuration: 0 }, route.path[0]).duration, 0);
+  console.log('Route progress checks passed: segment projection, bends, endpoints, off-route distance and invalid GPS');
+})().catch(error => { console.error(error); process.exitCode = 1; });

@@ -94,6 +94,14 @@ public class KakaoRoadContractTest {
         assert ((List<?>) segment(result).get("trafficSections")).size() == 1;
         assert segment(result).get("totalDistance").equals(1360);
         assert END.get("lat").equals(35.1538830767717);
+        Stub recommended = new Stub(r -> response(r, 1849, 326, 0));
+        Map<String, Object> sdkPreview = service(recommended, false).getSingleSegmentPath(START, END, "car", null, "RECOMMEND");
+        assert segment(sdkPreview).get("routePriority").equals("RECOMMEND");
+        assert recommended.calls.size() == 1 : "SDK preview must not fetch three competing paths";
+        try {
+            service(recommended, false).getSingleSegmentPath(START, END, "car", null, "INVALID");
+            throw new AssertionError("Unsupported route priority");
+        } catch (IllegalArgumentException expected) {}
 
         // Shorter but slower, or faster with higher tolls, must not replace recommendation.
         Stub tradeoffs = new Stub(r -> switch (r.priority()) {

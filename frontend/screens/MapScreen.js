@@ -31,6 +31,7 @@ import {
 } from '../services/notificationService';
 import { isRegisteredPlace, placeLocation } from '../utils/placeSearch';
 import { locationKey } from '../utils/routeSession';
+import { remainingRouteProgress } from '../utils/routeProgress';
 import { hasVisitCoordinates, promoteVisit, recommendVisitOrder, visitSetKey } from '../utils/visitOrder';
 import { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
 // 엑셀,csv 데이터 업로드
@@ -174,6 +175,7 @@ function NormalMapScreen({
   const [transportMode, setTransportMode] = useState('car');
   const [segmentChanging, setSegmentChanging] = useState(false);
   const [kakaoDestination, setKakaoDestination] = useState(null);
+  const [nativeProgress, setNativeProgress] = useState(null);
 
   const [keyword, setKeyword] = useState('');
   const [searchedPlace, setSearchedPlace] = useState(null);
@@ -358,6 +360,13 @@ function NormalMapScreen({
   const previewTarget = preview ? allVisits.find((item) => locationKey(item) === preview.targetKey) : null;
   const cardTarget = preview ? previewTarget : (isGuiding ? activeTarget : null);
   const cardSegment = preview ? preview.segment : activeSegment;
+  const guidanceProgress = useMemo(() => {
+    if (!isGuiding || !activeSegment) return null;
+    if (activeSegment.mode === 'car') return nativeProgress?.destinationKey === activeSegment.destinationKey ? nativeProgress : null;
+    return remainingRouteProgress(activeSegment, currentLocation);
+  }, [isGuiding, activeSegment, currentLocation, nativeProgress]);
+  const cardDistance = !preview && guidanceProgress ? guidanceProgress.distance : cardSegment?.totalDistance;
+  const cardDuration = !preview && guidanceProgress ? guidanceProgress.duration : cardSegment?.totalDuration;
   const routeVisibleKey = preview?.segment ? preview.targetKey : (!preview && isGuiding ? activeSegment?.destinationKey : null);
   const publicDisplayItems = useMemo(() => {
     const categoryInfo = PUBLIC_FACILITY_CATEGORIES.find((entry) => entry.key === publicCategory);
@@ -1025,7 +1034,7 @@ function NormalMapScreen({
   };
 
   const formatDuration = (seconds) => {
-    if (!seconds) return null;
+    if (seconds == null || !Number.isFinite(Number(seconds))) return null;
 
     const minutes = Math.round(seconds / 60);
 
@@ -1040,7 +1049,7 @@ function NormalMapScreen({
   };
 
   const formatDistance = (meters) => {
-    if (!meters) return null;
+    if (meters == null || !Number.isFinite(Number(meters))) return null;
 
     if (meters >= 1000) {
       return `약 ${(meters / 1000).toFixed(1)}km`;
@@ -1053,7 +1062,7 @@ function NormalMapScreen({
     const res = await fetch(`${API_BASE_URL}/api/routes/segment`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(mode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) },
-      body: JSON.stringify({ start: startLocation, end: endLocation, transportMode: mode }),
+      body: JSON.stringify({ start: startLocation, end: endLocation, transportMode: mode, ...(mode === 'car' ? { routePriority: 'RECOMMEND' } : {}) }),
     });
     const text = await res.text();
     if (!res.ok) throw new Error(`구간 경로 계산 실패: ${res.status} / ${text}`);
@@ -1087,6 +1096,7 @@ function NormalMapScreen({
     setPreview(null);
     setSegmentChanging(false);
     setKakaoDestination(null);
+    setNativeProgress(null);
     setPublicFacilityMode(false);
     setSearchOpen(false); setResultsMode(false); setFocusRequest({ coordinates: [], token: 0 });
     setDongOpen(false);
@@ -1113,6 +1123,7 @@ function NormalMapScreen({
     guideRequestRef.current += 1;
     setIsGuiding(false);
     setKakaoDestination(null);
+    setNativeProgress(null);
     setRouteSegments([]);
     setRoadPath([]);
     setCurrentSegmentIndex(0);
@@ -1200,6 +1211,10 @@ function NormalMapScreen({
     }
     const targetKey = locationKey(target);
     const mode = preview?.mode || activeSegment?.mode || transportMode;
+    if (mode === 'car' && !isKakaoNavigationAvailable()) {
+      showAlert('차량 안내 사용 불가', '카카오 차량 안내가 포함된 Android 앱에서 이용해 주세요. 도보 안내는 현재 지도에서 사용할 수 있습니다.');
+      return;
+    }
     const request = ++guideRequestRef.current;
     const scope = workspaceScopeRef.current;
     setSegmentChanging(true);
@@ -1217,6 +1232,7 @@ function NormalMapScreen({
       setCurrentSegmentIndex(0);
       setTotalDuration(result.totalDuration);
       setTransportMode(mode);
+      setNativeProgress(null);
       resumedRouteRef.current = `${scopeKey}:${routeResumeToken}:${targetKey}`;
       setOptimized(true);
       beginRouteSession();
@@ -1227,7 +1243,7 @@ function NormalMapScreen({
         setKakaoDestination({ lat: Number(target.lat), lng: Number(target.lng),
           name: target.detailAddress || target.roadAddress || '방문지',
           address: target.roadAddress || target.detailAddress || '',
-          startLat: Number(currentLocation.lat), startLng: Number(currentLocation.lng) });
+          startLat: Number(currentLocation.lat), startLng: Number(currentLocation.lng), destinationKey: targetKey });
       } else setKakaoDestination(null);
     } catch (error) {
       if (request === guideRequestRef.current) showAlert('안내 시작 실패', '경로를 불러오지 못했습니다. 다시 시도해 주세요.');
@@ -1242,6 +1258,7 @@ function NormalMapScreen({
   };
 
   const handleReroute = async (position = currentLocation, mode = activeSegment?.mode || transportMode) => {
+    if (mode === 'car') return;
     if (segmentChanging || !isGuiding || !activeTarget || isCompleted(activeTarget) || !hasVisitCoordinates(position)) return;
     const targetKey = locationKey(activeTarget);
     const request = ++guideRequestRef.current;
@@ -1261,7 +1278,14 @@ function NormalMapScreen({
     const key = `${scopeKey}:${routeResumeToken}:${activeSegment?.destinationKey}`;
     if (!isActive || !isGuiding || !activeTarget || !hasVisitCoordinates(currentLocation) || resumedRouteRef.current === key) return;
     resumedRouteRef.current = key;
-    handleReroute(currentLocation);
+    if (activeSegment.mode === 'car') {
+      if (!isKakaoNavigationAvailable()) { clearGuidance(); return; }
+      setNativeProgress(null);
+      setKakaoDestination({ lat: Number(activeTarget.lat), lng: Number(activeTarget.lng),
+        name: activeTarget.detailAddress || activeTarget.roadAddress || '방문지',
+        address: activeTarget.roadAddress || activeTarget.detailAddress || '',
+        startLat: Number(currentLocation.lat), startLng: Number(currentLocation.lng), destinationKey: activeSegment.destinationKey });
+    } else handleReroute(currentLocation);
   }, [isActive, isGuiding, routeResumeToken, scopeKey, activeTarget, currentLocation]);
 
   const handleTransportPress = (mode) => {
@@ -1273,10 +1297,10 @@ function NormalMapScreen({
   useEffect(() => {
     if (!isGuiding || !activeTarget || !activeSegment) { stopRouteNotification(); return; }
     updateRouteNotification({ from: '현재 위치', to: activeTarget.detailAddress || activeTarget.roadAddress || '방문지',
-      duration: formatDuration(activeSegment.totalDuration)?.replace(/^약\s*/, '') || '-',
-      distance: formatDistance(activeSegment.totalDistance ?? getPathDistance(activeSegment.path))?.replace(/^약\s*/, '') || '-',
+      duration: formatDuration(guidanceProgress?.duration ?? activeSegment.totalDuration)?.replace(/^약\s*/, '') || '-',
+      distance: formatDistance(guidanceProgress?.distance ?? activeSegment.totalDistance ?? getPathDistance(activeSegment.path))?.replace(/^약\s*/, '') || '-',
       remainingCount: orderedMarkers.length });
-  }, [isGuiding, activeTarget, activeSegment, orderedMarkers.length]);
+  }, [isGuiding, activeTarget, activeSegment, guidanceProgress, orderedMarkers.length]);
 
   return (
     <View style={styles.container} onLayout={event => setMapHeight(event.nativeEvent.layout.height)}>
@@ -1302,7 +1326,7 @@ function NormalMapScreen({
         currentSegmentIndex={0}
         panelOpen={false}
         setPanelOpen={setPanelOpen}
-        isGuiding={isGuiding}
+        isGuiding={isGuiding && !kakaoDestination}
         searchedPlace={searchedPlace}
         clearSearchMarkerSignal={clearSearchMarkerSignal}
         mapSelectMode={mapSelectMode && locationSettingMode}
@@ -1325,10 +1349,26 @@ function NormalMapScreen({
           style={StyleSheet.absoluteFillObject}
           destination={kakaoDestination}
           onError={(event) => {
-            setKakaoDestination(null);
+            clearGuidance();
             showAlert('카카오 길안내 오류', event.nativeEvent?.message || '길안내를 시작하지 못했습니다.');
           }}
-          onEnded={handleStopGuidance}
+          onEnded={(event) => {
+            if (event.nativeEvent?.destinationKey === activeSegment?.destinationKey) handleStopGuidance();
+          }}
+          onProgress={(event) => {
+            const data = event.nativeEvent;
+            if (data?.destinationKey !== activeSegment?.destinationKey || !Number.isFinite(data.distance) || !Number.isFinite(data.duration) || data.distance < 0 || data.duration < 0) return;
+            setNativeProgress(data);
+          }}
+          onArrived={(event) => {
+            if (event.nativeEvent?.destinationKey !== activeSegment?.destinationKey) return;
+            const target = activeTarget;
+            clearGuidance();
+            if (target && !target.isReturnLocation) showAlert('목적지에 도착했습니다', '방문지의 작업 기록을 작성할까요?', [
+              { text: '나중에', style: 'cancel' },
+              { text: '작업 기록 작성', onPress: () => onLocationClick?.(target, 'report') },
+            ]);
+          }}
         />
       )}
 
@@ -1675,7 +1715,7 @@ function NormalMapScreen({
                 <Text style={styles.destinationMeta} numberOfLines={2}>
                   {!preview && isGuiding ? '안내 중 · ' : ''}
                   {preview?.loading ? '경로를 불러오는 중…' : preview?.error ||
-                    [formatDistance(cardSegment?.totalDistance), formatDuration(cardSegment?.totalDuration)].filter(Boolean).join(' · ')}
+                    [formatDistance(cardDistance), formatDuration(cardDuration)].filter(Boolean).join(' · ')}
                 </Text>
               </TouchableOpacity>
             <View style={styles.destinationActions}>
@@ -1984,7 +2024,7 @@ function NormalMapScreen({
         setSelectedSearchPinId(`search:${place.id}:${index}`);
         focusPlaces([placeLocation(place)]);
       }} onAdd={addSearchPlace} />}
-      {searchOpen && isActive && <PlaceSearchOverlay userId={user?.userId} initialQuery={searchInitialQuery} center={currentLocation || returnLocation} locations={locations || []} onClose={() => setSearchOpen(false)} onResults={showResults} onAdd={addSearchPlace} />}
+      {searchOpen && isActive && <PlaceSearchOverlay userId={user?.userId} initialQuery={searchInitialQuery} center={currentLocation} districtOnly locations={locations || []} onClose={() => setSearchOpen(false)} onResults={showResults} onAdd={addSearchPlace} />}
       <Modal visible={workplaceOpen} transparent animationType="fade" onRequestClose={() => !workplaceBusy && setWorkplaceOpen(false)}>
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.35)' }}><View style={{ padding: 20, borderRadius: 18, backgroundColor: '#FFFFFF' }}>
           <Text style={{ fontSize: 18, fontWeight: '700', color: '#10285B' }}>근무지 등록</Text>
