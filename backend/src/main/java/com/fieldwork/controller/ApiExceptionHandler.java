@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-@RestControllerAdvice(assignableTypes = {GroupController.class, AuthController.class, TaskTransferController.class})
+@RestControllerAdvice(assignableTypes = {GroupController.class, AuthController.class, TaskTransferController.class, UserController.class})
 public class ApiExceptionHandler {
 
     @ExceptionHandler(RuntimeException.class)

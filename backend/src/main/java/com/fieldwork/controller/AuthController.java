@@ -25,7 +25,9 @@ public class AuthController {
         String workSido = body.get("workSido");
         String workSigungu = body.get("workSigungu");
 
-        return authService.register(loginId, password, name, workSido, workSigungu);
+        return authService.register(loginId, password, name, workSido, workSigungu, body.get("workplaceAddress"),
+                body.get("workplaceLat") == null ? null : Double.valueOf(body.get("workplaceLat")),
+                body.get("workplaceLng") == null ? null : Double.valueOf(body.get("workplaceLng")));
     }
 
     @PostMapping("/login")

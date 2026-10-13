@@ -26,6 +26,19 @@ public class User {
     @Column(name = "work_sigungu")
     private String workSigungu;
 
+    @Column(name = "workplace_address")
+    private String workplaceAddress;
+    @Column(name = "workplace_lat")
+    private Double workplaceLat;
+    @Column(name = "workplace_lng")
+    private Double workplaceLng;
+    public String getWorkplaceAddress() { return workplaceAddress; }
+    public void setWorkplaceAddress(String value) { workplaceAddress = value; }
+    public Double getWorkplaceLat() { return workplaceLat; }
+    public void setWorkplaceLat(Double value) { workplaceLat = value; }
+    public Double getWorkplaceLng() { return workplaceLng; }
+    public void setWorkplaceLng(Double value) { workplaceLng = value; }
+
     public User() {}
 
     public Long getUserId() {
