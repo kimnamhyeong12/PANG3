@@ -1,5 +1,6 @@
 import { showAlert } from '../components/CustomAlert';
 import React, { useEffect, useRef, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 
 import {
   View,
