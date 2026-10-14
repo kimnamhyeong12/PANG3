@@ -50,7 +50,7 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
   private val onEnded by EventDispatcher<Map<String, String>>()
   private val onProgress by EventDispatcher<Map<String, Any>>()
   private val onArrived by EventDispatcher<Map<String, String>>()
-  private val priority = KNRoutePriority.KNRoutePriority_Recommand
+  private var priority = KNRoutePriority.KNRoutePriority_Recommand
   private val avoidOptions = KNRouteAvoidOption.KNRouteAvoidOption_None.value
   private var naviView: KNNaviView? = null
   private var requestId = 0
@@ -75,6 +75,12 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
     val id = ++requestId
     stopGuidance()
     showLoading()
+    priority = when (destination["routePriority"] ?: "RECOMMEND") {
+      "RECOMMEND" -> KNRoutePriority.KNRoutePriority_Recommand
+      "TIME" -> KNRoutePriority.KNRoutePriority_Time
+      "DISTANCE" -> KNRoutePriority.KNRoutePriority_Distance
+      else -> { fail("지원하지 않는 경로 기준입니다."); return }
+    }
 
     val activity = appContext.currentActivity as? AppCompatActivity
     if (activity == null) { fail("현재 화면에서 카카오 길안내를 사용할 수 없습니다."); return }

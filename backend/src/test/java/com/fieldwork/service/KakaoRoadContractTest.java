@@ -85,6 +85,7 @@ public class KakaoRoadContractTest {
         assert result.get("totalDistance").equals(1360);
         assert result.get("totalDuration").equals(234);
         assert segment(result).get("routePriority").equals("TIME");
+        assert segment(result).get("routeCompared").equals(true);
         assert faster.calls.size() == 3;
         assert faster.calls.stream().allMatch(r -> r.destination().equals("128.997466947464,35.1538830767717"));
         Map<String, Object> diagnostics = (Map<String, Object>) segment(result).get("routeDiagnostics");
@@ -113,6 +114,7 @@ public class KakaoRoadContractTest {
         Stub recommended = new Stub(r -> response(r, 1849, 326, 0));
         Map<String, Object> sdkPreview = service(recommended, false).getSingleSegmentPath(START, END, "car", null, "RECOMMEND");
         assert segment(sdkPreview).get("routePriority").equals("RECOMMEND");
+        assert segment(sdkPreview).get("routeCompared").equals(false);
         assert recommended.calls.size() == 1 : "SDK preview must not fetch three competing paths";
         try {
             service(recommended, false).getSingleSegmentPath(START, END, "car", null, "INVALID");
@@ -189,7 +191,7 @@ public class KakaoRoadContractTest {
         Map<String, Object> destination = dasun ? Map.of("lat", 35.0636823232284,
                 "lng", 128.985493965177, "name", "다선초등학교") : END;
         Map<String, Object> result = service.getSingleSegmentPath(START, destination, "car", null,
-                dasun ? "RECOMMEND" : null);
+                null);
         Map<String, Object> summary = new HashMap<>();
         summary.put("origin", "주례동일1차아파트 장소 좌표 (촬영 당시 GPS 아님)");
         summary.put("destination", dasun ? "다선초등학교" : "백양낙조전망대작은도서관");

@@ -1062,7 +1062,7 @@ function NormalMapScreen({
     const res = await fetch(`${API_BASE_URL}/api/routes/segment`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(mode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) },
-      body: JSON.stringify({ start: startLocation, end: endLocation, transportMode: mode, ...(mode === 'car' ? { routePriority: 'RECOMMEND' } : {}) }),
+      body: JSON.stringify({ start: startLocation, end: endLocation, transportMode: mode }),
     });
     const text = await res.text();
     if (!res.ok) throw new Error(`구간 경로 계산 실패: ${res.status} / ${text}`);
@@ -1242,6 +1242,7 @@ function NormalMapScreen({
       if (mode === 'car' && Platform.OS === 'android' && isKakaoNavigationAvailable()) {
         const navigationTarget = result.segment.navigationDestination || target;
         setKakaoDestination({ lat: Number(navigationTarget.lat), lng: Number(navigationTarget.lng),
+          routePriority: result.segment.routePriority || 'RECOMMEND',
           name: target.detailAddress || target.roadAddress || '방문지',
           address: target.roadAddress || target.detailAddress || '',
           startLat: Number(currentLocation.lat), startLng: Number(currentLocation.lng), destinationKey: targetKey });
@@ -1281,11 +1282,13 @@ function NormalMapScreen({
     resumedRouteRef.current = key;
     if (activeSegment.mode === 'car') {
       if (!isKakaoNavigationAvailable()) { clearGuidance(); return; }
-      if (!activeSegment.navigationDestination) {
+      if (!activeSegment.navigationDestination || !activeSegment.routeCompared) {
+        setKakaoDestination(null);
+        setNativeProgress(null);
         const request = ++guideRequestRef.current;
         fetchRouteSegment(cleanLocation(currentLocation), cleanLocation(activeTarget), 'car').then(result => {
           if (request !== guideRequestRef.current) return;
-          if (!result.segment.navigationDestination) { clearGuidance(); return; }
+          if (!result.segment.navigationDestination || !result.segment.routeCompared) { clearGuidance(); return; }
           resumedRouteRef.current = null;
           setRouteSegments([{ ...result.segment, destinationKey: activeSegment.destinationKey }]);
           setRoadPath(result.segment.path || []);
@@ -1296,11 +1299,12 @@ function NormalMapScreen({
       setNativeProgress(null);
       const navigationTarget = activeSegment.navigationDestination || activeTarget;
       setKakaoDestination({ lat: Number(navigationTarget.lat), lng: Number(navigationTarget.lng),
+        routePriority: activeSegment.routePriority || 'RECOMMEND',
         name: activeTarget.detailAddress || activeTarget.roadAddress || '방문지',
         address: activeTarget.roadAddress || activeTarget.detailAddress || '',
         startLat: Number(currentLocation.lat), startLng: Number(currentLocation.lng), destinationKey: activeSegment.destinationKey });
     } else handleReroute(currentLocation);
-  }, [isActive, isGuiding, routeResumeToken, scopeKey, activeTarget, currentLocation]);
+  }, [isActive, isGuiding, routeResumeToken, scopeKey, activeTarget, activeSegment, currentLocation]);
 
   const handleTransportPress = (mode) => {
     setTransportMode(mode);

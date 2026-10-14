@@ -107,7 +107,7 @@ function createScreen({ nativeNavigation = false } = {}) {
 }
 
 const visit = (id, lng) => ({ id, lat: 35, lng, detailAddress: `장소 ${id}`, adminDong: `동 ${id}`, status: 'pending', markerNumber: id, visitOrderVersion: 2 });
-const route = (target) => ({ segments: [{ path: [{ lat: 35, lng: 129 }, { lat: target.lat, lng: target.lng }] }], totalDistance: 1000, totalDuration: 600 });
+const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: true, path: [{ lat: 35, lng: 129 }, { lat: target.lat, lng: target.lng }] }], totalDistance: 1000, totalDuration: 600 });
 
 (async () => {
   const app = createScreen({ nativeNavigation: true });
@@ -229,7 +229,7 @@ const route = (target) => ({ segments: [{ path: [{ lat: 35, lng: 129 }, { lat: t
   car.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 }); car.render();
   car.find('MapCanvas').props.onMarkerClick(car.props.locations[0]); car.render();
   const carPreview = car.requests.shift();
-  assert.equal(JSON.parse(carPreview.options.body).routePriority, 'RECOMMEND');
+  assert.equal(JSON.parse(carPreview.options.body).routePriority, undefined, 'server compares routes instead of forcing recommendation');
   car.response(carPreview, route(car.props.locations[0])); await car.settle();
   const carStart = car.find('TouchableOpacity', '안내 시작').props.onPress(); car.render();
   const entranceRoute = route(car.props.locations[0]);
@@ -238,11 +238,21 @@ const route = (target) => ({ segments: [{ path: [{ lat: 35, lng: 129 }, { lat: t
   assert.equal(car.find('Navigation').props.destination.destinationKey, '1');
   assert.equal(car.find('Navigation').props.destination.lat, 35.0008, 'SDK keeps the backend arrival instead of the school centre');
   assert.equal(car.find('Navigation').props.destination.lng, 129.01005);
+  assert.equal(car.find('Navigation').props.destination.routePriority, 'TIME', 'SDK uses the selected preview criterion');
   assert.equal(car.find('MapCanvas').props.isGuiding, false, 'WebView must not run a second guidance engine');
   car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: 'old', distance: 10, duration: 5 } }); car.render();
   car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: '1', distance: 500, duration: 300 } }); car.render();
   await car.find('MapCanvas').props.onRerouteRequest({ lat: 35, lng: 129.001 });
   assert.equal(car.requests.length, 0, 'SDK handles vehicle rerouting without a second REST request');
+  car.props.routeSegments = [{ ...car.props.routeSegments[0], routeCompared: false }];
+  car.props.routeResumeToken = 1; car.render();
+  assert.equal(car.find('Navigation'), undefined, 'old recommendation-only sessions are recalculated before SDK resumes');
+  const restoredRoute = route(car.props.locations[0]);
+  restoredRoute.segments[0].navigationDestination = { lat: 35.0008, lng: 129.01005 };
+  restoredRoute.segments[0].routePriority = 'DISTANCE';
+  car.response(car.requests.shift(), restoredRoute); await car.settle();
+  assert.equal(car.find('Navigation').props.destination.routePriority, 'DISTANCE', 'restored SDK receives the new comparison winner');
+  assert.equal(car.find('Navigation').props.destination.lat, 35.0008);
   car.find('Navigation').props.onArrived({ nativeEvent: { destinationKey: '1' } }); car.render();
   assert.equal(car.props.isGuiding, false);
   car.alerts.at(-1)[2].find(button => button.text === '작업 기록 작성').onPress();
