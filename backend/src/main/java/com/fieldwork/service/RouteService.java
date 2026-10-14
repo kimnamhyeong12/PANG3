@@ -24,8 +24,6 @@ public class RouteService {
     @Value("${kakao.rest-api-key}")
     private String kakaoRestApiKey;
 
-    @Value("${ors.api-key}")
-    private String orsApiKey;
 
     private final RestTemplate restTemplate;
     private final KakaoWalkingClient walkingClient = new KakaoWalkingClient();
