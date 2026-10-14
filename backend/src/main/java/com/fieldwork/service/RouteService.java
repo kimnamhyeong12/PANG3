@@ -257,6 +257,7 @@ public class RouteService {
             segment.put("totalDistance", leg.distance());
             segment.put("totalDuration", leg.duration());
             segment.put("routePriority", leg.priority());
+            segment.put("routeCompared", priority == null);
             Map<String, Double> navigationEnd = leg.path().get(leg.path().size() - 1);
             segment.put("navigationDestination", Map.of("lat", navigationEnd.get("latitude"),
                     "lng", navigationEnd.get("longitude")));
