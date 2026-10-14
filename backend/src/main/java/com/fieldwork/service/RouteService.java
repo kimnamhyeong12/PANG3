@@ -1,7 +1,6 @@
 package com.fieldwork.service;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -391,110 +390,6 @@ public class RouteService {
                 distance.intValue(), duration.intValue(),
                 fare == null || !(fare.get("toll") instanceof Number)
                         ? -1 : ((Number) fare.get("toll")).intValue(), priority);
-    }
-
-    private Map<String, Object> getOrsWalkingPath(
-            Map<String, Object> currentLocation,
-            List<Map<String, Object>> locations
-    ) {
-        List<Map<String, Object>> routePoints = makeRoutePoints(currentLocation, locations);
-
-        List<Map<String, Double>> fullPath = new ArrayList<>();
-        List<Map<String, Object>> segments = new ArrayList<>();
-
-        int totalDistance = 0;
-        int totalDuration = 0;
-
-        for (int i = 0; i < routePoints.size() - 1; i++) {
-            Map<String, Object> start = routePoints.get(i);
-            Map<String, Object> end = routePoints.get(i + 1);
-
-            String url = "https://api.heigit.org/openrouteservice/v2/directions/foot-walking/geojson";
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("Authorization", orsApiKey);
-            headers.setContentType(MediaType.APPLICATION_JSON);
-
-            Map<String, Object> requestBody = new HashMap<>();
-
-            List<List<Double>> coordinates = new ArrayList<>();
-            coordinates.add(Arrays.asList(getLng(start), getLat(start)));
-            coordinates.add(Arrays.asList(getLng(end), getLat(end)));
-
-            requestBody.put("coordinates", coordinates);
-
-            HttpEntity<Map<String, Object>> entity =
-                    new HttpEntity<>(requestBody, headers);
-
-           ResponseEntity<Map<String, Object>> response =
-            restTemplate.exchange(
-                    url,
-                    HttpMethod.POST,
-                    entity,
-                    new ParameterizedTypeReference<Map<String, Object>>() {}
-            );
-
-            Map<String, Object> body = response.getBody();
-
-            if (body == null) continue;
-
-            List<Map<String, Object>> features =
-                    (List<Map<String, Object>>) body.get("features");
-
-            if (features == null || features.isEmpty()) continue;
-
-            Map<String, Object> feature = features.get(0);
-
-            Map<String, Object> properties =
-                    (Map<String, Object>) feature.get("properties");
-
-            if (properties != null) {
-                Map<String, Object> summary =
-                        (Map<String, Object>) properties.get("summary");
-
-                if (summary != null) {
-                    totalDistance += ((Number) summary.getOrDefault("distance", 0)).intValue();
-                    totalDuration += ((Number) summary.getOrDefault("duration", 0)).intValue();
-                }
-            }
-
-            Map<String, Object> geometry =
-                    (Map<String, Object>) feature.get("geometry");
-
-            if (geometry == null) continue;
-
-            List<List<Number>> orsCoords =
-                    (List<List<Number>>) geometry.get("coordinates");
-
-            if (orsCoords == null) continue;
-
-            List<Map<String, Double>> segmentPath = new ArrayList<>();
-
-            for (List<Number> coord : orsCoords) {
-                if (coord.size() < 2) continue;
-
-                double lng = coord.get(0).doubleValue();
-                double lat = coord.get(1).doubleValue();
-
-                Map<String, Double> point = new HashMap<>();
-                point.put("latitude", lat);
-                point.put("longitude", lng);
-
-                fullPath.add(point);
-                segmentPath.add(point);
-            }
-
-            Map<String, Object> segment = makeSegment(i, start, end, segmentPath, "walk");
-            segments.add(segment);
-        }
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("path", fullPath);
-        result.put("segments", segments);
-        result.put("totalDistance", totalDistance);
-        result.put("totalDuration", totalDuration);
-
-        return result;
     }
 
     private Map<String, Object> getKakaoWalkingPath(Map<String, Object> currentLocation, List<Map<String, Object>> locations, String key) {
