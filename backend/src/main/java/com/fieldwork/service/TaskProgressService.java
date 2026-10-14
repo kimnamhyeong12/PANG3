@@ -314,13 +314,6 @@ public class TaskProgressService {
         }
     }
 
-    private boolean isLocalPath(String path) {
-        if (path == null) {
-            return false;
-        }
-        return path.startsWith("file:") || path.startsWith("/") || path.contains("uploads");
-    }
-
     private Double parseDouble(String value) {
         if (value == null || value.isBlank()) {
             return null;
