@@ -13,9 +13,18 @@
       "@/*": [
         "./*"
       ]
-    }
+    },
+    "allowJs": true,
+    "checkJs": false
   },
   "include": [
+    "App.js",
+    "screens/**/*",
+    "components/**/*",
+    "constants/**/*",
+    "utils/**/*",
+    "services/**/*",
+    "modules/**/*.js",
     "**/*.ts",
     "**/*.tsx"
   ]

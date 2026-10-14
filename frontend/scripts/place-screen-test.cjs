@@ -26,7 +26,7 @@ function load(file) {
     if (name.includes('async-storage')) return { getItem: async () => null, setItem: async () => {} };
     if (name.includes('kakao-navigation')) return { KakaoNavigationView: Surface, isKakaoNavigationAvailable: () => false };
     if (name.includes('notificationService')) return { stopRouteNotification: noOp, updateRouteNotification: noOp };
-    if (name.includes('PublicDataMapMode')) return { BUSAN_DISTRICT_CODES: {} };
+    if (name.includes('busanDistricts')) return { BUSAN_DISTRICT_CODES: {} };
     if (name.includes('BulkUploadModal')) return { __esModule: true, default: Surface };
     if (name.includes('CustomAlert')) return { showAlert: noOp };
     if (name.includes('KakaoMapWebView') || name.includes('VoiceTextInput') || name.includes('WorkplaceField')) return { __esModule: true, default: Surface };

@@ -63,7 +63,7 @@ function createScreen({ nativeNavigation = false } = {}) {
         beginRouteSession() {}, isSdkPreviewAvailable: id => sdkPreviews.has(id), discardSdkPreview: id => sdkPreviews.delete(id),
         previewSdkRoute: body => nativeNavigation ? new Promise((resolve, reject) => requests.push({ url: 'sdk:preview', sdk: true, options: { body: JSON.stringify(body) }, resolve, reject })) : Promise.reject(new Error('No native SDK')) };
       if (name.includes('BulkUploadModal')) return { __esModule: true, default: 'BulkUpload' };
-      if (name.includes('PublicDataMapMode')) return { BUSAN_DISTRICT_CODES: { '사하구': '21100' } };
+      if (name.includes('busanDistricts')) return { BUSAN_DISTRICT_CODES: { '사하구': '21100' } };
       if (name.includes('notificationService')) return { stopRouteNotification: async () => {}, updateRouteNotification: async () => {} };
       if (name.startsWith('.')) return load(path.resolve(path.dirname(file), name.endsWith('.js') ? name : `${name}.js`));
       throw Error('Unexpected import: ' + name);

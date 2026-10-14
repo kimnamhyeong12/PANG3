@@ -33,7 +33,7 @@ import { isRegisteredPlace, placeLocation } from '../utils/placeSearch';
 import { locationKey } from '../utils/routeSession';
 import { remainingRouteProgress } from '../utils/routeProgress';
 import { hasVisitCoordinates, promoteVisit, recommendVisitOrder, visitSetKey } from '../utils/visitOrder';
-import { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
+import { BUSAN_DISTRICT_CODES } from '../constants/busanDistricts';
 // 엑셀,csv 데이터 업로드
 import BulkUploadModal from '../components/BulkUploadModal';
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
@@ -185,7 +185,6 @@ function NormalMapScreen({
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [mapSelectMode, setMapSelectMode] = useState(false);
   const [locationSettingMode, setLocationSettingMode] = useState(false);
-  const [locationMoving, setLocationMoving] = useState(false);
   const [directCenter, setDirectCenter] = useState(null);
   const [centerAddress, setCenterAddress] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -383,11 +382,6 @@ function NormalMapScreen({
   const displayOnlyLocations = [...mapOnlyMarkers, ...publicDisplayItems, ...searchPins];
   const publicViewCoordinates = useMemo(() => publicFacilityMode && selectedDong
     ? facilityViewCoordinates(selectedDong, publicItems) : [], [publicFacilityMode, selectedDong, publicItems]);
-  const assignmentMap = useMemo(() => {
-    const map = new Map();
-    groupAssignments.forEach((item) => map.set(Number(item.taskId), item));
-    return map;
-  }, [groupAssignments]);
 
   useEffect(() => {
     setPanelOpen?.(false);
@@ -1363,7 +1357,6 @@ function NormalMapScreen({
         selectionSessionActive={mapSelectMode}
         selectionPosition={directCenter}
         onCenterChange={setDirectCenter}
-        onSelectionMoveChange={setLocationMoving}
         onCurrentLocationChange={setCurrentLocation}
         onMarkerClick={handleVisitPress}
         onLocationsChange={(next) => {
@@ -1436,7 +1429,6 @@ function NormalMapScreen({
               borderColor: locationSettingMode ? '#2477F3' : '#BFD6F6',
             }}
             onPress={() => {
-              setLocationMoving(false);
               setLocationSettingMode((value) => !value);
             }}
           >
@@ -1450,7 +1442,6 @@ function NormalMapScreen({
           <TouchableOpacity
             style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#F3B9C0', backgroundColor: '#FDE9EB' }}
             onPress={() => {
-              setLocationMoving(false);
               setLocationSettingMode(false);
               setMapSelectMode(false);
               setDirectCenter(null);
@@ -1468,7 +1459,6 @@ function NormalMapScreen({
             onPress={async () => {
               const place = { lat: directCenter.lat, lng: directCenter.lng, detailAddress: centerAddress && centerAddress !== '주소 확인 중...' ? centerAddress : '지도 선택 위치', roadAddress: centerAddress && centerAddress !== '주소 확인 중...' ? centerAddress : '' };
               sheetY.setValue(0);
-              setLocationMoving(false);
               setLocationSettingMode(false);
               setMapSelectMode(false);
               setSearchedPlace(place);

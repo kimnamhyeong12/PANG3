@@ -1647,10 +1647,7 @@ export default function KakaoMapWebView({
     setSelectedLocation,
   ] = useState(null);
 
-  const [
-    isSearching,
-    setIsSearching,
-  ] = useState(false);
+  const isSearching = false;
 
   /*
    * 가까워진 목적지 key.

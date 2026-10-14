@@ -12,7 +12,7 @@ import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { BackButton } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
-import { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
+import { BUSAN_DISTRICT_CODES } from '../constants/busanDistricts';
 import { koreaDayKey, isCurrentWork } from '../utils/completionDay';
 import { buildMemberColors } from '../utils/memberColors';
 import GroupDashboardScreen from './GroupDashboardScreen';

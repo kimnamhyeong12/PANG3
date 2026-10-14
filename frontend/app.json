@@ -30,8 +30,6 @@
       "bundleIdentifier": "com.pang3.fieldworkhelper"
     },
     "plugins": [
-      "expo-router",
-      "expo-web-browser",
       "expo-notifications",
       [
         "expo-speech-recognition",
@@ -61,7 +59,6 @@
       ]
     ],
     "extra": {
-      "router": {},
       "eas": {
         "projectId": "f6957131-791d-48a6-8e1d-9f7d5030c52a"
       }
