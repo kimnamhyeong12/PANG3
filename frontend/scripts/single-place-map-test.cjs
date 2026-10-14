@@ -124,6 +124,14 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   const app = createScreen({ nativeNavigation: true });
   app.props.locations = [visit(1, 129.01), visit(2, 129.02), visit(3, 129.03)];
   app.render();
+  const topOverlay = app.nodes().find(node => node.props.pointerEvents === 'box-none' && node.props.onLayout);
+  topOverlay.props.onLayout({ nativeEvent: { layout: { y: 35, height: 210 } } });
+  app.find('TouchableOpacity', '미처리 업무 목록 펼치기').props.onLayout({ nativeEvent: { layout: { height: 44 } } });
+  app.render();
+  assert.equal(app.find('MapCanvas').props.routeViewportPadding.top, 301, 'route fit clears the measured top overlay and marker height');
+  assert.equal(app.find('MapCanvas').props.routeViewportPadding.bottom, 96, 'route fit clears the bottom action');
+  topOverlay.props.onLayout({ nativeEvent: { layout: { y: 35, height: 300 } } }); app.render();
+  assert.equal(app.find('MapCanvas').props.routeViewportPadding.top, 391, 'expanded UI updates the visible map region');
   app.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 });
   app.render();
   assert.equal(app.find('MapCanvas').props.locations.length, 3, 'all administrative dongs appear together');

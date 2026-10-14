@@ -160,6 +160,8 @@ function NormalMapScreen({
   const [selectedSearchPinId, setSelectedSearchPinId] = useState(null);
   const [resultQuery, setResultQuery] = useState('');
   const [mapHeight, setMapHeight] = useState(600);
+  const [topOverlayBottom, setTopOverlayBottom] = useState(0);
+  const [bottomOverlayHeight, setBottomOverlayHeight] = useState(0);
   const [focusRequest, setFocusRequest] = useState({ coordinates: [], token: 0 });
   const [workplaceOpen, setWorkplaceOpen] = useState(false);
   const [workplaceCandidate, setWorkplaceCandidate] = useState(null);
@@ -1348,6 +1350,9 @@ function NormalMapScreen({
         guideTarget={activeTarget}
         onReturnArrival={handleStopGuidance}
         previewRouteSegment={preview?.segment || null}
+        routeViewportPadding={{ top: topOverlayBottom ? topOverlayBottom + 56 : 300,
+          bottom: !resultsMode && !mapSelectMode && !publicFacilityMode && !searchedPlace && !coordSheetOpen && !pendingOpen && !dongOpen
+            ? bottomOverlayHeight + 52 : 40, left: 40, right: 40 }}
         highlightedLocationKey={resultsMode ? selectedSearchPinId : cardTarget ? locationKey(cardTarget) : null}
         focusCoordinates={publicFacilityMode ? publicViewCoordinates : focusRequest.coordinates}
         focusToken={focusRequest.token}
@@ -1486,7 +1491,8 @@ function NormalMapScreen({
         <Pressable style={[StyleSheet.absoluteFill, { zIndex: 19 }]}
           accessibilityLabel="방문지 추가 메뉴 닫기" onPress={() => setAddMenuOpen(false)} />
       )}
-      <View style={styles.topOverlay} pointerEvents="box-none">
+      <View style={styles.topOverlay} pointerEvents="box-none"
+        onLayout={event => { const { y, height } = event.nativeEvent.layout; setTopOverlayBottom(y + height); }}>
         <View style={styles.searchControlRow}>
           {publicFacilityMode && <TouchableOpacity
             style={styles.smallTopButton}
@@ -1805,6 +1811,7 @@ function NormalMapScreen({
       {!resultsMode && !mapSelectMode && !publicFacilityMode && !searchedPlace && !coordSheetOpen && !pendingOpen && !dongOpen && (
         <TouchableOpacity
           style={styles.publicFacilityCollapsed}
+          onLayout={event => setBottomOverlayHeight(event.nativeEvent.layout.height)}
           activeOpacity={0.88}
           onPress={() => setPendingOpen(true)}
           accessibilityRole="button"

@@ -1513,6 +1513,7 @@ export default function KakaoMapWebView({
   guideTarget,
   onReturnArrival,
   previewRouteSegment = null,
+  routeViewportPadding = null,
   highlightedLocationKey = null,
   focusCoordinates = null,
   focusToken = 0,
@@ -1781,7 +1782,7 @@ export default function KakaoMapWebView({
 
         coordinates,
 
-        edgePadding:
+        padding:
           options.edgePadding ||
           {},
       });
@@ -2209,6 +2210,10 @@ export default function KakaoMapWebView({
 
       last.latitude,
       last.longitude,
+      routeViewportPadding?.top ?? 300,
+      routeViewportPadding?.right ?? 80,
+      routeViewportPadding?.bottom ?? 260,
+      routeViewportPadding?.left ?? 80,
     ].join("-");
 
     if (segmentFocusKeyRef.current === focusKey) {
@@ -2226,10 +2231,10 @@ export default function KakaoMapWebView({
       coordinates,
       {
         edgePadding: {
-          top: 300,
-          right: 80,
-          bottom: 260,
-          left: 80,
+          top: routeViewportPadding?.top ?? 300,
+          right: routeViewportPadding?.right ?? 80,
+          bottom: routeViewportPadding?.bottom ?? 260,
+          left: routeViewportPadding?.left ?? 80,
         },
 
         animated: true,
@@ -2284,6 +2289,10 @@ export default function KakaoMapWebView({
     routeSegments,
     roadPath,
     previewRouteSegment,
+    routeViewportPadding?.top,
+    routeViewportPadding?.right,
+    routeViewportPadding?.bottom,
+    routeViewportPadding?.left,
   ]);
 
   /*
