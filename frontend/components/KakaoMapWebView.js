@@ -1017,6 +1017,21 @@ const buildKakaoMapHtml = (
       entranceOverlays.push(entrance);
     });
 
+    if (data.vehicleArrival) {
+      var arrivalLabel = document.createElement("div");
+      arrivalLabel.textContent = "차량 도착";
+      arrivalLabel.style.cssText = "background:#2375EF;color:white;border:2px solid white;border-radius:12px;padding:5px 8px;font-size:12px;font-weight:bold;white-space:nowrap;box-shadow:0 1px 4px #0004;";
+      var arrivalOverlay = new window.kakao.maps.CustomOverlay({
+        position: new window.kakao.maps.LatLng(data.vehicleArrival.lat, data.vehicleArrival.lng),
+        content: arrivalLabel,
+        xAnchor: 0.5,
+        yAnchor: 1.3,
+        zIndex: 91
+      });
+      arrivalOverlay.setMap(map);
+      entranceOverlays.push(arrivalOverlay);
+    }
+
     /*
      * 현재 GPS 위치
      */
@@ -3141,6 +3156,8 @@ export default function KakaoMapWebView({
         currentPos: currentPosRef.current,
 
         roadPath: previewRouteSegment || isGuiding ? [] : roadPath,
+        vehicleArrival: (previewRouteSegment || routeSegments[currentSegmentIndex])?.engine === 'kakao-sdk'
+          ? (previewRouteSegment || routeSegments[currentSegmentIndex]).navigationDestination : null,
         connectorPaths: (previewRouteSegment ? [previewRouteSegment] : isGuiding ? [routeSegments[currentSegmentIndex]] : routeSegments)
           .map((segment) => segment?.connectorPath)
           .filter((path) => Array.isArray(path) && path.length >= 2),

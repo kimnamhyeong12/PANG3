@@ -24,7 +24,7 @@ import KakaoMapWebView from '../components/KakaoMapWebView';
 import PlaceSearchOverlay from '../components/PlaceSearchOverlay';
 import SearchResultSheet from '../components/SearchResultSheet';
 import WorkplaceField from '../components/WorkplaceField';
-import { KakaoNavigationView, beginRouteSession, isKakaoNavigationAvailable } from '../modules/kakao-navigation';
+import { KakaoNavigationView, beginRouteSession, isKakaoNavigationAvailable, previewSdkRoute, isSdkPreviewAvailable, discardSdkPreview } from '../modules/kakao-navigation';
 import {
   stopRouteNotification,
   updateRouteNotification,
@@ -175,6 +175,7 @@ function NormalMapScreen({
   const [transportMode, setTransportMode] = useState('car');
   const [segmentChanging, setSegmentChanging] = useState(false);
   const [kakaoDestination, setKakaoDestination] = useState(null);
+  const [multiArrival, setMultiArrival] = useState(false);
   const [nativeProgress, setNativeProgress] = useState(null);
 
   const [keyword, setKeyword] = useState('');
@@ -1058,7 +1059,14 @@ function NormalMapScreen({
     return `약 ${Math.round(meters)}m`;
   };
 
-  const fetchRouteSegment = async (startLocation, endLocation, mode) => {
+  const fetchRouteSegment = async (startLocation, endLocation, mode, allowMultiple = multiArrival) => {
+    if (mode === 'car') {
+      const segment = await previewSdkRoute({ startLat: Number(startLocation.lat), startLng: Number(startLocation.lng),
+        lat: Number(endLocation.lat), lng: Number(endLocation.lng), name: endLocation.detailAddress || endLocation.name || '방문지',
+        address: endLocation.roadAddress || '', routePriority: 'TIME', multiArrival: allowMultiple });
+      return { segment: { ...segment, mode, fromName: '현재 위치', toName: endLocation.detailAddress || '목적지' },
+        totalDuration: segment.totalDuration };
+    }
     const res = await fetch(`${API_BASE_URL}/api/routes/segment`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(mode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) },
@@ -1146,7 +1154,7 @@ function NormalMapScreen({
     }
   }, [allVisits, activeSegment, routeSegments, preview]);
 
-  const previewVisit = async (target, mode = transportMode) => {
+  const previewVisit = async (target, mode = transportMode, allowMultiple = multiArrival) => {
     if (!hasVisitCoordinates(target)) {
       showAlert('위치 정보 없음', '이 방문지의 좌표를 확인할 수 없습니다.');
       return;
@@ -1160,13 +1168,17 @@ function NormalMapScreen({
       return;
     }
     try {
-      const result = await fetchRouteSegment(cleanLocation(currentLocation), cleanLocation(target), mode);
-      if (request !== previewRequestRef.current || !liveVisitsRef.current.some((row) => locationKey(row) === targetKey)) return;
+      const result = await fetchRouteSegment(cleanLocation(currentLocation), cleanLocation(target), mode, allowMultiple);
+      if (request !== previewRequestRef.current || !liveVisitsRef.current.some((row) => locationKey(row) === targetKey)) {
+        discardSdkPreview(result.segment.sdkPreviewId); return;
+      }
       setPreview({ targetKey, mode, loading: false, coords: `${target.lat},${target.lng}`,
         segment: { ...result.segment, destinationKey: targetKey } });
+      return true;
     } catch (error) {
       if (request === previewRequestRef.current) {
-        setPreview({ targetKey, mode, segment: null, loading: false, error: '경로를 불러오지 못했습니다. 다시 시도해 주세요.' });
+        setPreview({ targetKey, mode, segment: null, loading: false,
+          error: mode === 'car' ? error.message || 'SDK 경로를 불러오지 못했습니다.' : '경로를 불러오지 못했습니다. 다시 시도해 주세요.' });
       }
     }
   };
@@ -1219,7 +1231,19 @@ function NormalMapScreen({
     const scope = workspaceScopeRef.current;
     setSegmentChanging(true);
     try {
-      const result = await fetchRouteSegment(cleanLocation(currentLocation), cleanLocation(target), mode);
+      let result;
+      if (mode === 'car' && preview?.segment) {
+        const origin = preview.segment.previewOrigin;
+        const movedMeters = origin ? Math.hypot((Number(currentLocation.lat) - origin.lat) * 111000,
+          (Number(currentLocation.lng) - origin.lng) * 111000 * Math.cos(origin.lat * Math.PI / 180)) : 0;
+        if (!isSdkPreviewAvailable(preview.segment.sdkPreviewId) || movedMeters > 30) {
+          if (await previewVisit(target, mode)) {
+            showAlert('경로 새로고침', '미리보기 경로가 갱신됐습니다. 확인한 뒤 안내를 시작해 주세요.');
+          }
+          return;
+        }
+        result = { segment: preview.segment, totalDuration: preview.segment.totalDuration };
+      } else result = await fetchRouteSegment(cleanLocation(currentLocation), cleanLocation(target), mode);
       const liveTarget = liveVisitsRef.current.find((row) => locationKey(row) === targetKey);
       if (request !== guideRequestRef.current || scope !== workspaceScopeRef.current || !liveTarget || isCompleted(liveTarget)) return;
       // Commit only after a route succeeds. Browsing and failed requests never renumber visits.
@@ -1240,12 +1264,7 @@ function NormalMapScreen({
       previewRequestRef.current += 1;
       setPreview(null);
       if (mode === 'car' && Platform.OS === 'android' && isKakaoNavigationAvailable()) {
-        const navigationTarget = result.segment.navigationDestination || target;
-        setKakaoDestination({ lat: Number(navigationTarget.lat), lng: Number(navigationTarget.lng),
-          routePriority: result.segment.routePriority || 'RECOMMEND',
-          name: target.detailAddress || target.roadAddress || '방문지',
-          address: target.roadAddress || target.detailAddress || '',
-          startLat: Number(currentLocation.lat), startLng: Number(currentLocation.lng), destinationKey: targetKey });
+        setKakaoDestination({ previewId: result.segment.sdkPreviewId, destinationKey: targetKey });
       } else setKakaoDestination(null);
     } catch (error) {
       if (request === guideRequestRef.current) showAlert('안내 시작 실패', '경로를 불러오지 못했습니다. 다시 시도해 주세요.');
@@ -1282,13 +1301,12 @@ function NormalMapScreen({
     resumedRouteRef.current = key;
     if (activeSegment.mode === 'car') {
       if (!isKakaoNavigationAvailable()) { clearGuidance(); return; }
-      if (!activeSegment.navigationDestination || !activeSegment.routeCompared) {
+      if (!isSdkPreviewAvailable(activeSegment.sdkPreviewId)) {
         setKakaoDestination(null);
         setNativeProgress(null);
         const request = ++guideRequestRef.current;
-        fetchRouteSegment(cleanLocation(currentLocation), cleanLocation(activeTarget), 'car').then(result => {
+        fetchRouteSegment(cleanLocation(currentLocation), cleanLocation(activeTarget), 'car', activeSegment.arrivalMode === 'MULTI').then(result => {
           if (request !== guideRequestRef.current) return;
-          if (!result.segment.navigationDestination || !result.segment.routeCompared) { clearGuidance(); return; }
           resumedRouteRef.current = null;
           setRouteSegments([{ ...result.segment, destinationKey: activeSegment.destinationKey }]);
           setRoadPath(result.segment.path || []);
@@ -1297,12 +1315,7 @@ function NormalMapScreen({
         return;
       }
       setNativeProgress(null);
-      const navigationTarget = activeSegment.navigationDestination || activeTarget;
-      setKakaoDestination({ lat: Number(navigationTarget.lat), lng: Number(navigationTarget.lng),
-        routePriority: activeSegment.routePriority || 'RECOMMEND',
-        name: activeTarget.detailAddress || activeTarget.roadAddress || '방문지',
-        address: activeTarget.roadAddress || activeTarget.detailAddress || '',
-        startLat: Number(currentLocation.lat), startLng: Number(currentLocation.lng), destinationKey: activeSegment.destinationKey });
+      setKakaoDestination({ previewId: activeSegment.sdkPreviewId, destinationKey: activeSegment.destinationKey });
     } else handleReroute(currentLocation);
   }, [isActive, isGuiding, routeResumeToken, scopeKey, activeTarget, activeSegment, currentLocation]);
 
@@ -1366,6 +1379,16 @@ function NormalMapScreen({
         <KakaoNavigationView
           style={StyleSheet.absoluteFillObject}
           destination={kakaoDestination}
+          onRouteChanged={(event) => {
+            const data = event.nativeEvent;
+            if (data?.destinationKey !== activeSegment?.destinationKey || !Array.isArray(data.path) || !data.path.length) return;
+            const end = data.path[data.path.length - 1];
+            setRouteSegments((previous) => previous.map((segment, index) => index === 0
+              ? { ...segment, path: data.path, totalDistance: data.totalDistance, totalDuration: data.totalDuration,
+                navigationDestination: { lat: end.latitude, lng: end.longitude } } : segment));
+            setRoadPath(data.path);
+            setTotalDuration(data.totalDuration);
+          }}
           onError={(event) => {
             clearGuidance();
             showAlert('카카오 길안내 오류', event.nativeEvent?.message || '길안내를 시작하지 못했습니다.');
@@ -1723,6 +1746,12 @@ function NormalMapScreen({
 
         {!resultsMode && !publicFacilityMode && !mapSelectMode && !searchedPlace && !coordSheetOpen && cardTarget && (
           <View style={styles.destinationCard}>
+            {(preview?.mode || activeSegment?.mode || transportMode) === 'car' && !isGuiding && (
+              <TouchableOpacity accessibilityLabel="주변 도로 도착 허용" disabled={preview?.loading || segmentChanging}
+                onPress={() => { const next = !multiArrival; setMultiArrival(next); previewVisit(cardTarget, 'car', next); }}>
+                <Text style={styles.destinationMeta}>도착 위치: {multiArrival ? '주변 도로 허용' : '기본'} · 눌러서 비교</Text>
+              </TouchableOpacity>
+            )}
             <View style={styles.destinationHead}>
               <TouchableOpacity style={styles.destinationInfo}
                 accessibilityLabel={cardTarget.isReturnLocation ? '복귀 목적지' : '보고서 작성'}

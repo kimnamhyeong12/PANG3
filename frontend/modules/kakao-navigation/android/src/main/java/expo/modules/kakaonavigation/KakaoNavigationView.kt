@@ -42,14 +42,12 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
   KNGuidance_CitsGuideDelegate,
   KNNaviView_GuideStateDelegate {
 
-  companion object {
-    private var sdkInstalled = false
-  }
-
   private val onError by EventDispatcher<Map<String, String>>()
   private val onEnded by EventDispatcher<Map<String, String>>()
   private val onProgress by EventDispatcher<Map<String, Any>>()
   private val onArrived by EventDispatcher<Map<String, String>>()
+  private val onRouteChanged by EventDispatcher<Map<String, Any>>()
+  private var preparedTrip: KNTrip? = null
   private var priority = KNRoutePriority.KNRoutePriority_Recommand
   private val avoidOptions = KNRouteAvoidOption.KNRouteAvoidOption_None.value
   private var naviView: KNNaviView? = null
@@ -72,71 +70,17 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
     if (destination == lastDestination) return
     lastDestination = destination
     released = false
-    val id = ++requestId
+    requestId++
     stopGuidance()
     showLoading()
-    priority = when (destination["routePriority"] ?: "RECOMMEND") {
-      "RECOMMEND" -> KNRoutePriority.KNRoutePriority_Recommand
-      "TIME" -> KNRoutePriority.KNRoutePriority_Time
-      "DISTANCE" -> KNRoutePriority.KNRoutePriority_Distance
-      else -> { fail("지원하지 않는 경로 기준입니다."); return }
-    }
-
+    val prepared = KakaoRouteEngine.get(destination["previewId"] as? String ?: "")
+    if (prepared == null) { fail("미리보기 경로가 만료됐습니다. 경로를 다시 확인해 주세요."); return }
     val activity = appContext.currentActivity as? AppCompatActivity
     if (activity == null) { fail("현재 화면에서 카카오 길안내를 사용할 수 없습니다."); return }
-    val latitude = (destination["lat"] as? Number)?.toDouble()
-    val longitude = (destination["lng"] as? Number)?.toDouble()
-    val startLatitude = (destination["startLat"] as? Number)?.toDouble()
-    val startLongitude = (destination["startLng"] as? Number)?.toDouble()
-    if (latitude == null || longitude == null || latitude !in 33.0..39.0 || longitude !in 124.0..132.0 ||
-      startLatitude == null || startLongitude == null || startLatitude !in 33.0..39.0 || startLongitude !in 124.0..132.0) {
-      fail("현재 위치나 목적지 좌표가 올바르지 않습니다.")
-      return
-    }
-    val appKey = activity.packageManager.getApplicationInfo(activity.packageName, 128)
-      .metaData?.getString("com.pang3.KAKAO_NATIVE_APP_KEY").orEmpty()
-    if (appKey.isBlank()) { fail("카카오 네이티브 앱 키가 빌드에 등록되지 않았습니다."); return }
-
-    synchronized(KNSDK) {
-      if (!sdkInstalled) {
-        KNSDK.install(activity.application, "${activity.filesDir.absolutePath}/kakao-navigation")
-        sdkInstalled = true
-      }
-    }
-    KNSDK.initializeWithAppKey(appKey,
-      activity.packageManager.getPackageInfo(activity.packageName, 0).versionName ?: "1.0",
-      null, null, KNLanguageType.KNLanguageType_KOREAN) { error ->
-      activity.runOnUiThread {
-        if (!isCurrent(id)) return@runOnUiThread
-        if (error != null) { fail("카카오 SDK 초기화 실패: ${error.msg}"); return@runOnUiThread }
-        val start = poi("현재 위치", startLongitude, startLatitude, "")
-        val goal = poi(destination["name"] as? String ?: "목적지", longitude, latitude,
-          destination["address"] as? String ?: "")
-        KNSDK.makeTripWithStart(start, goal, null) { tripError, trip ->
-          activity.runOnUiThread {
-            if (!isCurrent(id)) return@runOnUiThread
-            if (tripError != null || trip == null) {
-              fail("경로 생성 실패: ${tripError?.msg ?: "알 수 없는 오류"}")
-              return@runOnUiThread
-            }
-            trip.routeWithPriority(priority, avoidOptions) { routeError, _ ->
-              activity.runOnUiThread {
-                if (!isCurrent(id)) return@runOnUiThread
-                if (routeError != null) { fail("경로 탐색 실패: ${routeError.msg}"); return@runOnUiThread }
-                startGuidance(activity, trip)
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  private fun isCurrent(id: Int) = !released && id == requestId
-
-  private fun poi(name: String, longitude: Double, latitude: Double, address: String): KNPOI {
-    val point = WGS84ToKATEC(longitude, latitude)
-    return KNPOI(name, point.x.roundToInt(), point.y.roundToInt(), address)
+    priority = prepared.priority
+    preparedTrip = prepared.trip
+    onRouteChanged(prepared.result + mapOf("destinationKey" to destination["destinationKey"].toString()))
+    startGuidance(activity, prepared.trip)
   }
 
   private fun startGuidance(activity: AppCompatActivity, trip: KNTrip) {
@@ -219,7 +163,10 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
   override fun guidanceRouteUnchangedWithError(guidance: KNGuidance, error: KNError) { naviView?.guidanceRouteUnchangedWithError(guidance, error) }
   override fun guidanceOutOfRoute(guidance: KNGuidance) { naviView?.guidanceOutOfRoute(guidance) }
   override fun guidanceRouteChanged(guidance: KNGuidance, before: KNRoute, beforeLocation: KNLocation,
-    after: KNRoute, afterLocation: KNLocation, reason: KNGuideRouteChangeReason) { naviView?.guidanceRouteChanged(guidance) }
+    after: KNRoute, afterLocation: KNLocation, reason: KNGuideRouteChangeReason) {
+    naviView?.guidanceRouteChanged(guidance)
+    emitRoute(guidance, after)
+  }
   override fun guidanceGuideEnded(guidance: KNGuidance) {
     if (released || stopping) return
     val arrived = guidance.trip?.remainDist()?.let { it in 0..30 } == true
@@ -228,6 +175,13 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
   }
   override fun guidanceDidUpdateRoutes(guidance: KNGuidance, routes: List<KNRoute>, multi: KNMultiRouteInfo?) {
     naviView?.guidanceDidUpdateRoutes(guidance, routes, multi)
+    routes.firstOrNull()?.let { emitRoute(guidance, it) }
+  }
+  private fun emitRoute(guidance: KNGuidance, route: KNRoute) {
+    if (released || stopping || guidance.trip !== preparedTrip) return
+    val path = KakaoRouteEngine.routePath(route) ?: return
+    onRouteChanged(mapOf("destinationKey" to lastDestination?.get("destinationKey").toString(),
+      "path" to path, "totalDistance" to route.totalDist, "totalDuration" to route.totalTime))
   }
   override fun guidanceDidUpdateIndoorRoute(guidance: KNGuidance, route: KNRoute?) { naviView?.guidanceDidUpdateIndoorRoute(guidance, route) }
   override fun guidanceDidUpdateLocation(guidance: KNGuidance, location: KNGuide_Location) {

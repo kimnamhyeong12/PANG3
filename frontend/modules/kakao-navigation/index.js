@@ -11,8 +11,15 @@ const NativeNavigationView = nativeModule
   : null;
 
 export function isKakaoNavigationAvailable() {
-  return Boolean(NativeNavigationView);
+  return Boolean(NativeNavigationView && nativeModule?.previewRoute);
 }
+
+export async function previewSdkRoute(request) {
+  if (!nativeModule?.previewRoute) throw new Error('SDK 경로 미리보기가 포함된 Android 앱으로 업데이트해 주세요.');
+  return nativeModule.previewRoute(request);
+}
+export function isSdkPreviewAvailable(id) { return Boolean(id && nativeModule?.isPreviewAvailable?.(id)); }
+export function discardSdkPreview(id) { if (id) nativeModule?.discardPreview?.(id); }
 
 export function wasRouteTaskRemoved() { return nativeModule?.wasRouteTaskRemoved?.() || false; }
 export function beginRouteSession() { nativeModule?.beginRouteSession?.(); }

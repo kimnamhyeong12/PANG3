@@ -8,7 +8,8 @@ const babel = require('../node_modules/@babel/core');
 // GPS, backend responses, and workspace refreshes are controlled by each scenario.
 function createScreen({ nativeNavigation = false } = {}) {
   let slots = [], cursor = 0, effects = [], dirty = true, tree;
-  const calls = [], alerts = [], requests = [], storage = new Map();
+  const calls = [], alerts = [], requests = [], storage = new Map(), sdkPreviews = new Set();
+  let sdkSequence = 0;
   const same = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
   const react = {
     useState(initial) {
@@ -58,7 +59,9 @@ function createScreen({ nativeNavigation = false } = {}) {
         setItem: async (key, value) => storage.set(key, value), removeItem: async key => storage.delete(key) };
       if (name.includes('CustomAlert')) return { showAlert: (...args) => alerts.push(args) };
       if (name.includes('KakaoMapWebView')) return { __esModule: true, default: 'MapCanvas' };
-      if (name.includes('kakao-navigation')) return { KakaoNavigationView: 'Navigation', isKakaoNavigationAvailable: () => nativeNavigation, beginRouteSession() {} };
+      if (name.includes('kakao-navigation')) return { KakaoNavigationView: 'Navigation', isKakaoNavigationAvailable: () => nativeNavigation,
+        beginRouteSession() {}, isSdkPreviewAvailable: id => sdkPreviews.has(id), discardSdkPreview: id => sdkPreviews.delete(id),
+        previewSdkRoute: body => nativeNavigation ? new Promise((resolve, reject) => requests.push({ url: 'sdk:preview', sdk: true, options: { body: JSON.stringify(body) }, resolve, reject })) : Promise.reject(new Error('No native SDK')) };
       if (name.includes('BulkUploadModal')) return { __esModule: true, default: 'BulkUpload' };
       if (name.includes('PublicDataMapMode')) return { BUSAN_DISTRICT_CODES: { '사하구': '21100' } };
       if (name.includes('notificationService')) return { stopRouteNotification: async () => {}, updateRouteNotification: async () => {} };
@@ -102,8 +105,16 @@ function createScreen({ nativeNavigation = false } = {}) {
   const find = (type, label) => nodes().find(node => node.type === type &&
     (!label || text(node).includes(label) || node.props.accessibilityLabel === label));
   async function settle() { for (let i = 0; i < 3; i++) { await new Promise(setImmediate); if (dirty) render(); } }
-  function response(request, data) { request.resolve({ ok: true, text: async () => JSON.stringify(data), json: async () => data }); }
-  return { props, render, settle, find, nodes, text, requests, response, calls, alerts };
+  function response(request, data) {
+    if (!request) return;
+    if (request.sdk) {
+      const segment = { ...data.segments[0], engine: 'kakao-sdk', sdkPreviewId: `sdk-${++sdkSequence}`,
+        arrivalMode: JSON.parse(request.options.body).multiArrival ? 'MULTI' : 'DEFAULT',
+        totalDistance: data.totalDistance, totalDuration: data.totalDuration };
+      sdkPreviews.add(segment.sdkPreviewId); request.resolve(segment);
+    } else request.resolve({ ok: true, text: async () => JSON.stringify(data), json: async () => data });
+  }
+  return { props, render, settle, find, nodes, text, requests, response, calls, alerts, expireSdkPreviews: () => sdkPreviews.clear() };
 }
 
 const visit = (id, lng) => ({ id, lat: 35, lng, detailAddress: `장소 ${id}`, adminDong: `동 ${id}`, status: 'pending', markerNumber: id, visitOrderVersion: 2 });
@@ -121,7 +132,7 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   app.find('MapCanvas').props.onMarkerClick(app.props.locations[2]);
   app.render();
   const first = app.requests.shift();
-  assert(first.url.endsWith('/api/routes/segment'));
+  assert.equal(first.url, 'sdk:preview', 'vehicle preview uses SDK, never REST');
   app.response(first, route(app.props.locations[2])); await app.settle();
   assert.deepEqual(app.props.locations.map(row => row.id), [1, 2, 3], 'preview preserves numbering');
   assert.equal(app.props.routeSegments.length, 0, 'preview does not change active guidance');
@@ -199,6 +210,7 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   failure.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 }); failure.render();
   failure.find('MapCanvas').props.onMarkerClick(failure.props.locations[2]); failure.render();
   failure.response(failure.requests.shift(), route(failure.props.locations[2])); await failure.settle();
+  failure.expireSdkPreviews();
   const unsuccessful = failure.find('TouchableOpacity', '안내 시작').props.onPress(); failure.render();
   failure.requests.shift().reject(new Error('offline')); await unsuccessful; await failure.settle();
   assert.deepEqual(Array.from(failure.props.locations, row => row.id), [1, 2, 3], 'failed guidance never renumbers');
@@ -229,40 +241,56 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   car.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 }); car.render();
   car.find('MapCanvas').props.onMarkerClick(car.props.locations[0]); car.render();
   const carPreview = car.requests.shift();
-  assert.equal(JSON.parse(carPreview.options.body).routePriority, undefined, 'server compares routes instead of forcing recommendation');
+  assert.equal(JSON.parse(carPreview.options.body).routePriority, 'TIME', 'vehicle preview prioritizes fastest SDK route');
   car.response(carPreview, route(car.props.locations[0])); await car.settle();
-  const carStart = car.find('TouchableOpacity', '안내 시작').props.onPress(); car.render();
-  const entranceRoute = route(car.props.locations[0]);
-  entranceRoute.segments[0].navigationDestination = { lat: 35.0008, lng: 129.01005 };
-  car.response(car.requests.shift(), entranceRoute); await carStart; await car.settle();
+  const previewId = car.find('MapCanvas').props.previewRouteSegment.sdkPreviewId;
+  const carStart = car.find('TouchableOpacity', '안내 시작').props.onPress(); await carStart; await car.settle();
+  assert.equal(car.requests.length, 0, 'guidance starts the exact preview trip without recomputing');
   assert.equal(car.find('Navigation').props.destination.destinationKey, '1');
-  assert.equal(car.find('Navigation').props.destination.lat, 35.0008, 'SDK keeps the backend arrival instead of the school centre');
-  assert.equal(car.find('Navigation').props.destination.lng, 129.01005);
-  assert.equal(car.find('Navigation').props.destination.routePriority, 'TIME', 'SDK uses the selected preview criterion');
+  assert.equal(car.find('Navigation').props.destination.previewId, previewId);
   assert.equal(car.find('MapCanvas').props.isGuiding, false, 'WebView must not run a second guidance engine');
   car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: 'old', distance: 10, duration: 5 } }); car.render();
   car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: '1', distance: 500, duration: 300 } }); car.render();
   await car.find('MapCanvas').props.onRerouteRequest({ lat: 35, lng: 129.001 });
   assert.equal(car.requests.length, 0, 'SDK handles vehicle rerouting without a second REST request');
-  car.props.routeSegments = [{ ...car.props.routeSegments[0], routeCompared: false }];
+  car.expireSdkPreviews();
   car.props.routeResumeToken = 1; car.render();
   assert.equal(car.find('Navigation'), undefined, 'old recommendation-only sessions are recalculated before SDK resumes');
   const restoredRoute = route(car.props.locations[0]);
   restoredRoute.segments[0].navigationDestination = { lat: 35.0008, lng: 129.01005 };
   restoredRoute.segments[0].routePriority = 'DISTANCE';
   car.response(car.requests.shift(), restoredRoute); await car.settle();
-  assert.equal(car.find('Navigation').props.destination.routePriority, 'DISTANCE', 'restored SDK receives the new comparison winner');
-  assert.equal(car.find('Navigation').props.destination.lat, 35.0008);
+  assert.equal(car.find('Navigation').props.destination.previewId, car.props.routeSegments[0].sdkPreviewId, 'restored SDK receives the freshly prepared trip');
+  const updatedPath = [{ latitude: 35, longitude: 129 }, { latitude: 35.001, longitude: 129.01 }];
+  car.find('Navigation').props.onRouteChanged({ nativeEvent: { destinationKey: 'old', path: updatedPath, totalDistance: 800, totalDuration: 400 } }); car.render();
+  assert.notEqual(car.props.roadPath, updatedPath, 'stale destination events never replace the active route');
+  car.find('Navigation').props.onRouteChanged({ nativeEvent: { destinationKey: '1', path: updatedPath, totalDistance: 800, totalDuration: 400 } }); car.render();
+  assert.equal(car.props.roadPath, updatedPath, 'SDK reroutes update the app geometry');
   car.find('Navigation').props.onArrived({ nativeEvent: { destinationKey: '1' } }); car.render();
   assert.equal(car.props.isGuiding, false);
   car.alerts.at(-1)[2].find(button => button.text === '작업 기록 작성').onPress();
   assert.equal(car.calls.at(-1)[1], 'report', 'SDK arrival returns to the task report');
 
+  const experiment = createScreen({ nativeNavigation: true });
+  experiment.props.locations = [visit(1, 129.01)]; experiment.render();
+  experiment.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 }); experiment.render();
+  experiment.find('MapCanvas').props.onMarkerClick(experiment.props.locations[0]); experiment.render();
+  experiment.response(experiment.requests.shift(), route(experiment.props.locations[0])); await experiment.settle();
+  experiment.find('TouchableOpacity', '주변 도로 도착 허용').props.onPress(); experiment.render();
+  const multiRequest = experiment.requests.shift();
+  assert.equal(multiRequest.url, 'sdk:preview');
+  assert.equal(JSON.parse(multiRequest.options.body).multiArrival, true);
+  experiment.response(multiRequest, route(experiment.props.locations[0])); await experiment.settle();
+  const multiToken = experiment.find('MapCanvas').props.previewRouteSegment.sdkPreviewId;
+  await experiment.find('TouchableOpacity', '안내 시작').props.onPress(); await experiment.settle();
+  assert.equal(experiment.find('Navigation').props.destination.previewId, multiToken, 'multi-arrival guidance uses the exact compared preview');
+  assert.equal(experiment.requests.length, 0);
+
   const walk = createScreen();
   walk.props.locations = [visit(1, 129.01)]; walk.render();
   walk.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 }); walk.render();
   walk.find('MapCanvas').props.onMarkerClick(walk.props.locations[0]); walk.render();
-  walk.response(walk.requests.shift(), route(walk.props.locations[0])); await walk.settle();
+  await walk.settle();
   walk.find('TouchableOpacity', '도보 경로').props.onPress(); walk.render();
   walk.response(walk.requests.shift(), route(walk.props.locations[0])); await walk.settle();
   const walkStart = walk.find('TouchableOpacity', '안내 시작').props.onPress(); walk.render();
