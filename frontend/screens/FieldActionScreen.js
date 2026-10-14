@@ -955,7 +955,7 @@ export default function FieldActionScreen({
             ? {
                 ...photo,
                 uri: preservePhoto(key, editedUri),
-                path: null,
+                path: editedUri === photo.uri ? photo.path : null,
               }
             : photo
       )
@@ -1520,7 +1520,6 @@ export default function FieldActionScreen({
       </ScrollView>
 
       <PhotoMarkupEditor
-        onUseOriginal={photoEditor.isNew ? completePhotoEdit : undefined}
         visible={
           photoEditor.visible
         }

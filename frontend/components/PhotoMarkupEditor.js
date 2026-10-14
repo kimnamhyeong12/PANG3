@@ -14,6 +14,7 @@ import {
 import Svg, { Polyline } from 'react-native-svg';
 import { captureRef } from 'react-native-view-shot';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { showAlert } from './CustomAlert';
 
 const SCREEN = Dimensions.get('window');
 
@@ -61,9 +62,12 @@ export default function PhotoMarkupEditor({
   uri,
   onCancel,
   onComplete,
-  onUseOriginal,
 }) {
   const stageRef = useRef(null);
+  const originalSizeRef = useRef(null);
+  const sessionRef = useRef(0);
+  const operationRef = useRef(false);
+  const [imageReady, setImageReady] = useState(false);
 
   const cropRef = useRef({
     left: 0,
@@ -121,6 +125,8 @@ export default function PhotoMarkupEditor({
     [imageSize]
   );
 
+  const canEdit = imageReady && imageSize.width > 0 && imageSize.height > 0;
+
   useEffect(() => {
     cropRef.current = crop;
   }, [crop]);
@@ -151,11 +157,15 @@ export default function PhotoMarkupEditor({
   };
 
   useEffect(() => {
-    if (!visible || !uri) {
-      return;
-    }
+    const session = ++sessionRef.current;
+    operationRef.current = false;
+    setSaving(false);
+    setImageReady(false);
+    originalSizeRef.current = null;
+    if (!visible || !uri) return;
 
     setCurrentUri(uri);
+    setImageSize({ width: 0, height: 0 });
 
     setPaths([]);
     setActivePath([]);
@@ -165,17 +175,16 @@ export default function PhotoMarkupEditor({
     Image.getSize(
       uri,
 
-      (width, height) =>
-        setImageSize({
-          width,
-          height,
-        }),
-
-      () =>
-        setImageSize({
-          width: 1200,
-          height: 900,
-        })
+      (width, height) => {
+        if (session !== sessionRef.current) return;
+        originalSizeRef.current = { width, height };
+        setImageSize({ width, height });
+      },
+      () => {
+        if (session !== sessionRef.current) return;
+        originalSizeRef.current = { width: 1200, height: 900 };
+        setImageSize(originalSizeRef.current);
+      }
     );
   }, [uri, visible]);
 
@@ -561,154 +570,105 @@ export default function PhotoMarkupEditor({
       );
     };
 
-  const rotate90 =
-    async () => {
-      try {
-        setSaving(true);
+  // Crop the actual base image before changing tools. Existing pen marks are
+  // flattened first so their position is preserved through crops and rotations.
+  const renderImage = async (includeCrop, extraActions = []) => {
+    let source = { uri: currentUri, ...imageSize };
+    if (paths.length || activePath.length > 1) {
+      source = {
+        uri: await captureStage(),
+        width: Math.round(displaySize.width * CAPTURE_SCALE),
+        height: Math.round(displaySize.height * CAPTURE_SCALE),
+      };
+    }
+    const actions = [];
+    if (includeCrop) {
+      const selected = cropRef.current;
+      const scaleX = source.width / displaySize.width;
+      const scaleY = source.height / displaySize.height;
+      const originX = clamp(Math.round(selected.left * scaleX), 0, source.width - 1);
+      const originY = clamp(Math.round(selected.top * scaleY), 0, source.height - 1);
+      const right = clamp(Math.round(selected.right * scaleX), originX + 1, source.width);
+      const bottom = clamp(Math.round(selected.bottom * scaleY), originY + 1, source.height);
+      actions.push({ crop: { originX, originY, width: right - originX, height: bottom - originY } });
+    }
+    actions.push(...extraActions);
+    if (!actions.length) return source;
+    return ImageManipulator.manipulateAsync(source.uri, actions, {
+      compress: 0.95, format: ImageManipulator.SaveFormat.JPEG,
+    });
+  };
 
-        const captured =
-          await captureStage();
+  const replaceImage = (result) => {
+    if (result.uri !== currentUri) setImageReady(false);
+    setCurrentUri(result.uri);
+    setImageSize({ width: result.width, height: result.height });
+    const size = fitSize(result.width, result.height);
+    resetCrop(size.width, size.height);
+    setPaths([]);
+    setActivePath([]);
+    setCropMode(false);
+    setPenMode(false);
+    penModeRef.current = false;
+    dragRef.current = null;
+  };
 
-        const result =
-          await ImageManipulator
-            .manipulateAsync(
-              captured,
-
-              [
-                {
-                  rotate: 90,
-                },
-              ],
-
-              {
-                compress: 0.95,
-
-                format:
-                  ImageManipulator
-                    .SaveFormat
-                    .JPEG,
-              }
-            );
-
-        setCurrentUri(
-          result.uri
-        );
-
-        setPaths([]);
-        setActivePath([]);
-        setPenMode(false);
-
-        Image.getSize(
-          result.uri,
-
-          (
-            width,
-            height
-          ) =>
-            setImageSize({
-              width,
-              height,
-            }),
-
-          () =>
-            setImageSize({
-              width:
-                displaySize.height,
-
-              height:
-                displaySize.width,
-            })
-        );
-      } catch (error) {
-        console.log(
-          '사진 회전 실패:',
-          error
-        );
-      } finally {
+  const runEdit = async (operation, commit) => {
+    if (operationRef.current || !imageReady || !imageSize.width || !imageSize.height) return;
+    const session = sessionRef.current;
+    operationRef.current = true;
+    setSaving(true);
+    try {
+      const result = await operation();
+      if (session === sessionRef.current) commit(result);
+    } catch (error) {
+      if (session === sessionRef.current) {
+        showAlert('사진 편집 실패', '편집을 적용하지 못했습니다. 다시 시도해 주세요.');
+      }
+    } finally {
+      if (session === sessionRef.current) {
+        operationRef.current = false;
         setSaving(false);
       }
-    };
+    }
+  };
 
-  const save =
-    async () => {
-      try {
-        setSaving(true);
+  const applyCrop = (startPen = false) => runEdit(
+    () => renderImage(true),
+    (result) => {
+      replaceImage(result);
+      setPenMode(startPen);
+      penModeRef.current = startPen;
+    }
+  );
 
-        const captured =
-          await captureStage();
+  const toggleCrop = () => {
+    if (cropMode) return applyCrop();
+    setCropMode(true);
+    setPenMode(false);
+    penModeRef.current = false;
+  };
 
-        // captureStage()가 CAPTURE_SCALE만큼 확대해서 캡처하므로,
-        // 그 확대된 이미지 기준으로 자르려면 crop 좌표도 같은 배율로 키워야 한다.
-        const width =
-          Math.max(
-            1,
+  const togglePen = () => {
+    if (cropMode) return applyCrop(true);
+    penModeRef.current = !penMode;
+    setPenMode(!penMode);
+  };
 
-            Math.round(
-              (crop.right -
-                crop.left) *
-                CAPTURE_SCALE
-            )
-          );
+  const rotate90 = () => runEdit(
+    () => renderImage(cropMode, [{ rotate: 90 }]),
+    replaceImage
+  );
 
-        const height =
-          Math.max(
-            1,
+  const restoreOriginal = () => {
+    if (operationRef.current || !originalSizeRef.current) return;
+    replaceImage({ uri, ...originalSizeRef.current });
+  };
 
-            Math.round(
-              (crop.bottom -
-                crop.top) *
-                CAPTURE_SCALE
-            )
-          );
-
-        const result =
-          await ImageManipulator
-            .manipulateAsync(
-              captured,
-
-              [
-                {
-                  crop: {
-                    originX:
-                      Math.round(
-                        crop.left *
-                          CAPTURE_SCALE
-                      ),
-
-                    originY:
-                      Math.round(
-                        crop.top *
-                          CAPTURE_SCALE
-                      ),
-
-                    width,
-                    height,
-                  },
-                },
-              ],
-
-              {
-                compress: 0.95,
-
-                format:
-                  ImageManipulator
-                    .SaveFormat
-                    .JPEG,
-              }
-            );
-
-        onComplete?.(
-          result.uri
-        );
-      } catch (error) {
-        console.log(
-          '사진 편집 저장 실패:',
-          error
-        );
-      } finally {
-        setSaving(false);
-      }
-    };
+  const save = () => runEdit(
+    () => renderImage(cropMode),
+    (result) => onComplete?.(result.uri)
+  );
 
   if (
     !visible ||
@@ -747,9 +707,7 @@ export default function PhotoMarkupEditor({
     <Modal
       visible={visible}
       animationType="slide"
-      onRequestClose={
-        onCancel
-      }
+      onRequestClose={() => { if (!operationRef.current) onCancel?.(); }}
       statusBarTranslucent
       navigationBarTranslucent
     >
@@ -767,9 +725,7 @@ export default function PhotoMarkupEditor({
             onPress={
               onCancel
             }
-            disabled={
-              saving
-            }
+            disabled={saving}
             style={[styles.headerTouch, styles.cancelHeaderTouch]}
           >
             <Text
@@ -786,15 +742,13 @@ export default function PhotoMarkupEditor({
           >
             사진 편집
           </Text>
-          {onUseOriginal && <TouchableOpacity onPress={() => onUseOriginal(uri)} disabled={saving} style={styles.headerTouch}>
-            <Text style={styles.headerButton}>원본 사용</Text>
-          </TouchableOpacity>}
+          <TouchableOpacity onPress={restoreOriginal} disabled={saving || !originalSizeRef.current} style={styles.headerTouch}>
+            <Text style={styles.headerButton}>원본 복원</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             onPress={save}
-            disabled={
-              saving
-            }
+            disabled={saving || !canEdit}
             style={
               styles.headerTouch
             }
@@ -851,6 +805,8 @@ export default function PhotoMarkupEditor({
                   height:
                     displaySize.height,
                 }}
+                onLoad={() => setImageReady(true)}
+                onError={() => setImageReady(false)}
                 resizeMode="stretch"
               />
 
@@ -1059,9 +1015,7 @@ export default function PhotoMarkupEditor({
             onPress={
               rotate90
             }
-            disabled={
-              saving
-            }
+            disabled={saving || !canEdit}
           >
             <Text
               style={
@@ -1074,13 +1028,10 @@ export default function PhotoMarkupEditor({
 
           <TouchableOpacity
             style={[styles.toolButton, cropMode && styles.toolButtonActive]}
-            onPress={() => {
-              setCropMode((value) => !value);
-              setPenMode(false);
-            }}
-            disabled={saving}
+            onPress={toggleCrop}
+            disabled={saving || !canEdit}
           >
-            <Text style={[styles.toolText, cropMode && styles.toolTextActive]}>자르기</Text>
+            <Text style={[styles.toolText, cropMode && styles.toolTextActive]}>{cropMode ? '자르기 적용' : '자르기'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1090,13 +1041,8 @@ export default function PhotoMarkupEditor({
               penMode &&
                 styles.toolButtonActive,
             ]}
-            onPress={() => {
-              setPenMode((v) => !v);
-              setCropMode(false);
-            }}
-            disabled={
-              saving
-            }
+            onPress={togglePen}
+            disabled={saving || !canEdit}
           >
             <Text
               style={[
@@ -1138,6 +1084,8 @@ export default function PhotoMarkupEditor({
             </Text>
           </TouchableOpacity>
         </View>
+
+        {cropMode && <Text style={styles.guide}>모서리로 영역을 조절한 뒤 ‘자르기 적용’을 누르세요. 펜으로 바꿔도 선택한 영역이 적용됩니다.</Text>}
 
         {penMode && (
           <Text
