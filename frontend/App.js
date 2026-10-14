@@ -907,17 +907,6 @@ export default function App() {
     go('groupHome');
   };
 
-  const openTeamMap = async () => {
-    if (!activeGroup?.groupId) {
-      go('groupHome');
-      return;
-    }
-
-    await loadTeamLocations(activeGroup);
-    await refreshGroupAssignments();
-    go('teamLocations');
-  };
-
   return (
     <SafeAreaProvider>
     <SafeAreaView style={styles.safe} edges={['bottom']}>

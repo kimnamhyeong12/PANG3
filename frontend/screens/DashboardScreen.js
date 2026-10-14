@@ -1824,63 +1824,6 @@ function DistributionRow({
   );
 }
 
-function BarRow({
-  label,
-  count,
-  maxCount,
-  color,
-}) {
-  return (
-    <View
-      style={
-        styles.barRow
-      }
-    >
-      <Text
-        style={
-          styles.barLabel
-        }
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
-
-      <View
-        style={
-          styles.barTrack
-        }
-      >
-        {count > 0 ? (
-          <View
-            style={[
-              styles.barFill,
-              {
-                width:
-                  `${
-                    (
-                      count /
-                      maxCount
-                    ) *
-                    100
-                  }%`,
-                backgroundColor:
-                  color,
-              },
-            ]}
-          />
-        ) : null}
-      </View>
-
-      <Text
-        style={
-          styles.barCount
-        }
-      >
-        {count}건
-      </Text>
-    </View>
-  );
-}
 
 function EmptyText({
   children,

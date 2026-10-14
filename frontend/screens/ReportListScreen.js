@@ -44,13 +44,6 @@ const getTaskId = (loc) =>
 
 const dongName = (value) => String(value || '').trim().split(/\s+/).pop().replace(/제(?=\d+동$)/, '') || '행정동 미확인';
 
-const isPersonalGroup = (group) =>
-  Boolean(
-    group?.personalWorkspace ||
-    group?.personal ||
-    group?.workspaceType === 'PERSONAL'
-  );
-
 export default function ReportListScreen({
   locations = [],
   loading = false,

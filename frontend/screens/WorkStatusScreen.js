@@ -44,8 +44,6 @@ const STATUS = {
 };
 
 const safeJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
-const shortAreaName = (value) =>
-  (String(value || '').trim().split(/\s+/).pop() || '').replace(/제(?=\d+동$)/, '');
 
 const buildMapHtml = ({ boundaries, assignments, memberColors, selectedMemberId, focusedAreaBounds }) => `<!doctype html>
 <html><head>

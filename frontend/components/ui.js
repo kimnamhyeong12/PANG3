@@ -1,7 +1,7 @@
 import React from 'react';
 import { Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, radius, shadow } from '../constants/design';
+import { colors, shadow } from '../constants/design';
 
 export function BackButton({ onPress }) {
   return <TouchableOpacity onPress={onPress} style={styles.backButton} activeOpacity={0.72} accessibilityRole="button" accessibilityLabel="뒤로가기"><Ionicons name="arrow-back" size={25} color={colors.primaryDark} /></TouchableOpacity>;

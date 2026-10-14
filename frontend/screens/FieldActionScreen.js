@@ -7,7 +7,6 @@ import { fetch as expoFetch } from 'expo/fetch';
 import {
   View,
   Text,
-  TextInput,
   BackHandler,
   ActivityIndicator,
   AppState,
@@ -17,7 +16,7 @@ import {
   Image,
 } from 'react-native';
 
-import { PHOTO_TYPES, emptyPhotos, restorePhotos, photoManifest, isLocalPhoto } from '../utils/reportPhotos';
+import { emptyPhotos, restorePhotos, photoManifest, isLocalPhoto } from '../utils/reportPhotos';
 import { draftKey, readDraft, writeDraft, clearDraft, preservePhoto, beginPhotoPick, pendingPhotoPick, endPhotoPick } from '../utils/reportDraft';
 
 import * as ImagePicker from 'expo-image-picker';

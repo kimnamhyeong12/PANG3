@@ -89,12 +89,6 @@ const getStatusColor = (status) => {
   return '#E74C3C';
 };
 
-const getStatusLabel = (status) => {
-  if (status === 'complete') return '작업 후';
-  if (status === 'working') return '작업 중';
-  return '작업 전';
-};
-
 const isCompleted = (item) => ['complete', 'completed', 'done'].includes(
   String(item?.status ?? item?.taskStatus ?? item?.task_status ?? '').toLowerCase()
 );

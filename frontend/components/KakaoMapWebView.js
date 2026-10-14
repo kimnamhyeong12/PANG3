@@ -1019,7 +1019,7 @@ const buildKakaoMapHtml = (
 
     if (data.vehicleArrival) {
       var arrivalDot = document.createElement("div");
-      arrivalDot.style.cssText = "width:12px;height:12px;background:#2375EF;border:2px solid white;border-radius:50%;box-shadow:0 1px 4px #0004;";
+      arrivalDot.style.cssText = "width:12px;height:12px;background:#E74C3C;border:2px solid white;border-radius:50%;box-shadow:0 1px 4px #0004;pointer-events:none;";
       var arrivalOverlay = new window.kakao.maps.CustomOverlay({
         position: new window.kakao.maps.LatLng(data.vehicleArrival.lat, data.vehicleArrival.lng),
         content: arrivalDot,
@@ -3085,24 +3085,6 @@ export default function KakaoMapWebView({
         "지도에서 선택",
     });
   };
-
-  const handleFieldAction =
-    (action) => {
-      if (
-        !selectedLocation
-      ) {
-        return;
-      }
-
-      setSelectedLocation(
-        null
-      );
-
-      onMarkerClick?.(
-        selectedLocation,
-        action
-      );
-    };
 
   /*
    * ===============================
