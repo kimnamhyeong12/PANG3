@@ -99,7 +99,7 @@ object KakaoRouteEngine {
                   }
                   val id = UUID.randomUUID().toString()
                   val result = mapOf<String, Any>("sdkPreviewId" to id, "engine" to "kakao-sdk",
-                    "mode" to "car", "path" to path, "totalDistance" to route.totalDist,
+                    "mode" to "car", "path" to path, "trafficSections" to trafficSections(route), "totalDistance" to route.totalDist,
                     "totalDuration" to route.totalTime, "routePriority" to (request["routePriority"] ?: "TIME"),
                     "arrivalMode" to if (multi) "MULTI" else "DEFAULT",
                     "previewOrigin" to mapOf("lat" to startLat, "lng" to startLng),
@@ -121,6 +121,34 @@ object KakaoRouteEngine {
     val lng = (point["x"] ?: point["longitude"] ?: point["lng"])?.toDouble() ?: return@mapNotNull null
     if (!lat.isFinite() || !lng.isFinite()) return@mapNotNull null
     mapOf("latitude" to lat, "longitude" to lng)
+  }
+  fun trafficSections(route: KNRoute): List<Map<String, Any>> =
+    trafficSectionsFromPoints(route.routePolylineWGS84().orEmpty())
+
+  /** trfSt belongs to the edge starting at that vertex. Keep the shared boundary vertex. */
+  fun trafficSectionsFromPoints(points: List<Map<String, Number>>): List<Map<String, Any>> {
+    val sections = mutableListOf<Map<String, Any>>()
+    var state: Int? = null
+    var path = mutableListOf<Map<String, Double>>()
+    fun flush() { if (path.size >= 2) sections.add(mapOf("trafficState" to (state ?: 0), "path" to path.toList())) }
+    fun position(point: Map<String, Number>): Map<String, Double>? {
+      val lat = point["y"]?.toDouble() ?: return null
+      val lng = point["x"]?.toDouble() ?: return null
+      if (!lat.isFinite() || !lng.isFinite()) return null
+      return mapOf("latitude" to lat, "longitude" to lng)
+    }
+    for (index in 0 until points.size - 1) {
+      val start = position(points[index])
+      val end = position(points[index + 1])
+      if (start == null || end == null) { flush(); path = mutableListOf(); state = null; continue }
+      val sdkState = points[index]["trfSt"]?.toInt() ?: 0
+      // Existing map renderer uses REST's blocked=6; the SDK uses blocked=5.
+      val nextState = when (sdkState) { 1, 2, 3, 4 -> sdkState; 5 -> 6; else -> 0 }
+      if (state != nextState || path.isEmpty()) { flush(); state = nextState; path = mutableListOf(start) }
+      path.add(end)
+    }
+    flush()
+    return sections
   }
   private fun coordinate(request: Map<String, Any?>, key: String, range: ClosedFloatingPointRange<Double>): Double {
     val value = (request[key] as? Number)?.toDouble()

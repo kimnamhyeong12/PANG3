@@ -1385,6 +1385,7 @@ function NormalMapScreen({
             const end = data.path[data.path.length - 1];
             setRouteSegments((previous) => previous.map((segment, index) => index === 0
               ? { ...segment, path: data.path, totalDistance: data.totalDistance, totalDuration: data.totalDuration,
+                trafficSections: Array.isArray(data.trafficSections) ? data.trafficSections : [],
                 navigationDestination: { lat: end.latitude, lng: end.longitude } } : segment));
             setRoadPath(data.path);
             setTotalDuration(data.totalDuration);

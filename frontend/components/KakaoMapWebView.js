@@ -2789,7 +2789,7 @@ export default function KakaoMapWebView({
       const start = activePath.findIndex((point, index) =>
         index >= cursor && samePoint(point, section.path[0]));
       if (start < 0) return [];
-      cursor = start + section.path.length;
+      cursor = start + section.path.length - 1;
       const path = section.path.slice(Math.max(0, passedCount - start));
       return path.length >= 2 ? [{ ...section, path }] : [];
     });

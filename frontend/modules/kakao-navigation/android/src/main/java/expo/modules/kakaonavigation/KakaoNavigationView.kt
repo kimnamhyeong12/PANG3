@@ -181,7 +181,8 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
     if (released || stopping || guidance.trip !== preparedTrip) return
     val path = KakaoRouteEngine.routePath(route) ?: return
     onRouteChanged(mapOf("destinationKey" to lastDestination?.get("destinationKey").toString(),
-      "path" to path, "totalDistance" to route.totalDist, "totalDuration" to route.totalTime))
+      "path" to path, "trafficSections" to KakaoRouteEngine.trafficSections(route),
+      "totalDistance" to route.totalDist, "totalDuration" to route.totalTime))
   }
   override fun guidanceDidUpdateIndoorRoute(guidance: KNGuidance, route: KNRoute?) { naviView?.guidanceDidUpdateIndoorRoute(guidance, route) }
   override fun guidanceDidUpdateLocation(guidance: KNGuidance, location: KNGuide_Location) {

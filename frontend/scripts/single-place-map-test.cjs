@@ -264,8 +264,11 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   const updatedPath = [{ latitude: 35, longitude: 129 }, { latitude: 35.001, longitude: 129.01 }];
   car.find('Navigation').props.onRouteChanged({ nativeEvent: { destinationKey: 'old', path: updatedPath, totalDistance: 800, totalDuration: 400 } }); car.render();
   assert.notEqual(car.props.roadPath, updatedPath, 'stale destination events never replace the active route');
-  car.find('Navigation').props.onRouteChanged({ nativeEvent: { destinationKey: '1', path: updatedPath, totalDistance: 800, totalDuration: 400 } }); car.render();
+  const updatedTraffic = [{ trafficState: 1, path: updatedPath }];
+  car.find('Navigation').props.onRouteChanged({ nativeEvent: { destinationKey: '1', path: updatedPath,
+    trafficSections: updatedTraffic, totalDistance: 800, totalDuration: 400 } }); car.render();
   assert.equal(car.props.roadPath, updatedPath, 'SDK reroutes update the app geometry');
+  assert.equal(car.props.routeSegments[0].trafficSections, updatedTraffic, 'SDK reroutes preserve traffic colors');
   car.find('Navigation').props.onArrived({ nativeEvent: { destinationKey: '1' } }); car.render();
   assert.equal(car.props.isGuiding, false);
   car.alerts.at(-1)[2].find(button => button.text === '작업 기록 작성').onPress();
