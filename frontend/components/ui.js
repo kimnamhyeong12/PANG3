@@ -10,7 +10,7 @@ export function BackButton({ onPress, root = false }) {
 
 export function ScreenHeader({ title, subtitle, onBack, right, compact = false, root = false }) {
   const insets = useSafeAreaInsets();
-  return <View style={[styles.headerWrap, { paddingTop: insets.top + 6 }, compact && styles.headerWrapCompact]}><View style={[styles.header, root && styles.rootHeader]}>{onBack ? <BackButton onPress={onBack} root={root} /> : null}<View style={styles.headerText}><Text style={[styles.headerTitle, root && styles.rootTitle]} numberOfLines={1}>{title}</Text>{subtitle ? <Text style={styles.headerSubtitle} numberOfLines={2}>{subtitle}</Text> : null}</View>{right || null}</View></View>;
+  return <View style={[styles.headerWrap, { paddingTop: insets.top + 6 }, compact && styles.headerWrapCompact]}><View style={[styles.header, root && styles.rootHeader]}>{onBack && !root ? <BackButton onPress={onBack} /> : null}<View style={styles.headerText}><Text style={[styles.headerTitle, root && styles.rootTitle]} numberOfLines={1}>{title}</Text>{subtitle ? <Text style={styles.headerSubtitle} numberOfLines={2}>{subtitle}</Text> : null}</View>{right || null}</View></View>;
 }
 
 export function CardTitle({ icon, title, suffix, actionLabel, actionIcon = 'add', onAction, tone = 'blue' }) {

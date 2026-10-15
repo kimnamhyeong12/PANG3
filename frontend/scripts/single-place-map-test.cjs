@@ -134,6 +134,10 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   const app = createScreen({ nativeNavigation: true });
   app.props.locations = [visit(1, 129.01), visit(2, 129.02), visit(3, 129.03)];
   app.render();
+  assert.equal(app.find('TouchableOpacity', '뒤로가기'), undefined, 'root map has no back button');
+  app.props.root = false; app.render();
+  assert.ok(app.find('TouchableOpacity', '뒤로가기'), 'nested map retains its back button');
+  app.props.root = true; app.render();
   const topOverlay = app.nodes().find(node => node.props.pointerEvents === 'box-none' && node.props.onLayout);
   topOverlay.props.onLayout({ nativeEvent: { layout: { y: 35, height: 210 } } });
   app.find('TouchableOpacity', '미처리 업무 목록 펼치기').props.onLayout({ nativeEvent: { layout: { height: 44 } } });

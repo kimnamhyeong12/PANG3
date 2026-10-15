@@ -120,6 +120,7 @@ const cleanLocation = (loc, fallbackName = '위치') => {
 
 
 function NormalMapScreen({
+  root = true,
   isActive = true,
   user,
   onBack,
@@ -1517,7 +1518,7 @@ function NormalMapScreen({
       <View style={[styles.topOverlay, { top: screenInsets.top + 6 }]} pointerEvents="box-none"
         onLayout={event => { const { y, height } = event.nativeEvent.layout; setTopOverlayBottom(y + height); }}>
         <View style={styles.searchControlRow}>
-          <TouchableOpacity style={[styles.smallTopButton, { minWidth: 44, minHeight: 44 }]} accessibilityLabel="뒤로가기" onPress={() => { if (!consumeScreenBack()) onBack?.(); }}><Ionicons name="arrow-back" size={27} color="#2477F3" /></TouchableOpacity>
+          {!root && <TouchableOpacity style={[styles.smallTopButton, { minWidth: 44, minHeight: 44 }]} accessibilityLabel="뒤로가기" onPress={() => { if (!consumeScreenBack()) onBack?.(); }}><Ionicons name="arrow-back" size={22} color="#2477F3" /></TouchableOpacity>}
           {publicFacilityMode && <TouchableOpacity
             style={styles.smallTopButton}
             onPress={() => { setPublicCategoryOpen(false); dongOpen ? setDongOpen(false) : loadDongs(); }}

@@ -43,6 +43,8 @@ assert.doesNotThrow(() => EmptyState({ title: '기록이 없습니다' }));
 const outer = ScreenHeader({ title: '그룹', root: true, onBack() {} });
 const inner = ScreenHeader({ title: '보고서 다운로드', onBack() {} });
 const titleStyle = tree => descendants(tree).find(node => node.type === 'Text').props.style.filter(Boolean).reduce((all, item) => ({ ...all, ...item }), {});
+assert.equal(descendants(outer).filter(node => node.type === BackButton).length, 0, 'root screens must not display back buttons');
+assert.equal(descendants(inner).filter(node => node.type === BackButton).length, 1, 'nested screens retain back buttons');
 assert.ok(titleStyle(outer).fontSize > titleStyle(inner).fontSize);
 assert.equal(outer.props.style[1].paddingTop, 37, 'header follows safe area rather than a device-specific offset');
 assert.equal(BackButton({ onPress() {} }).props.style.height, 44, 'small inner icons retain a usable touch target');

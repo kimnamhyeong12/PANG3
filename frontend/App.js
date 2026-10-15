@@ -1106,6 +1106,7 @@ function AppContent() {
 
         {screen === 'publicDataAssignment' && activeGroup && (
           <MapScreen
+            root={false}
             user={user}
             onUpdatedUser={setUser}
             onSearchVisibilityChange={setMapSearchVisible}
@@ -1141,6 +1142,7 @@ function AppContent() {
 
         {screen === 'teamLocations' && activeGroup && (
           <MapScreen
+            root={false}
             user={user}
             onUpdatedUser={setUser}
             onSearchVisibilityChange={setMapSearchVisible}
