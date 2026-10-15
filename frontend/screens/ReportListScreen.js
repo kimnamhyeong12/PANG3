@@ -294,6 +294,7 @@ const styles = StyleSheet.create({
 
   body: {
     padding: 16,
+    paddingTop: 0,
     gap: 12,
     paddingBottom: 120,
   },
