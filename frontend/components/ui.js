@@ -10,7 +10,7 @@ export function BackButton({ onPress, root = false }) {
 
 export function ScreenHeader({ title, subtitle, onBack, right, compact = false, root = false }) {
   const insets = useSafeAreaInsets();
-  return <View style={[styles.headerWrap, { paddingTop: insets.top + 6 }, compact && styles.headerWrapCompact]}><View style={[styles.header, root && styles.rootHeader]}>{onBack && !root ? <BackButton onPress={onBack} /> : null}<View style={styles.headerText}><Text style={[styles.headerTitle, root && styles.rootTitle]} numberOfLines={1}>{title}</Text>{subtitle ? <Text style={styles.headerSubtitle} numberOfLines={2}>{subtitle}</Text> : null}</View>{right || null}</View></View>;
+  return <View style={[styles.headerWrap, { paddingTop: insets.top + 1 }, compact && styles.headerWrapCompact]}><View style={[styles.header, root && styles.rootHeader]}>{onBack && !root ? <BackButton onPress={onBack} /> : null}<View style={styles.headerText}><Text style={[styles.headerTitle, root && styles.rootTitle]} numberOfLines={1}>{title}</Text>{subtitle ? <Text style={styles.headerSubtitle} numberOfLines={2}>{subtitle}</Text> : null}</View>{right || null}</View></View>;
 }
 
 export function CardTitle({ icon, title, suffix, actionLabel, actionIcon = 'add', onAction, tone = 'blue' }) {
@@ -35,9 +35,9 @@ export function EmptyState({ icon = 'file-tray-outline', title, description }) {
 }
 
 const styles = StyleSheet.create({
-  headerWrap: { flexShrink: 0, backgroundColor: colors.background, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10 }, headerWrapCompact: { paddingBottom: 7 },
-  backButton: { width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' }, header: { height: 48, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 5 }, headerText: { flex: 1 }, headerTitle: { color: colors.text, fontSize: 15, fontWeight: '900', letterSpacing: -0.7 }, headerSubtitle: { color: colors.textSoft, fontSize: 11, lineHeight: 16, marginTop: 3, fontWeight: '600' },
-  rootHeader: { height: 58, minHeight: 58 }, rootTitle: { fontSize: 20, letterSpacing: -0.8 },
+  headerWrap: { flexShrink: 0, backgroundColor: colors.background, paddingHorizontal: 16, paddingTop: 1, paddingBottom: 10 }, headerWrapCompact: { paddingBottom: 7 },
+  backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, header: { height: 48, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 0 }, headerText: { flex: 1 }, headerTitle: { color: colors.text, fontSize: 24, fontWeight: '900', letterSpacing: -0.8 }, headerSubtitle: { color: colors.textSoft, fontSize: 11, lineHeight: 16, marginTop: 3, fontWeight: '600' },
+  rootHeader: { height: 48, minHeight: 48 }, rootTitle: { fontSize: 24, letterSpacing: -0.8 },
   primaryButton: { minHeight: 46, paddingHorizontal: 15, borderRadius: 14, backgroundColor: colors.primary, flexDirection: 'row', gap: 7, alignItems: 'center', justifyContent: 'center', ...shadow }, tealButton: { backgroundColor: colors.teal }, disabledButton: { backgroundColor: '#B9C8D9', shadowOpacity: 0, elevation: 0 }, primaryButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
   secondaryButton: { minHeight: 44, paddingHorizontal: 13, borderRadius: 14, borderWidth: 1.3, borderColor: '#BFD6F5', backgroundColor: colors.surface, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center' }, secondaryDisabled: { opacity: 0.45 }, secondaryButtonText: { color: colors.primary, fontSize: 12, fontWeight: '900' },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }, sectionTitle: { color: colors.text, fontSize: 16, fontWeight: '900', letterSpacing: -0.3 }, sectionActionButton: { minHeight: 44, justifyContent: 'center', paddingLeft: 8 }, sectionAction: { color: colors.primary, fontSize: 12, fontWeight: '800' },
