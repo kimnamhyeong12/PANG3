@@ -1,3 +1,5 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScreenBackHandler, consumeScreenBack } from '../utils/screenBack';
 import { apiFetch as fetch } from '../utils/auth';
 import { showAlert } from '../components/CustomAlert';
 // 키보드 자판 내 엔터가 안먹힘
@@ -7,7 +9,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
-  BackHandler,
   FlatList,
   Keyboard,
   Modal,
@@ -155,6 +156,7 @@ function NormalMapScreen({
   const [selectedSearchPinId, setSelectedSearchPinId] = useState(null);
   const [resultQuery, setResultQuery] = useState('');
   const [mapHeight, setMapHeight] = useState(600);
+  const screenInsets = useSafeAreaInsets();
   const [topOverlayBottom, setTopOverlayBottom] = useState(0);
   const [bottomOverlayHeight, setBottomOverlayHeight] = useState(0);
   const [focusRequest, setFocusRequest] = useState({ coordinates: [], token: 0 });
@@ -420,12 +422,7 @@ function NormalMapScreen({
     });
   };
 
-  useEffect(() => {
-    if (!isActive) {
-      return undefined;
-    }
-
-    const backAction = () => {
+  useScreenBackHandler(() => {
       if (dongOpen) {
         setDongOpen(false);
         return true;
@@ -435,7 +432,6 @@ function NormalMapScreen({
         setCoordSheetOpen(false);
         setCoordLat('');
         setCoordLng('');
-        onBack?.();
         return true;
       }
 
@@ -472,25 +468,7 @@ function NormalMapScreen({
       }
 
       return false;
-    };
-
-    const subscription = BackHandler.addEventListener(
-      'hardwareBackPress',
-      backAction
-    );
-
-    return () => subscription.remove();
-  }, [
-    isActive,
-    dongOpen,
-    coordSheetOpen,
-    mapSelectMode,
-    addMenuOpen,
-    searchedPlace,
-    resultsMode,
-    visitListOpen,
-    preview,
-  ]);
+  }, isActive);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -1536,9 +1514,10 @@ function NormalMapScreen({
         <Pressable style={[StyleSheet.absoluteFill, { zIndex: 19 }]}
           accessibilityLabel="방문지 추가 메뉴 닫기" onPress={() => setAddMenuOpen(false)} />
       )}
-      <View style={styles.topOverlay} pointerEvents="box-none"
+      <View style={[styles.topOverlay, { top: screenInsets.top + 6 }]} pointerEvents="box-none"
         onLayout={event => { const { y, height } = event.nativeEvent.layout; setTopOverlayBottom(y + height); }}>
         <View style={styles.searchControlRow}>
+          <TouchableOpacity style={[styles.smallTopButton, { minWidth: 44, minHeight: 44 }]} accessibilityLabel="뒤로가기" onPress={() => { if (!consumeScreenBack()) onBack?.(); }}><Ionicons name="arrow-back" size={27} color="#2477F3" /></TouchableOpacity>
           {publicFacilityMode && <TouchableOpacity
             style={styles.smallTopButton}
             onPress={() => { setPublicCategoryOpen(false); dongOpen ? setDongOpen(false) : loadDongs(); }}
@@ -1816,13 +1795,14 @@ function NormalMapScreen({
 
         {!resultsMode && !publicFacilityMode && !mapSelectMode && !searchedPlace && !coordSheetOpen && cardTarget && (
           <View style={styles.destinationCard}>
+            <View style={styles.destinationHead}>
+              <View style={{ flex: 1, minWidth: 0 }}>
             {(preview?.mode || activeSegment?.mode || transportMode) === 'car' && !isGuiding && (
               <TouchableOpacity accessibilityLabel="주변 도로 도착 허용" disabled={preview?.loading || segmentChanging}
                 onPress={() => { const next = !multiArrival; setMultiArrival(next); previewVisit(cardTarget, 'car', next); }}>
                 <Text style={styles.destinationMeta}>도착 위치: {multiArrival ? '주변 도로 허용' : '기본'} · 눌러서 비교</Text>
               </TouchableOpacity>
             )}
-            <View style={styles.destinationHead}>
               <TouchableOpacity style={styles.destinationInfo}
                 accessibilityLabel={cardTarget.isReturnLocation ? '복귀 목적지' : '보고서 작성'}
                 accessibilityRole={cardTarget.isReturnLocation ? 'text' : 'button'}
@@ -1835,6 +1815,7 @@ function NormalMapScreen({
                     [formatDistance(cardDistance), formatDuration(cardDuration)].filter(Boolean).join(' · ')}
                 </Text>
               </TouchableOpacity>
+              </View>
             <View style={styles.destinationActions}>
               {['car', 'walk'].map((mode) => (
                 <TouchableOpacity key={mode} accessibilityLabel={mode === 'car' ? '차량 경로' : '도보 경로'}
@@ -2170,7 +2151,7 @@ export default function MapScreen(props) {
 const styles = StyleSheet.create({
   destinationCard: { marginTop: 5, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 12, backgroundColor: '#2477F3', elevation: 3 },
   destinationHead: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  destinationInfo: { flex: 1, minWidth: 0, minHeight: 44, justifyContent: 'center', paddingHorizontal: 3 },
+  destinationInfo: { minWidth: 0, minHeight: 44, justifyContent: 'center', paddingHorizontal: 3 },
   destinationName: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' },
   destinationMeta: { color: '#E3EEFF', fontSize: 10, marginTop: 3 },
   destinationClose: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },

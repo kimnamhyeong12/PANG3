@@ -2,6 +2,8 @@ import { apiFetch as fetch, session, subscribeAuthExpired } from './utils/auth';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BackHandler,
+  Keyboard,
+  ToastAndroid,
   AppState,
   PanResponder,
   Platform,
@@ -34,6 +36,8 @@ import WorkStatusScreen from './screens/WorkStatusScreen';
 import PersonalWorkspaceScreen from './screens/PersonalWorkspaceScreen';
 import TransferScreen from './screens/TransferScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import { ROOT_SCREENS, navigationHistory, createExitConfirmation } from './utils/navigation';
+import { consumeScreenBack } from './utils/screenBack';
 import { groupApi } from './utils/groupApi';
 import { CustomAlertHost, showAlert } from './components/CustomAlert';
 import { colors } from './constants/design';
@@ -85,6 +89,15 @@ export default function App() {
 
 function AppContent() {
   const [screen, setScreen] = useState('login');
+  const [groupHomeTab, setGroupHomeTab] = useState('groups');
+  const exitConfirmation = useRef(createExitConfirmation());
+  const keyboardVisibleRef = useRef(false);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => { keyboardVisibleRef.current = true; exitConfirmation.current.reset(); });
+    const hide = Keyboard.addListener('keyboardDidHide', () => { keyboardVisibleRef.current = false; });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+  useEffect(() => { exitConfirmation.current.reset(); }, [screen, groupHomeTab]);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState('');
   const [mapRecordReturn, setMapRecordReturn] = useState(null);
@@ -286,21 +299,31 @@ function AppContent() {
     } finally { if (request === navigationRequestRef.current) navigationBusyRef.current = false; }
   };
   const go = (next, options = {}) => navigateSafely(() => {
+    exitConfirmation.current.reset();
+    if (next === 'main' || next === 'dashboard') { setGroupHomeTab('dashboard'); next = 'groupHome'; }
     if (next === screenRef.current) return;
 
     if (next === 'mapDirect') {
       setMapInitialized(true);
     }
 
-    if (!options.replace) {
-      historyRef.current.push(screenRef.current);
-    }
+    historyRef.current = navigationHistory(historyRef.current, screenRef.current, next, options.replace);
 
     screenRef.current = next;
     setScreen(next);
   }, options.bypass);
 
-  const goBack = (fallback = 'main', options = {}) => navigateSafely(() => {
+  const goBack = (fallback = 'mapDirect', options = {}) => navigateSafely(() => {
+    if (keyboardVisibleRef.current) { Keyboard.dismiss(); exitConfirmation.current.reset(); return; }
+    if (consumeScreenBack()) { exitConfirmation.current.reset(); return; }
+    if (ROOT_SCREENS.has(screenRef.current)) {
+      if (Platform.OS === 'android') {
+        if (exitConfirmation.current.press()) BackHandler.exitApp();
+        else ToastAndroid.show('뒤로가기를 한 번 더 누르면 종료됩니다.', ToastAndroid.SHORT);
+      }
+      return;
+    }
+    exitConfirmation.current.reset();
     const previous = historyRef.current.pop();
     const next = previous || fallback;
 
@@ -462,6 +485,7 @@ function AppContent() {
   useEffect(() => {
     if (!user?.userId) return;
     const subscription = AppState.addEventListener('change', (state) => {
+      exitConfirmation.current.reset();
       if (state === 'active') {
         setCalendarDayKey(getLocalDateKey());
         loadWorkspaceLocations();
@@ -515,10 +539,6 @@ function AppContent() {
           return false;
         }
 
-        if (screen === 'mapDirect' && historyRef.current.length === 0) {
-          return false;
-        }
-
         // 보고서 작성 화면은 자체 이탈 확인이 변경 내용을 보호한다.
         if (screen === 'fieldAction') {
           return false;
@@ -545,6 +565,7 @@ function AppContent() {
       ) =>
         Platform.OS === 'ios' &&
         screenRef.current !== 'login' &&
+        !ROOT_SCREENS.has(screenRef.current) &&
         evt.nativeEvent.pageX - gestureState.dx <= 28 &&
         gestureState.dx > 18 &&
         Math.abs(gestureState.dy) < 35,
@@ -787,8 +808,9 @@ function AppContent() {
           // 알림을 눌렀을 때 현재 업무공간 홈으로 이동한다.
           navigateSafely(() => {
             historyRef.current = [];
-            screenRef.current = 'main';
-            setScreen('main');
+            setGroupHomeTab('dashboard');
+            screenRef.current = 'groupHome';
+            setScreen('groupHome');
           });
         }
       });
@@ -968,6 +990,9 @@ function AppContent() {
             <GroupScreen
               user={user}
               activeGroup={activeGroup}
+              tab={groupHomeTab}
+              onTabChange={setGroupHomeTab}
+              overview={<DashboardScreen embedded user={user} onSettings={() => go('settings')} />}
               onBack={() =>
                 goBack('mapDirect')
               }
@@ -1206,7 +1231,7 @@ function AppContent() {
             <SettingsScreen
               user={user}
               activeGroup={activeGroup}
-              onBack={() => go('dashboard')}
+              onBack={() => goBack('mapDirect')}
               onUpdatedUser={setUser}
               onLogout={handleLogout}
               onDeleteAccount={handleLogout}
@@ -1406,10 +1431,10 @@ function AppContent() {
 
         {user &&
           !(['mapDirect', 'teamLocations', 'publicDataAssignment'].includes(screen) && mapSearchVisible) &&
-          !['login', 'register', 'settings'].includes(screen) && (
+          !['login', 'register'].includes(screen) && (
             <BottomNavigation
               screen={screen}
-              onDashboard={() => go('dashboard')}
+              onSettings={() => go('settings')}
               // 하단 메뉴도 홈에서 선택한 현재 작업공간을 그대로 따른다.
               onMap={openWorkspaceMap}
               onReport={() => go('reportList')}
@@ -1427,7 +1452,7 @@ function AppContent() {
 
 function BottomNavigation({
   screen,
-  onDashboard,
+  onSettings,
   onMap,
   onReport,
   onGroup,
@@ -1457,7 +1482,7 @@ function BottomNavigation({
           'assignment',
         ].includes(screen)
           ? 'group'
-          : 'dashboard';
+          : 'settings';
 
   return (
     <View style={styles.bottomNav}>
@@ -1494,10 +1519,10 @@ function BottomNavigation({
         onPress={onGroup}
       />
       <BottomNavItem
-        icon={activeTab === 'dashboard' ? 'settings' : 'settings-outline'}
-        label="대시보드"
-        active={activeTab === 'dashboard'}
-        onPress={onDashboard}
+        icon={activeTab === 'settings' ? 'settings' : 'settings-outline'}
+        label="설정"
+        active={activeTab === 'settings'}
+        onPress={onSettings}
       />
     </View>
   );

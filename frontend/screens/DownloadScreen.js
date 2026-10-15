@@ -116,7 +116,7 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
   </View>;
 }
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, marginTop: -15 }, body: { flexGrow: 1, padding: 24, paddingBottom: 36, gap: 16 },
+  container: { flex: 1, backgroundColor: colors.background, marginTop: 0 }, body: { flexGrow: 1, padding: 24, paddingBottom: 36, gap: 16 },
   icon: { alignSelf: 'center', width: 70, height: 70, borderRadius: radius.large, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
   title: { color: colors.text, fontSize: 19, fontWeight: '800', textAlign: 'center' }, description: { color: colors.textSoft, fontSize: 13, lineHeight: 20, textAlign: 'center' },
   error: { color: colors.danger, fontSize: 12, lineHeight: 18 }, fileRow: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 14 },

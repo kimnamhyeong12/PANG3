@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, BackHandler, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useScreenBackHandler } from '../utils/screenBack';
 import { ScreenHeader } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
 import { colors } from '../constants/design';
@@ -25,11 +26,7 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
   const [openFilter, setOpenFilter] = useState(null);
   useEffect(() => { setMember(''); setDong(''); setSelectedPlace(null); setOpenFilter(null); }, [group.groupId]);
   useEffect(() => { if (!isActive) { setOpenFilter(null); setDateSide(null); } }, [isActive]);
-  useEffect(() => {
-    if (!isActive || !selectedPlace) return;
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => { setSelectedPlace(null); return true; });
-    return () => subscription.remove();
-  }, [isActive, selectedPlace]);
+  useScreenBackHandler(() => { if (!selectedPlace) return false; setSelectedPlace(null); return true; }, isActive && !!selectedPlace);
 
   useEffect(() => {
     if (!isActive) return;
@@ -98,7 +95,7 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
       <View style={styles.dateRow}>
         {['start', 'end'].map((side, index) => <React.Fragment key={side}>
           {index > 0 && <Text style={styles.dateDash}>~</Text>}
-          <TouchableOpacity style={styles.dateButton} onPress={() => { setOpenFilter(null); setDateSide(side); }} accessibilityLabel={side === 'start' ? '시작일 선택' : '종료일 선택'}>
+          <TouchableOpacity style={styles.dateButton} onPress={() => { setOpenFilter(null); setDateSide(side); }} accessibilityLabel={side === 'start' ? '시작일' : '종료일'}>
             <Text style={styles.dateText}>{side === 'start' ? startDate || '시작일' : endDate || '종료일'}</Text>
             <Ionicons name="calendar-outline" size={18} color={colors.primary} />
           </TouchableOpacity>
@@ -127,7 +124,7 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
           <Ionicons name="chevron-forward" size={20} color={colors.primary} />
         </TouchableOpacity>) : <Text style={styles.empty}>조건에 맞는 보고서가 없습니다.</Text>}
     </ScrollView>
-    <ReportDatePicker visible={!!dateSide} value={(dateSide === 'end' ? endDate : startDate) || currentMonthRange().start} title={dateSide === 'end' ? '종료일 선택' : '시작일 선택'} onClose={() => setDateSide(null)} onSelect={value => {
+    <ReportDatePicker visible={!!dateSide} value={(dateSide === 'end' ? endDate : startDate) || currentMonthRange().start} title={dateSide === 'end' ? '종료일' : '시작일'} onClose={() => setDateSide(null)} onSelect={value => {
       const range = selectRangeDate(startDate, endDate, dateSide, value);
       setStartDate(range.start); setEndDate(range.end); setSelectedPlace(null);
     }} />
@@ -142,7 +139,7 @@ const styles = StyleSheet.create({
   filterValue: { flex: 1, color: colors.text, fontSize: 12 },
   filterOptions: { position: 'absolute', top: '100%', marginTop: 6, left: 0, right: 0, zIndex: 40, elevation: 8, borderWidth: 1, borderColor: colors.line, borderRadius: 10, backgroundColor: colors.surface, overflow: 'hidden' },
   filterOption: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingHorizontal: 12, gap: 6 },
-  container: { flex: 1, backgroundColor: colors.background, marginTop: -15 }, body: { padding: 14, paddingBottom: 24, gap: 7 },
+  container: { flex: 1, backgroundColor: colors.background, marginTop: 0 }, body: { padding: 14, paddingBottom: 24, gap: 7 },
   dongGroup: { gap: 8 }, dongGroupTitle: { color: colors.text, fontSize: 13, fontWeight: '800', marginTop: 4 },
   label: { color: colors.text, fontSize: 13, fontWeight: '800' },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },

@@ -7,128 +7,18 @@ import { showAlert } from '../components/CustomAlert';
 import { apiFetch } from '../utils/auth';
 import { API_BASE_URL } from '../utils/api';
 import { colors } from '../constants/design';
+import { useScreenBackHandler } from '../utils/screenBack';
 import AccountManagementScreen from './AccountManagementScreen';
 import { checkNotificationPermission, requestNotificationPermission, getTaskNotificationPreference, setTaskNotificationPreference } from '../services/notificationService';
 
-export const REGIONS = [
-  '부산광역시',
-  '서울특별시',
-  '대구광역시',
-  '인천광역시',
-  '광주광역시',
-  '대전광역시',
-  '울산광역시',
-  '제주특별자치도',
-];
-
-export const DISTRICTS_BY_REGION = {
-  부산광역시: [
-    '중구',
-    '서구',
-    '동구',
-    '영도구',
-    '부산진구',
-    '동래구',
-    '남구',
-    '북구',
-    '해운대구',
-    '사하구',
-    '금정구',
-    '강서구',
-    '연제구',
-    '수영구',
-    '사상구',
-    '기장군',
-  ],
-
-  서울특별시: [
-    '종로구',
-    '중구',
-    '용산구',
-    '성동구',
-    '광진구',
-    '동대문구',
-    '중랑구',
-    '성북구',
-    '강북구',
-    '도봉구',
-    '노원구',
-    '은평구',
-    '서대문구',
-    '마포구',
-    '양천구',
-    '강서구',
-    '구로구',
-    '금천구',
-    '영등포구',
-    '동작구',
-    '관악구',
-    '서초구',
-    '강남구',
-    '송파구',
-    '강동구',
-  ],
-
-  대구광역시: [
-    '중구',
-    '동구',
-    '서구',
-    '남구',
-    '북구',
-    '수성구',
-    '달서구',
-    '달성군',
-    '군위군',
-  ],
-
-  인천광역시: [
-    '중구',
-    '동구',
-    '미추홀구',
-    '연수구',
-    '남동구',
-    '부평구',
-    '계양구',
-    '서구',
-    '강화군',
-    '옹진군',
-  ],
-
-  광주광역시: [
-    '동구',
-    '서구',
-    '남구',
-    '북구',
-    '광산구',
-  ],
-
-  대전광역시: [
-    '동구',
-    '중구',
-    '서구',
-    '유성구',
-    '대덕구',
-  ],
-
-  울산광역시: [
-    '중구',
-    '남구',
-    '동구',
-    '북구',
-    '울주군',
-  ],
-
-  제주특별자치도: [
-    '제주시',
-    '서귀포시',
-  ],
-};
+export { REGIONS, DISTRICTS_BY_REGION } from '../utils/workRegion';
 
 export default function SettingsScreen({ user, onBack, onUpdatedUser, onLogout, onDeleteAccount }) {
   const [gate, setGate] = useState(false), [password, setPassword] = useState(''), [credential, setCredential] = useState('');
   const [busy, setBusy] = useState(false), [detail, setDetail] = useState(null), [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState(''), [enabled, setEnabled] = useState(false), [notificationBusy, setNotificationBusy] = useState(true);
   useEffect(() => { let active = true; Promise.all([getTaskNotificationPreference(user.userId), checkNotificationPermission()]).then(([preferred, granted]) => { if (active) setEnabled(preferred && granted); }).finally(() => { if (active) setNotificationBusy(false); }); return () => { active = false; }; }, [user.userId]);
+  useScreenBackHandler(() => { if (!credential) return false; setCredential(''); return true; }, !!credential);
   const verify = async () => {
     if (busy || !password) return; setBusy(true);
     try {
@@ -152,10 +42,10 @@ export default function SettingsScreen({ user, onBack, onUpdatedUser, onLogout, 
       setDeleteOpen(false); setDeletePassword(''); (onDeleteAccount || onLogout)();
     } catch (error) { showAlert('계정 탈퇴 실패', error.message); } finally { setBusy(false); }
   };
-  if (credential) return <AccountManagementScreen user={user} credential={credential} regions={REGIONS} districtsByRegion={DISTRICTS_BY_REGION} onBack={() => setCredential('')} onUpdatedUser={onUpdatedUser} onLogout={onLogout} />;
+  if (credential) return <AccountManagementScreen user={user} credential={credential} onBack={() => setCredential('')} onUpdatedUser={onUpdatedUser} onLogout={onLogout} />;
   const row = (icon, title, onPress, danger = false) => <TouchableOpacity style={styles.row} onPress={onPress}><Ionicons name={icon} size={21} color={danger ? colors.danger : colors.primary} /><Text style={[styles.rowText, danger && { color: colors.danger }]}>{title}</Text><Ionicons name="chevron-forward" size={17} color={colors.textFaint} /></TouchableOpacity>;
   const closeGate = () => { if (!busy) { setGate(false); setPassword(''); } };
-  return <View style={styles.container}><ScreenHeader title="설정" onBack={onBack} /><ScrollView contentContainerStyle={styles.body}>
+  return <View style={styles.container}><ScreenHeader root title="설정" onBack={onBack} /><ScrollView contentContainerStyle={styles.body}>
     <View style={styles.profile}><View style={styles.avatar}><Text style={styles.avatarText}>{String(user.name || user.loginId).slice(0, 1)}</Text></View><View style={{ flex: 1 }}><Text style={styles.name}>{user.name || user.loginId}</Text><Text style={styles.id}>@{user.loginId}</Text></View><TouchableOpacity style={styles.manage} onPress={() => setGate(true)}><Text style={styles.manageText}>관리</Text></TouchableOpacity></View>
     <View style={styles.card}><View style={styles.row}><Ionicons name="notifications-outline" size={21} color={colors.primary} /><Text style={styles.rowText}>업무 알림</Text><Switch value={enabled} disabled={notificationBusy} onValueChange={toggleNotifications} trackColor={{ true: colors.primary, false: '#CBD5E1' }} /></View></View>
     <View style={styles.card}>{row('megaphone-outline', '공지사항', () => setDetail('notice'))}{row('help-circle-outline', '고객센터 / 운영정책', () => setDetail('support'))}{row('information-circle-outline', '앱 관리', () => setDetail('version'))}</View>
@@ -166,7 +56,7 @@ export default function SettingsScreen({ user, onBack, onUpdatedUser, onLogout, 
   </View>;
 }
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, marginTop: -15 }, body: { padding: 16, gap: 14, paddingBottom: 30 },
+  container: { flex: 1, backgroundColor: colors.background, marginTop: 0 }, body: { padding: 16, gap: 14, paddingBottom: 30 },
   profile: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.surface, borderRadius: 18, padding: 16, borderWidth: 1, borderColor: colors.line }, avatar: { width: 44, height: 44, backgroundColor: colors.primarySoft, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: colors.primary, fontWeight: '900', fontSize: 20 }, name: { color: colors.text, fontSize: 19, fontWeight: '900' }, id: { color: colors.textSoft, marginTop: 4, fontSize: 12 }, manage: { paddingHorizontal: 12, minHeight: 34, borderRadius: 10, borderWidth: 1, borderColor: colors.line, justifyContent: 'center' }, manageText: { color: colors.primary, fontWeight: '800', fontSize: 12 },
   card: { backgroundColor: colors.surface, borderRadius: 16, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.line }, row: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 12 }, rowText: { flex: 1, color: colors.text, fontSize: 14, fontWeight: '700' }, overlay: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(16,40,91,0.38)' }, sheet: { backgroundColor: colors.surface, borderRadius: 18, padding: 20, gap: 14 }, sheetTitle: { color: colors.text, fontSize: 18, fontWeight: '800' }, help: { color: colors.textSoft, fontSize: 13, lineHeight: 21, paddingVertical: 14 }, input: { height: 48, padding: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 12, color: colors.text }, cancel: { minHeight: 40, alignItems: 'center', justifyContent: 'center' },
 });

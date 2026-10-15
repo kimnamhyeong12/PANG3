@@ -12,7 +12,7 @@ const InputSurface = ({ placeholder }) => React.createElement('input', { placeho
 class Value { constructor(value) { this.value = value; } setValue(value) { this.value = value; } stopAnimation(callback) { callback?.(this.value); } }
 const noOp = () => {};
 let searchSafeAreaEdges;
-const rn = { Animated: { Value, View: Surface, spring: () => ({ start: noOp }), timing: () => ({ start: noOp }) }, ActivityIndicator: Surface, BackHandler: { addEventListener: () => ({ remove: noOp }) }, FlatList: Surface, Keyboard: { addListener: () => ({ remove: noOp }), dismiss: noOp }, KeyboardAvoidingView: Surface, Modal: ({ visible, children }) => visible ? React.createElement(Surface, null, children) : null, PanResponder: { create: () => ({ panHandlers: {} }) }, Platform: { OS: 'android' }, Pressable: Surface, ScrollView: Surface, Text: Surface, TextInput: Surface, TouchableOpacity: Surface, View: Surface, StyleSheet: { create: x => x, absoluteFill: {}, absoluteFillObject: {} } };
+const rn = { Animated: { Value, View: Surface, spring: () => ({ start: noOp }), timing: () => ({ start: noOp }) }, ActivityIndicator: Surface, BackHandler: { addEventListener: () => ({ remove: noOp }) }, FlatList: Surface, RefreshControl: Surface, Keyboard: { addListener: () => ({ remove: noOp }), dismiss: noOp }, KeyboardAvoidingView: Surface, Modal: ({ visible, children }) => visible ? React.createElement(Surface, null, children) : null, PanResponder: { create: () => ({ panHandlers: {} }) }, Platform: { OS: 'android' }, Pressable: Surface, ScrollView: Surface, Text: Surface, TextInput: Surface, TouchableOpacity: Surface, View: Surface, StyleSheet: { create: x => x, absoluteFill: {}, absoluteFillObject: {} } };
 function load(file) {
   if (cache.has(file)) return cache.get(file);
   const exports = {}; cache.set(file, exports);
@@ -21,7 +21,7 @@ function load(file) {
     if (name === 'react') return React;
     if (name === 'react/jsx-runtime') return require(name);
     if (name === 'react-native') return rn;
-    if (name === 'react-native-safe-area-context') return { SafeAreaView: ({ edges, children }) => { searchSafeAreaEdges = edges; return React.createElement(Surface, null, children); } };
+    if (name === 'react-native-safe-area-context') return { useSafeAreaInsets: () => ({ top: 24, bottom: 24, left: 0, right: 0 }), SafeAreaView: ({ edges, children }) => { searchSafeAreaEdges = edges; return React.createElement(Surface, null, children); } };
     if (name === '@expo/vector-icons') return { Ionicons: Surface };
     if (name.includes('async-storage')) return { getItem: async () => null, setItem: async () => {} };
     if (name.includes('kakao-navigation')) return { KakaoNavigationView: Surface, isKakaoNavigationAvailable: () => false, endRouteSession: noOp, wasRouteTaskRemoved: () => false };
@@ -109,7 +109,8 @@ assert.ok(reportHtml.includes('10월 15일'));
 assert.ok(!reportHtml.includes('업무일'));
 assert.ok(!reportHtml.includes('카드에서 숨길 주소'));
 assert.ok(!reportHtml.includes('카드에서 숨길 업무'));
-assert.ok(!reportHtml.includes('작업 전 · 선택 불가'));
+assert.ok(reportHtml.includes('작업 전 · 선택 불가'));
+assert.equal((reportHtml.match(/선택 불가/g) || []).length, 1, 'only pre-work rows carry the unavailable label');
 const isCreateReportButton = control => React.Children.toArray(control.children)
   .some(child => /^\d+건 보고서 만들기$/.test(child.props?.children || ''));
 controls.find(isCreateReportButton).onPress();
@@ -117,4 +118,12 @@ assert.deepEqual(selectedRows.map(row => row.id), [2, 3], 'cached pre-work IDs m
 controls = [];
 renderToStaticMarkup(React.createElement(ReportList, { locations: reportLocations.slice(0, 1), selectedIds: [1] }));
 assert.equal(controls.find(isCreateReportButton).disabled, true);
+const GroupScreen = load(path.join(base, 'screens/GroupScreen.js')).default;
+const groupProps = { user: { userId: 7 }, activeGroup: { groupId: 1, groupName: '현장 그룹' }, onBack: noOp };
+const groupHtml = renderToStaticMarkup(React.createElement(GroupScreen, groupProps));
+assert.ok(groupHtml.includes('그룹 관리') && groupHtml.includes('대시보드'));
+assert.ok(!groupHtml.includes('팀 만들기') && !groupHtml.includes('초대 확인'), 'group actions no longer occupy list cards');
+const overviewHtml = renderToStaticMarkup(React.createElement(GroupScreen, { ...groupProps, tab: 'dashboard', overview: React.createElement('div', null, '전체 대시보드 내용') }));
+assert.ok(overviewHtml.includes('전체 대시보드 내용'));
+assert.ok(!overviewHtml.includes('내 그룹'), 'overview replaces the list instead of nesting both scroll views');
 console.log('Place screen render checks passed: map/search gestures and pre-work report selection guards');

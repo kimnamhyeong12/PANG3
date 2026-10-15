@@ -53,7 +53,7 @@ function createScreen({ nativeNavigation = false, taskRemoved = false } = {}) {
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'Fragment' };
       if (name === 'react-native') return native;
-      if (name === 'react-native-safe-area-context') return { SafeAreaView: 'SafeAreaView' };
+      if (name === 'react-native-safe-area-context') return { SafeAreaView: 'SafeAreaView', useSafeAreaInsets: () => ({ top: 24, bottom: 24, left: 0, right: 0 }) };
       if (name === '@expo/vector-icons') return { Ionicons: 'Icon' };
       if (name === '@react-native-async-storage/async-storage') return { getItem: async key => storage.get(key) || null,
         setItem: async (key, value) => storage.set(key, value), removeItem: async key => storage.delete(key) };

@@ -118,6 +118,21 @@ public class SgisBoundaryService {
      */
     public JsonNode getSidoAdministrativeDongBoundaries(String sido) {
         String normalized = sido == null ? "" : sido.replace(" ", "").trim();
+        // The configured SGIS boundary vintage may predate the 2026 merger.
+        // Keep the legacy statistical codes and combine their features instead
+        // of confusing MOIS address codes with SGIS statistical codes.
+        if ("전남광주통합특별시".equals(normalized)) {
+            return cachedBoundaries.computeIfAbsent("sido-dong-jeonnam-gwangju", ignored -> {
+                ObjectNode combined = objectMapper.createObjectNode();
+                combined.put("type", "FeatureCollection");
+                ArrayNode features = combined.putArray("features");
+                for (String legacyCode : java.util.List.of("24", "36")) {
+                    JsonNode collection = convertFeatureCollection(requestBoundary(getAccessToken(), legacyCode, 2));
+                    collection.path("features").forEach(features::add);
+                }
+                return combined;
+            });
+        }
         String code = SIDO_CODES.get(normalized);
         if (code == null) {
             throw new IllegalArgumentException("지원하지 않는 근무 시·도입니다: " + sido);

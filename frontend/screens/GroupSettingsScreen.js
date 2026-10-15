@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    marginTop: -15,
+    marginTop: 0,
   },
 
   body: {

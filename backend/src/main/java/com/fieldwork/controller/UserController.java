@@ -39,17 +39,19 @@ public class UserController {
         User user = verifiedUser(userId, (String) body.get("currentPassword"));
         String name = (String) body.get("name"), sido = (String) body.get("workSido"), district = (String) body.get("workSigungu");
         if (name == null || name.isBlank() || name.trim().length() > 50) throw new IllegalArgumentException("이름은 1~50자로 입력해 주세요.");
-        if (sido == null || sido.isBlank() || district == null || district.isBlank()) throw new IllegalArgumentException("근무지역을 선택해 주세요.");
+        com.fieldwork.service.WorkRegion.validate(sido, district);
         String address = (String) body.get("workplaceAddress");
         Double lat = body.get("workplaceLat") instanceof Number number ? number.doubleValue() : null;
         Double lng = body.get("workplaceLng") instanceof Number number ? number.doubleValue() : null;
-        com.fieldwork.service.Workplace.validate(address, lat, lng);
+        if ((address != null && !address.isBlank()) || lat != null || lng != null) {
+            com.fieldwork.service.Workplace.validate(address, lat, lng);
+        }
         String password = (String) body.get("newPassword");
         boolean changedPassword = password != null && !password.isEmpty();
         if (changedPassword && (password.length() < 8 || password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72))
             throw new IllegalArgumentException("새 비밀번호는 8자 이상으로 입력하고, 너무 길면 줄여 주세요.");
         user.setName(name.trim()); user.setWorkSido(sido.trim()); user.setWorkSigungu(district.trim());
-        user.setWorkplaceAddress(address.trim()); user.setWorkplaceLat(lat); user.setWorkplaceLng(lng);
+        user.setWorkplaceAddress(address == null || address.isBlank() ? null : address.trim()); user.setWorkplaceLat(lat); user.setWorkplaceLng(lng);
         if (changedPassword) { user.setPassword(encoder.encode(password)); sessions.revokeAll(userId); }
         userRepository.saveAndFlush(user);
         Map<String, Object> result = com.fieldwork.service.AuthSessionService.userInfo(user);

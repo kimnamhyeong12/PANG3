@@ -42,6 +42,7 @@ public class AuthService {
     @Transactional
     public User register(String loginId, String password, String name, String workSido, String workSigungu,
                          String workplaceAddress, Double workplaceLat, Double workplaceLng) {
+        WorkRegion.validate(workSido, workSigungu);
         if (workplaceAddress != null || workplaceLat != null || workplaceLng != null) {
             Workplace.validate(workplaceAddress, workplaceLat, workplaceLng);
         }
@@ -54,7 +55,10 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(password));
         user.setName(name);
         user.setRole("USER");
-        user.setWorkSido(workSido == null || workSido.isBlank() ? "부산광역시" : workSido.trim());
+        if (workSido == null || workSido.isBlank()) {
+            throw new IllegalArgumentException("시·도를 선택해주세요.");
+        }
+        user.setWorkSido(workSido.trim());
         if (workSigungu == null || workSigungu.isBlank()) {
             throw new IllegalArgumentException("시·군·구를 선택해주세요.");
         }

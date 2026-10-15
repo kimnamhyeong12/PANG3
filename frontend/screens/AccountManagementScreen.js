@@ -1,25 +1,26 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ScreenHeader, PrimaryButton } from '../components/ui';
 import WorkplaceField from '../components/WorkplaceField';
 import { showAlert } from '../components/CustomAlert';
 import { apiFetch } from '../utils/auth';
 import { API_BASE_URL } from '../utils/api';
 import { colors } from '../constants/design';
+import WorkRegionField from '../components/WorkRegionField';
+import { parseWorkRegion, serializeWorkRegion, isWorkRegionComplete } from '../utils/workRegion';
 
-export default function AccountManagementScreen({ user, credential, regions, districtsByRegion, onBack, onUpdatedUser, onLogout }) {
+export default function AccountManagementScreen({ user, credential, onBack, onUpdatedUser, onLogout }) {
   const [name, setName] = useState(user.name || '');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [sido, setSido] = useState(user.workSido || '부산광역시');
-  const [district, setDistrict] = useState(user.workSigungu || '');
+  const [region, setRegion] = useState(() => parseWorkRegion(user.workSido, user.workSigungu));
+  const sido = region.sido;
+  const district = serializeWorkRegion(region);
   const [workplace, setWorkplace] = useState({ workplaceAddress: user.workplaceAddress || '', workplaceLat: user.workplaceLat, workplaceLng: user.workplaceLng });
   const [email, setEmail] = useState(user.email || '');
-  const [picker, setPicker] = useState(null);
   const [busy, setBusy] = useState(false);
   const save = async () => {
-    if (busy) return;
+    if (busy || !name.trim() || !isWorkRegionComplete(region)) return;
     if (password !== confirm) return showAlert('비밀번호 확인', '새 비밀번호가 서로 일치하지 않습니다.');
     setBusy(true);
     try {
@@ -51,26 +52,19 @@ export default function AccountManagementScreen({ user, credential, regions, dis
         {field('이름', name, setName, { maxLength: 50, placeholder: '이름' })}
         {field('새 비밀번호', password, setPassword, { secureTextEntry: true, placeholder: '변경할 때만 입력하세요', autoCapitalize: 'none' })}
         {field('새 비밀번호 확인', confirm, setConfirm, { secureTextEntry: true, placeholder: '새 비밀번호를 다시 입력하세요', autoCapitalize: 'none' })}
-        <Text style={styles.label}>근무지역</Text>
-        {['sido', 'district'].map(side => <TouchableOpacity key={side} style={styles.region} disabled={busy} onPress={() => setPicker(side)}>
-          <View style={styles.regionIcon}><Ionicons name={side === 'sido' ? 'location' : 'navigate'} size={20} color={colors.primary} /></View>
-          <View style={{ flex: 1 }}><Text style={styles.regionSmall}>{side === 'sido' ? '시·도' : '시·군·구'}</Text><Text style={styles.regionText}>{side === 'sido' ? sido : district || '구·군 선택'}</Text></View>
-          <Ionicons name="chevron-down" size={18} color={colors.textSoft} />
-        </TouchableOpacity>)}
+        <WorkRegionField value={region} onChange={setRegion} disabled={busy} required />
         <WorkplaceField value={workplace} onChange={setWorkplace} userId={user.userId} disabled={busy} />
         {field('이메일', email, setEmail, { keyboardType: 'email-address', autoCapitalize: 'none', placeholder: '이메일 주소' })}
         <TouchableOpacity disabled={busy || !email.trim() || email.trim() === user.email} onPress={changeEmail} style={styles.emailButton}><Text style={styles.emailText}>인증 메일 받기</Text></TouchableOpacity>
-        <PrimaryButton title={busy ? '처리 중…' : '변경사항 저장'} onPress={save} disabled={busy || !name.trim() || !district || !workplace?.workplaceAddress || password !== confirm} />
+        <PrimaryButton title={busy ? '처리 중…' : '변경사항 저장'} onPress={save} disabled={busy || !name.trim() || !isWorkRegionComplete(region) || password !== confirm} />
       </View>
     </ScrollView>
-    <Modal visible={!!picker} transparent animationType="fade" onRequestClose={() => setPicker(null)}><View style={styles.overlay}><TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setPicker(null)} /><View style={styles.sheet}><Text style={styles.label}>{picker === 'sido' ? '시·도 선택' : '구·군 선택'}</Text><ScrollView>{(picker === 'sido' ? regions : districtsByRegion[sido] || []).map(value => <TouchableOpacity key={value} style={styles.option} onPress={() => { if (picker === 'sido') { setSido(value); setDistrict(''); } else setDistrict(value); setPicker(null); }}><Text>{value}</Text></TouchableOpacity>)}</ScrollView></View></View></Modal>
+
   </KeyboardAvoidingView>;
 }
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, marginTop: -15 }, body: { padding: 16, paddingBottom: 30 },
+  container: { flex: 1, backgroundColor: colors.background, marginTop: 0 }, body: { padding: 16, paddingBottom: 30 },
   card: { backgroundColor: colors.surface, borderRadius: 18, borderWidth: 1, borderColor: colors.line, padding: 18, gap: 12 }, field: { gap: 6 },
   label: { color: colors.text, fontSize: 12, fontWeight: '800' }, id: { color: colors.textSoft, marginBottom: 5 }, input: { height: 48, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.line, color: colors.text, backgroundColor: '#FFFFFF' },
-  region: { minHeight: 54, gap: 10, paddingHorizontal: 11, borderWidth: 1, borderColor: colors.line, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, regionText: { color: colors.text, fontSize: 13, fontWeight: '900', marginTop: 1 }, regionIcon: { width: 34, height: 34, borderRadius: 11, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }, regionSmall: { color: colors.textSoft, fontSize: 8.5 },
   emailButton: { minHeight: 40, alignSelf: 'flex-end', justifyContent: 'center' }, emailText: { color: colors.primary, fontWeight: '800' },
-  overlay: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(16,40,91,0.38)' }, sheet: { maxHeight: '70%', padding: 18, backgroundColor: colors.surface, borderRadius: 18 }, option: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.line },
 });

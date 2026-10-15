@@ -15,7 +15,7 @@ import { colors } from '../constants/design';
 const getStatusLabel = (status) => {
   if (status === 'complete') return '작업 후';
   if (status === 'working') return '작업 중';
-  return '작업 전';
+  return '작업 전 · 선택 불가';
 };
 
 const getStatusColor = (status) => {
@@ -118,7 +118,7 @@ export default function ReportListScreen({
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="보고서 작성" onBack={onBack} />
+      <ScreenHeader root title="보고서 작성" onBack={onBack} />
 
       <ScrollView
         contentContainerStyle={styles.body}
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    marginTop: -15,
+    marginTop: 0,
   },
 
   body: {

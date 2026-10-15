@@ -11,7 +11,7 @@ import {
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/design';
-import { BackButton } from '../components/ui';
+import { ScreenHeader } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
 import { BUSAN_DISTRICT_CODES } from '../constants/busanDistricts';
 import { koreaDayKey, isCurrentWork } from '../utils/completionDay';
@@ -290,16 +290,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
 
   return (
     <View style={styles.container}>
-      {!embedded && <View style={styles.header}>
-        <BackButton onPress={onBack} />
-        <View style={{ flex: 1 }}>
-          {!personalWorkspace && <Text style={styles.eyebrow}>업무 현황</Text>}
-          <Text style={styles.title}>
-            {personalWorkspace ? '내 업무 현황' : '팀 작업현황'}
-          </Text>
-          {!personalWorkspace && <Text style={styles.desc}>{group?.groupName || '현재 그룹'} · 팀 전체 현황</Text>}
-        </View>
-      </View>}
+      {!embedded && <ScreenHeader title={personalWorkspace ? '내 업무 현황' : '팀 작업현황'} subtitle={personalWorkspace ? undefined : `${group?.groupName || '현재 그룹'} · 팀 전체 현황`} onBack={onBack} />}
 
       <ScrollView
         style={styles.screenScroll}

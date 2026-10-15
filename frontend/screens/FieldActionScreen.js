@@ -1592,7 +1592,7 @@ const styles =
       flex: 1,
       backgroundColor:
         '#F4F8FF',
-      marginTop: -15,
+      marginTop: 0,
     },
 
     body: {

@@ -18,6 +18,19 @@ function fixture(handler, initial = null) {
   return { session, calls, stored: () => stored, expired: () => expired };
 }
 (async () => {
+  const availability = fixture(async (url) => {
+    assert.ok(url.includes('/api/auth/login-id/availability?'), 'ID checks must not refresh a login session');
+    return response(200, { available: true });
+  });
+  assert.equal((await availability.session.fetch('https://api.test/api/auth/login-id/availability?loginId=newuser')).status, 200);
+  assert.equal(availability.calls.length, 1);
+  assert.equal(availability.expired(), 0, 'signup ID checks must not reset the current screen');
+  assert.equal(availability.calls[0].options.headers?.Authorization, undefined);
+  const unavailableServer = fixture(async () => response(401), { refreshToken: 'keep-public-check-session' });
+  await unavailableServer.session.fetch('https://api.test/api/auth/login-id/availability?loginId=newuser');
+  assert.equal(unavailableServer.expired(), 0, 'a failed public ID check must not trigger session expiry');
+  assert.equal(unavailableServer.stored().refreshToken, 'keep-public-check-session', 'public ID checks must preserve saved login data');
+  assert.equal(unavailableServer.calls.length, 1, 'public ID check errors must not request refresh');
   let refreshes=0;
   const f=fixture(async (url, options) => {
     if(url.endsWith('/login')) return response(200,tokenResult('first'));

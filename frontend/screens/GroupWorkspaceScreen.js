@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
   inviteBox: { marginTop: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
   inviteInput: { flex: 1, minWidth: 0, height: 44, borderWidth: 1, borderColor: colors.line, borderRadius: 12, paddingHorizontal: 12, color: colors.text, backgroundColor: colors.background },
   inviteButton: { width: 68, minHeight: 44, paddingVertical: 0, paddingHorizontal: 8, borderRadius: 12 },
-  root: { flex: 1, backgroundColor: colors.background, marginTop: -15 },
+  root: { flex: 1, backgroundColor: colors.background, marginTop: 0 },
   tabs: {
     flexDirection: 'row',
     borderBottomWidth: 1,

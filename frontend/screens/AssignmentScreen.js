@@ -1,3 +1,4 @@
+import { colors } from '../constants/design';
 import { apiFetch as fetch } from '../utils/auth';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -10,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BackButton } from '../components/ui';
+import { ScreenHeader } from '../components/ui';
 import { API_BASE_URL } from '../utils/api';
 import { groupApi } from '../utils/groupApi';
 import { showAlert } from '../components/CustomAlert';
@@ -463,20 +464,7 @@ export default function AssignmentScreen({
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <BackButton onPress={onBack} />
-
-        <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>
-            담당 관리
-          </Text>
-
-          <Text style={styles.title}>
-            방문지 담당자 지정
-          </Text>
-        </View>
-      </View>
+      <ScreenHeader title="방문지 담당자 지정" onBack={onBack} />
 
       {/* 구역별 / 방문지별 */}
       <View style={styles.modeTabs}>
@@ -1167,7 +1155,7 @@ export default function AssignmentScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7F5',
+    backgroundColor: colors.background,
   },
 
   header: {

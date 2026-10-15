@@ -167,10 +167,10 @@ class ReleaseAuthIntegrationTest {
     @Test void registrationAllowsSharedNamesButRequiresUniqueLoginIds() throws Exception {
         String first="new"+UUID.randomUUID().toString().replace("-", ""), second="new"+UUID.randomUUID().toString().replace("-", "");
         mvc.perform(get("/api/auth/login-id/availability").param("loginId",first)).andExpect(status().isOk()).andExpect(jsonPath("$.available").value(true));
-        for (String id : List.of(first,second)) mvc.perform(postJson("/api/auth/register",Map.of("loginId",id,"password","test-password","name","same name","workSigungu","test district")))
+        for (String id : List.of(first,second)) mvc.perform(postJson("/api/auth/register",Map.of("loginId",id,"password","test-password","name","same name","workSido","부산광역시","workSigungu","사하구")))
             .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("same name")).andExpect(jsonPath("$.loginId").value(id));
         mvc.perform(get("/api/auth/login-id/availability").param("loginId",first)).andExpect(status().isOk()).andExpect(jsonPath("$.available").value(false));
-        mvc.perform(postJson("/api/auth/register",Map.of("loginId",first,"password","test-password","name","other name","workSigungu","test district"))).andExpect(status().isBadRequest());
+        mvc.perform(postJson("/api/auth/register",Map.of("loginId",first,"password","test-password","name","other name","workSido","부산광역시","workSigungu","사하구"))).andExpect(status().isBadRequest());
         mvc.perform(get("/api/auth/login-id/availability").param("loginId","!!")).andExpect(status().isBadRequest());
         assertNotEquals(users.findByLoginId(first).orElseThrow().getUserId(),users.findByLoginId(second).orElseThrow().getUserId());
     }
@@ -183,10 +183,15 @@ class ReleaseAuthIntegrationTest {
             .header("Authorization",bearer(auth))).andExpect(status().isForbidden());
         mvc.perform(postJson("/api/users/"+a.getUserId()+"/account/verify",Map.of("password","test-password"))
             .header("Authorization",bearer(auth))).andExpect(status().isOk()).andExpect(jsonPath("$.password").doesNotExist());
-        Map<String,Object> body=new HashMap<>(Map.of("currentPassword","test-password","name","new name","workSido","new region","workSigungu","new district", "workplaceAddress","new workplace","workplaceLat",35.12,"workplaceLng",129.12,"loginId","forged"));
+        Map<String,Object> body=new HashMap<>(Map.of("currentPassword","test-password","name","new name","workSido","충청남도","workSigungu","천안시 동남구", "workplaceAddress","new workplace","workplaceLat",35.12,"workplaceLng",129.12,"loginId","forged"));
         mvc.perform(patch("/api/users/"+a.getUserId()+"/account").contentType("application/json").content(json.writeValueAsString(body))
             .header("Authorization",bearer(auth))).andExpect(status().isOk()).andExpect(jsonPath("$.name").value("new name"))
             .andExpect(jsonPath("$.loginId").value(a.getLoginId())).andExpect(jsonPath("$.requiresLogin").value(false));
+        body.remove("workplaceAddress"); body.remove("workplaceLat"); body.remove("workplaceLng");
+        mvc.perform(patch("/api/users/"+a.getUserId()+"/account").contentType("application/json").content(json.writeValueAsString(body))
+            .header("Authorization",bearer(auth))).andExpect(status().isOk());
+        assertNull(users.findById(a.getUserId()).orElseThrow().getWorkplaceAddress());
+        assertEquals("천안시 동남구", users.findById(a.getUserId()).orElseThrow().getWorkSigungu());
         body.put("currentPassword","wrong"); body.put("name","must not save");
         mvc.perform(patch("/api/users/"+a.getUserId()+"/account").contentType("application/json").content(json.writeValueAsString(body))
             .header("Authorization",bearer(auth))).andExpect(status().isBadRequest());
@@ -195,7 +200,7 @@ class ReleaseAuthIntegrationTest {
 
     @Test void changingPasswordRevokesSessionsAndUsesNewPassword() throws Exception {
         User a=user(); JsonNode auth=login(a);
-        Map<String,Object> body=Map.of("currentPassword","test-password","newPassword","new-password-2026","name","tester", "workSido","region","workSigungu","district","workplaceAddress","workplace","workplaceLat",35.1,"workplaceLng",129.1);
+        Map<String,Object> body=Map.of("currentPassword","test-password","newPassword","new-password-2026","name","tester", "workSido","부산광역시","workSigungu","사하구","workplaceAddress","workplace","workplaceLat",35.1,"workplaceLng",129.1);
         mvc.perform(patch("/api/users/"+a.getUserId()+"/account").contentType("application/json").content(json.writeValueAsString(body))
             .header("Authorization",bearer(auth))).andExpect(status().isOk()).andExpect(jsonPath("$.requiresLogin").value(true));
         mvc.perform(get("/api/auth/me").header("Authorization",bearer(auth))).andExpect(status().isUnauthorized());
@@ -284,8 +289,35 @@ class ReleaseAuthIntegrationTest {
         mvc.perform(postJson("/api/auth/login", Map.of("loginId", "missing", "password", "bad"))
                 .with(request -> { request.setRemoteAddr(limitedIp); return request; }).header("X-Auth-Client", "native")).andExpect(status().isTooManyRequests());
     }
+    @Test void registrationRequiresGuForCityAndPersistsFullSelection() throws Exception {
+        String id = "new" + UUID.randomUUID().toString().replace("-", "");
+        Map<String, String> body = new HashMap<>(Map.of("loginId", id, "password", "test-password", "name", "test user",
+                "workSido", "충청남도", "workSigungu", "천안시"));
+        mvc.perform(postJson("/api/auth/register", body)).andExpect(status().isBadRequest());
+        body.put("workSigungu", "천안시 동남구");
+        mvc.perform(postJson("/api/auth/register", body)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.workSigungu").value("천안시 동남구"));
+        assertEquals("천안시 동남구", users.findByLoginId(id).orElseThrow().getWorkSigungu());
+    }
+
+    @Test void registrationRequiresAllMandatoryFieldsButAllowsNoWorkplace() throws Exception {
+        String id = "new" + UUID.randomUUID().toString().replace("-", "");
+        Map<String, String> required = Map.of("loginId", id, "password", "test-password", "name", "test user",
+                "workSido", "부산광역시", "workSigungu", "사하구");
+        for (String field : required.keySet()) {
+            Map<String, String> missing = new HashMap<>(required);
+            missing.remove(field);
+            mvc.perform(postJson("/api/auth/register", missing)).andExpect(status().isBadRequest());
+            assertTrue(users.findByLoginId(id).isEmpty());
+        }
+        mvc.perform(postJson("/api/auth/register", required)).andExpect(status().isOk());
+        User registered = users.findByLoginId(id).orElseThrow();
+        assertNull(registered.getWorkplaceAddress());
+        assertNull(registered.getWorkplaceLat());
+        assertNull(registered.getWorkplaceLng());
+    }
     @Test void registrationDoesNotExposePasswordAndWorksWithoutOptionalEmail() throws Exception {
-        mvc.perform(postJson("/api/auth/register", Map.of("loginId", "new"+UUID.randomUUID().toString().replace("-", ""), "password", "test-password", "name", "test user", "workSigungu", "사하구")))
+        mvc.perform(postJson("/api/auth/register", Map.of("loginId", "new"+UUID.randomUUID().toString().replace("-", ""), "password", "test-password", "name", "test user", "workSido", "부산광역시", "workSigungu", "사하구")))
             .andExpect(status().isOk()).andExpect(jsonPath("$.userId").exists()).andExpect(jsonPath("$.password").doesNotExist());
     }
     @Test void verifiedEmailRecoveryIsSingleUseAndRevokesExistingSessions() throws Exception {

@@ -92,7 +92,7 @@ export function createSessionClient({ baseUrl, transport, storage, client = 'nat
       const target = new URL(String(url), baseUrl || undefined);
       const base = baseUrl ? new URL(baseUrl) : null;
       if (!base || target.origin !== base.origin || !target.pathname.startsWith(`${base.pathname.replace(/\/$/, '')}/api/`)
-          || ['/api/auth/login', '/api/auth/register', '/api/auth/password/forgot', '/api/auth/password/reset', '/api/auth/email/verify'].includes(target.pathname)) return transport(url, options);
+          || ['/api/auth/login-id/availability', '/api/auth/login', '/api/auth/register', '/api/auth/password/forgot', '/api/auth/password/reset', '/api/auth/email/verify'].includes(target.pathname)) return transport(url, options);
       if ((!access || accessDeadline <= Date.now() + 30000) && !await refresh()) throw new Error('다시 로그인해 주세요.');
       const version = epoch;
       const sent = access;

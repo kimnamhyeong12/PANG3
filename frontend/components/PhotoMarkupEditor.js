@@ -1015,7 +1015,7 @@ const styles =
       backgroundColor: colors.background,
 
       // 상단 상태바를 피함
-      marginTop: -15,
+      marginTop: 0,
 
       // 갤럭시 하단 내비게이션 영역을 피함
       paddingBottom: 28,

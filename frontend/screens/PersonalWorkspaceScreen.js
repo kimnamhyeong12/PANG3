@@ -15,7 +15,7 @@ export default function PersonalWorkspaceScreen({ user, group, assignments, tab,
   </View>;
 }
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, marginTop: -15 },
+  container: { flex: 1, backgroundColor: colors.background, marginTop: 0 },
   tabs: { flexDirection: 'row', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: colors.line, backgroundColor: colors.surface },
   tab: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' }, activeTab: { borderBottomColor: colors.primary },
   label: { color: colors.textSoft, fontWeight: '800', fontSize: 13 }, activeLabel: { color: colors.primary },

@@ -731,6 +731,7 @@ export const buildAnalytics = (
 };
 
 export default function DashboardScreen({
+  embedded = false,
   user,
   onBack,
   onSettings,
@@ -990,7 +991,7 @@ export default function DashboardScreen({
         styles.container
       }
     >
-      <ScreenHeader
+      {!embedded && <ScreenHeader
         title="대시보드"
         onBack={onBack}
         right={<TouchableOpacity
@@ -1002,7 +1003,7 @@ export default function DashboardScreen({
         >
           <Ionicons name="settings-outline" size={19} color={colors.primary} />
         </TouchableOpacity>}
-      />
+      />}
 
       {loading ? (
         <View
@@ -1902,7 +1903,7 @@ const styles =
       flex: 1,
       backgroundColor:
         colors.background,
-      marginTop: -15,
+      marginTop: 0,
     },
 
     settingsButton: {
