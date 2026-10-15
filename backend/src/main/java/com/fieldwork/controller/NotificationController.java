@@ -1,4 +1,5 @@
 package com.fieldwork.controller;
+import com.fieldwork.security.CurrentUser;
 
 import com.fieldwork.service.PushNotificationService;
 import org.springframework.web.bind.annotation.*;
@@ -7,7 +8,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/notifications")
-@CrossOrigin(origins = "*")
 public class NotificationController {
 
     private final PushNotificationService pushNotificationService;
@@ -23,7 +23,7 @@ public class NotificationController {
             @RequestBody Map<String, Object> body
     ) {
         return pushNotificationService.registerToken(
-                longValue(body.get("userId")),
+                CurrentUser.require(body.get("userId")),
                 stringValue(body.get("expoPushToken")),
                 stringValue(body.get("platform"))
         );
@@ -34,7 +34,7 @@ public class NotificationController {
             @RequestBody Map<String, Object> body
     ) {
         return pushNotificationService.unregisterToken(
-                longValue(body.get("userId")),
+                CurrentUser.require(body.get("userId")),
                 stringValue(body.get("expoPushToken"))
         );
     }

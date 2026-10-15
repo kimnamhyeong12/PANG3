@@ -1,0 +1,17 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const source = fs.readFileSync(require('node:path').join(__dirname, '../components/KakaoMapWebView.js'), 'utf8');
+const start = source.indexOf('    if (commandData.type === "SELECTION_SESSION")');
+const end = source.indexOf('    if (commandData.type === "SELECTION_MODE")', start);
+const handle = new Function('state', 'map', 'post', 'ensureSelectionOverlay', `with (state) { ${source.slice(start, end)} }`);
+const point = (lat, lng) => ({ getLat: () => lat, getLng: () => lng });
+const visibleCenter = point(35.2, 129.2), old = point(35.1, 129.1);
+const state = { commandData: { type: 'SELECTION_SESSION', enabled: true }, selectionSessionActive: false, selectedCenter: old, selectionMode: false, selectionDragStarted: false, selectionOverlay: null };
+const messages = []; let shown = 0;
+handle(state, { getCenter: () => visibleCenter }, data => messages.push(data), () => shown++);
+assert.equal(state.selectedCenter, visibleCenter, 'new direct selection uses the visible viewport rather than an old selection');
+assert.equal(shown, 1); assert.equal(messages[0].latitude, 35.2);
+state.selectedCenter = old;
+handle(state, { getCenter: () => visibleCenter }, () => {}, () => {});
+assert.equal(state.selectedCenter, old, 'repeated commands preserve a selection already in progress');
+console.log('Map direct-selection checks passed: visible center on entry and stable active selection');

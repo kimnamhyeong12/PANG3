@@ -1,0 +1,780 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { showAlert } from '../components/CustomAlert';
+import {
+  CardTitle,
+  PrimaryButton,
+  ScreenHeader,
+  SecondaryButton,
+} from '../components/ui';
+import { groupApi } from '../utils/groupApi';
+import { colors, shadow } from '../constants/design';
+
+const DISTRICTS = [
+  '중구',
+  '서구',
+  '동구',
+  '영도구',
+  '부산진구',
+  '동래구',
+  '남구',
+  '북구',
+  '해운대구',
+  '사하구',
+  '금정구',
+  '강서구',
+  '연제구',
+  '수영구',
+  '사상구',
+  '기장군',
+];
+
+const DISTRICT_CODES = {
+  중구: '21010',
+  서구: '21020',
+  동구: '21030',
+  영도구: '21040',
+  부산진구: '21050',
+  동래구: '21060',
+  남구: '21070',
+  북구: '21080',
+  해운대구: '21090',
+  사하구: '21100',
+  금정구: '21110',
+  강서구: '21120',
+  연제구: '21130',
+  수영구: '21140',
+  사상구: '21150',
+  기장군: '21310',
+};
+
+export default function GroupSettingsScreen({
+  user,
+  group,
+  onBack,
+  onWorkStatus,
+  onTransfer,
+  onReports,
+  onUpdatedGroup,
+  onLeaveGroup,
+  mode = 'all',
+}) {
+  const [detail, setDetail] = useState(group || null);
+  const [loading, setLoading] = useState(true);
+  const [teamAlerts, setTeamAlerts] = useState(true);
+  const [activityAlerts, setActivityAlerts] = useState(true);
+  const [regionOpen, setRegionOpen] = useState(false);
+  const [regionSaving, setRegionSaving] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [leavePassword, setLeavePassword] = useState('');
+  const [draftDistrict, setDraftDistrict] = useState(
+    group?.regionSigungu || ''
+  );
+
+  const load = useCallback(async () => {
+    if (!group?.groupId || !user?.userId) return;
+
+    try {
+      const data = await groupApi(
+        `/api/groups/${group.groupId}?userId=${user.userId}`
+      );
+
+      setDetail(data);
+      onUpdatedGroup?.(data);
+    } catch (error) {
+      showAlert('그룹 조회 실패', error.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [group?.groupId, user?.userId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const saveRegion = async () => {
+    if (!draftDistrict || regionSaving) return;
+
+    try {
+      setRegionSaving(true);
+
+      const data = await groupApi(`/api/groups/${group.groupId}/region`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          leaderUserId: user.userId,
+          regionSido: '부산광역시',
+          regionSigungu: draftDistrict,
+          regionAdmCode: DISTRICT_CODES[draftDistrict],
+        }),
+      });
+
+      const next = { ...detail, ...data };
+
+      setDetail(next);
+      onUpdatedGroup?.(next);
+      setRegionOpen(false);
+
+      showAlert(
+        '활동지역 변경 완료',
+        `부산광역시 ${draftDistrict}로 변경했습니다.`
+      );
+    } catch (error) {
+      showAlert('활동지역 변경 실패', error.message);
+    } finally {
+      setRegionSaving(false);
+    }
+  };
+
+  const leaveGroup = async () => {
+    if (!leavePassword || leaving) return;
+    setLeaving(true);
+    try {
+      await groupApi(`/api/groups/${group.groupId}/members/me`, {
+        method: 'DELETE',
+        body: JSON.stringify({ userId: user.userId, password: leavePassword }),
+      });
+      setLeaveOpen(false);
+      setLeavePassword('');
+      onLeaveGroup?.(group.groupId);
+    } catch (error) {
+      showAlert('그룹 탈퇴 실패', error.message);
+    } finally {
+      setLeaving(false);
+    }
+  };
+
+
+
+  const groupName =
+    detail?.groupName ||
+    group?.groupName ||
+    '그룹';
+
+  const regionSido =
+    detail?.regionSido ||
+    '부산광역시';
+
+  const regionSigungu =
+    detail?.regionSigungu ||
+    '';
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader
+          title="그룹 설정"
+          onBack={onBack}
+        />
+
+        <View style={styles.loading}>
+          <ActivityIndicator
+            size="large"
+            color={colors.primary}
+          />
+
+          <Text style={styles.loadingText}>
+            그룹 정보를 불러오는 중입니다.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <ScreenHeader
+        title="그룹 설정"
+        onBack={onBack}
+      />
+
+      <ScrollView
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+      >
+        {mode === 'all' && <View style={styles.card}>
+          <CardTitle
+            icon="people"
+            title="기본 정보"
+          />
+
+          <InfoRow
+            icon="pricetag"
+            label="그룹명"
+            value={groupName}
+          />
+
+          <InfoRow
+            icon="location"
+            label="활동 지역"
+            value={
+              regionSigungu
+                ? `${regionSido} · ${regionSigungu}`
+                : '활동지역 미설정'
+            }
+            last
+          />
+
+            <SecondaryButton
+              title={
+                regionSigungu
+                  ? '활동지역 변경'
+                  : '활동지역 설정'
+              }
+              icon="location-outline"
+              onPress={() => {
+                setDraftDistrict(regionSigungu);
+                setRegionOpen(true);
+              }}
+              style={styles.fullButton}
+            />
+        </View>}
+
+        {mode === 'all' && <View style={styles.managementGrid}>
+          <TouchableOpacity
+            style={styles.managementCard}
+            activeOpacity={0.76}
+            onPress={onWorkStatus}
+          >
+            <View style={styles.managementIcon}>
+              <Ionicons
+                name="map"
+                size={22}
+                color="#FFFFFF"
+              />
+            </View>
+
+            <Text style={styles.managementTitle}>
+              업무현황
+            </Text>
+
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={colors.primary}
+              style={styles.managementArrow}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.managementCard,
+              styles.publicManagementCard,
+            ]}
+            activeOpacity={0.76}
+            onPress={onTransfer}
+          >
+            <View
+              style={[
+                styles.managementIcon,
+                styles.managementIconTeal,
+              ]}
+            >
+              <Ionicons
+                name="business"
+                size={22}
+                color="#FFFFFF"
+              />
+            </View>
+
+            <Text style={styles.managementTitle}>
+              방문지 이관
+            </Text>
+
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={colors.teal}
+              style={styles.managementArrow}
+            />
+          </TouchableOpacity>
+        </View>}
+
+        {mode === 'all' && <TouchableOpacity style={styles.card} activeOpacity={0.76} onPress={onReports}>
+          <CardTitle icon="document-text" title="그룹 보고서 전체보기" />
+          <Text style={styles.memberRole}>팀원별 · 행정동별 · 기간별 보고서를 확인합니다.</Text>
+        </TouchableOpacity>}
+
+          {mode === 'all' && <View style={styles.card}>
+            <CardTitle
+              icon="settings"
+              title="그룹 설정"
+            />
+
+            <SettingRow
+              icon="notifications"
+              title="팀 알림 받기"
+              value={teamAlerts}
+              onValueChange={setTeamAlerts}
+            />
+
+            <SettingRow
+              icon="people"
+              title="팀원 활동 알림"
+              value={activityAlerts}
+              onValueChange={
+                setActivityAlerts
+              }
+              last
+            />
+          </View>}
+        {(mode === 'all' || mode === 'settings') && !detail?.personal && (
+          <TouchableOpacity
+            style={styles.leaveButton}
+            onPress={() => setLeaveOpen(true)}
+            disabled={leaving}
+          >
+            <Text style={styles.leaveText}>{leaving ? '탈퇴 중...' : '그룹 탈퇴'}</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+
+      <Modal visible={leaveOpen} transparent animationType="fade" onRequestClose={() => setLeaveOpen(false)}>
+        <View style={styles.leaveBackdrop}>
+          <View style={styles.leaveSheet}>
+            <Text style={styles.leaveTitle}>그룹 탈퇴</Text>
+            <Text style={styles.leaveDescription}>
+              맡은 방문지는 남은 팀원에게 넘어갑니다. 비밀번호를 입력해 주세요.
+            </Text>
+            <TextInput
+              style={styles.leaveInput}
+              value={leavePassword}
+              onChangeText={setLeavePassword}
+              placeholder="현재 비밀번호"
+              secureTextEntry
+              autoCapitalize="none"
+            />
+            <View style={styles.leaveActions}>
+              <TouchableOpacity onPress={() => { setLeaveOpen(false); setLeavePassword(''); }}>
+                <Text style={styles.leaveCancel}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={leaveGroup} disabled={!leavePassword || leaving}>
+                <Text style={[styles.leaveConfirm, (!leavePassword || leaving) && styles.leaveDisabled]}>
+                  {leaving ? '처리 중...' : '그룹 탈퇴'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={regionOpen}
+        transparent
+        animationType="fade"
+        navigationBarTranslucent={false}
+        onRequestClose={() =>
+          setRegionOpen(false)
+        }
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() =>
+            setRegionOpen(false)
+          }
+        >
+          <View
+            style={[
+              styles.regionSheet,
+              {
+                paddingBottom:
+                  Platform.OS === 'android'
+                    ? 64
+                    : 34,
+              },
+            ]}
+            onStartShouldSetResponder={() =>
+              true
+            }
+          >
+            <View
+              style={
+                styles.regionSheetHeader
+              }
+            >
+              <Text
+                style={styles.regionSheetTitle}
+              >
+                활동 구·군 선택
+              </Text>
+
+              <TouchableOpacity
+                onPress={() =>
+                  setRegionOpen(false)
+                }
+              >
+                <Ionicons
+                  name="close"
+                  size={22}
+                  color={colors.textSoft}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.regionList}
+            >
+              {DISTRICTS.map((item) => (
+                <TouchableOpacity
+                  key={item}
+                  style={[
+                    styles.regionOption,
+                    draftDistrict === item &&
+                      styles.regionOptionActive,
+                  ]}
+                  onPress={() =>
+                    setDraftDistrict(item)
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.regionOptionText,
+                      draftDistrict === item &&
+                        styles.regionOptionTextActive,
+                    ]}
+                  >
+                    {item}
+                  </Text>
+
+                  {draftDistrict === item ? (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={21}
+                      color={colors.primary}
+                    />
+                  ) : null}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <PrimaryButton
+              title={
+                regionSaving
+                  ? '저장 중...'
+                  : '활동지역 저장'
+              }
+              onPress={saveRegion}
+              disabled={
+                !draftDistrict ||
+                regionSaving
+              }
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  );
+}
+
+function InfoRow({
+  icon,
+  label,
+  value,
+  last,
+}) {
+  return (
+    <View
+      style={[
+        styles.infoRow,
+        !last && styles.infoDivider,
+      ]}
+    >
+      <Ionicons
+        name={icon}
+        size={18}
+        color={colors.primary}
+      />
+
+      <Text style={styles.infoLabel}>
+        {label}
+      </Text>
+
+      <Text
+        style={styles.infoValue}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function SettingRow({
+  icon,
+  title,
+  value,
+  onValueChange,
+  last,
+}) {
+  return (
+    <View
+      style={[
+        styles.settingRow,
+        !last && styles.divider,
+      ]}
+    >
+      <Ionicons
+        name={icon}
+        size={21}
+        color={colors.primary}
+      />
+
+      <View style={{ flex: 1 }}>
+        <Text style={styles.settingTitle}>
+          {title}
+        </Text>
+      </View>
+
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        trackColor={{
+          false: '#CBD5E1',
+          true: '#86B9FF',
+        }}
+        thumbColor={
+          value
+            ? colors.primary
+            : '#FFFFFF'
+        }
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    marginTop: -15,
+  },
+
+  body: {
+    padding: 14,
+    gap: 10,
+    paddingBottom: 27,
+  },
+
+  leaveButton: {
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginTop: 6,
+  },
+  leaveText: {
+    color: colors.textFaint,
+    fontSize: 12,
+  },
+  leaveSheet: {
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    padding: 20,
+    marginHorizontal: 24,
+  },
+  leaveBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 35, 72, 0.34)',
+    justifyContent: 'center',
+  },
+  leaveTitle: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 10 },
+  leaveDescription: { color: colors.textSoft, fontSize: 13, lineHeight: 20, marginBottom: 16 },
+  leaveInput: { borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 12, marginBottom: 18 },
+  leaveActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 24 },
+  leaveCancel: { color: colors.textSoft, fontSize: 14 },
+  leaveConfirm: { color: colors.danger, fontSize: 14, fontWeight: '800' },
+  leaveDisabled: { color: colors.textFaint },
+
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+
+  loadingText: {
+    color: colors.textSoft,
+    fontSize: 11,
+  },
+
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E4ECF7',
+    padding: 14,
+    ...shadow,
+  },
+
+  infoRow: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 6,
+  },
+
+  infoDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+  },
+
+  infoLabel: {
+    width: 68,
+    color: colors.textSoft,
+    fontSize: 10.5,
+  },
+
+  infoValue: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+
+  fullButton: {
+    marginTop: 8,
+  },
+
+  divider: {
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+  },
+
+  memberRole: {
+    color: colors.textSoft,
+    fontSize: 9.5,
+    marginTop: 3,
+  },
+
+  managementGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+
+  managementCard: {
+    flex: 1,
+    minHeight: 110,
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: colors.surface,
+    borderWidth: 1.3,
+    borderColor: '#CFE0F6',
+    ...shadow,
+  },
+
+  publicManagementCard: {
+    borderColor: '#C9ECE9',
+  },
+
+  managementIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  managementIconTeal: {
+    backgroundColor: colors.teal,
+  },
+
+  managementTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+    marginTop: 10,
+  },
+
+  managementArrow: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+  },
+
+  settingRow: {
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    paddingHorizontal: 2,
+  },
+
+  settingTitle: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor:
+      'rgba(15, 35, 72, 0.34)',
+    justifyContent: 'flex-end',
+  },
+
+  regionSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 18,
+    paddingBottom: 28,
+    maxHeight: '78%',
+  },
+
+  regionSheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+
+  regionSheetTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+
+  regionList: {
+    maxHeight: 410,
+    marginBottom: 14,
+  },
+
+  regionOption: {
+    minHeight: 48,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  regionOptionActive: {
+    backgroundColor: colors.primarySoft,
+  },
+
+  regionOptionText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  regionOptionTextActive: {
+    color: colors.primary,
+    fontWeight: '900',
+  },
+});

@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../utils/auth';
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -95,6 +96,19 @@ const buildKakaoMapHtml = (
     background: #EAF1F7;
   }
 
+  .route-direction-arrow {
+    width: 12px;
+    height: 12px;
+    pointer-events: none;
+    filter: drop-shadow(0 0 1px #475569);
+  }
+
+  .route-direction-arrow svg {
+    display: block;
+    width: 12px;
+    height: 12px;
+  }
+
   /*
    * ===============================
    * 일반 방문지 마커
@@ -141,6 +155,34 @@ const buildKakaoMapHtml = (
     line-height: 22px;
     text-align: center;
     transform: rotate(45deg);
+  }
+
+  .marker-number.marker-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .marker-icon svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+  }
+
+  .marker-wrap.highlighted .marker {
+    border-color: #2477F3;
+    box-shadow: 0 0 0 3px #FFFFFF, 0 0 0 5px #2477F3;
+  }
+
+  .marker-wrap.search-selected {
+    transform: scale(1.3);
+    transform-origin: 50% 100%;
+  }
+
+  .marker-wrap.search-selected .marker {
+    border-color: #F97316;
+    box-shadow: 0 0 0 3px #FFFFFF, 0 0 0 5px #F97316;
   }
 
   /*
@@ -368,7 +410,12 @@ const buildKakaoMapHtml = (
   var renderedBoundaryCount = 0;
 
   var roadLine = null;
+  var activeOutline = null;
   var activeLine = null;
+  var trafficLines = [];
+  var displayedTrafficPaths = [];
+  var directionOverlays = [];
+  var displayedActivePath = [];
   var connectorLines = [];
   var entranceOverlays = [];
 
@@ -493,6 +540,16 @@ const buildKakaoMapHtml = (
       activeLine.setMap(null);
       activeLine = null;
     }
+    if (activeOutline) {
+      activeOutline.setMap(null);
+      activeOutline = null;
+    }
+    trafficLines.forEach(function (line) { line.setMap(null); });
+    trafficLines = [];
+
+    directionOverlays.forEach(function (overlay) { overlay.setMap(null); });
+    directionOverlays = [];
+    displayedActivePath = [];
 
     connectorLines.forEach(function (line) { line.setMap(null); });
     connectorLines = [];
@@ -588,14 +645,20 @@ const buildKakaoMapHtml = (
   function createMarkerElement(
     index,
     color,
-    pulse
+    pulse,
+    label,
+    highlighted,
+    selectedSearch,
+    returnLocation
   ) {
     var wrapper =
       document.createElement("div");
 
     wrapper.className =
       "marker-wrap" +
-      (pulse ? " near" : "");
+      (pulse ? " near" : "") +
+      (highlighted ? " highlighted" : "") +
+      (selectedSearch ? " search-selected" : "");
 
     var waveOne =
       document.createElement("div");
@@ -624,8 +687,13 @@ const buildKakaoMapHtml = (
     markerNumber.className =
       "marker-number";
 
-    markerNumber.innerText =
-      String(index + 1);
+    if (returnLocation) {
+      markerNumber.className += ' marker-icon';
+      markerNumber.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V3h14v18M3 21h18M10 21v-4h4v4M9 7h1m4 0h1M9 11h1m4 0h1"/></svg>';
+      wrapper.setAttribute('aria-label', '근무지');
+    } else {
+      markerNumber.innerText = label != null ? String(label) : String(index + 1);
+    }
 
     marker.appendChild(markerNumber);
 
@@ -761,7 +829,7 @@ const buildKakaoMapHtml = (
   /*
    * 여러 좌표가 모두 보이도록 화면 맞춤.
    */
-  function fitCoordinates(coordinates) {
+  function fitCoordinates(coordinates, padding) {
     if (
       !map ||
       !coordinates ||
@@ -779,12 +847,19 @@ const buildKakaoMapHtml = (
       );
     });
 
+    // A single result needs a readable street view, not maximum zoom.
+    if (coordinates.length === 1) {
+      var centerPoint = toLatLng(coordinates[0]);
+      bounds.extend(new window.kakao.maps.LatLng(centerPoint.getLat() - 0.0015, centerPoint.getLng() - 0.0015));
+      bounds.extend(new window.kakao.maps.LatLng(centerPoint.getLat() + 0.0015, centerPoint.getLng() + 0.0015));
+    }
+
     map.setBounds(
       bounds,
-      40,
-      40,
-      40,
-      40
+      padding?.top || 40,
+      padding?.right || 40,
+      padding?.bottom || 40,
+      padding?.left || 40
     );
   }
 
@@ -831,7 +906,11 @@ const buildKakaoMapHtml = (
           createMarkerElement(
             location.markerNumber ? location.markerNumber - 1 : index,
             location.color,
-            !!location.pulse
+            !!location.pulse,
+            location.markerLabel,
+            !!location.highlighted,
+            !!location.isSelectedSearch,
+            !!location.isReturnLocation
           );
 
         var overlay =
@@ -840,7 +919,7 @@ const buildKakaoMapHtml = (
             content: markerElement,
             xAnchor: 0.5,
             yAnchor: 1,
-            zIndex: 20 + index
+            zIndex: location.isSelectedSearch ? 150 : 20 + index
           });
 
         overlay.setMap(map);
@@ -921,9 +1000,9 @@ const buildKakaoMapHtml = (
           strokeWeight: 5,
 
           strokeColor:
-            "#12395B",
+            "#9CA3AF",
 
-          strokeOpacity: 0.25,
+          strokeOpacity: 0.12,
 
           strokeStyle:
             "solid"
@@ -932,7 +1011,7 @@ const buildKakaoMapHtml = (
       roadLine.setMap(map);
     }
 
-    updateActivePath(data.activePath);
+    updateActivePath(data.activePath, data.activeTrafficPaths, data.activeMode);
 
     (data.connectorPaths || []).forEach(function (connector) {
       if (!Array.isArray(connector) || connector.length < 2) return;
@@ -959,6 +1038,20 @@ const buildKakaoMapHtml = (
       entranceOverlays.push(entrance);
     });
 
+    if (data.vehicleArrival) {
+      var arrivalDot = document.createElement("div");
+      arrivalDot.style.cssText = "width:12px;height:12px;background:#E74C3C;border:2px solid white;border-radius:50%;box-shadow:0 1px 4px #0004;pointer-events:none;";
+      var arrivalOverlay = new window.kakao.maps.CustomOverlay({
+        position: new window.kakao.maps.LatLng(data.vehicleArrival.lat, data.vehicleArrival.lng),
+        content: arrivalDot,
+        xAnchor: 0.5,
+        yAnchor: 0.5,
+        zIndex: 91
+      });
+      arrivalOverlay.setMap(map);
+      entranceOverlays.push(arrivalOverlay);
+    }
+
     /*
      * 현재 GPS 위치
      */
@@ -970,21 +1063,124 @@ const buildKakaoMapHtml = (
     }
   }
 
-  function updateActivePath(path) {
+  function trafficColor(state) {
+    var colors = {
+      1: "#DC2626", // 정체
+      2: "#F97316", // 지체
+      3: "#FACC15", // 서행
+      4: "#16A34A", // 원활
+      6: "#64748B"  // 통행 불가
+    };
+    return colors[Number(state)] || "#9CA3AF"; // 교통 정보 없음
+  }
+
+  function updateActivePath(path, trafficPaths, mode) {
     if (!map) return;
+    if (Array.isArray(trafficPaths)) displayedTrafficPaths = trafficPaths;
+    displayedActivePath = Array.isArray(path) ? path : [];
+    if (activeOutline) {
+      activeOutline.setMap(null);
+      activeOutline = null;
+    }
     if (activeLine) {
       activeLine.setMap(null);
       activeLine = null;
     }
-    if (!Array.isArray(path) || path.length < 2) return;
+    trafficLines.forEach(function (line) { line.setMap(null); });
+    trafficLines = [];
+    if (displayedActivePath.length < 2) {
+      renderDirectionArrows();
+      return;
+    }
+    activeOutline = new window.kakao.maps.Polyline({
+      path: displayedActivePath.map(toLatLng),
+      strokeWeight: 11,
+      strokeColor: "#FFFFFF",
+      strokeOpacity: 0.95,
+      strokeStyle: "solid"
+    });
+    activeOutline.setMap(map);
     activeLine = new window.kakao.maps.Polyline({
-      path: path.map(toLatLng),
-      strokeWeight: 9,
-      strokeColor: "#12395B",
+      path: displayedActivePath.map(toLatLng),
+      strokeWeight: 7,
+      strokeColor: mode === "walk" ? "#2477F3" : "#9CA3AF",
       strokeOpacity: 1,
       strokeStyle: "solid"
     });
     activeLine.setMap(map);
+    displayedTrafficPaths.forEach(function (section) {
+      if (!Array.isArray(section.path) || section.path.length < 2) return;
+      var line = new window.kakao.maps.Polyline({
+        path: section.path.map(toLatLng),
+        strokeWeight: 7,
+        strokeColor: trafficColor(section.trafficState),
+        strokeOpacity: 1,
+        strokeStyle: "solid"
+      });
+      line.setMap(map);
+      trafficLines.push(line);
+    });
+    renderDirectionArrows();
+  }
+
+  function routePoint(point) {
+    return {
+      lat: Number(point.latitude != null ? point.latitude : point.lat != null ? point.lat : point.y),
+      lng: Number(point.longitude != null ? point.longitude : point.lng != null ? point.lng : point.x)
+    };
+  }
+
+  function routeDistance(a, b) {
+    var north = (b.lat - a.lat) * 111320;
+    var east = (b.lng - a.lng) * 111320 * Math.cos((a.lat + b.lat) * Math.PI / 360);
+    return Math.sqrt(north * north + east * east);
+  }
+
+  function renderDirectionArrows() {
+    directionOverlays.forEach(function (overlay) { overlay.setMap(null); });
+    directionOverlays = [];
+    if (!map || displayedActivePath.length < 2 || map.getLevel() > 5) return;
+
+    var points = displayedActivePath.map(routePoint);
+    var totalDistance = 0;
+    for (var i = 1; i < points.length; i++) {
+      totalDistance += routeDistance(points[i - 1], points[i]);
+    }
+    var spacing = Math.max(45, Math.min(90, totalDistance / 4), totalDistance / 30);
+    var nextArrowAt = spacing / 2;
+    var travelled = 0;
+
+    for (var index = 1; index < points.length && directionOverlays.length < 30; index++) {
+      var start = points[index - 1];
+      var end = points[index];
+      var length = routeDistance(start, end);
+      if (!Number.isFinite(length) || length < 0.1) continue;
+      var east = (end.lng - start.lng) * Math.cos((start.lat + end.lat) * Math.PI / 360);
+      var north = end.lat - start.lat;
+      var angle = Math.atan2(east, north) * 180 / Math.PI;
+
+      while (nextArrowAt <= travelled + length && directionOverlays.length < 30) {
+        var fraction = (nextArrowAt - travelled) / length;
+        var arrow = document.createElement("div");
+        arrow.className = "route-direction-arrow";
+        arrow.style.transform = "rotate(" + angle + "deg)";
+        arrow.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1 L10 10 L6 8 L2 10 Z" fill="#FFFFFF"/></svg>';
+        var overlay = new window.kakao.maps.CustomOverlay({
+          position: new window.kakao.maps.LatLng(
+            start.lat + (end.lat - start.lat) * fraction,
+            start.lng + (end.lng - start.lng) * fraction
+          ),
+          content: arrow,
+          xAnchor: 0.5,
+          yAnchor: 0.5,
+          zIndex: 90
+        });
+        overlay.setMap(map);
+        directionOverlays.push(overlay);
+        nextArrowAt += spacing;
+      }
+      travelled += length;
+    }
   }
 
   /*
@@ -1010,7 +1206,7 @@ const buildKakaoMapHtml = (
     }
 
     if (commandData.type === "ACTIVE_PATH") {
-      updateActivePath(commandData.path);
+      updateActivePath(commandData.path, commandData.trafficPaths, commandData.mode);
       return;
     }
 
@@ -1041,12 +1237,13 @@ const buildKakaoMapHtml = (
     }
 
     if (commandData.type === "SELECTION_SESSION") {
+      var startingSelection = Boolean(commandData.enabled) && !selectionSessionActive;
       selectionSessionActive = Boolean(commandData.enabled);
 
       if (selectionSessionActive && map) {
         // 새 방문지를 "지도에서 직접 선택"할 때는 기존/최근 마커로 이동하지 않는다.
         // 사용자가 현재 보고 있던 지도 중심을 그대로 첫 선택 좌표로 잡고 즉시 마커를 표시한다.
-        if (!selectedCenter) {
+        if (startingSelection || !selectedCenter) {
           selectedCenter = map.getCenter();
         }
         ensureSelectionOverlay();
@@ -1142,7 +1339,7 @@ const buildKakaoMapHtml = (
       commandData.type === "FIT"
     ) {
       fitCoordinates(
-        commandData.coordinates
+        commandData.coordinates, commandData.padding
       );
 
       return;
@@ -1286,6 +1483,7 @@ const buildKakaoMapHtml = (
       );
 
       window.kakao.maps.event.addListener(map, "zoom_changed", function () {
+        renderDirectionArrows();
         // 줌은 선택 위도/경도를 바꾸지 않는다. 위치 설정 중이면 같은 좌표를 중심으로만 유지한다.
         if (selectionMode && selectionSessionActive && selectedCenter) {
           map.setCenter(selectedCenter);
@@ -1334,6 +1532,14 @@ export default function KakaoMapWebView({
   routeSegments = [],
   currentSegmentIndex = 0,
   isGuiding = false,
+  guideTarget,
+  onReturnArrival,
+  previewRouteSegment = null,
+  routeViewportPadding = null,
+  highlightedLocationKey = null,
+  focusCoordinates = null,
+  focusToken = 0,
+  focusPadding = null,
 
   searchedPlace,
   clearSearchMarkerSignal,
@@ -1428,6 +1634,10 @@ export default function KakaoMapWebView({
 
   const activePathRef =
     useRef([]);
+  const liveCallbacksRef = useRef({ onCurrentLocationChange, onRerouteRequest });
+  liveCallbacksRef.current = { onCurrentLocationChange, onRerouteRequest };
+  const previewRouteRef = useRef(previewRouteSegment);
+  previewRouteRef.current = previewRouteSegment;
 
   /*
    * ===============================
@@ -1459,10 +1669,7 @@ export default function KakaoMapWebView({
     setSelectedLocation,
   ] = useState(null);
 
-  const [
-    isSearching,
-    setIsSearching,
-  ] = useState(false);
+  const isSearching = false;
 
   /*
    * 가까워진 목적지 key.
@@ -1594,12 +1801,21 @@ export default function KakaoMapWebView({
 
         coordinates,
 
-        edgePadding:
+        padding:
           options.edgePadding ||
           {},
       });
     },
   });
+
+  const focusCoordinatesKey = JSON.stringify(focusCoordinates || []);
+  useEffect(() => {
+    if (!focusCoordinates?.length) return;
+    followModeRef.current = false;
+    if (segmentFocusTimerRef.current) { clearTimeout(segmentFocusTimerRef.current); segmentFocusTimerRef.current = null; }
+    if (panReturnTimerRef.current) { clearTimeout(panReturnTimerRef.current); panReturnTimerRef.current = null; }
+    sendMapCommand({ type: "FIT", coordinates: focusCoordinates, padding: focusPadding });
+  }, [focusCoordinatesKey, focusToken]);
 
   /*
    * ===============================
@@ -1631,7 +1847,7 @@ export default function KakaoMapWebView({
     currentSegmentIndex;
 
   const currentTarget =
-    mapLocations[
+    guideTarget !== undefined ? guideTarget : mapLocations[
       currentTargetIndex
     ];
   const hasCurrentPosition = Boolean(currentPos);
@@ -1674,6 +1890,16 @@ export default function KakaoMapWebView({
       panReturnTimerRef.current = null;
     }
   }, [isGuiding]);
+
+  useEffect(() => {
+    if (previewRouteSegment) {
+      followModeRef.current = false;
+      if (panReturnTimerRef.current) {
+        clearTimeout(panReturnTimerRef.current);
+        panReturnTimerRef.current = null;
+      }
+    } else if (isGuiding) followModeRef.current = true;
+  }, [previewRouteSegment, isGuiding]);
 
   /*
    * ===============================
@@ -1782,6 +2008,7 @@ export default function KakaoMapWebView({
       setPulseTargetKey(
         null
       );
+      setArrivalTarget(null);
 
       return;
     }
@@ -1804,6 +2031,7 @@ export default function KakaoMapWebView({
       setPulseTargetKey(
         null
       );
+      setArrivalTarget(null);
 
       return;
     }
@@ -1828,6 +2056,7 @@ export default function KakaoMapWebView({
     const targetKey =
       currentTarget.id ??
       `${currentTarget.detailAddress}-${currentTarget.lat}-${currentTarget.lng}`;
+    setArrivalTarget((previous) => previous?.targetKey !== targetKey ? null : previous);
 
     const distance =
       getDistanceMeters(
@@ -1926,12 +2155,12 @@ export default function KakaoMapWebView({
         null;
     }
 
-    const targetPath =
+    const targetPath = previewRouteSegment?.path || (
       isGuiding
         ? routeSegments[
             currentSegmentIndex
           ]?.path || []
-        : roadPath;
+        : roadPath);
 
     if (
       !targetPath ||
@@ -1942,7 +2171,7 @@ export default function KakaoMapWebView({
     }
 
     const coordinates =
-      targetPath.concat((isGuiding ? [routeSegments[currentSegmentIndex]] : routeSegments)
+      targetPath.concat((previewRouteSegment ? [previewRouteSegment] : isGuiding ? [routeSegments[currentSegmentIndex]] : routeSegments)
         .flatMap((segment) => segment?.connectorPath || []))
         .map((point) => ({
           latitude:
@@ -1986,6 +2215,7 @@ export default function KakaoMapWebView({
       ];
 
     const focusKey = [
+      previewRouteSegment?.destinationKey || "",
       isGuiding
         ? "guiding"
         : "preview",
@@ -1999,6 +2229,10 @@ export default function KakaoMapWebView({
 
       last.latitude,
       last.longitude,
+      routeViewportPadding?.top ?? 300,
+      routeViewportPadding?.right ?? 80,
+      routeViewportPadding?.bottom ?? 260,
+      routeViewportPadding?.left ?? 80,
     ].join("-");
 
     if (segmentFocusKeyRef.current === focusKey) {
@@ -2008,7 +2242,7 @@ export default function KakaoMapWebView({
     segmentFocusKeyRef.current =
       focusKey;
 
-    if (isGuiding && !followModeRef.current) {
+    if (isGuiding && !previewRouteSegment && !followModeRef.current) {
       return;
     }
 
@@ -2016,17 +2250,17 @@ export default function KakaoMapWebView({
       coordinates,
       {
         edgePadding: {
-          top: 300,
-          right: 80,
-          bottom: 260,
-          left: 80,
+          top: routeViewportPadding?.top ?? 300,
+          right: routeViewportPadding?.right ?? 80,
+          bottom: routeViewportPadding?.bottom ?? 260,
+          left: routeViewportPadding?.left ?? 80,
         },
 
         animated: true,
       }
     );
 
-    if (!isGuiding) {
+    if (!isGuiding || previewRouteSegment) {
       return;
     }
 
@@ -2073,6 +2307,11 @@ export default function KakaoMapWebView({
     currentSegmentIndex,
     routeSegments,
     roadPath,
+    previewRouteSegment,
+    routeViewportPadding?.top,
+    routeViewportPadding?.right,
+    routeViewportPadding?.bottom,
+    routeViewportPadding?.left,
   ]);
 
   /*
@@ -2202,7 +2441,7 @@ export default function KakaoMapWebView({
           false
         );
 
-        onCurrentLocationChange?.({
+        liveCallbacksRef.current.onCurrentLocationChange?.({
           lat:
             pos.latitude,
 
@@ -2252,7 +2491,7 @@ export default function KakaoMapWebView({
                 newPos
               );
 
-              onCurrentLocationChange?.({
+              liveCallbacksRef.current.onCurrentLocationChange?.({
                 lat:
                   newPos.latitude,
 
@@ -2327,7 +2566,7 @@ export default function KakaoMapWebView({
                   lastRerouteTimeRef.current =
                     now;
 
-                  onRerouteRequest?.({
+                  liveCallbacksRef.current.onRerouteRequest?.({
                     lat:
                       newPos.latitude,
 
@@ -2557,6 +2796,31 @@ export default function KakaoMapWebView({
       currentPos,
       activePath,
     ]);
+
+  const activeTrafficPaths = useMemo(() => {
+    const segments = isGuiding ? [routeSegments[currentSegmentIndex]] : routeSegments;
+    const sections = segments.flatMap((segment) =>
+      Array.isArray(segment?.trafficSections) ? segment.trafficSections : []);
+    if (!isGuiding) return sections;
+    if (remainingActivePath.length < 2) return [];
+
+    // Match road vertices to the current segment, then remove the passed part.
+    // Sequential matching also handles a route that visits the same point twice.
+    const passedCount = activePath.length - remainingActivePath.length;
+    const samePoint = (a, b) => a && b &&
+      Number(a.lat ?? a.latitude ?? a.y) === Number(b.lat ?? b.latitude ?? b.y) &&
+      Number(a.lng ?? a.longitude ?? a.x) === Number(b.lng ?? b.longitude ?? b.x);
+    let cursor = 0;
+    return sections.flatMap((section) => {
+      if (!Array.isArray(section.path) || section.path.length < 2) return [];
+      const start = activePath.findIndex((point, index) =>
+        index >= cursor && samePoint(point, section.path[0]));
+      if (start < 0) return [];
+      cursor = start + section.path.length - 1;
+      const path = section.path.slice(Math.max(0, passedCount - start));
+      return path.length >= 2 ? [{ ...section, path }] : [];
+    });
+  }, [isGuiding, routeSegments, currentSegmentIndex, activePath, remainingActivePath]);
 
   /*
    * ===============================
@@ -2841,24 +3105,6 @@ export default function KakaoMapWebView({
     });
   };
 
-  const handleFieldAction =
-    (action) => {
-      if (
-        !selectedLocation
-      ) {
-        return;
-      }
-
-      setSelectedLocation(
-        null
-      );
-
-      onMarkerClick?.(
-        selectedLocation,
-        action
-      );
-    };
-
   /*
    * ===============================
    * React Native 데이터 → 지도
@@ -2886,6 +3132,7 @@ export default function KakaoMapWebView({
 
           return {
             ...location,
+            highlighted: String(location.id ?? `${location.lat},${location.lng},${location.detailAddress}`) === highlightedLocationKey,
 
             color:
               location.markerColor || getMarkerColorByStatus(
@@ -2917,8 +3164,10 @@ export default function KakaoMapWebView({
 
         currentPos: currentPosRef.current,
 
-        roadPath: isGuiding ? [] : roadPath,
-        connectorPaths: (isGuiding ? [routeSegments[currentSegmentIndex]] : routeSegments)
+        roadPath: previewRouteSegment || isGuiding ? [] : roadPath,
+        vehicleArrival: (previewRouteSegment || routeSegments[currentSegmentIndex])?.engine === 'kakao-sdk'
+          ? (previewRouteSegment || routeSegments[currentSegmentIndex]).navigationDestination : null,
+        connectorPaths: (previewRouteSegment ? [previewRouteSegment] : isGuiding ? [routeSegments[currentSegmentIndex]] : routeSegments)
           .map((segment) => segment?.connectorPath)
           .filter((path) => Array.isArray(path) && path.length >= 2),
 
@@ -2927,9 +3176,11 @@ export default function KakaoMapWebView({
          * 조금씩 잘라낸 버전을 사용.
          */
         activePath:
-          isGuiding
+          previewRouteSegment ? previewRouteSegment.path || [] : isGuiding
             ? remainingActivePath
             : activePath,
+        activeTrafficPaths: previewRouteSegment ? previewRouteSegment.trafficSections || [] : activeTrafficPaths,
+        activeMode: previewRouteSegment?.mode || routeSegments[currentSegmentIndex]?.mode,
       },
     });
   }, [
@@ -2940,15 +3191,18 @@ export default function KakaoMapWebView({
     routeSegments,
     currentSegmentIndex,
     activePath,
+    activeTrafficPaths,
     isGuiding,
     pulseTargetKey,
     selectionSessionActive,
+    previewRouteSegment,
+    highlightedLocationKey,
   ]);
 
   useEffect(() => {
-    if (!isGuiding || !initialMapPositionRef.current) return;
-    sendMapCommand({ type: "ACTIVE_PATH", path: remainingActivePath });
-  }, [isGuiding, remainingActivePath]);
+    if (!isGuiding || previewRouteSegment || !initialMapPositionRef.current) return;
+    sendMapCommand({ type: "ACTIVE_PATH", path: remainingActivePath, trafficPaths: activeTrafficPaths, mode: routeSegments[currentSegmentIndex]?.mode });
+  }, [isGuiding, remainingActivePath, activeTrafficPaths, previewRouteSegment]);
 
   useEffect(() => {
     if (!boundaries) {
@@ -3100,10 +3354,10 @@ export default function KakaoMapWebView({
             onSelectionMoveChange?.(false);
           }
 
-          if (guidingRef.current) {
+          if (guidingRef.current && !previewRouteRef.current) {
             panReturnTimerRef.current = setTimeout(() => {
               panReturnTimerRef.current = null;
-              if (guidingRef.current && !followModeRef.current) {
+              if (guidingRef.current && !previewRouteRef.current && !followModeRef.current) {
                 moveToCurrentLocation();
               }
             }, 5000);
@@ -3748,7 +4002,7 @@ export default function KakaoMapWebView({
             >
               {arrivalTarget?.detailAddress ||
                 "목적지"}{" "}
-              작업을 시작하시겠습니까?
+              {arrivalTarget?.isReturnLocation ? '근처에 도착했습니다.' : '작업을 시작하시겠습니까?'}
             </Text>
 
             <View
@@ -3780,6 +4034,12 @@ export default function KakaoMapWebView({
                 onPress={
                   async () => {
                     try {
+                      if (arrivalTarget?.isReturnLocation) {
+                        onReturnArrival?.();
+                        setArrivalTarget(null);
+                        setPulseTargetKey(null);
+                        return;
+                      }
                       if (
                         arrivalTarget?.id
                       ) {
@@ -3867,7 +4127,7 @@ export default function KakaoMapWebView({
                     styles.actionText
                   }
                 >
-                  작업 시작
+                  {arrivalTarget?.isReturnLocation ? '안내 종료' : '작업 시작'}
                 </Text>
               </TouchableOpacity>
             </View>

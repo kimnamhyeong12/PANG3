@@ -1,4 +1,5 @@
 package com.fieldwork.controller;
+import com.fieldwork.security.CurrentUser;
 
 import com.fieldwork.entity.TaskProgress;
 import com.fieldwork.service.TaskProgressService;
@@ -22,11 +23,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping("/api/task-progress")
-@CrossOrigin(origins = "*")
 public class TaskProgressController {
 
     private final TaskProgressService taskProgressService;
-    private record CombinedFile(Long userId, String path, List<Long> progressIds) {}
+    private record CombinedFile(Long userId, String path, List<Long> progressIds, java.time.Instant expiresAt) {}
     public record ReportBatchRequest(Long userId, List<Long> progressIds) {}
     private final Map<String, CombinedFile> combinedFiles = new ConcurrentHashMap<>();
 
@@ -34,54 +34,76 @@ public class TaskProgressController {
         this.taskProgressService = taskProgressService;
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> invalidInput(IllegalArgumentException error) {
+        return ResponseEntity.badRequest().body(Map.of("message", error.getMessage()));
+    }
+
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String, Object> saveProgressMultipart(MultipartHttpServletRequest request) throws Exception {
+        CurrentUser.require(request.getParameter("userId"));
         return taskProgressService.saveFromMultipart(request);
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> saveProgressJson(@RequestBody Map<String, Object> body) throws Exception {
+        body.put("userId", CurrentUser.require(body.get("userId")));
         return taskProgressService.saveFromJson(body);
+    }
+
+    @PatchMapping(value = "/task/{taskId}/location", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> updatePosition(@PathVariable Long taskId, @RequestBody Map<String, Object> body) throws Exception {
+        return taskProgressService.updatePosition(taskId, CurrentUser.id(), body, null);
+    }
+
+    @PatchMapping(value = "/task/{taskId}/location", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> updatePositionMultipart(@PathVariable Long taskId, MultipartHttpServletRequest request) throws Exception {
+        Map<String, Object> body = new java.util.HashMap<>();
+        for (String name : List.of("latitude", "longitude", "locationAddress", "progressId", "expectedRevision"))
+            body.put(name, request.getParameter(name));
+        return taskProgressService.updatePosition(taskId, CurrentUser.id(), body, request.getFile("mapImage"));
     }
 
     @GetMapping("/task/{taskId}")
     public Map<String, Object> getProgressByTaskId(@PathVariable Long taskId) {
+        taskProgressService.validateTaskReader(taskId, CurrentUser.id());
         return taskProgressService.getLatestByTaskId(taskId);
     }
 
     @GetMapping("/{progressId}")
     public Map<String, Object> getReport(@PathVariable Long progressId, @RequestParam Long userId) {
         TaskProgress progress = taskProgressService.getById(progressId);
-        taskProgressService.validateReader(progress.getTask(), userId);
+        taskProgressService.validateReader(progress.getTask(), CurrentUser.require(userId));
         return taskProgressService.toResponseMap(progress, progress.getTask());
     }
 
     @PostMapping("/{progressId}/report/prepare")
     public Map<String, Object> prepare(@PathVariable Long progressId, @RequestParam Long userId) {
-        return taskProgressService.prepareReport(progressId, userId);
+        return taskProgressService.prepareReport(progressId, CurrentUser.require(userId));
     }
 
     @PostMapping("/reports/prepare")
     public Map<String, Object> prepareCombined(@RequestBody ReportBatchRequest body) throws Exception {
-        Long userId = body.userId();
+        Long userId = CurrentUser.require(body.userId());
         List<Long> ids = body.progressIds();
         if (userId == null || ids == null || ids.isEmpty() || ids.stream().anyMatch(id -> id == null || id <= 0)) {
             throw new IllegalArgumentException("사용자와 선택한 보고서를 확인하세요.");
         }
         String file = taskProgressService.prepareCombined(ids, userId);
         String key = UUID.randomUUID().toString();
-        combinedFiles.put(key, new CombinedFile(userId, file, List.copyOf(ids)));
+        combinedFiles.put(key, new CombinedFile(userId, file, List.copyOf(ids), java.time.Instant.now().plusSeconds(86400)));
         return Map.of("reportDownloadUrl", "/api/task-progress/reports/" + key + "/download?userId=" + userId,
                 "reportCount", ids.stream().distinct().count());
     }
 
     @GetMapping("/reports/{key}/download")
     public ResponseEntity<Resource> downloadCombined(@PathVariable String key, @RequestParam Long userId) {
+        CurrentUser.require(userId);
         CombinedFile file = combinedFiles.get(key);
-        if (file == null || !file.userId().equals(userId)) return ResponseEntity.notFound().build();
+        if (file == null || !file.expiresAt().isAfter(java.time.Instant.now()) || !file.userId().equals(userId)) return ResponseEntity.notFound().build();
         for (Long id : file.progressIds()) {
             TaskProgress progress = taskProgressService.getById(id);
-            taskProgressService.validateReader(progress.getTask(), userId);
+            taskProgressService.validateReader(progress.getTask(), CurrentUser.require(userId));
             taskProgressService.validateDownloadable(progress);
         }
         return downloadFile(file.path(), "combined_report.hwpx");
@@ -93,9 +115,15 @@ public class TaskProgressController {
                 .contentType(MediaType.APPLICATION_OCTET_STREAM).body(new FileSystemResource(Paths.get(reportPath)));
     }
 
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 3600000)
+    public void expireCombinedDownloads() {
+        combinedFiles.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(java.time.Instant.now()));
+    }
+
     @GetMapping("/{progressId}/report/download")
     public ResponseEntity<Resource> downloadReport(@PathVariable Long progressId) {
         TaskProgress progress = taskProgressService.getById(progressId);
+        taskProgressService.validateReader(progress.getTask(), CurrentUser.id());
         taskProgressService.validateDownloadable(progress);
         String reportPath = progress.getReportFilePath();
 

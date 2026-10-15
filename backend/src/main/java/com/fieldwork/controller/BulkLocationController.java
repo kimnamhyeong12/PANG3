@@ -9,7 +9,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/locations/bulk")
-@CrossOrigin(origins = "*")
 public class BulkLocationController {
     private final BulkLocationService bulkLocationService;
 
@@ -20,6 +19,7 @@ public class BulkLocationController {
     @PostMapping
     public ResponseEntity<Map<String, Object>> upload(@RequestBody BulkLocationRequest request) {
         try {
+            com.fieldwork.security.CurrentUser.require(request.createdByUserId());
             return ResponseEntity.ok(bulkLocationService.importLocations(request));
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));

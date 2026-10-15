@@ -1,0 +1,20 @@
+name: pang3-release-local
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: pang3-release-test-db
+    environment:
+      POSTGRES_USER: pang3_test
+      POSTGRES_PASSWORD: local_test_only
+      POSTGRES_DB: pang3_release_test
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - pang3-release-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pang3_test -d pang3_release_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  pang3-release-test-data:

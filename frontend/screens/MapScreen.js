@@ -1,16 +1,18 @@
+import { apiFetch as fetch } from '../utils/auth';
 import { showAlert } from '../components/CustomAlert';
 // 키보드 자판 내 엔터가 안먹힘
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
   ActivityIndicator,
+  Animated,
   BackHandler,
   FlatList,
   Keyboard,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,37 +22,48 @@ import {
   View,
 } from 'react-native';
 import KakaoMapWebView from '../components/KakaoMapWebView';
-import { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
-import { locationKey, numberVisits, numberOptimizedVisits } from '../utils/routeSession';
+import PlaceSearchOverlay from '../components/PlaceSearchOverlay';
+import SearchResultSheet from '../components/SearchResultSheet';
+import WorkplaceField from '../components/WorkplaceField';
+import { KakaoNavigationView, beginRouteSession, endRouteSession, wasRouteTaskRemoved, isKakaoNavigationAvailable, previewSdkRoute, isSdkPreviewAvailable, discardSdkPreview } from '../modules/kakao-navigation';
 import {
   stopRouteNotification,
   updateRouteNotification,
 } from '../services/notificationService';
-
+import { isRegisteredPlace, placeLocation, searchViewportPlaces } from '../utils/placeSearch';
+import { locationKey } from '../utils/routeSession';
+import { remainingRouteProgress } from '../utils/routeProgress';
+import { hasVisitCoordinates, numberVisitOrder, promoteVisit, recommendVisitOrder, visitSetKey } from '../utils/visitOrder';
+import { BUSAN_DISTRICT_CODES } from '../constants/busanDistricts';
+// 엑셀,csv 데이터 업로드
+import BulkUploadModal from '../components/BulkUploadModal';
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const EMPTY_MARKERS = [];
 const dongName = (value) => String(value || '').trim().split(/\s+/).pop().replace(/제(?=\d+동$)/, '') || '';
-const inDong = (item, name) => Boolean(name) && dongName(item.adminDong || item.admin_dong) === name;
-const replaceDongLocations = (previous, next, name) => {
-  if (!name) return next;
-  const result = [];
-  let inserted = false;
-  previous.forEach((item) => {
-    if (inDong(item, name)) {
-      if (!inserted) result.push(...next);
-      inserted = true;
-    } else {
-      result.push(item);
-    }
-  });
-  if (!inserted) result.push(...next);
-  return result;
-};
 const PUBLIC_FACILITY_CATEGORIES = [
   { key: 'aed', label: '심폐제세동기', shortLabel: 'AED', icon: 'medkit-outline' },
   { key: 'bus', label: '버스정류장', shortLabel: '버스정류장', icon: 'bus-outline' },
 ];
+
+function facilityViewCoordinates(feature, items) {
+  const points = [];
+  const collect = (coordinates) => {
+    if (!Array.isArray(coordinates)) return;
+    if (typeof coordinates[0] === 'number' && typeof coordinates[1] === 'number') {
+      points.push({ lat: coordinates[1], lng: coordinates[0] });
+    } else coordinates.forEach(collect);
+  };
+  collect(feature?.geometry?.coordinates);
+  const located = (points.length ? points : items).filter(hasVisitCoordinates);
+  if (!located.length) return [];
+  let south = Infinity, north = -Infinity, west = Infinity, east = -Infinity;
+  located.forEach((point) => {
+    south = Math.min(south, Number(point.lat)); north = Math.max(north, Number(point.lat));
+    west = Math.min(west, Number(point.lng)); east = Math.max(east, Number(point.lng));
+  });
+  return [{ lat: south, lng: west }, { lat: north, lng: east }];
+}
 
 const getLocalDateKey = (date = new Date()) => {
   const year = date.getFullYear();
@@ -75,12 +88,6 @@ const getStatusColor = (status) => {
   if (status === 'complete') return '#1F9D55';
   if (status === 'working') return '#FACC15';
   return '#E74C3C';
-};
-
-const getStatusLabel = (status) => {
-  if (status === 'complete') return '작업 후';
-  if (status === 'working') return '작업 중';
-  return '작업 전';
 };
 
 const isCompleted = (item) => ['complete', 'completed', 'done'].includes(
@@ -110,68 +117,6 @@ const cleanLocation = (loc, fallbackName = '위치') => {
   };
 };
 
-const geoDistance = (a, b) => {
-  if (!a || !b) return Number.POSITIVE_INFINITY;
-  const lat1 = Number(a.lat ?? a.latitude);
-  const lng1 = Number(a.lng ?? a.longitude);
-  const lat2 = Number(b.lat ?? b.latitude);
-  const lng2 = Number(b.lng ?? b.longitude);
-  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
-  const rad = Math.PI / 180;
-  const dLat = (lat2 - lat1) * rad;
-  const dLng = (lng2 - lng1) * rad;
-  const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
-  return 6371000 * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
-};
-
-const geometricFixedEndOrder = (start, visits, home) => {
-  const remaining = [...visits];
-  const result = [];
-  let cursor = start;
-
-  while (remaining.length) {
-    let bestIndex = 0;
-    let bestScore = Number.POSITIVE_INFINITY;
-    remaining.forEach((candidate, index) => {
-      const score = geoDistance(cursor, candidate) + geoDistance(candidate, home) * 0.18;
-      if (score < bestScore) {
-        bestScore = score;
-        bestIndex = index;
-      }
-    });
-    const [next] = remaining.splice(bestIndex, 1);
-    result.push(next);
-    cursor = next;
-  }
-
-  const routeCost = (order) => {
-    let total = 0;
-    let point = start;
-    order.forEach((item) => { total += geoDistance(point, item); point = item; });
-    total += geoDistance(point, home);
-    return total;
-  };
-
-  let improved = true;
-  while (improved) {
-    improved = false;
-    let currentCost = routeCost(result);
-    for (let i = 0; i < result.length - 1; i += 1) {
-      for (let j = i + 1; j < result.length; j += 1) {
-        const candidate = [...result];
-        candidate.splice(i, j - i + 1, ...candidate.slice(i, j + 1).reverse());
-        const candidateCost = routeCost(candidate);
-        if (candidateCost + 0.5 < currentCost) {
-          result.splice(0, result.length, ...candidate);
-          currentCost = candidateCost;
-          improved = true;
-        }
-      }
-    }
-  }
-
-  return result;
-};
 
 function NormalMapScreen({
   isActive = true,
@@ -190,42 +135,57 @@ function NormalMapScreen({
   setRoadPath,
   routeSegments,
   setRouteSegments,
-  currentSegmentIndex,
   setCurrentSegmentIndex,
-  optimized,
   setOptimized,
   isGuiding,
   setIsGuiding,
-  totalDuration,
   setTotalDuration,
-  panelOpen,
   setPanelOpen,
-  onSwitchToPublic,
   routeResumeToken = 0,
-  selectedDong: persistedSelectedDong = null,
-  onSelectedDongChange,
+  recordReturn,
   pendingWork = [],
   onAddWork,
+  onUpdatedUser,
+  onSearchVisibilityChange,
 }) {
-  const [selected, setSelected] = useState(null);
-  const [optimizing, setOptimizing] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchInitialQuery, setSearchInitialQuery] = useState('');
+  const [resultsMode, setResultsMode] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedSearchPinId, setSelectedSearchPinId] = useState(null);
+  const [resultQuery, setResultQuery] = useState('');
+  const [mapHeight, setMapHeight] = useState(600);
+  const [topOverlayBottom, setTopOverlayBottom] = useState(0);
+  const [bottomOverlayHeight, setBottomOverlayHeight] = useState(0);
+  const [focusRequest, setFocusRequest] = useState({ coordinates: [], token: 0 });
+  const [workplaceOpen, setWorkplaceOpen] = useState(false);
+  const [workplaceCandidate, setWorkplaceCandidate] = useState(null);
+  const [workplaceBusy, setWorkplaceBusy] = useState(false);
+  useEffect(() => { if (isActive) onSearchVisibilityChange?.(searchOpen); return () => { if (isActive) onSearchVisibilityChange?.(false); }; }, [searchOpen, isActive]);
+  const focusPlaces = (rows) => setFocusRequest(previous => ({ coordinates: rows.filter(hasVisitCoordinates), token: previous.token + 1 }));
+  const [preview, setPreview] = useState(null);
+  const previewRequestRef = useRef(0);
+  const guideRequestRef = useRef(0);
+  const orderSetRef = useRef(null);
+  const workspaceScopeRef = useRef(null);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [transportMode, setTransportMode] = useState('car');
   const [segmentChanging, setSegmentChanging] = useState(false);
-  const [guideStartOpen, setGuideStartOpen] = useState(false);
+  const [kakaoDestination, setKakaoDestination] = useState(null);
+  const [multiArrival, setMultiArrival] = useState(false);
+  const [nativeProgress, setNativeProgress] = useState(null);
 
   const [keyword, setKeyword] = useState('');
   const [searchedPlace, setSearchedPlace] = useState(null);
   const [placeName, setPlaceName] = useState('');
   const [task, setTask] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
+  const registrationBusyRef = useRef(false);
+  const [registrationBusy, setRegistrationBusy] = useState(false);
   const [clearSearchMarkerSignal, setClearSearchMarkerSignal] = useState(0);
 
   const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const [addressSearchMode, setAddressSearchMode] = useState(false);
   const [mapSelectMode, setMapSelectMode] = useState(false);
   const [locationSettingMode, setLocationSettingMode] = useState(false);
-  const [locationMoving, setLocationMoving] = useState(false);
   const [directCenter, setDirectCenter] = useState(null);
   const [centerAddress, setCenterAddress] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -234,11 +194,8 @@ function NormalMapScreen({
   const [coordLat, setCoordLat] = useState('');
   const [coordLng, setCoordLng] = useState('');
 
-  const [priorityMode, setPriorityMode] = useState(false);
-  const [selectionPurpose, setSelectionPurpose] = useState('visit');
   const [returnLocation, setReturnLocation] = useState(null);
-  const [priorityMap, setPriorityMap] = useState({});
-  const [priorityLoaded, setPriorityLoaded] = useState(false);
+  const [includeReturn, setIncludeReturn] = useState(true);
   const [publicFacilityMode, setPublicFacilityMode] = useState(false);
   const [publicSheetOpen, setPublicSheetOpen] = useState(true);
   const [publicCategoryOpen, setPublicCategoryOpen] = useState(false);
@@ -252,46 +209,22 @@ function NormalMapScreen({
   const [pendingSelected, setPendingSelected] = useState([]);
   const [pendingBusy, setPendingBusy] = useState(false);
   const [dongOpen, setDongOpen] = useState(false);
-  const [myDongPanelOpen, setMyDongPanelOpen] = useState(false);
   const [favoriteDongNames, setFavoriteDongNames] = useState([]);
   const [dongOptions, setDongOptions] = useState([]);
   const [dongLoading, setDongLoading] = useState(false);
   const dongLoadIdRef = useRef(0);
-  const [dongAdding, setDongAdding] = useState(false);
-  const dongAddingRef = useRef(false);
-  dongAddingRef.current = dongAdding;
   const dongSheetY = useRef(new Animated.Value(0)).current;
-  const selectedDong = persistedSelectedDong;
+  const [selectedDong, setSelectedDong] = useState(null);
   const selectedDongName = dongName(selectedDong?.properties?.adm_nm || selectedDong?.properties?.name);
-  const selectedDongNameRef = useRef(selectedDongName);
-  selectedDongNameRef.current = selectedDongName;
-  const selectedDongBoundary = useMemo(() => selectedDong
-    ? { type: 'FeatureCollection', features: [selectedDong] }
-    : null, [selectedDong]);
-  const { dongWorkCounts, totalRemainingWork } = useMemo(() => {
-    const counts = new Map();
-    const seen = new Set();
-    const rows = [...(locations || []), ...pendingWork];
-    const rowId = (item) => String(item.id ?? item.taskId ?? item.task_id ?? locationKey(item));
-    const completedIds = new Set(rows.filter(isCompleted).map(rowId));
-    rows.forEach((item) => {
-      const id = rowId(item);
-      if (completedIds.has(id)) return;
-      if (seen.has(id)) return;
-      seen.add(id);
-      const name = dongName(item.adminDong || item.admin_dong);
-      if (name) counts.set(name, (counts.get(name) || 0) + 1);
-    });
-    return { dongWorkCounts: counts, totalRemainingWork: seen.size };
-  }, [locations, pendingWork]);
   const favoriteDongKey = `pang3:favorite-dongs:${user?.userId || 'guest'}:${activeGroup?.groupId || 'personal'}`;
+  // 엑셀, csv 데이터 업로드
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   useEffect(() => {
     let active = true;
     setFavoriteDongNames([]);
     setDongOptions([]);
     setDongOpen(false);
     setDongLoading(false);
-    setMyDongPanelOpen(false);
     dongLoadIdRef.current += 1;
     AsyncStorage.getItem(favoriteDongKey).then((raw) => {
       if (!active) return;
@@ -313,21 +246,12 @@ function NormalMapScreen({
       return next;
     });
   };
-  const myDongNames = useMemo(() => Array.from(dongWorkCounts.keys()).sort((left, right) =>
-    (dongWorkCounts.get(right) || 0) - (dongWorkCounts.get(left) || 0)
-    || left.localeCompare(right, 'ko')
-  ), [dongWorkCounts]);
-  const MyDongListContainer = myDongNames.length > 6 ? ScrollView : View;
   const sortedDongOptions = useMemo(() => [...dongOptions].sort((left, right) => {
     const leftName = dongName(left.properties?.adm_nm || left.properties?.name);
     const rightName = dongName(right.properties?.adm_nm || right.properties?.name);
-    const leftCount = dongWorkCounts.get(leftName) || 0;
-    const rightCount = dongWorkCounts.get(rightName) || 0;
     return Number(favoriteDongNames.includes(rightName)) - Number(favoriteDongNames.includes(leftName))
-      || Number(rightCount > 0) - Number(leftCount > 0)
-      || rightCount - leftCount
       || leftName.localeCompare(rightName, 'ko');
-  }), [dongOptions, dongWorkCounts, favoriteDongNames]);
+  }), [dongOptions, favoriteDongNames]);
 
   const sheetY = useRef(new Animated.Value(0)).current;
   const publicSheetY = useRef(new Animated.Value(0)).current;
@@ -338,7 +262,7 @@ function NormalMapScreen({
     }
   }, [dongOpen, dongSheetY]);
   useEffect(() => {
-    if (!isActive) setDongOpen(false);
+    if (!isActive) { setDongOpen(false); setSearchOpen(false); }
   }, [isActive]);
   useEffect(() => {
     if (!publicSheetOpen) publicSheetY.setValue(0);
@@ -346,70 +270,12 @@ function NormalMapScreen({
   useEffect(() => {
     if (!pendingOpen) pendingSheetY.setValue(0);
   }, [pendingOpen, pendingSheetY]);
-  const searchInputRef = useRef(null);
-  const guideAdvanceRef = useRef(false);
-
-  const visitNumbersRef = useRef({});
-  const autoRouteKeyRef = useRef('');
-  const visitNumberScopeRef = useRef(null);
-  const returnStorageKey = `pang3:return-location:${user?.userId || 'guest'}`;
-  const priorityStorageKey = `pang3:route-priorities:${user?.userId || 'guest'}:${locationScope}:${activeGroup?.groupId || 'personal'}`;
-
   useEffect(() => {
-    let active = true;
-    setPriorityLoaded(false);
-    AsyncStorage.getItem(priorityStorageKey)
-      .then((raw) => {
-        if (!active) return;
-        if (!raw) {
-          setPriorityMap({});
-          return;
-        }
-        try {
-          const parsed = JSON.parse(raw);
-          setPriorityMap(parsed && typeof parsed === 'object' ? parsed : {});
-        } catch {
-          setPriorityMap({});
-        }
-      })
-      .catch(() => { if (active) setPriorityMap({}); })
-      .finally(() => { if (active) setPriorityLoaded(true); });
-    return () => { active = false; };
-  }, [priorityStorageKey]);
+    setReturnLocation(user?.workplaceAddress && user?.workplaceLat != null && user?.workplaceLng != null
+      ? { detailAddress: '근무지', roadAddress: user.workplaceAddress, lat: Number(user.workplaceLat), lng: Number(user.workplaceLng), isReturnLocation: true }
+      : null);
+  }, [user?.userId, user?.workplaceAddress, user?.workplaceLat, user?.workplaceLng]);
 
-  useEffect(() => {
-    if (!priorityLoaded) return;
-    AsyncStorage.setItem(priorityStorageKey, JSON.stringify(priorityMap)).catch(() => {});
-  }, [priorityLoaded, priorityMap, priorityStorageKey]);
-
-  useEffect(() => {
-    let active = true;
-    AsyncStorage.getItem(returnStorageKey)
-      .then((raw) => {
-        if (!active || !raw) return;
-        try {
-          const parsed = JSON.parse(raw);
-          const lat = Number(parsed?.lat);
-          const lng = Number(parsed?.lng);
-          if (Number.isFinite(lat) && Number.isFinite(lng)) {
-            setReturnLocation({ ...parsed, lat, lng, isReturnLocation: true });
-          }
-        } catch {}
-      })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [returnStorageKey]);
-
-  const saveReturnLocation = async (location) => {
-    const next = location ? { ...location, isReturnLocation: true } : null;
-    setReturnLocation(next);
-    try {
-      if (next) await AsyncStorage.setItem(returnStorageKey, JSON.stringify(next));
-      else await AsyncStorage.removeItem(returnStorageKey);
-    } catch (error) {
-      console.log('[ReturnLocation] 저장 실패:', error?.message || error);
-    }
-  };
   useEffect(() => {
     if (!mapSelectMode || !directCenter || !KAKAO_REST_API_KEY) return undefined;
     let cancelled = false;
@@ -459,147 +325,47 @@ function NormalMapScreen({
       if (requestId === dongLoadIdRef.current) setDongLoading(false);
     }
   };
-  const selectDong = async (feature) => {
-    if (dongAdding) return;
-    const name = dongName(feature.properties?.adm_nm || feature.properties?.name);
-    const remaining = pendingWork.filter((item) =>
-      !isCompleted(item) && dongName(item.adminDong || item.admin_dong) === name
-    );
-    setDongAdding(true);
-    try {
-      if (name !== selectedDongName) {
-        setIsGuiding(false);
-        stopRouteNotification();
-        setRoadPath([]);
-        setRouteSegments([]);
-        setCurrentSegmentIndex(0);
-        setTotalDuration(null);
-        setOptimized(false);
-      }
-      onSelectedDongChange?.(feature);
-      setDongOpen(false);
-      setMyDongPanelOpen(false);
-      if (remaining.length && onAddWork) {
-        const added = await onAddWork(remaining);
-        if (added === false) throw new Error('방문지를 등록하지 못했습니다. 잠시 후 다시 선택해 주세요.');
-        if (name !== selectedDongName) {
-          setRoadPath([]);
-          setRouteSegments([]);
-          setCurrentSegmentIndex(0);
-          setTotalDuration(null);
-          setOptimized(false);
-        }
-      }
-    } catch (error) {
-      showAlert('방문지 등록 실패', error.message || '방문지를 지도에 추가하지 못했습니다.');
-    } finally {
-      setDongAdding(false);
-    }
+  const selectDong = (feature) => {
+    setSelectedDong(feature);
+    setPublicItems([]);
+    setPublicSelectedIds([]);
+    setDongOpen(false);
+    setPublicSheetOpen(true);
+    if (!publicCategory) setPublicCategoryOpen(true);
   };
-  const routeMarkers = useMemo(() => {
-    const scope = locationScope === 'personal'
-      ? `${user?.userId}:personal`
-      : `${user?.userId}:${activeGroup?.groupId}:${locationScope}`;
-    if (visitNumberScopeRef.current !== scope) {
-      visitNumbersRef.current = {};
-      visitNumberScopeRef.current = scope;
-    }
-    const numbered = numberVisits((locations || []).filter((item) => inDong(item, selectedDongName)), visitNumbersRef.current)
-      .map((row) => {
-        const key = locationKey(row);
-        const storedPriority = Number(priorityMap[key]);
-        return {
-          ...row,
-          priority: Number.isFinite(storedPriority) && storedPriority > 0
-            ? storedPriority
-            : null,
-        };
-      });
-    numbered.forEach((row) => { visitNumbersRef.current[locationKey(row)] = row.markerNumber; });
-    return numbered;
-  }, [locations, selectedDongName, user?.userId, activeGroup?.groupId, locationScope, priorityMap]);
-  const markers = useMemo(() => [...routeMarkers].sort((a, b) => a.markerNumber - b.markerNumber), [routeMarkers]);
-  const orderedMarkers = useMemo(() => routeMarkers.filter((item) => !isCompleted(item)), [routeMarkers]);
-
-  // Priority markers always occupy the front slots. Non-priority markers continue
-  // with normal numbers immediately after P1, P2, ... so the visible order is
-  // unambiguous while priorities are being edited.
-  const activeDisplayMarkers = useMemo(() => {
-    const prioritized = orderedMarkers
-      .filter((item) => Number.isFinite(Number(item.priority)) && Number(item.priority) > 0)
-      .sort((a, b) => Number(a.priority) - Number(b.priority));
-    const prioritizedKeys = new Set(prioritized.map(locationKey));
-    const normal = orderedMarkers
-      .filter((item) => !prioritizedKeys.has(locationKey(item)))
-      .sort((a, b) => Number(a.markerNumber || 0) - Number(b.markerNumber || 0));
-    const priorityCount = prioritized.length;
-
-    return [
-      ...prioritized.map((item) => ({ ...item, markerLabel: `P${Number(item.priority)}` })),
-      ...normal.map((item, index) => ({ ...item, markerLabel: String(priorityCount + index + 1) })),
-    ];
-  }, [orderedMarkers]);
-
-  // The visit chips/list use the same visual ordering. Removing a priority puts
-  // the item back into the normal marker-number order, and the remaining labels
-  // close the gap automatically.
-  const visitDisplayMarkers = useMemo(() => {
-    const unfinished = markers.filter((item) => !isCompleted(item));
-    const prioritized = unfinished
-      .filter((item) => Number.isFinite(Number(item.priority)) && Number(item.priority) > 0)
-      .sort((a, b) => Number(a.priority) - Number(b.priority));
-    const prioritizedKeys = new Set(prioritized.map(locationKey));
-    const normal = unfinished
-      .filter((item) => !prioritizedKeys.has(locationKey(item)))
-      .sort((a, b) => Number(a.markerNumber || 0) - Number(b.markerNumber || 0));
-    const priorityCount = prioritized.length;
-
-    return [
-      ...prioritized.map((item) => ({ ...item, displayMarkerLabel: `P${Number(item.priority)}` })),
-      ...normal.map((item, index) => ({ ...item, displayMarkerLabel: String(priorityCount + index + 1) })),
-      ...markers.filter(isCompleted).map((item) => ({ ...item, displayMarkerLabel: String(item.markerNumber || '') })),
-    ];
-  }, [markers]);
-  const completedDisplayMarkers = useMemo(() => markers
-    .filter(isCompleted)
-    .map((item) => ({ ...item, markerLabel: String(item.markerNumber || '') })), [markers]);
-  const returnDisplayMarker = useMemo(() => {
-    if (!returnLocation || !Number.isFinite(Number(returnLocation.lat)) || !Number.isFinite(Number(returnLocation.lng))) return null;
-    const markerNumber = markers.length + 1;
-    return {
-      id: '__return_location__',
-      lat: Number(returnLocation.lat),
-      lng: Number(returnLocation.lng),
-      detailAddress: returnLocation.detailAddress || '복귀 위치',
-      roadAddress: returnLocation.roadAddress || '',
-      status: 'return',
-      isReturnLocation: true,
-      markerNumber,
-      markerLabel: String(markerNumber),
-      color: '#2477F3',
-    };
-  }, [returnLocation, markers.length]);
-  const guideTargets = useMemo(() => {
-    if (!returnLocation) return orderedMarkers;
-    return [
-      ...orderedMarkers,
-      {
-        id: '__return_location__',
-        lat: Number(returnLocation.lat),
-        lng: Number(returnLocation.lng),
-        detailAddress: returnLocation.detailAddress || '복귀 위치',
-        roadAddress: returnLocation.roadAddress || '',
-        status: 'return',
-        isReturnLocation: true,
-      },
-    ];
-  }, [orderedMarkers, returnLocation]);
+  const markers = useMemo(() => [...(locations || [])].sort((a, b) =>
+    (a.markerNumber || Infinity) - (b.markerNumber || Infinity)), [locations]);
+  const orderedMarkers = useMemo(() => markers.filter((item) => !isCompleted(item)), [markers]);
+  const activeDisplayMarkers = useMemo(() => orderedMarkers.map((item) => ({ ...item,
+    markerLabel: String(item.markerNumber || '') })), [orderedMarkers]);
+  const completedDisplayMarkers = useMemo(() => markers.filter(isCompleted)
+    .map((item) => ({ ...item, markerLabel: '✓' })), [markers]);
+  const visitDisplayMarkers = useMemo(() => [...activeDisplayMarkers, ...completedDisplayMarkers]
+    .map((item) => ({ ...item, displayMarkerLabel: item.markerLabel })), [activeDisplayMarkers, completedDisplayMarkers]);
+  const returnDisplayMarker = useMemo(() => hasVisitCoordinates(returnLocation) ? {
+    ...returnLocation, id: '__return_location__', status: 'return', isReturnLocation: true,
+    markerLabel: '', markerColor: '#2477F3',
+  } : null, [returnLocation]);
   const mapOnlyMarkers = useMemo(() => {
-    const routeKeys = new Set(routeMarkers.map(locationKey));
-    const lastNumber = Math.max(0, ...markers.map((item) => item.markerNumber || 0));
-    return previewMarkers.filter((item) => inDong(item, selectedDongName) && !routeKeys.has(locationKey(item)))
-      .map((item, index) => ({ ...item, markerNumber: lastNumber + index + 1 }));
-  }, [previewMarkers, routeMarkers, markers, selectedDongName]);
+    const keys = new Set(markers.map(locationKey));
+    return previewMarkers.filter((item) => !keys.has(locationKey(item)))
+      .map((item) => ({ ...item, markerLabel: isCompleted(item) ? '✓' : '·' }));
+  }, [previewMarkers, markers]);
+  const allVisits = useMemo(() => [...markers, ...mapOnlyMarkers,
+    ...(returnDisplayMarker ? [returnDisplayMarker] : [])], [markers, mapOnlyMarkers, returnDisplayMarker]);
+  const activeSegment = routeSegments?.[0]?.destinationKey ? routeSegments[0] : null;
+  const activeTarget = activeSegment ? allVisits.find((item) => locationKey(item) === activeSegment.destinationKey) : null;
+  const previewTarget = preview ? allVisits.find((item) => locationKey(item) === preview.targetKey) : null;
+  const cardTarget = preview ? previewTarget : (isGuiding ? activeTarget : null);
+  const cardSegment = preview ? preview.segment : activeSegment;
+  const guidanceProgress = useMemo(() => {
+    if (!isGuiding || !activeSegment) return null;
+    if (activeSegment.mode === 'car') return nativeProgress?.destinationKey === activeSegment.destinationKey ? nativeProgress : null;
+    return remainingRouteProgress(activeSegment, currentLocation);
+  }, [isGuiding, activeSegment, currentLocation, nativeProgress]);
+  const cardDistance = !preview && guidanceProgress ? guidanceProgress.distance : cardSegment?.totalDistance;
+  const cardDuration = !preview && guidanceProgress ? guidanceProgress.duration : cardSegment?.totalDuration;
+  const routeVisibleKey = preview?.segment ? preview.targetKey : (!preview && isGuiding ? activeSegment?.destinationKey : null);
   const publicDisplayItems = useMemo(() => {
     const categoryInfo = PUBLIC_FACILITY_CATEGORIES.find((entry) => entry.key === publicCategory);
     return publicItems.map((item) => ({
@@ -609,62 +375,21 @@ function NormalMapScreen({
       markerColor: publicSelectedIds.includes(item.id) ? '#0CA678' : '#2477F3',
     }));
   }, [publicItems, publicSelectedIds, publicCategory]);
-  const resumedTokenRef = useRef(null);
-  const assignmentMap = useMemo(() => {
-    const map = new Map();
-    groupAssignments.forEach((item) => map.set(Number(item.taskId), item));
-    return map;
-  }, [groupAssignments]);
-
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchModalVisible, setSearchModalVisible] = useState(false);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const PAGE_SIZE = 7;
-
-  const goFirst = () => searchPlace(1);
-  const goLast = () => searchPlace(totalPages);
-
-  const goPrev = () => {
-    if (page > 1) searchPlace(page - 1);
-  };
-
-  const goNext = () => {
-    if (page < totalPages) searchPlace(page + 1);
-  };
-
-  const getPageNumbers = () => {
-    const maxVisible = 5;
-
-    let start = Math.max(1, page - 2);
-    let end = Math.min(totalPages, start + maxVisible - 1);
-
-    if (end - start < maxVisible - 1) {
-      start = Math.max(1, end - maxVisible + 1);
-    }
-
-    const pages = [];
-
-    for (let i = start; i <= end; i++) {
-      pages.push(i);
-    }
-
-    return pages;
-  };
+  const showReturnMarker = Boolean(returnDisplayMarker && (preview?.targetKey === locationKey(returnDisplayMarker)
+    || (isGuiding && activeSegment?.destinationKey === locationKey(returnDisplayMarker))));
+  const displayLocations = useMemo(() => [...activeDisplayMarkers, ...completedDisplayMarkers,
+    ...(showReturnMarker ? [returnDisplayMarker] : [])], [activeDisplayMarkers, completedDisplayMarkers, returnDisplayMarker, showReturnMarker]);
+  const searchPins = resultsMode ? searchResults.map((place, index) => {
+    const id = `search:${place.id}:${index}`; const selected = id === selectedSearchPinId;
+    return { ...placeLocation(place), id, isSearchResult: true, isSelectedSearch: selected, markerLabel: selected ? '✓' : '⌕', markerColor: selected ? '#F97316' : '#168DE2', status: 'search' };
+  }) : [];
+  const displayOnlyLocations = [...mapOnlyMarkers, ...publicDisplayItems, ...searchPins];
+  const publicViewCoordinates = useMemo(() => publicFacilityMode && selectedDong
+    ? facilityViewCoordinates(selectedDong, publicItems) : [], [publicFacilityMode, selectedDong, publicItems]);
 
   useEffect(() => {
     setPanelOpen?.(false);
   }, []);
-
-  useEffect(() => {
-    const mode = routeSegments[currentSegmentIndex]?.mode;
-
-    if (mode === 'walk' || mode === 'car') {
-      setTransportMode(mode);
-    } else if (!optimized) {
-      setTransportMode('car');
-    }
-  }, [currentSegmentIndex, routeSegments, optimized]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => {
@@ -702,7 +427,7 @@ function NormalMapScreen({
 
     const backAction = () => {
       if (dongOpen) {
-        if (!dongAdding) setDongOpen(false);
+        setDongOpen(false);
         return true;
       }
 
@@ -728,23 +453,21 @@ function NormalMapScreen({
         return true;
       }
 
+      if (resultsMode) { setResultsMode(false); return true; }
       if (searchedPlace) {
         closeAddSheet();
         return true;
       }
 
-      if (guideStartOpen) {
-        setGuideStartOpen(false);
-        return true;
-      }
 
       if (visitListOpen) {
         setVisitListOpen(false);
         return true;
       }
 
-      if (selected) {
-        setSelected(null);
+      if (preview) {
+        previewRequestRef.current += 1;
+        setPreview(null);
         return true;
       }
 
@@ -760,14 +483,13 @@ function NormalMapScreen({
   }, [
     isActive,
     dongOpen,
-    dongAdding,
     coordSheetOpen,
     mapSelectMode,
     addMenuOpen,
     searchedPlace,
-    guideStartOpen,
+    resultsMode,
     visitListOpen,
-    selected,
+    preview,
   ]);
 
   const panResponder = useRef(
@@ -855,7 +577,7 @@ function NormalMapScreen({
   const dongSheetPanResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) =>
-        !dongAddingRef.current && gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+        gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
       onPanResponderTerminationRequest: () => false,
       onPanResponderMove: (_, gesture) => dongSheetY.setValue(Math.max(0, gesture.dy)),
       onPanResponderRelease: (_, gesture) => {
@@ -865,7 +587,7 @@ function NormalMapScreen({
             duration: 220,
             useNativeDriver: true,
           }).start(({ finished }) => {
-            if (finished && !dongAddingRef.current) setDongOpen(false);
+            if (finished) setDongOpen(false);
             else Animated.spring(dongSheetY, { toValue: 0, useNativeDriver: true }).start();
           });
         } else {
@@ -878,40 +600,8 @@ function NormalMapScreen({
     })
   ).current;
 
-  const handleSetPriority = (targetLocation) => {
-    if (targetLocation?.isReturnLocation || targetLocation?.isPublicFacility) return;
-    if (!priorityMode) {
-      onLocationClick?.(targetLocation, 'report');
-      return;
-    }
-
-    const targetKey = locationKey(targetLocation);
-    const currentPriority = Number(priorityMap[targetKey]);
-    const hasPriority = Number.isFinite(currentPriority) && currentPriority > 0;
-    const priorities = Object.entries(priorityMap)
-      .map(([key, value]) => ({ key, priority: Number(value) }))
-      .filter((item) => Number.isFinite(item.priority) && item.priority > 0)
-      .sort((a, b) => a.priority - b.priority);
-
-    setPriorityMap((previous) => {
-      const next = { ...previous };
-      if (hasPriority) {
-        delete next[targetKey];
-        Object.entries(next).forEach(([key, value]) => {
-          const priority = Number(value);
-          if (Number.isFinite(priority) && priority > currentPriority) {
-            next[key] = priority - 1;
-          }
-        });
-      } else {
-        next[targetKey] = priorities.length + 1;
-      }
-      return next;
-    });
-  };
-
   useEffect(() => {
-    if (!publicFacilityMode || !publicCategory) {
+    if (!publicFacilityMode || !selectedDong || !publicCategory) {
       setPublicItems([]);
       setPublicSelectedIds([]);
       return undefined;
@@ -931,6 +621,8 @@ function NormalMapScreen({
       return undefined;
     }
     let cancelled = false;
+    setPublicItems([]);
+    setPublicSelectedIds([]);
     (async () => {
       try {
         setPublicLoading(true);
@@ -1031,54 +723,26 @@ function NormalMapScreen({
     }
   };
 
-  const searchPlace = async (targetPage = 1) => {
-    const q = keyword.trim();
-
-    if (!q) {
-      showAlert('입력 필요', '주소나 장소명을 입력하세요.');
-      return;
-    }
-
-    if (!KAKAO_REST_API_KEY) {
-      showAlert(
-        'REST API 키 필요',
-        '.env의 EXPO_PUBLIC_KAKAO_REST_API_KEY를 확인하세요.'
-      );
-      return;
-    }
-
+  const openSearch = () => { setSearchInitialQuery(resultsMode ? resultQuery : ''); resetAddModes(); setAddMenuOpen(false); setResultsMode(false); setSearchOpen(true); };
+  const showResults = (rows, query) => {
+    setSelectedSearchPinId(null);
+    setSearchResults(rows); setResultQuery(query); setKeyword(query); setResultsMode(true); setSearchOpen(false);
+    focusPlaces(searchViewportPlaces(rows).map(placeLocation));
+  };
+  const addSearchPlace = (place) => {
+    if (isRegisteredPlace(place, locations || [])) return;
+    setSearchOpen(false); setResultsMode(false); setNextPlace(place);
+  };
+  const saveWorkplace = async () => {
+    if (!workplaceCandidate?.workplaceAddress || workplaceBusy) return;
+    setWorkplaceBusy(true);
     try {
-      setIsSearching(true);
-
-      const keywordUrl =
-        `https://dapi.kakao.com/v2/local/search/keyword.json` +
-        `?query=${encodeURIComponent(q)}&page=${targetPage}&size=7`;
-
-      const res = await fetch(keywordUrl, {
-        headers: {
-          Authorization: `KakaoAK ${KAKAO_REST_API_KEY}`,
-        },
-      });
-
-      const data = await res.json();
-
-      if (!data.documents || data.documents.length === 0) {
-        showAlert('검색 실패', '검색 결과가 없습니다.');
-        return;
-      }
-
-      setSearchResults(data.documents);
-      setPage(targetPage);
-
-      const total = Math.ceil(data.meta.pageable_count / PAGE_SIZE);
-      setTotalPages(total);
-      setSearchModalVisible(true);
-    } catch (error) {
-      console.log(error);
-      showAlert('검색 오류', '주소 검색 중 문제가 발생했습니다.');
-    } finally {
-      setIsSearching(false);
-    }
+      const response = await fetch(`${API_BASE_URL}/api/users/${user.userId}/workplace`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(workplaceCandidate) });
+      if (!response.ok) throw new Error('근무지를 저장하지 못했습니다.');
+      onUpdatedUser?.({ ...user, ...(await response.json()) }); setWorkplaceOpen(false);
+      showAlert('등록 완료', '근무지를 등록했습니다. 메뉴의 근무지 복귀로 안내를 시작할 수 있습니다.');
+    } catch (error) { showAlert('저장 실패', error.message); }
+    finally { setWorkplaceBusy(false); }
   };
 
   const setNextPlace = async (loc) => {
@@ -1104,11 +768,12 @@ function NormalMapScreen({
     setSearchedPlace(nextLoc);
     setPlaceName(nextLoc.detailAddress);
     setTask('');
-    setSearchModalVisible(false);
-    setAddressSearchMode(false);
+    focusPlaces([nextLoc]);
+
   };
 
   const resetAddModes = () => {
+    setResultsMode(false); setSearchOpen(false);
     setPendingOpen(false);
     setCoordSheetOpen(false);
     setSearchedPlace(null);
@@ -1120,7 +785,7 @@ function NormalMapScreen({
     setLocationSettingMode(false);
     setDirectCenter(null);
     setCenterAddress('');
-    setAddressSearchMode(false);
+
     setPublicFacilityMode(false);
     setPublicCategoryOpen(false);
     setPublicCategory('');
@@ -1134,7 +799,7 @@ function NormalMapScreen({
     const lat = Number(coordLat);
     const lng = Number(coordLng);
 
-    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    if (!coordLat.trim() || !coordLng.trim() || !Number.isFinite(lat) || !Number.isFinite(lng)) {
       showAlert('입력 오류', '위도와 경도를 숫자로 입력하세요.');
       return;
     }
@@ -1160,7 +825,7 @@ function NormalMapScreen({
     setCoordSheetOpen(false);
     setCoordLat('');
     setCoordLng('');
-    setAddressSearchMode(false);
+
   };
 
   const getAdministrativeRegion = async (lat, lng) => {
@@ -1202,6 +867,7 @@ function NormalMapScreen({
   };
 
   const addLocation = async () => {
+    if (registrationBusyRef.current) return;
     if (!searchedPlace) {
       showAlert('위치 필요', '먼저 위치를 선택하세요.');
       return;
@@ -1212,10 +878,15 @@ function NormalMapScreen({
       return;
     }
 
-    const region = await getAdministrativeRegion(
-      searchedPlace.lat,
-      searchedPlace.lng
-    );
+    registrationBusyRef.current = true; setRegistrationBusy(true);
+    let region;
+    try {
+      region = await getAdministrativeRegion(searchedPlace.lat, searchedPlace.lng);
+    } catch (error) {
+      showAlert('행정구역 조회 실패', error.message);
+      registrationBusyRef.current = false; setRegistrationBusy(false);
+      return;
+    }
 
     console.log('행정구역 확인:', region);
 
@@ -1261,6 +932,7 @@ function NormalMapScreen({
         setLocations?.((previous) => [
           ...(Array.isArray(previous) ? previous : locations || []),
           {
+            ...newLoc,
             ...savedLocation,
             id: savedLocation.id ?? savedLocation.taskId ?? savedLocation.task_id,
             detailAddress: savedLocation.detailAddress || newLoc.detailAddress,
@@ -1278,9 +950,11 @@ function NormalMapScreen({
         ]);
       }
       onDataChanged?.();
+      focusPlaces([newLoc]);
+      showAlert('방문지 등록 완료', `${newLoc.detailAddress}을(를) 오늘 업무에 추가했습니다.`);
 
       setKeyword('');
-      setAddressSearchMode(false);
+
       closeAddSheet();
     } catch (error) {
       console.log(error);
@@ -1288,6 +962,8 @@ function NormalMapScreen({
         'DB 저장 실패',
         '백엔드 실행 상태와 EXPO_PUBLIC_API_BASE_URL을 확인하세요.'
       );
+    } finally {
+      registrationBusyRef.current = false; setRegistrationBusy(false);
     }
   };
 
@@ -1353,7 +1029,7 @@ function NormalMapScreen({
   };
 
   const formatDuration = (seconds) => {
-    if (!seconds) return null;
+    if (seconds == null || !Number.isFinite(Number(seconds))) return null;
 
     const minutes = Math.round(seconds / 60);
 
@@ -1368,7 +1044,7 @@ function NormalMapScreen({
   };
 
   const formatDistance = (meters) => {
-    if (!meters) return null;
+    if (meters == null || !Number.isFinite(Number(meters))) return null;
 
     if (meters >= 1000) {
       return `약 ${(meters / 1000).toFixed(1)}km`;
@@ -1377,47 +1053,14 @@ function NormalMapScreen({
     return `약 ${Math.round(meters)}m`;
   };
 
-  const getGuideSummary = () => {
-    if (!isGuiding) {
-      return formatDuration(totalDuration)
-        ? ` · 예상 이동시간 ${formatDuration(totalDuration)}`
-        : '';
+  const fetchRouteSegment = async (startLocation, endLocation, mode, allowMultiple = multiArrival) => {
+    if (mode === 'car') {
+      const segment = await previewSdkRoute({ startLat: Number(startLocation.lat), startLng: Number(startLocation.lng),
+        lat: Number(endLocation.lat), lng: Number(endLocation.lng), name: endLocation.detailAddress || endLocation.name || '방문지',
+        address: endLocation.roadAddress || '', routePriority: 'TIME', multiArrival: allowMultiple });
+      return { segment: { ...segment, mode, fromName: '현재 위치', toName: endLocation.detailAddress || '목적지' },
+        totalDuration: segment.totalDuration };
     }
-
-    const currentSegment = routeSegments[currentSegmentIndex];
-
-    if (!currentSegment) return '';
-
-    const distance =
-      currentSegment.totalDistance ??
-      currentSegment.distance ??
-      getPathDistance(currentSegment.path);
-
-    const duration =
-      currentSegment.totalDuration ??
-      currentSegment.duration ??
-      currentSegment.durationSeconds ??
-      (distance ? distance / 5.5 : null);
-
-    const distanceText = formatDistance(distance);
-    const durationText = formatDuration(duration);
-
-    if (distanceText && durationText) {
-      return ` · 남은거리 ${distanceText} · 남은시간 ${durationText}`;
-    }
-
-    if (distanceText) {
-      return ` · 남은거리 ${distanceText}`;
-    }
-
-    if (durationText) {
-      return ` · 구간시간 ${durationText}`;
-    }
-
-    return '';
-  };
-
-  const fetchRouteSegment = async (startLocation, endLocation, mode) => {
     const res = await fetch(`${API_BASE_URL}/api/routes/segment`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(mode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) },
@@ -1441,737 +1084,394 @@ function NormalMapScreen({
     };
   };
 
-  const optimizeWithFixedReturn = async (startLocation, visits, homeLocation, mode) => {
-    const start = cleanLocation(startLocation, '현재 위치');
-    const home = cleanLocation(homeLocation, '복귀 위치');
-    const candidates = (visits || []).map((item) => cleanLocation(item)).filter(Boolean);
+  const scopeKey = `${user?.userId}:${activeGroup?.groupId}:${locationScope}`;
+  const membershipKey = visitSetKey(locations || []);
+  const [recommendationBasis, setRecommendationBasis] = useState('distance');
+  const [recommendationBusy, setRecommendationBusy] = useState(false);
+  const recommendationReturn = includeReturn ? returnDisplayMarker : null;
+  const returnOrderKey = recommendationReturn ? `${recommendationReturn.lat}:${recommendationReturn.lng}` : '';
+  const locationReady = hasVisitCoordinates(currentLocation);
+  const liveVisitsRef = useRef(allVisits);
+  liveVisitsRef.current = allVisits;
+  const resumedRouteRef = useRef(null);
+  const [resumeRetryToken, setResumeRetryToken] = useState(0);
+  const resumeRetryTimerRef = useRef(null);
+  const resumeFailureCountRef = useRef(0);
+  useEffect(() => () => {
+    clearTimeout(resumeRetryTimerRef.current);
+    resumeFailureCountRef.current = 0;
+  }, [isActive, isGuiding, scopeKey]);
 
-    if (!home) return { order: candidates, segments: [], totalDuration: 0 };
-    if (!candidates.length) {
-      const homeLeg = await fetchRouteSegment(start, home, mode);
-      return {
-        order: [],
-        segments: [{ ...homeLeg.segment, isReturnSegment: true, toName: home.detailAddress || '복귀 위치' }],
-        totalDuration: homeLeg.totalDuration,
-      };
-    }
-
-    let ordered = candidates;
-    const edgeCache = new Map();
-    const edgeKey = (from, to) => `${Number(from.lat).toFixed(6)},${Number(from.lng).toFixed(6)}>${Number(to.lat).toFixed(6)},${Number(to.lng).toFixed(6)}`;
-    const getLeg = async (from, to) => {
-      const key = edgeKey(from, to);
-      if (edgeCache.has(key)) return edgeCache.get(key);
-      const result = await fetchRouteSegment(from, to, mode);
-      edgeCache.set(key, result);
-      return result;
+  useEffect(() => {
+    workspaceScopeRef.current = scopeKey;
+    orderSetRef.current = null;
+    previewRequestRef.current += 1;
+    guideRequestRef.current += 1;
+    setPreview(null);
+    setSegmentChanging(false);
+    setKakaoDestination(null);
+    setNativeProgress(null);
+    setPublicFacilityMode(false);
+    setSearchOpen(false); setResultsMode(false); setFocusRequest({ coordinates: [], token: 0 });
+    setDongOpen(false);
+    setSelectedDong(null);
+    return () => {
+      previewRequestRef.current += 1;
+      guideRequestRef.current += 1;
     };
+  }, [scopeKey]);
 
-    // 방문지가 많지 않은 일반 외근 경로는 실제 도로 구간 시간을 기준으로
-    // 시작점/복귀 위치가 고정된 TSP를 정확히 계산한다.
-    if (candidates.length <= 8) {
-      const n = candidates.length;
-      const startCosts = new Array(n);
-      const homeCosts = new Array(n);
-      const betweenCosts = Array.from({ length: n }, () => new Array(n).fill(Number.POSITIVE_INFINITY));
-
-      await Promise.all(candidates.map(async (item, i) => {
-        const [fromStart, toHome] = await Promise.all([
-          getLeg(start, item),
-          getLeg(item, home),
-        ]);
-        startCosts[i] = Number(fromStart.segment?.totalDistance ?? fromStart.segment?.distance ?? 0) || fromStart.totalDuration || Number.POSITIVE_INFINITY;
-        homeCosts[i] = Number(toHome.segment?.totalDistance ?? toHome.segment?.distance ?? 0) || toHome.totalDuration || Number.POSITIVE_INFINITY;
-      }));
-
-      const pairJobs = [];
-      for (let i = 0; i < n; i += 1) {
-        for (let j = 0; j < n; j += 1) {
-          if (i === j) continue;
-          pairJobs.push((async () => {
-            const result = await getLeg(candidates[i], candidates[j]);
-            betweenCosts[i][j] = Number(result.segment?.totalDistance ?? result.segment?.distance ?? 0) || result.totalDuration || Number.POSITIVE_INFINITY;
-          })());
-        }
-      }
-      await Promise.all(pairJobs);
-
-      const size = 1 << n;
-      const dp = Array.from({ length: size }, () => new Array(n).fill(Number.POSITIVE_INFINITY));
-      const parent = Array.from({ length: size }, () => new Array(n).fill(-1));
-      for (let i = 0; i < n; i += 1) dp[1 << i][i] = startCosts[i];
-
-      for (let mask = 1; mask < size; mask += 1) {
-        for (let last = 0; last < n; last += 1) {
-          const base = dp[mask][last];
-          if (!Number.isFinite(base)) continue;
-          for (let next = 0; next < n; next += 1) {
-            if (mask & (1 << next)) continue;
-            const nextMask = mask | (1 << next);
-            const cost = base + betweenCosts[last][next];
-            if (cost < dp[nextMask][next]) {
-              dp[nextMask][next] = cost;
-              parent[nextMask][next] = last;
-            }
-          }
-        }
-      }
-
-      const fullMask = size - 1;
-      let bestLast = 0;
-      let bestCost = Number.POSITIVE_INFINITY;
-      for (let last = 0; last < n; last += 1) {
-        const total = dp[fullMask][last] + homeCosts[last];
-        if (total < bestCost) {
-          bestCost = total;
-          bestLast = last;
-        }
-      }
-
-      const indexes = [];
-      let mask = fullMask;
-      let last = bestLast;
-      while (last >= 0) {
-        indexes.push(last);
-        const prev = parent[mask][last];
-        mask &= ~(1 << last);
-        last = prev;
-      }
-      indexes.reverse();
-      ordered = indexes.map((index) => candidates[index]);
-    } else {
-      // 방문지가 많을 때는 API 호출 폭증을 피하면서도 복귀 위치까지 포함한
-      // 전체 동선을 줄이도록 고정 종료점 기반 2-opt를 적용한다.
-      ordered = geometricFixedEndOrder(start, candidates, home);
-    }
-
-    const segments = [];
-    let totalDuration = 0;
-    let cursor = start;
-    for (const target of ordered) {
-      const result = await getLeg(cursor, target);
-      segments.push(result.segment);
-      totalDuration += result.totalDuration;
-      cursor = target;
-    }
-    const homeLeg = await getLeg(cursor, home);
-    segments.push({ ...homeLeg.segment, isReturnSegment: true, toName: home.detailAddress || '복귀 위치' });
-    totalDuration += homeLeg.totalDuration;
-
-    return { order: ordered, segments, totalDuration };
-  };
-
-  const handleOptimizeRoute = async (mode = transportMode) => {
-    setGuideStartOpen(false);
-    setCurrentSegmentIndex(0);
-    setRoadPath([]);
-    setRouteSegments([]);
-    setTotalDuration(null);
-    setOptimized(false);
-    setIsGuiding(false);
-    stopRouteNotification();
-
-    if (!API_BASE_URL) {
-      showAlert('오류', '.env의 EXPO_PUBLIC_API_BASE_URL을 확인하세요.');
-      return;
-    }
-    if (!currentLocation) {
-      showAlert('현재 위치 필요', '현재 위치를 먼저 불러와야 합니다.');
-      return;
-    }
-    if (orderedMarkers.length === 0) {
-      showAlert('남은 작업 없음', '모든 방문지의 작업이 완료되었습니다.');
-      return;
-    }
-
-    try {
-      setOptimizing(true);
-      const completed = markers.filter((item) => item.status === 'complete');
-      const priorityMarkers = orderedMarkers
-        .filter((item) => Number.isFinite(Number(item.priority)) && Number(item.priority) > 0)
-        .sort((a, b) => Number(a.priority) - Number(b.priority));
-      const priorityKeys = new Set(priorityMarkers.map(locationKey));
-      const remainingMarkers = orderedMarkers.filter((item) => !priorityKeys.has(locationKey(item)));
-
-      let cursor = cleanLocation(currentLocation, '현재 위치');
-      const composedSegments = [];
-      let composedDuration = 0;
-
-      for (const target of priorityMarkers) {
-        const end = cleanLocation(target, target.detailAddress || '우선 방문지');
-        const result = await fetchRouteSegment(cursor, end, mode);
-        composedSegments.push(result.segment);
-        composedDuration += result.totalDuration;
-        cursor = end;
-      }
-
-      let optimizedRemaining = remainingMarkers;
-      const validReturnLocation = returnLocation &&
-        Number.isFinite(Number(returnLocation.lat)) &&
-        Number.isFinite(Number(returnLocation.lng))
-        ? returnLocation
-        : null;
-
-      if (validReturnLocation) {
-        const fixedEndResult = await optimizeWithFixedReturn(
-          cursor,
-          remainingMarkers,
-          validReturnLocation,
-          mode
-        );
-        optimizedRemaining = fixedEndResult.order.map((loc) => ({
-          ...remainingMarkers.find((item) => String(item.id ?? item.taskId) === String(loc.id ?? loc.taskId)),
-          ...loc,
-          priority: null,
-        }));
-        composedSegments.push(...fixedEndResult.segments);
-        composedDuration += fixedEndResult.totalDuration;
-      } else if (remainingMarkers.length > 0) {
-        const response = await fetch(`${API_BASE_URL}/api/routes/optimize`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(mode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) },
-          body: JSON.stringify({
-            currentLocation: cursor,
-            locations: remainingMarkers.map((item) => cleanLocation(item)).filter(Boolean),
-            transportMode: mode,
-          }),
-        });
-        const text = await response.text();
-        if (!response.ok) throw new Error(`경로 최적화 실패: ${response.status} / ${text}`);
-        const data = JSON.parse(text);
-        optimizedRemaining = (data.optimizedLocations || []).map((loc) => ({
-          ...remainingMarkers.find((item) => String(item.id ?? item.taskId) === String(loc.id ?? loc.taskId)),
-          ...loc,
-          lat: loc.lat ?? loc.latitude,
-          lng: loc.lng ?? loc.longitude,
-          priority: null,
-        }));
-        if (!optimizedRemaining.length) optimizedRemaining = remainingMarkers;
-        if (Array.isArray(data.segments)) composedSegments.push(...data.segments);
-        composedDuration += Number(data.totalDuration ?? 0) || 0;
-      }
-
-      const finalOrder = [...priorityMarkers, ...optimizedRemaining];
-
-      if (selectedDongNameRef.current !== selectedDongName) return;
-      const nextDongLocations = numberOptimizedVisits(finalOrder, completed);
-      setLocations?.((previous) => replaceDongLocations(
-        Array.isArray(previous) ? previous : locations || [], nextDongLocations, selectedDongName
-      ));
-      setRouteSegments(composedSegments);
-      setRoadPath(composedSegments.flatMap((segment) => segment?.path || []));
-      setCurrentSegmentIndex(0);
-      setTotalDuration(composedDuration || null);
-      setTransportMode(mode);
-      setOptimized(true);
-      setIsGuiding(false);
-      setGuideStartOpen(false);
-    } catch (error) {
-      console.log(error);
-      showAlert('오류', '경로 최적화 중 문제가 발생했습니다.');
-    } finally {
-      setOptimizing(false);
-    }
-  };
-
-  const autoRouteKey = [
-    `dong:${selectedDongName}`,
-    ...orderedMarkers.map((item) => `${String(item.id ?? item.taskId)}:${item.priority ?? '-'}`).sort(),
-    returnLocation ? `home:${returnLocation.lat}:${returnLocation.lng}` : 'home:none',
-  ].join(',');
-  const optimizeRemainingRoute = async () => {
-    if (!API_BASE_URL || !currentLocation) return;
-
-    // 안내 중 우선순위가 바뀌면 기존 목적지를 고정하지 않고,
-    // 현재 GPS 위치에서 남은 방문지 전체를 다시 계산한다.
-    // 그래서 기존 2번 방문지를 P1으로 바꾸면 즉시 그 방문지가 다음 목적지가 된다.
-    const candidates = orderedMarkers.filter((item) => item.status !== 'complete');
-    const validReturnLocation = returnLocation &&
-      Number.isFinite(Number(returnLocation.lat)) &&
-      Number.isFinite(Number(returnLocation.lng))
-      ? returnLocation
-      : null;
-    if (!candidates.length && !validReturnLocation) return;
-
-    try {
-      setOptimizing(true);
-
-      const priorityMarkers = candidates
-        .filter((item) => Number.isFinite(Number(item.priority)) && Number(item.priority) > 0)
-        .sort((a, b) => Number(a.priority) - Number(b.priority));
-      const priorityKeys = new Set(priorityMarkers.map(locationKey));
-      const remainingMarkers = candidates.filter((item) => !priorityKeys.has(locationKey(item)));
-
-      let cursor = cleanLocation(currentLocation, '현재 위치');
-      const nextSegments = [];
-      let nextDuration = 0;
-
-      for (const target of priorityMarkers) {
-        const end = cleanLocation(target, target.detailAddress || '우선 방문지');
-        const result = await fetchRouteSegment(cursor, end, transportMode);
-        nextSegments.push(result.segment);
-        nextDuration += result.totalDuration;
-        cursor = end;
-      }
-
-      let optimizedRemaining = remainingMarkers;
-      if (validReturnLocation) {
-        const fixedEndResult = await optimizeWithFixedReturn(
-          cursor,
-          remainingMarkers,
-          validReturnLocation,
-          transportMode
-        );
-        optimizedRemaining = fixedEndResult.order.map((loc) => ({
-          ...remainingMarkers.find((row) => String(row.id ?? row.taskId) === String(loc.id ?? loc.taskId)),
-          ...loc,
-          priority: null,
-        }));
-        nextSegments.push(...fixedEndResult.segments);
-        nextDuration += fixedEndResult.totalDuration;
-      } else if (remainingMarkers.length) {
-        const response = await fetch(`${API_BASE_URL}/api/routes/optimize`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(transportMode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}),
-          },
-          body: JSON.stringify({
-            currentLocation: cursor,
-            locations: remainingMarkers.map((item) => cleanLocation(item)).filter(Boolean),
-            transportMode,
-          }),
-        });
-        if (!response.ok) throw new Error('이후 경로 계산 실패');
-        const data = await response.json();
-        optimizedRemaining = (data.optimizedLocations || []).map((item) => ({
-          ...remainingMarkers.find((row) => String(row.id ?? row.taskId) === String(item.id)),
-          ...item,
-          lat: item.lat ?? item.latitude,
-          lng: item.lng ?? item.longitude,
-          priority: null,
-        }));
-        if (!optimizedRemaining.length) optimizedRemaining = remainingMarkers;
-        if (Array.isArray(data.segments)) nextSegments.push(...data.segments);
-        nextDuration += Number(data.totalDuration ?? 0) || 0;
-      }
-
-      const finalOrder = [...priorityMarkers, ...optimizedRemaining];
-      if (selectedDongNameRef.current !== selectedDongName) return;
-      const nextDongLocations = numberOptimizedVisits(
-        finalOrder, markers.filter((item) => item.status === 'complete')
-      );
-      setLocations?.((previous) => replaceDongLocations(
-        Array.isArray(previous) ? previous : locations || [], nextDongLocations, selectedDongName
-      ));
-      setRouteSegments(nextSegments);
-      setRoadPath(nextSegments.flatMap((segment) => segment?.path || []));
-      setCurrentSegmentIndex(0);
-      setTotalDuration(nextDuration || null);
-      setOptimized(true);
-      // 안내 상태는 유지한다. 목적지만 현재 위치 기준 새 1번으로 갱신된다.
-      setIsGuiding(true);
-    } catch (error) {
-      console.log(error);
-      showAlert('경로 계산 실패', '방문지는 유지했습니다. 경로 최적화를 다시 눌러주세요.');
-    } finally {
-      setOptimizing(false);
-    }
-  };
   useEffect(() => {
-    if (!isActive || !currentLocation || optimizing || dongAdding) return undefined;
-    if (!orderedMarkers.length) {
-      autoRouteKeyRef.current = autoRouteKey;
-      return undefined;
-    }
-    if (isGuiding) {
-      if (autoRouteKeyRef.current !== autoRouteKey) {
-        autoRouteKeyRef.current = autoRouteKey;
-        optimizeRemainingRoute();
-      }
-      return undefined;
-    }
-    if (autoRouteKeyRef.current === autoRouteKey) return undefined;
-    const timer = setTimeout(() => {
-      autoRouteKeyRef.current = autoRouteKey;
-      handleOptimizeRoute(transportMode);
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [isActive, autoRouteKey, currentLocation?.lat, currentLocation?.lng, isGuiding, optimizing, dongAdding]);
-
-  const updateGuideTargetSegment = async (targetIndex, mode = transportMode) => {
-    if (!API_BASE_URL) {
-      showAlert('오류', '.env의 EXPO_PUBLIC_API_BASE_URL을 확인하세요.');
-      return;
-    }
-
-    if (!currentLocation) {
-      showAlert('현재 위치 필요', '현재 위치를 먼저 불러와야 합니다.');
-      return;
-    }
-
-    const target = guideTargets[targetIndex];
-
-    if (!target) {
-      showAlert('목적지 없음', '해당 목적지를 찾을 수 없습니다.');
-      return;
-    }
-
-    try {
-      setSegmentChanging(true);
-      setTransportMode(mode);
-
-      const start = cleanLocation(currentLocation, '현재 위치');
-      const end = cleanLocation(target, '목적지');
-
-      if (!start || !end) {
-        showAlert('오류', '현재 위치 또는 목적지 정보를 찾을 수 없습니다.');
-        return;
-      }
-
-      const res = await fetch(`${API_BASE_URL}/api/routes/segment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(mode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) },
-        body: JSON.stringify({
-          start,
-          end,
-          transportMode: mode,
-        }),
+    if (!isActive || !locationReady) return;
+    const pinnedKey = isGuiding ? activeSegment?.destinationKey : null;
+    const recommendationKey = `${scopeKey}:${membershipKey}:${returnOrderKey}:${transportMode}:${pinnedKey || ''}`;
+    if (orderSetRef.current === recommendationKey) return;
+    orderSetRef.current = recommendationKey;
+    let active = true;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 35000);
+    setRecommendationBasis('distance');
+    setRecommendationBusy(true);
+    setLocations?.((previous) => recommendVisitOrder(
+      Array.isArray(previous) ? previous : locations || [], currentLocation, pinnedKey, recommendationReturn
+    ));
+    const pending = (locations || []).filter(row => !isCompleted(row));
+    if (!pending.length) { clearTimeout(timer); setRecommendationBusy(false); return; }
+    fetch(`${API_BASE_URL}/api/routes/order`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+      body: JSON.stringify({ currentLocation, locations: pending, returnLocation: recommendationReturn,
+        pinnedKey, transportMode }),
+    }).then(async response => {
+      if (!response.ok) throw new Error('추천 순서를 불러오지 못했습니다.');
+      const result = await response.json();
+      if (!active || orderSetRef.current !== recommendationKey || !Array.isArray(result.optimizedLocations)) return;
+      const keys = result.optimizedLocations.map(locationKey);
+      if (keys.length !== pending.length || new Set(keys).size !== pending.length ||
+          pending.some(row => !keys.includes(locationKey(row)))) return;
+      setLocations?.(previous => {
+        const rows = Array.isArray(previous) ? previous : locations || [];
+        const byKey = new Map(rows.map(row => [locationKey(row), row]));
+        return numberVisitOrder([...keys.map(key => byKey.get(key)).filter(Boolean), ...rows.filter(isCompleted)]);
       });
+      setRecommendationBasis(result.basis === 'roadDuration' ? 'roadDuration' : 'distance');
+    }).catch(() => { /* The visible distance recommendation remains available. */ })
+      .finally(() => { clearTimeout(timer); if (active) setRecommendationBusy(false); });
+    return () => { active = false; clearTimeout(timer); controller.abort(); orderSetRef.current = null; };
+  }, [isActive, membershipKey, locationReady, scopeKey, returnOrderKey, transportMode, isGuiding, activeSegment?.destinationKey]);
 
-      const text = await res.text();
+  const clearGuidance = () => {
+    if (isGuiding) endRouteSession();
+    guideRequestRef.current += 1;
+    setIsGuiding(false);
+    setKakaoDestination(null);
+    setNativeProgress(null);
+    setRouteSegments([]);
+    setRoadPath([]);
+    setCurrentSegmentIndex(0);
+    setOptimized(false);
+    setTotalDuration(null);
+    setSegmentChanging(false);
+    stopRouteNotification();
+  };
 
-      if (!res.ok) {
-        throw new Error(`안내 경로 재계산 실패: ${res.status}`);
+  // An accepted transfer can remove the current destination from the sender's map.
+  // Never keep guiding to a removed or completed task, or resume a legacy full route.
+  useEffect(() => {
+    if (routeSegments?.length && (!activeSegment || !activeTarget || isCompleted(activeTarget))) {
+      clearGuidance();
+    }
+    if (preview && (!previewTarget ||
+        (preview.coords && preview.coords !== `${previewTarget.lat},${previewTarget.lng}`))) {
+      previewRequestRef.current += 1;
+      setPreview(null);
+    }
+  }, [allVisits, activeSegment, routeSegments, preview]);
+
+  const previewVisit = async (target, mode = transportMode, allowMultiple = multiArrival) => {
+    if (!hasVisitCoordinates(target)) {
+      showAlert('위치 정보 없음', '이 방문지의 좌표를 확인할 수 없습니다.');
+      return;
+    }
+    const request = ++previewRequestRef.current;
+    const targetKey = locationKey(target);
+    setPreview({ targetKey, mode, segment: null, loading: true, coords: `${target.lat},${target.lng}` });
+    setVisitListOpen(false);
+    if (!hasVisitCoordinates(currentLocation)) {
+      setPreview({ targetKey, mode, segment: null, loading: false, error: '현재 위치를 확인한 뒤 다시 시도해 주세요.' });
+      return;
+    }
+    try {
+      const result = await fetchRouteSegment(cleanLocation(currentLocation), cleanLocation(target), mode, allowMultiple);
+      if (request !== previewRequestRef.current || !liveVisitsRef.current.some((row) => locationKey(row) === targetKey)) {
+        discardSdkPreview(result.segment.sdkPreviewId); return;
       }
-
-      const data = JSON.parse(text);
-
-      if (!data.segments || data.segments.length === 0) {
-        showAlert('오류', '안내 경로를 받아오지 못했습니다.');
-        return;
-      }
-
-      const updatedSegment = {
-        ...data.segments[0],
-        mode,
-        fromName: '현재 위치',
-        toName: end.detailAddress || '목적지',
-        totalDistance: data.totalDistance,
-        totalDuration: data.totalDuration,
-      };
-
-      const updatedSegments = [...routeSegments];
-      updatedSegments[targetIndex] = updatedSegment;
-
-      setRouteSegments(updatedSegments);
-      setCurrentSegmentIndex(targetIndex);
-      setRoadPath(updatedSegments.slice(targetIndex).flatMap((segment) => segment?.path || []));
-
-      if (data.totalDuration !== undefined && data.totalDuration !== null) {
-        setTotalDuration(data.totalDuration);
-      }
+      setPreview({ targetKey, mode, loading: false, coords: `${target.lat},${target.lng}`,
+        segment: { ...result.segment, destinationKey: targetKey } });
+      return true;
     } catch (error) {
-      console.log(error);
-      showAlert('오류', '현재 위치 기준 안내 경로를 다시 계산하지 못했습니다.');
-    } finally {
-      setSegmentChanging(false);
+      if (request === previewRequestRef.current) {
+        setPreview({ targetKey, mode, segment: null, loading: false,
+          error: mode === 'car' ? error.message || 'SDK 경로를 불러오지 못했습니다.' : '경로를 불러오지 못했습니다. 다시 시도해 주세요.' });
+      }
     }
   };
 
-  const updateCurrentSegmentMode = async (mode) => {
-    await updateGuideTargetSegment(currentSegmentIndex, mode);
+  const handleVisitPress = (target) => {
+    if (target?.isSearchResult) { setSelectedSearchPinId(target.id); focusPlaces([target]); return; }
+    if (target?.isPublicFacility) { togglePublicFacility(target); return; }
+    if (publicFacilityMode) return;
+    if (isCompleted(target)) { onLocationClick?.(target, 'report'); return; }
+    if (locationKey(target) === routeVisibleKey && !target.isReturnLocation) {
+      onLocationClick?.(target, 'report');
+      return;
+    }
+    if (preview?.loading && preview.targetKey === locationKey(target)) return;
+    previewVisit(target);
+  };
+
+  const handledRecordRef = useRef(null);
+  const [recordNextOffer, setRecordNextOffer] = useState(null);
+  const nextVisit = (excluded) => markers.find((row) => !isCompleted(row) && !row.isReturnLocation &&
+    locationKey(row) !== String(excluded) && hasVisitCoordinates(row)) || recommendationReturn;
+  useEffect(() => {
+    if (!isActive || !recordReturn || recordReturn.token === handledRecordRef.current) return;
+    handledRecordRef.current = recordReturn.token;
+    clearGuidance();
+    previewRequestRef.current += 1; setPreview(null);
+    if (hasVisitCoordinates(recordReturn)) focusPlaces([recordReturn]);
+    const next = nextVisit(recordReturn.taskId);
+    if (recordReturn.status === 'complete') {
+      setRecordNextOffer(null);
+      if (next) previewVisit(next);
+    } else if (recordReturn.status === 'working') {
+      setRecordNextOffer({ taskId: recordReturn.taskId, scope: scopeKey });
+    } else setRecordNextOffer(null);
+  }, [isActive, recordReturn?.token, scopeKey]);
+
+  const handleStartGuidance = async (explicitTarget = null) => {
+    const target = explicitTarget?.isReturnLocation ? explicitTarget : cardTarget;
+    if (!target || isCompleted(target) || segmentChanging || preview?.loading) return;
+    if (!hasVisitCoordinates(currentLocation)) {
+      showAlert('현재 위치 확인 중', '현재 위치를 확인한 뒤 다시 시도해 주세요.');
+      return;
+    }
+    const targetKey = locationKey(target);
+    const mode = preview?.mode || activeSegment?.mode || transportMode;
+    if (mode === 'car' && !isKakaoNavigationAvailable()) {
+      showAlert('차량 안내 사용 불가', '카카오 차량 안내가 포함된 Android 앱에서 이용해 주세요. 도보 안내는 현재 지도에서 사용할 수 있습니다.');
+      return;
+    }
+    const request = ++guideRequestRef.current;
+    const scope = workspaceScopeRef.current;
+    setSegmentChanging(true);
+    try {
+      let result;
+      if (mode === 'car' && preview?.segment) {
+        const origin = preview.segment.previewOrigin;
+        const movedMeters = origin ? Math.hypot((Number(currentLocation.lat) - origin.lat) * 111000,
+          (Number(currentLocation.lng) - origin.lng) * 111000 * Math.cos(origin.lat * Math.PI / 180)) : 0;
+        if (!isSdkPreviewAvailable(preview.segment.sdkPreviewId) || movedMeters > 30) {
+          if (await previewVisit(target, mode)) {
+            showAlert('경로 새로고침', '미리보기 경로가 갱신됐습니다. 확인한 뒤 안내를 시작해 주세요.');
+          }
+          return;
+        }
+        result = { segment: preview.segment, totalDuration: preview.segment.totalDuration };
+      } else result = await fetchRouteSegment(cleanLocation(currentLocation), cleanLocation(target), mode);
+      const liveTarget = liveVisitsRef.current.find((row) => locationKey(row) === targetKey);
+      if (request !== guideRequestRef.current || scope !== workspaceScopeRef.current || !liveTarget || isCompleted(liveTarget)) return;
+      // Commit only after a route succeeds. Browsing and failed requests never renumber visits.
+      setLocations?.((previous) => promoteVisit(
+        [...(Array.isArray(previous) ? previous : locations || [])].sort((a, b) =>
+          (a.markerNumber || Infinity) - (b.markerNumber || Infinity)), targetKey
+      ));
+      setRouteSegments([{ ...result.segment, destinationKey: targetKey }]);
+      setRoadPath(result.segment.path || []);
+      setCurrentSegmentIndex(0);
+      setTotalDuration(result.totalDuration);
+      setTransportMode(mode);
+      setNativeProgress(null);
+      resumedRouteRef.current = `${scopeKey}:${routeResumeToken}:${targetKey}`;
+      setOptimized(true);
+      beginRouteSession();
+      setIsGuiding(true);
+      previewRequestRef.current += 1;
+      setPreview(null);
+      if (mode === 'car' && Platform.OS === 'android' && isKakaoNavigationAvailable()) {
+        setKakaoDestination({ previewId: result.segment.sdkPreviewId, destinationKey: targetKey });
+      } else setKakaoDestination(null);
+    } catch (error) {
+      if (request === guideRequestRef.current) showAlert('안내 시작 실패', '경로를 불러오지 못했습니다. 다시 시도해 주세요.');
+    } finally {
+      if (request === guideRequestRef.current) setSegmentChanging(false);
+    }
+  };
+
+  const handleStopGuidance = () => {
+    clearGuidance();
+    setSegmentChanging(false);
+  };
+
+  const handleReroute = async (position = currentLocation, mode = activeSegment?.mode || transportMode) => {
+    if (mode === 'car') return;
+    if (segmentChanging || !isGuiding || !activeTarget || isCompleted(activeTarget) || !hasVisitCoordinates(position)) return;
+    const targetKey = locationKey(activeTarget);
+    const request = ++guideRequestRef.current;
+    try {
+      const result = await fetchRouteSegment(cleanLocation(position), cleanLocation(activeTarget), mode);
+      if (request !== guideRequestRef.current) return;
+      setRouteSegments([{ ...result.segment, destinationKey: targetKey }]);
+      setRoadPath(result.segment.path || []);
+      setTotalDuration(result.totalDuration);
+      setTransportMode(mode);
+    } catch (error) {
+      console.log('목적지 경로 재탐색 실패:', error.message);
+    }
   };
 
   useEffect(() => {
-    if (!isActive || !currentLocation || !optimized || !routeResumeToken ||
-        resumedTokenRef.current === routeResumeToken || !guideTargets[currentSegmentIndex]) return;
-    resumedTokenRef.current = routeResumeToken;
-    updateGuideTargetSegment(currentSegmentIndex, routeSegments[currentSegmentIndex]?.mode || transportMode);
-  }, [isActive, currentLocation, optimized, routeResumeToken, currentSegmentIndex]);
+    const key = `${scopeKey}:${routeResumeToken}:${activeSegment?.destinationKey}`;
+    if (!isActive || !isGuiding || !activeTarget || !hasVisitCoordinates(currentLocation) || resumedRouteRef.current === key) return;
+    resumedRouteRef.current = key;
+    // Task removal stopped the old SDK/notification, but did not end the user's
+    // destination. Begin a fresh native session before rebuilding that route.
+    beginRouteSession();
+    if (activeSegment.mode === 'car') {
+      if (!isKakaoNavigationAvailable()) { clearGuidance(); return; }
+      if (!isSdkPreviewAvailable(activeSegment.sdkPreviewId)) {
+        setKakaoDestination(null);
+        setNativeProgress(null);
+        const request = ++guideRequestRef.current;
+        fetchRouteSegment(cleanLocation(currentLocation), cleanLocation(activeTarget), 'car', activeSegment.arrivalMode === 'MULTI').then(result => {
+          if (request !== guideRequestRef.current) return;
+          resumeFailureCountRef.current = 0;
+          clearTimeout(resumeRetryTimerRef.current);
+          resumedRouteRef.current = null;
+          setRouteSegments([{ ...result.segment, destinationKey: activeSegment.destinationKey }]);
+          setRoadPath(result.segment.path || []);
+          setTotalDuration(result.totalDuration);
+        }).catch(() => {
+          if (request !== guideRequestRef.current) return;
+          // A transient route request failure must not turn an unfinished
+          // destination into an explicit stop. Retry without adding a button.
+          if (++resumeFailureCountRef.current < 3) {
+            resumeRetryTimerRef.current = setTimeout(() => {
+              resumedRouteRef.current = null;
+              setResumeRetryToken(value => value + 1);
+            }, 5000);
+          } else showAlert('안내 재개 대기', '목적지는 보관했습니다. 인터넷 연결을 확인한 뒤 앱을 다시 열어 주세요.');
+        });
+        return;
+      }
+      setNativeProgress(null);
+      setKakaoDestination({ previewId: activeSegment.sdkPreviewId, destinationKey: activeSegment.destinationKey });
+    } else handleReroute(currentLocation);
+  }, [isActive, isGuiding, routeResumeToken, resumeRetryToken, scopeKey, activeTarget, activeSegment, currentLocation]);
 
   const handleTransportPress = (mode) => {
-    if (optimized && isGuiding) {
-      updateCurrentSegmentMode(mode);
-      return;
-    }
-
-    handleOptimizeRoute(mode);
+    setTransportMode(mode);
+    if (cardTarget) previewVisit(cardTarget, mode);
   };
 
-  const handleReroute = async (newCurrentLocation) => {
-    if (!API_BASE_URL) return;
-    if (!routeSegments || routeSegments.length === 0) return;
 
-    try {
-      const rawEnd = guideTargets[currentSegmentIndex];
-
-      const start = cleanLocation(newCurrentLocation, '현재 위치');
-      const end = cleanLocation(rawEnd, '목적지');
-
-      if (!start || !end) return;
-
-      const res = await fetch(`${API_BASE_URL}/api/routes/segment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(transportMode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) },
-        body: JSON.stringify({
-          start,
-          end,
-          transportMode,
-        }),
-      });
-
-      const text = await res.text();
-
-      if (!res.ok) {
-        throw new Error('재탐색 실패');
-      }
-
-      const data = JSON.parse(text);
-
-      if (!data.segments || data.segments.length === 0) return;
-
-      const updatedSegments = [...routeSegments];
-
-      updatedSegments[currentSegmentIndex] = {
-        ...data.segments[0],
-        mode: transportMode,
-        fromName: '현재 위치',
-        toName: end.detailAddress || '목적지',
-        totalDistance: data.totalDistance,
-        totalDuration: data.totalDuration,
-      };
-
-      setRouteSegments(updatedSegments);
-
-      if (data.totalDuration !== undefined && data.totalDuration !== null) {
-        setTotalDuration(data.totalDuration);
-      }
-    } catch (error) {
-      console.log(error);
-    }
-  };
-
-  const movePrevSegment = () => {
-    const prevIndex = Math.max(currentSegmentIndex - 1, 0);
-    updateGuideTargetSegment(prevIndex);
-  };
-
-  const moveNextSegment = () => {
-    const nextIndex = Math.min(
-      currentSegmentIndex + 1,
-      guideTargets.length - 1
-    );
-
-    updateGuideTargetSegment(nextIndex);
-  };
-
-  const getNextIncompleteIndex = (startIndex = 0) => {
-    for (
-      let index = Math.max(0, startIndex);
-      index < orderedMarkers.length;
-      index += 1
-    ) {
-      if (orderedMarkers[index]?.status !== 'complete') {
-        return index;
-      }
-    }
-
-    if (returnLocation && Math.max(0, startIndex) <= orderedMarkers.length) {
-      return orderedMarkers.length;
-    }
-
-    return -1;
-  };
-
-  const handleStartGuidance = async () => {
-    const firstIndex = getNextIncompleteIndex(0);
-
-    if (firstIndex < 0) {
-      setGuideStartOpen(false);
-      setIsGuiding(false);
-      await stopRouteNotification();
-
-      showAlert(
-        '안내할 업무 없음',
-        '모든 방문지가 완료되었습니다.'
-      );
-      return;
-    }
-
-    setGuideStartOpen(false);
-    setIsGuiding(true);
-
-    await updateGuideTargetSegment(firstIndex);
-  };
-
-  const handleStopGuidance = async () => {
-    setIsGuiding(false);
-    await stopRouteNotification();
-  };
-
-  /*
-   * 안내 상태가 꺼지면 경로 알림도 항상 제거한다.
-   * 다른 화면/세션에서 setIsGuiding(false)를 호출하더라도 동일하게 동작한다.
-   */
   useEffect(() => {
-    if (!isGuiding) {
-      stopRouteNotification();
-    }
-  }, [isGuiding]);
-
-  /*
-   * 현재 구간/경로가 바뀔 때 같은 notification id를 갱신한다.
-   * 경로 재탐색, 이동수단 변경, 다음 방문지 전환도 모두 여기서 반영된다.
-   */
-  useEffect(() => {
-    if (!isGuiding) {
-      return;
-    }
-
-    const target =
-      guideTargets[currentSegmentIndex];
-
-    const currentSegment =
-      routeSegments[currentSegmentIndex];
-
-    if (!target || !currentSegment) {
-      return;
-    }
-
-    const distance =
-      currentSegment.totalDistance ??
-      currentSegment.distance ??
-      getPathDistance(currentSegment.path);
-
-    const duration =
-      currentSegment.totalDuration ??
-      currentSegment.duration ??
-      currentSegment.durationSeconds ??
-      (distance ? distance / 5.5 : null);
-
-    const durationText =
-      formatDuration(duration)?.replace(/^약\s*/, '') ||
-      '-';
-
-    const distanceText =
-      formatDistance(distance)?.replace(/^약\s*/, '') ||
-      '-';
-
-    const remainingCount =
-      orderedMarkers
-        .slice(currentSegmentIndex)
-        .filter((item) => item?.status !== 'complete')
-        .length;
-
-    updateRouteNotification({
-      from: currentSegment.fromName || '현재 위치',
-      to:
-        target.detailAddress ||
-        currentSegment.toName ||
-        '다음 방문지',
-      duration: durationText,
-      distance: distanceText,
-      remainingCount,
-    });
-  }, [
-    isGuiding,
-    currentSegmentIndex,
-    routeSegments,
-    orderedMarkers,
-    guideTargets,
-  ]);
-
-  /*
-   * 현재 목적지가 complete가 되면 다음 미완료 방문지로 자동 이동한다.
-   * 마지막 방문지까지 완료되면 안내와 경로 알림을 종료한다.
-   */
-  useEffect(() => {
-    if (
-      !isGuiding ||
-      segmentChanging ||
-      guideAdvanceRef.current
-    ) {
-      return;
-    }
-
-    const currentTarget =
-      guideTargets[currentSegmentIndex];
-
-    if (!currentTarget || currentTarget.isReturnLocation || currentTarget.status !== 'complete') {
-      return;
-    }
-
-    const nextIndex =
-      getNextIncompleteIndex(currentSegmentIndex + 1);
-
-    guideAdvanceRef.current = true;
-
-    if (nextIndex < 0) {
-      setIsGuiding(false);
-
-      stopRouteNotification().finally(() => {
-        guideAdvanceRef.current = false;
-      });
-
-      return;
-    }
-
-    updateGuideTargetSegment(nextIndex)
-      .finally(() => {
-        guideAdvanceRef.current = false;
-      });
-  }, [
-    isGuiding,
-    segmentChanging,
-    currentSegmentIndex,
-    orderedMarkers,
-    guideTargets,
-  ]);
+    if (!isGuiding || !activeTarget || !activeSegment) { stopRouteNotification(); return; }
+    updateRouteNotification({ from: '현재 위치', to: activeTarget.detailAddress || activeTarget.roadAddress || '방문지',
+      duration: formatDuration(guidanceProgress?.duration ?? activeSegment.totalDuration)?.replace(/^약\s*/, '') || '-',
+      distance: formatDistance(guidanceProgress?.distance ?? activeSegment.totalDistance ?? getPathDistance(activeSegment.path))?.replace(/^약\s*/, '') || '-',
+      remainingCount: orderedMarkers.length });
+  }, [isGuiding, activeTarget, activeSegment, guidanceProgress, orderedMarkers.length]);
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={event => setMapHeight(event.nativeEvent.layout.height)}>
+      {recordNextOffer?.scope === scopeKey && isActive && nextVisit(recordNextOffer.taskId) && <TouchableOpacity
+        accessibilityRole="button" accessibilityLabel="다음 방문지 경로 보기"
+        style={{ position: 'absolute', top: 110, right: 16, zIndex: 20, backgroundColor: '#FFFFFF', padding: 12, borderRadius: 12 }}
+        onPress={() => { const next = nextVisit(recordNextOffer.taskId); setRecordNextOffer(null); if (next) previewVisit(next); }}>
+        <Text style={{ color: '#2477F3', fontWeight: '700' }}>{nextVisit(recordNextOffer.taskId)?.isReturnLocation ? '근무지 복귀' : '다음 방문지'}</Text>
+      </TouchableOpacity>}
       <KakaoMapWebView
-        boundaries={selectedDongBoundary}
-        locations={[...activeDisplayMarkers, ...(selectedDongName && returnDisplayMarker ? [returnDisplayMarker] : []), ...completedDisplayMarkers]}
-        displayOnlyLocations={[...mapOnlyMarkers, ...publicDisplayItems]}
-        directMarkerPress={publicFacilityMode}
-        roadPath={selectedDongName ? roadPath : []}
-        routeSegments={selectedDongName ? routeSegments : []}
-        currentSegmentIndex={currentSegmentIndex}
+        locations={displayLocations}
+        displayOnlyLocations={displayOnlyLocations}
+        directMarkerPress
+        guideTarget={activeTarget}
+        onReturnArrival={handleStopGuidance}
+        previewRouteSegment={preview?.segment || null}
+        routeViewportPadding={{ top: topOverlayBottom ? topOverlayBottom + 56 : 300,
+          bottom: !resultsMode && !mapSelectMode && !publicFacilityMode && !searchedPlace && !coordSheetOpen && !pendingOpen && !dongOpen
+            ? bottomOverlayHeight + 52 : 40, left: 40, right: 40 }}
+        highlightedLocationKey={resultsMode ? selectedSearchPinId : cardTarget ? locationKey(cardTarget) : null}
+        focusCoordinates={publicFacilityMode ? publicViewCoordinates : focusRequest.coordinates}
+        focusToken={focusRequest.token}
+        focusPadding={resultsMode ? { top: 120, bottom: mapHeight * 0.53, left: 40, right: 40 } : { top: 160, bottom: 140, left: 40, right: 40 }}
+        roadPath={isGuiding ? roadPath : []}
+        routeSegments={activeSegment ? routeSegments : EMPTY_MARKERS}
+        currentSegmentIndex={0}
         panelOpen={false}
         setPanelOpen={setPanelOpen}
-        isGuiding={Boolean(selectedDongName) && isGuiding}
+        isGuiding={isGuiding && !kakaoDestination}
         searchedPlace={searchedPlace}
         clearSearchMarkerSignal={clearSearchMarkerSignal}
         mapSelectMode={mapSelectMode && locationSettingMode}
         selectionSessionActive={mapSelectMode}
         selectionPosition={directCenter}
         onCenterChange={setDirectCenter}
-        onSelectionMoveChange={setLocationMoving}
         onCurrentLocationChange={setCurrentLocation}
-        onMarkerClick={(loc) => {
-          if (loc?.isReturnLocation) return;
-          if (loc?.isPublicFacility) {
-            togglePublicFacility(loc);
-            return;
-          }
-          if (publicFacilityMode) return;
-          if (priorityMode) handleSetPriority(loc);
-          else onLocationClick?.(loc, 'report');
+        onMarkerClick={handleVisitPress}
+        onLocationsChange={(next) => {
+          const updated = new Map(next.filter((item) => !item.isReturnLocation).map((item) => [locationKey(item), item]));
+          setLocations?.((previous) => (Array.isArray(previous) ? previous : locations || [])
+            .map((item) => updated.has(locationKey(item)) ? { ...item, status: updated.get(locationKey(item)).status } : item));
+          onDataChanged?.();
         }}
-        onLocationsChange={(next) => setLocations?.((previous) => replaceDongLocations(
-          Array.isArray(previous) ? previous : locations || [],
-          next.filter((item) => !item.isReturnLocation), selectedDongName
-        ))}
         onRerouteRequest={handleReroute}
       />
+      {kakaoDestination && (
+        <KakaoNavigationView
+          style={StyleSheet.absoluteFillObject}
+          destination={kakaoDestination}
+          onRouteChanged={(event) => {
+            const data = event.nativeEvent;
+            if (data?.destinationKey !== activeSegment?.destinationKey || !Array.isArray(data.path) || !data.path.length) return;
+            const end = data.path[data.path.length - 1];
+            setRouteSegments((previous) => previous.map((segment, index) => index === 0
+              ? { ...segment, path: data.path, totalDistance: data.totalDistance, totalDuration: data.totalDuration,
+                trafficSections: Array.isArray(data.trafficSections) ? data.trafficSections : [],
+                navigationDestination: { lat: end.latitude, lng: end.longitude } } : segment));
+            setRoadPath(data.path);
+            setTotalDuration(data.totalDuration);
+          }}
+          onError={(event) => {
+            if (wasRouteTaskRemoved()) return;
+            clearGuidance();
+            showAlert('카카오 길안내 오류', event.nativeEvent?.message || '길안내를 시작하지 못했습니다.');
+          }}
+          onEnded={(event) => {
+            if (wasRouteTaskRemoved() || event.nativeEvent?.reason === 'task_removed') return;
+            if (event.nativeEvent?.destinationKey === activeSegment?.destinationKey) handleStopGuidance();
+          }}
+          onProgress={(event) => {
+            const data = event.nativeEvent;
+            if (data?.destinationKey !== activeSegment?.destinationKey || !Number.isFinite(data.distance) || !Number.isFinite(data.duration) || data.distance < 0 || data.duration < 0) return;
+            setNativeProgress(data);
+          }}
+          onArrived={(event) => {
+            if (event.nativeEvent?.destinationKey !== activeSegment?.destinationKey) return;
+            const target = activeTarget;
+            clearGuidance();
+            if (target && !target.isReturnLocation) showAlert('목적지에 도착했습니다', '방문지의 작업 기록을 작성할까요?', [
+              { text: '나중에', style: 'cancel' },
+              { text: '작업 기록 작성', onPress: () => onLocationClick?.(target, 'report') },
+            ]);
+          }}
+        />
+      )}
 
       {mapSelectMode && <View style={{ position: 'absolute', left: 16, right: 16, bottom: 16, zIndex: 46, backgroundColor: '#FFFFFF', padding: 14, borderRadius: 14, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, elevation: 6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
           <View style={{ flex: 1, paddingRight: 4 }}>
             <Text style={{ color: '#172033', fontWeight: '800' }}>
-              {centerAddress || (selectionPurpose === 'return' ? '근무지를 지도에서 선택하세요' : (locationSettingMode ? '현재 위치를 확인하는 중...' : '위치 설정을 눌러 위치를 선택하세요'))}
+              {centerAddress || (locationSettingMode ? '현재 위치를 확인하는 중...' : '위치 설정을 눌러 위치를 선택하세요')}
             </Text>
             <Text style={{ color: '#697386', marginTop: 4 }}>
               {directCenter ? `${directCenter.lat.toFixed(6)}, ${directCenter.lng.toFixed(6)}` : '선택된 위치 없음'}
@@ -2190,7 +1490,6 @@ function NormalMapScreen({
               borderColor: locationSettingMode ? '#2477F3' : '#BFD6F6',
             }}
             onPress={() => {
-              setLocationMoving(false);
               setLocationSettingMode((value) => !value);
             }}
           >
@@ -2204,12 +1503,11 @@ function NormalMapScreen({
           <TouchableOpacity
             style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#F3B9C0', backgroundColor: '#FDE9EB' }}
             onPress={() => {
-              setLocationMoving(false);
               setLocationSettingMode(false);
               setMapSelectMode(false);
               setDirectCenter(null);
               setCenterAddress('');
-              setSelectionPurpose('visit');
+
               setClearSearchMarkerSignal((prev) => prev + 1);
             }}
           >
@@ -2220,24 +1518,16 @@ function NormalMapScreen({
             disabled={!directCenter}
             style={{ flex: 2, padding: 12, alignItems: 'center', borderRadius: 10, backgroundColor: '#2477F3', opacity: directCenter ? 1 : 0.5 }}
             onPress={async () => {
-              const place = { lat: directCenter.lat, lng: directCenter.lng, detailAddress: centerAddress && centerAddress !== '주소 확인 중...' ? centerAddress : (selectionPurpose === 'return' ? '근무지' : '지도 선택 위치'), roadAddress: centerAddress && centerAddress !== '주소 확인 중...' ? centerAddress : '' };
+              const place = { lat: directCenter.lat, lng: directCenter.lng, detailAddress: centerAddress && centerAddress !== '주소 확인 중...' ? centerAddress : '지도 선택 위치', roadAddress: centerAddress && centerAddress !== '주소 확인 중...' ? centerAddress : '' };
               sheetY.setValue(0);
-              setLocationMoving(false);
               setLocationSettingMode(false);
               setMapSelectMode(false);
-              if (selectionPurpose === 'return') {
-                await saveReturnLocation(place);
-                setSelectionPurpose('visit');
-                setDirectCenter(null);
-                setCenterAddress('');
-                return;
-              }
               setSearchedPlace(place);
               setPlaceName(place.detailAddress);
               setTask('');
             }}
           >
-            <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>이 위치로 설정</Text>
+            <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>위치 선택</Text>
           </TouchableOpacity>
         </View>
       </View>}
@@ -2246,154 +1536,44 @@ function NormalMapScreen({
         <Pressable style={[StyleSheet.absoluteFill, { zIndex: 19 }]}
           accessibilityLabel="방문지 추가 메뉴 닫기" onPress={() => setAddMenuOpen(false)} />
       )}
-      <View style={styles.topOverlay} pointerEvents="box-none">
+      <View style={styles.topOverlay} pointerEvents="box-none"
+        onLayout={event => { const { y, height } = event.nativeEvent.layout; setTopOverlayBottom(y + height); }}>
         <View style={styles.searchControlRow}>
-          <TouchableOpacity
+          {publicFacilityMode && <TouchableOpacity
             style={styles.smallTopButton}
-            onPress={() => { if (!dongAdding) dongOpen ? setDongOpen(false) : loadDongs(); }}
+            onPress={() => { setPublicCategoryOpen(false); dongOpen ? setDongOpen(false) : loadDongs(); }}
             accessibilityRole="button"
-            accessibilityLabel="행정동 선택"
+            accessibilityLabel="공공시설물 조회 지역 선택"
           >
             <Ionicons name="map-outline" size={13} color="#2477F3" />
             <Text style={styles.smallTopText}>{selectedDongName || '행정동'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.searchBox}
-            activeOpacity={0.9}
-            onPress={() => {
-              if (publicFacilityMode) {
-                setPublicCategoryOpen((open) => !open);
-                return;
-              }
-              if (!addressSearchMode) setAddMenuOpen((open) => !open);
-            }}
-          >
-
-            <TouchableOpacity
-              onPress={() => {
-                resetAddModes();
-                setAddressSearchMode(false);
-                setAddMenuOpen((open) => !open);
-                searchInputRef.current?.blur();
-              }}
-            >
-              <Ionicons name="menu" size={18} color="#2477F3" />
+          </TouchableOpacity>}
+          <View style={styles.searchBox}>
+            <TouchableOpacity onPress={() => { resetAddModes(); setAddMenuOpen(value => !value); }} accessibilityLabel="방문지 추가 방법"><Ionicons name="menu" size={21} color="#2477F3" /></TouchableOpacity>
+            <TouchableOpacity style={{ flex: 1, height: 44 }} disabled={publicFacilityMode || resultsMode}
+              onPress={() => { resetAddModes(); setAddMenuOpen(value => !value); }}
+              accessibilityRole="button" accessibilityLabel="방문지 추가 방법" accessible={!publicFacilityMode && !resultsMode}>
+              <View pointerEvents="none" style={{ flex: 1 }}>
+                <TextInput style={styles.searchInput} value={publicFacilityMode ? (PUBLIC_FACILITY_CATEGORIES.find(item => item.key === publicCategory)?.label || '') : resultsMode ? resultQuery : ''} placeholder={publicFacilityMode ? '공공시설물 카테고리 선택' : '방문지를 추가해주세요'} placeholderTextColor="#9AA6B2" editable={false} accessible={publicFacilityMode || resultsMode} />
+              </View>
             </TouchableOpacity>
+            <TouchableOpacity onPress={() => { if (resultsMode) { setResultsMode(false); setKeyword(''); } else if (publicFacilityMode) { if (!selectedDong) loadDongs(); else setPublicCategoryOpen(value => !value); } else setAddMenuOpen(value => !value); }} accessibilityLabel={resultsMode ? '검색 결과 닫기' : '방문지 추가 방법'}><Ionicons name={resultsMode ? 'close' : publicFacilityMode ? 'chevron-down' : 'search'} size={23} color="#2477F3" /></TouchableOpacity>
+          </View>
 
-            <TextInput
-              ref={searchInputRef}
-              value={keyword}
-              onChangeText={setKeyword}
-              placeholder={publicFacilityMode ? (PUBLIC_FACILITY_CATEGORIES.find((item) => item.key === publicCategory)?.label || '공공시설물 카테고리 선택') : '방문지를 추가해주세요'}
-              placeholderTextColor="#9AA6B2"
-              style={styles.searchInput}
-              returnKeyType="search"
-              editable={addressSearchMode && !publicFacilityMode}
-              onFocus={() => {
-                if (publicFacilityMode) {
-                  setPublicCategoryOpen(true);
-                  searchInputRef.current?.blur();
-                } else if (!addressSearchMode) {
-                  setAddMenuOpen(true);
-                }
-              }}
-              onSubmitEditing={() => {
-                searchPlace(1);
-                setPage(1);
-              }}
-            />
-
-            {keyword.length > 0 && (
-              <TouchableOpacity onPress={() => setKeyword('')}>
-                <Ionicons name="close-circle" size={16} color="#9AA6B2" />
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              onPress={() => {
-                if (publicFacilityMode) {
-                  setPublicCategoryOpen((value) => !value);
-                  searchInputRef.current?.blur();
-                  return;
-                }
-                searchPlace(1);
-                setPage(1);
-              }}
-              disabled={isSearching}
-            >
-              <Ionicons name={publicFacilityMode ? 'chevron-down' : 'search'} size={18} color="#2477F3" />
-            </TouchableOpacity>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.smallTopButton,
-              priorityMode && styles.priorityActive,
-            ]}
-            onPress={() => setPriorityMode(!priorityMode)}
-          >
-            <Ionicons name="list" size={13} color="#2477F3" />
-            <Text style={styles.smallTopText}>
-              {priorityMode ? '선택중' : '우선순위'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.optimizeTopButton, (optimizing || segmentChanging) && styles.optimizeTopButtonDisabled]}
-            accessibilityLabel="경로 최적화"
-            disabled={optimizing || segmentChanging}
-            onPress={() => {
-              if (isGuiding) optimizeRemainingRoute();
-              else handleOptimizeRoute(transportMode);
-            }}
-          >
-            <Ionicons name="git-branch-outline" size={16} color="#2477F3" />
-            <Text style={styles.optimizeTopText}>
-              {'경로\n최적화'}
-            </Text>
-          </TouchableOpacity>
+          {publicFacilityMode && <TouchableOpacity style={styles.smallTopButton}
+            accessibilityLabel="공공시설물 조회 닫기" onPress={() => { resetAddModes(); setDongOpen(false); }}>
+            <Ionicons name="close" size={20} color="#2477F3" />
+          </TouchableOpacity>}
         </View>
         {addMenuOpen && (
           <View style={styles.addMenuBox}>
+            <TouchableOpacity style={styles.addMenuItem} onPress={() => { setAddMenuOpen(false); returnDisplayMarker ? previewVisit(returnDisplayMarker) : setWorkplaceOpen(true); }}><Ionicons name="home-outline" size={18} color="#2477F3" /><View style={{ flex: 1 }}><Text style={styles.addMenuTitle}>근무지 복귀</Text><Text style={styles.addMenuDesc}>{user?.workplaceAddress || '근무지를 등록하고 복귀 경로 확인'}</Text></View></TouchableOpacity>
             <TouchableOpacity
               style={styles.addMenuItem}
               onPress={() => {
                 resetAddModes();
                 setAddMenuOpen(false);
-                setAddressSearchMode(false);
-                setCoordSheetOpen(false);
-                setSelectionPurpose('return');
-                setDirectCenter(
-                  returnLocation
-                    ? { lat: Number(returnLocation.lat), lng: Number(returnLocation.lng) }
-                    : null
-                );
-                setCenterAddress(returnLocation?.detailAddress || '');
-                setLocationSettingMode(true);
-                setMapSelectMode(true);
-                searchInputRef.current?.blur();
-              }}
-            >
-              <Ionicons name="home-outline" size={18} color="#2477F3" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.addMenuTitle}>근무지 지정</Text>
-                <Text style={styles.addMenuDesc} numberOfLines={1}>
-                  {returnLocation?.detailAddress || '경로 마지막에 돌아갈 근무지를 지정'}
-                </Text>
-              </View>
-              {returnLocation ? (
-                <Ionicons name="checkmark-circle-outline" size={19} color="#2477F3" />
-              ) : null}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.addMenuItem}
-              onPress={() => {
-                resetAddModes();
-                setAddMenuOpen(false);
-                setAddressSearchMode(true);
-                setTimeout(() => {
-                  searchInputRef.current?.focus();
-                }, 100);
+                openSearch();
               }}
             >
               <Ionicons name="location-outline" size={18} color="#2477F3" />
@@ -2408,14 +1588,14 @@ function NormalMapScreen({
               onPress={() => {
                 resetAddModes();
                 setAddMenuOpen(false);
-                setAddressSearchMode(false);
+
                 setCoordSheetOpen(false);
                 setDirectCenter(null);
                 setCenterAddress('');
                 setLocationSettingMode(true);
-                setSelectionPurpose('visit');
+
                 setMapSelectMode(true);
-                searchInputRef.current?.blur();
+
               }}
             >
               <Ionicons name="map-outline" size={18} color="#2477F3" />
@@ -2427,11 +1607,6 @@ function NormalMapScreen({
             <TouchableOpacity
               style={styles.addMenuItem}
               onPress={() => {
-                if (!selectedDong) {
-                  setAddMenuOpen(false);
-                  showAlert('행정동 선택 필요', '공공시설물을 조회하려면 먼저 행정동을 선택해주세요.');
-                  return;
-                }
                 resetAddModes();
                 setAddMenuOpen(false);
                 setPublicFacilityMode(true);
@@ -2440,16 +1615,26 @@ function NormalMapScreen({
                 setPublicCategory('');
                 setPublicItems([]);
                 setPublicSelectedIds([]);
-                setPublicCategoryOpen(true);
-                searchInputRef.current?.blur();
+                setPublicCategoryOpen(false);
+                loadDongs();
+
               }}
             >
               <Ionicons name="business-outline" size={18} color="#2477F3" />
-              <View><Text style={styles.addMenuTitle}>공공시설물</Text><Text style={styles.addMenuDesc}>선택한 행정동의 AED · 버스정류장 조회</Text></View>
+              <View><Text style={styles.addMenuTitle}>공공시설물</Text><Text style={styles.addMenuDesc}>행정동을 선택해 AED · 버스정류장 조회</Text></View>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.addMenuItem} onPress={() => { setAddMenuOpen(false); showAlert('준비 중', '엑셀 일괄 등록은 후속 개발 예정입니다.'); }}>
+            <TouchableOpacity
+              style={styles.addMenuItem}
+              onPress={() => {
+                setAddMenuOpen(false);
+                setBulkUploadOpen(true);
+              }}
+            >
               <Ionicons name="grid-outline" size={18} color="#2477F3" />
-              <View><Text style={styles.addMenuTitle}>엑셀 일괄 등록</Text><Text style={styles.addMenuDesc}>후속 개발 예정</Text></View>
+              <View>
+                <Text style={styles.addMenuTitle}>엑셀 일괄 등록</Text>
+                <Text style={styles.addMenuDesc}>xcel · CSV 파일 불러오기</Text>
+              </View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.addMenuItemLast} onPress={() => { setAddMenuOpen(false); showAlert('준비 중', '사진으로 등록은 후속 개발 예정입니다.'); }}>
               <Ionicons name="image-outline" size={18} color="#2477F3" />
@@ -2458,7 +1643,7 @@ function NormalMapScreen({
           </View>
         )}
 
-        {publicFacilityMode && publicCategoryOpen && (
+        {publicFacilityMode && selectedDong && publicCategoryOpen && !dongOpen && (
           <View style={styles.publicCategoryBox}>
             <View style={styles.publicCategoryHeader}>
               <View>
@@ -2517,7 +1702,7 @@ function NormalMapScreen({
               renderItem={({ item, index }) => (
                 <TouchableOpacity
                   style={styles.routeChip}
-                  onPress={() => handleSetPriority(item)}
+                  onPress={() => handleVisitPress(item)}
                 >
                   <View
                     style={[
@@ -2541,15 +1726,6 @@ function NormalMapScreen({
             />
           )}
 
-          <View style={styles.visitWorkSummary} accessibilityLabel={selectedDongName
-            ? `${selectedDongName} ${dongWorkCounts.get(selectedDongName) || 0}건, 전체 ${totalRemainingWork}건`
-            : `행정동 선택 전, 전체 ${totalRemainingWork}건`}>
-            <Text style={styles.visitWorkSummaryText} numberOfLines={1}>
-              {selectedDongName ? `${selectedDongName} ${dongWorkCounts.get(selectedDongName) || 0}건` : '행정동 미선택'}
-            </Text>
-            <Text style={styles.visitWorkSummaryText} numberOfLines={1}>전체 {totalRemainingWork}건</Text>
-          </View>
-
           <TouchableOpacity
             style={styles.chevronButton}
             onPress={() => setVisitListOpen(!visitListOpen)}
@@ -2565,13 +1741,23 @@ function NormalMapScreen({
         {visitListOpen && markers.length > 0 && (
           <View style={styles.visitListCard}>
             <View style={styles.visitListHead}>
-              <Text style={styles.visitCount}>방문지 {orderedMarkers.length}개</Text>
+              <Text style={styles.visitCount}>방문지 {orderedMarkers.length}개 · 추천 방문 순서</Text>
 
               <TouchableOpacity onPress={() => setVisitListOpen(false)}>
                 <Text style={styles.foldText}>접기</Text>
               </TouchableOpacity>
             </View>
 
+            <Text style={{ color: '#64748B', fontSize: 12, paddingHorizontal: 12, paddingBottom: 8 }}>
+              {recommendationBusy ? '추천 순서 계산 중' : recommendationBasis === 'roadDuration' ? '이동시간 기준 추천' : '거리 기준 추천'}
+              {recommendationReturn ? ' · 근무지 복귀 포함' : returnDisplayMarker ? ' · 복귀 제외' : ' · 근무지 미등록'}{'\n'}원하는 방문지를 선택해 먼저 방문할 수 있습니다.
+            </Text>
+            <TouchableOpacity accessibilityRole="switch" accessibilityLabel="근무지 복귀 포함 경로 추천"
+              accessibilityState={{ checked: includeReturn && !!returnDisplayMarker }}
+              onPress={() => returnDisplayMarker ? setIncludeReturn(value => !value) : setWorkplaceOpen(true)}
+              style={{ paddingHorizontal: 12, paddingBottom: 10 }}>
+              <Text style={{ color: '#2477F3', fontSize: 12 }}>{returnDisplayMarker ? `근무지 복귀 포함: ${includeReturn ? '켜짐' : '꺼짐'}` : '복귀 근무지 등록'}</Text>
+            </TouchableOpacity>
             {visitDisplayMarkers.map((loc, index) => (
               <View
                 key={`${loc.detailAddress || 'loc'}-${loc.lat}-${loc.lng}-${index}`}
@@ -2579,7 +1765,7 @@ function NormalMapScreen({
               >
                 <TouchableOpacity
                   style={styles.visitMain}
-                  onPress={() => onLocationClick?.(loc, 'report')}
+                  onPress={() => handleVisitPress(loc)}
                 >
                   <View
                     style={[
@@ -2617,147 +1803,85 @@ function NormalMapScreen({
                 )}
               </View>
             ))}
+            {recommendationReturn && <TouchableOpacity style={styles.visitItem} accessibilityRole="button"
+              accessibilityLabel="마지막 목적지 근무지 복귀 경로 보기" onPress={() => previewVisit(recommendationReturn)}>
+              <Ionicons name="home-outline" size={20} color="#2477F3" />
+              <View style={styles.visitTextWrap}>
+                <Text style={styles.visitName}>마지막 목적지 · 근무지 복귀</Text>
+                <Text style={styles.visitTask} numberOfLines={1}>{recommendationReturn.roadAddress}</Text>
+              </View>
+            </TouchableOpacity>}
           </View>
         )}
 
-        {optimized && (
-          <View style={styles.doneRow}>
-            <View style={[styles.doneBar, isGuiding && styles.guidingBar]}>
-              <Text style={styles.doneText}>
-                {isGuiding
-                  ? `안내 중 · ${currentSegmentIndex + 1}/${guideTargets.length}목적지`
-                  : '경로 계산 완료'}
-                {getGuideSummary()}
-              </Text>
+        {!resultsMode && !publicFacilityMode && !mapSelectMode && !searchedPlace && !coordSheetOpen && cardTarget && (
+          <View style={styles.destinationCard}>
+            {(preview?.mode || activeSegment?.mode || transportMode) === 'car' && !isGuiding && (
+              <TouchableOpacity accessibilityLabel="주변 도로 도착 허용" disabled={preview?.loading || segmentChanging}
+                onPress={() => { const next = !multiArrival; setMultiArrival(next); previewVisit(cardTarget, 'car', next); }}>
+                <Text style={styles.destinationMeta}>도착 위치: {multiArrival ? '주변 도로 허용' : '기본'} · 눌러서 비교</Text>
+              </TouchableOpacity>
+            )}
+            <View style={styles.destinationHead}>
+              <TouchableOpacity style={styles.destinationInfo}
+                accessibilityLabel={cardTarget.isReturnLocation ? '복귀 목적지' : '보고서 작성'}
+                accessibilityRole={cardTarget.isReturnLocation ? 'text' : 'button'}
+                disabled={cardTarget.isReturnLocation}
+                onPress={() => onLocationClick?.(cardTarget, 'report')}>
+                <Text style={styles.destinationName} numberOfLines={1}>{cardTarget.detailAddress || cardTarget.roadAddress || '방문지'}</Text>
+                <Text style={styles.destinationMeta} numberOfLines={2}>
+                  {!preview && isGuiding ? '안내 중 · ' : ''}
+                  {preview?.loading ? '경로를 불러오는 중…' : preview?.error ||
+                    [formatDistance(cardDistance), formatDuration(cardDuration)].filter(Boolean).join(' · ')}
+                </Text>
+              </TouchableOpacity>
+            <View style={styles.destinationActions}>
+              {['car', 'walk'].map((mode) => (
+                <TouchableOpacity key={mode} accessibilityLabel={mode === 'car' ? '차량 경로' : '도보 경로'}
+                  disabled={preview?.loading || segmentChanging}
+                  onPress={() => handleTransportPress(mode)}
+                  style={[styles.destinationMode, (preview?.mode || activeSegment?.mode || transportMode) === mode && styles.destinationModeActive]}>
+                  <Ionicons name={mode === 'car' ? 'car' : 'walk'} size={19}
+                    color="#FFFFFF" />
+                </TouchableOpacity>
+              ))}
+              {preview || !isGuiding ? (
+                <TouchableOpacity style={[styles.startButton, (!cardSegment || isCompleted(cardTarget) || segmentChanging) && { opacity: 0.4 }]}
+                  accessibilityLabel={isGuiding ? '이곳으로 안내 변경' : '안내 시작'}
+                  disabled={!cardSegment || isCompleted(cardTarget) || segmentChanging}
+                  onPress={handleStartGuidance}>
+                  <Ionicons name="play-circle" size={25} color="#FFFFFF" />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.stopButton} accessibilityLabel="안내 종료" onPress={handleStopGuidance}>
+                  <Ionicons name="stop-circle" size={25} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
             </View>
-
-            <TouchableOpacity
-              style={[
-                styles.modeButton,
-                transportMode === 'car' && styles.modeButtonActive,
-              ]}
-              onPress={() => handleTransportPress('car')}
-              disabled={optimizing || segmentChanging}
-            >
-              <Ionicons
-                name="car"
-                size={18}
-                color={transportMode === 'car' ? '#FFFFFF' : '#2477F3'}
-              />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.modeButton,
-                transportMode === 'walk' && styles.modeButtonActive,
-              ]}
-              onPress={() => handleTransportPress('walk')}
-              disabled={optimizing || segmentChanging}
-            >
-              <Ionicons
-                name="walk"
-                size={18}
-                color={transportMode === 'walk' ? '#FFFFFF' : '#2477F3'}
-              />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.modeButton,
-                isGuiding ? styles.stopGuideButton : styles.modeButtonActive,
-              ]}
-              onPress={() => {
-                if (isGuiding) {
-                  handleStopGuidance();
-                } else {
-                  setGuideStartOpen(true);
-                }
-              }}
-            >
-              <Ionicons
-                name={isGuiding ? 'stop-circle' : 'play-circle'}
-                size={20}
-                color="#FFFFFF"
-              />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {isGuiding && guideTargets.length > 0 && (
-          <View style={styles.segmentControlBar}>
-            <TouchableOpacity
-              style={[
-                styles.segmentButton,
-                currentSegmentIndex === 0 && styles.segmentButtonDisabled,
-              ]}
-              onPress={movePrevSegment}
-              disabled={currentSegmentIndex === 0}
-            >
-              <Ionicons name="chevron-back" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-
-            <Text style={styles.segmentText} numberOfLines={1}>
-              현재 위치 →{' '}
-              {guideTargets[currentSegmentIndex]?.detailAddress ||
-                routeSegments[currentSegmentIndex]?.toName ||
-                '목적지'}
-            </Text>
-
-            <TouchableOpacity
-              style={[
-                styles.segmentButton,
-                currentSegmentIndex === guideTargets.length - 1 &&
-                styles.segmentButtonDisabled,
-              ]}
-              onPress={moveNextSegment}
-              disabled={currentSegmentIndex === guideTargets.length - 1}
-            >
-              <Ionicons name="chevron-forward" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        )}
-        {!addressSearchMode && !addMenuOpen && !mapSelectMode && !publicFacilityMode && !searchedPlace && !coordSheetOpen && !pendingOpen && !dongOpen && !visitListOpen && (
-          <View style={styles.myDongPanel}>
-            <TouchableOpacity
-              style={styles.myDongPanelToggle}
-              onPress={() => {
-                if (!myDongPanelOpen && dongOptions.length === 0) loadDongs(false);
-                setMyDongPanelOpen((value) => !value);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="담당 행정동 목록"
-            >
-              <Text style={styles.myDongPanelToggleText}>담당 행정동 {dongWorkCounts.size}</Text>
-              <Ionicons name={myDongPanelOpen ? 'chevron-up' : 'chevron-down'} size={14} color="#2477F3" />
-            </TouchableOpacity>
-            {myDongPanelOpen && <MyDongListContainer
-              style={[styles.myDongPanelList, myDongNames.length > 6 && styles.myDongPanelListScrollable]}
-              {...(myDongNames.length > 6 ? { nestedScrollEnabled: true } : {})}
-            >
-              {myDongNames.length ? myDongNames.map((name) => {
-                const feature = dongOptions.find((item) => dongName(item.properties?.adm_nm || item.properties?.name) === name);
-                return <View key={name} style={styles.myDongPanelRow}>
-                  <TouchableOpacity style={styles.myDongPanelName} onPress={() => feature ? selectDong(feature) : loadDongs()}>
-                    <Text style={styles.myDongPanelNameText} numberOfLines={1}>{name}</Text>
-                    <Text style={styles.myDongPanelCount}>{dongWorkCounts.get(name) || 0}건</Text>
-                  </TouchableOpacity>
-                </View>;
-              }) : <Text style={styles.myDongPanelEmpty}>맡은 행정동이 없습니다.</Text>}
-            </MyDongListContainer>}
+              {preview && <TouchableOpacity style={styles.destinationClose}
+                accessibilityLabel={isGuiding ? '현재 안내로 돌아가기' : '경로 미리보기 닫기'}
+                onPress={() => { previewRequestRef.current += 1; setPreview(null); }}>
+                <Ionicons name="close" size={20} color="#FFFFFF" />
+              </TouchableOpacity>}
+            </View>
+            {preview?.error && <TouchableOpacity onPress={() => previewVisit(cardTarget, preview.mode)}>
+              <Text style={styles.retryText}>경로 다시 불러오기</Text>
+            </TouchableOpacity>}
           </View>
         )}
       </View>
 
-      {!addressSearchMode && !mapSelectMode && !publicFacilityMode && !searchedPlace && !coordSheetOpen && !pendingOpen && !dongOpen && (
+      {!resultsMode && !mapSelectMode && !publicFacilityMode && !searchedPlace && !coordSheetOpen && !pendingOpen && !dongOpen && (
         <TouchableOpacity
           style={styles.publicFacilityCollapsed}
+          onLayout={event => setBottomOverlayHeight(event.nativeEvent.layout.height)}
           activeOpacity={0.88}
           onPress={() => setPendingOpen(true)}
           accessibilityRole="button"
           accessibilityLabel="미처리 업무 목록 펼치기"
         >
           <Text style={styles.publicFacilityCollapsedText}>
-            미처리 업무 {pendingWork.length}건 보기
+            미처리 업무 {pendingWork.length}건
           </Text>
         </TouchableOpacity>
       )}
@@ -2867,8 +1991,8 @@ function NormalMapScreen({
             </ScrollView>
           </View>
 
-          <TouchableOpacity style={styles.addButton} onPress={addLocation}>
-            <Text style={styles.addButtonText}>방문지 추가</Text>
+          <TouchableOpacity style={styles.addButton} onPress={addLocation} disabled={registrationBusy}>
+            <Text style={styles.addButtonText}>{registrationBusy ? '등록 중...' : '방문지 추가'}</Text>
           </TouchableOpacity>
         </Animated.View>
       )}
@@ -2962,7 +2086,7 @@ function NormalMapScreen({
               try {
                 setPendingBusy(true);
                 const rows = pendingWork.filter((item) => pendingSelected.includes(String(item.id ?? item.taskId)));
-                if (await onAddWork?.(rows) !== false) { setPendingSelected([]); setPendingOpen(false); }
+                if (await onAddWork?.(rows) !== false) { setPendingSelected([]); setPendingOpen(false); focusPlaces(rows); showAlert('업무 추가 완료', `${rows.length}건을 오늘 업무에 추가했습니다.`); }
               } finally { setPendingBusy(false); }
             }}
           >
@@ -2976,29 +2100,26 @@ function NormalMapScreen({
           <View style={styles.publicFacilityHandleArea} {...dongSheetPanResponder.panHandlers}>
             <View style={styles.publicFacilityHandle} />
             <View style={styles.publicFacilityHeader}>
-              <Text style={styles.publicFacilityActionTitle}>행정동 선택</Text>
-              {dongAdding ? <ActivityIndicator size="small" color="#2477F3" />
-                : <Text style={styles.publicFacilityCount}>전체 {totalRemainingWork}건</Text>}
+              <Text style={styles.publicFacilityActionTitle}>공공시설물 조회 지역</Text>
+              <TouchableOpacity accessibilityLabel="조회 지역 선택 닫기" onPress={() => setDongOpen(false)}><Ionicons name="close" size={22} color="#607195" /></TouchableOpacity>
             </View>
           </View>
           <ScrollView style={styles.publicFacilityList} nestedScrollEnabled>
             {dongLoading ? <Text style={styles.publicFacilityEmpty}>행정동을 불러오는 중...</Text>
               : sortedDongOptions.length ? sortedDongOptions.map((feature, index) => {
                 const name = dongName(feature.properties?.adm_nm || feature.properties?.name);
-                const count = dongWorkCounts.get(name) || 0;
                 const selected = name === selectedDongName;
                 return <View
                   key={feature.properties?.adm_cd || index}
-                  style={[styles.dongOption, count > 0 && styles.dongOptionWithWork, selected && styles.dongOptionSelected]}
+                  style={[styles.dongOption, selected && styles.dongOptionSelected]}
                 >
-                  <TouchableOpacity style={styles.dongOptionMain} disabled={dongAdding} onPress={() => selectDong(feature)}
-                    accessibilityRole="button" accessibilityLabel={`${name} ${count}건${selected ? ', 현재 선택' : ''}`}>
-                    <Text style={[styles.dongOptionText, count > 0 && styles.dongOptionTextWithWork]}>{name || `행정동 ${index + 1}`}</Text>
+                  <TouchableOpacity style={styles.dongOptionMain} onPress={() => selectDong(feature)}
+                    accessibilityRole="button" accessibilityLabel={`${name}${selected ? ', 현재 선택' : ''}`}>
+                    <Text style={styles.dongOptionText}>{name || `행정동 ${index + 1}`}</Text>
                   </TouchableOpacity>
                   <View style={styles.dongOptionEnd}>
-                    {count > 0 ? <Text style={styles.dongWorkCount}>{count}건</Text> : null}
                     {selected ? <Ionicons name="checkmark-circle" size={17} color="#2477F3" /> : null}
-                    <TouchableOpacity onPress={() => toggleFavoriteDong(name)} disabled={dongAdding}
+                    <TouchableOpacity onPress={() => toggleFavoriteDong(name)}
                       accessibilityRole="button" accessibilityLabel={`${name} 즐겨찾기`}>
                       <Ionicons name={favoriteDongNames.includes(name) ? 'star' : 'star-outline'} size={18} color="#2477F3" />
                     </TouchableOpacity>
@@ -3009,194 +2130,35 @@ function NormalMapScreen({
         </Animated.View>
       )}
 
-      {(optimizing || segmentChanging) && (
+      {segmentChanging && (
         <View style={styles.loadingOverlay}>
-          <Text style={styles.loadingTitle}>
-            {segmentChanging ? '구간 경로 변경 중' : '경로 최적화 중'}
-          </Text>
-          <Text style={styles.loadingDesc}>
-            {segmentChanging
-              ? '현재 위치에서 선택한 목적지까지 경로를 다시 계산합니다.'
-              : '방문 순서와 실제 도로 경로를 계산합니다.'}
-          </Text>
+          <ActivityIndicator color="#2477F3" />
+          <Text style={styles.loadingTitle}>안내 경로를 준비하는 중</Text>
         </View>
       )}
 
-      <Modal
-        visible={guideStartOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setGuideStartOpen(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalBg}
-          activeOpacity={1}
-          onPress={() => setGuideStartOpen(false)}
-        >
-          <TouchableOpacity activeOpacity={1} style={styles.sheet}>
-            <View style={styles.handle} />
-
-            <Text style={styles.routeTitle}>GUIDE START</Text>
-            <Text style={styles.placeName}>이 경로로 안내를 시작할까요?</Text>
-            <Text style={styles.placeAddr}>
-              안내 시작 후 현재 위치에서 첫 번째 목적지까지 경로 안내가 진행됩니다.
-            </Text>
-
-            <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={[styles.sheetButton, styles.dismissSheetButton]}
-                onPress={() => setGuideStartOpen(false)}
-              >
-                <Text style={[styles.sheetLabel, styles.dismissSheetLabel]}>취소</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.sheetButton}
-                onPress={handleStartGuidance}
-              >
-                <Text style={styles.sheetLabel}>안내 시작</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
+      {resultsMode && !searchedPlace && <SearchResultSheet height={mapHeight} results={searchResults} query={resultQuery} locations={locations || []} onPick={place => {
+        const index = searchResults.indexOf(place);
+        setSelectedSearchPinId(`search:${place.id}:${index}`);
+        focusPlaces([placeLocation(place)]);
+      }} onAdd={addSearchPlace} />}
+      {searchOpen && isActive && <PlaceSearchOverlay userId={user?.userId} initialQuery={searchInitialQuery} center={currentLocation} locations={locations || []} onClose={() => setSearchOpen(false)} onResults={showResults} onAdd={addSearchPlace} />}
+      <Modal visible={workplaceOpen} transparent animationType="fade" onRequestClose={() => !workplaceBusy && setWorkplaceOpen(false)}>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.35)' }}><View style={{ padding: 20, borderRadius: 18, backgroundColor: '#FFFFFF' }}>
+          <Text style={{ fontSize: 18, fontWeight: '700', color: '#10285B' }}>근무지 등록</Text>
+          <WorkplaceField value={workplaceCandidate} onChange={setWorkplaceCandidate} userId={user?.userId} disabled={workplaceBusy} />
+          <TouchableOpacity disabled={!workplaceCandidate?.workplaceAddress || workplaceBusy} onPress={saveWorkplace} style={{ backgroundColor: '#2477F3', padding: 14, borderRadius: 12, alignItems: 'center', opacity: workplaceCandidate?.workplaceAddress ? 1 : 0.5 }}><Text style={{ color: '#FFFFFF', fontWeight: '700' }}>{workplaceBusy ? '저장 중...' : '근무지 저장'}</Text></TouchableOpacity>
+          <TouchableOpacity disabled={workplaceBusy} onPress={() => setWorkplaceOpen(false)} style={{ padding: 14, alignItems: 'center' }}><Text>닫기</Text></TouchableOpacity>
+        </View></View>
       </Modal>
-
-      <Modal
-        visible={!!selected}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSelected(null)}
-      >
-        <TouchableOpacity
-          style={styles.modalBg}
-          activeOpacity={1}
-          onPress={() => setSelected(null)}
-        >
-          <TouchableOpacity activeOpacity={1} style={styles.sheet}>
-            <View style={styles.handle} />
-
-            <View style={styles.placeRow}>
-              <View
-                style={[
-                  styles.placeIcon,
-                  { backgroundColor: getStatusColor(selected?.status) },
-                ]}
-              >
-                <Text style={styles.placeIconText}>📍</Text>
-              </View>
-
-              <View style={{ flex: 1 }}>
-                <Text style={styles.placeName}>
-                  {selected?.detailAddress || '이름 없음'}
-                </Text>
-                <Text style={styles.placeAddr}>
-                  {selected?.roadAddress || selected?.task || '주소 없음'}
-                </Text>
-                {locationScope === 'team' && activeGroup && (
-                  <Text style={styles.assigneeInfo}>
-                    {assignmentMap.get(Number(selected?.id))
-                      ? `담당자: ${assignmentMap.get(Number(selected?.id)).assigneeName || assignmentMap.get(Number(selected?.id)).assigneeLoginId}`
-                      : '담당자 미지정'}
-                  </Text>
-                )}
-              </View>
-            </View>
-
-            <Text style={styles.routeTitle}>FIELD RECORD</Text>
-
-            <View style={styles.actionRow}>
-              {[
-                { label: '사진', icon: '📷', type: 'photo' },
-                { label: '메모', icon: '📝', type: 'memo' },
-                { label: '상태', icon: '🔄', type: 'status' },
-              ].map((b) => (
-                <TouchableOpacity
-                  key={b.type}
-                  style={styles.sheetButton}
-                  onPress={() => {
-                    const loc = selected;
-                    setSelected(null);
-                    onLocationClick?.(loc, b.type);
-                  }}
-                >
-                  <Text style={styles.sheetIcon}>{b.icon}</Text>
-                  <Text style={styles.sheetLabel}>{b.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      <Modal
-
-        visible={searchModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSearchModalVisible(false)}
-      >
-        <View style={styles.searchModalBackdrop}>
-          <View style={styles.searchModal}>
-            <Text style={styles.searchModalTitle}>검색 결과</Text>
-
-            <ScrollView>
-              {searchResults.map((place, index) => (
-                <TouchableOpacity
-                  key={`${place.id || place.place_name || index}`}
-                  style={styles.searchResultItem}
-                  onPress={() => setNextPlace(place)}
-                >
-                  <Text style={styles.searchResultName}>
-                    {place.place_name || place.address_name}
-                  </Text>
-
-                  <Text style={styles.searchResultAddress}>
-                    {place.road_address_name || place.address_name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-
-              <View style={styles.pagination}>
-                <TouchableOpacity onPress={goFirst}>
-                  <Text style={styles.pageBtn}>{'<<'}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={goPrev}>
-                  <Text style={styles.pageBtn}>{'<'}</Text>
-                </TouchableOpacity>
-
-                {getPageNumbers().map((p) => (
-                  <TouchableOpacity key={p} onPress={() => searchPlace(p)}>
-                    <Text
-                      style={[
-                        styles.pageNumber,
-                        p === page && styles.pageActive,
-                      ]}
-                    >
-                      {p}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-
-                <TouchableOpacity onPress={goNext}>
-                  <Text style={styles.pageBtn}>{'>'}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={goLast}>
-                  <Text style={styles.pageBtn}>{'>>'}</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setSearchModalVisible(false)}
-            >
-              <Text style={styles.closeButtonText}>닫기</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <BulkUploadModal
+        visible={bulkUploadOpen}
+        userId={user?.userId}
+        groupId={activeGroup?.groupId ?? null}
+        onDataChanged={onDataChanged}
+        apiBaseUrl={API_BASE_URL}
+        onClose={() => setBulkUploadOpen(false)}
+      />
     </View>
   );
 }
@@ -3206,6 +2168,18 @@ export default function MapScreen(props) {
 }
 
 const styles = StyleSheet.create({
+  destinationCard: { marginTop: 5, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 12, backgroundColor: '#2477F3', elevation: 3 },
+  destinationHead: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  destinationInfo: { flex: 1, minWidth: 0, minHeight: 44, justifyContent: 'center', paddingHorizontal: 3 },
+  destinationName: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' },
+  destinationMeta: { color: '#E3EEFF', fontSize: 10, marginTop: 3 },
+  destinationClose: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },
+  destinationActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  destinationMode: { width: 36, height: 44, borderRadius: 9, backgroundColor: 'rgba(255,255,255,0.10)', alignItems: 'center', justifyContent: 'center' },
+  destinationModeActive: { backgroundColor: 'rgba(255,255,255,0.28)' },
+  startButton: { width: 44, height: 44, borderRadius: 9, backgroundColor: '#145CCD', alignItems: 'center', justifyContent: 'center' },
+  stopButton: { width: 44, height: 44, borderRadius: 9, backgroundColor: '#E74C3C', alignItems: 'center', justifyContent: 'center' },
+  retryText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800', paddingVertical: 6, paddingHorizontal: 3 },
   container: {
     flex: 1,
     backgroundColor: '#F4F7FA',
@@ -3304,55 +2278,10 @@ const styles = StyleSheet.create({
     color: '#10285B',
   },
 
-  optimizeTopButton: {
-    width: 62,
-    height: 46,
-    paddingHorizontal: 5,
-    borderRadius: 11,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E3EAF2',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
 
-  optimizeTopButtonDisabled: {
-    opacity: 0.55,
-  },
 
-  optimizeTopText: {
-    color: '#10285B',
-    fontSize: 8.5,
-    lineHeight: 10.5,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  priorityActive: {
-    backgroundColor: '#FFF7E6',
-    borderColor: '#FACC15',
-  },
 
-  priorityResetBox: {
-    alignSelf: 'flex-end',
-    marginTop: 7,
-    backgroundColor: '#E74C3C',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
 
-  priorityResetText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '900',
-  },
 
   chipRowWrap: {
     marginTop: 5,
@@ -3369,8 +2298,6 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   visitChipList: { flex: 1, minWidth: 0 },
-  visitWorkSummary: { alignItems: 'flex-end', justifyContent: 'center', gap: 1, marginLeft: 4 },
-  visitWorkSummaryText: { color: '#2477F3', fontSize: 11, fontWeight: '800' },
 
   routeChip: {
     flexDirection: 'row',
@@ -3799,6 +2726,20 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
+  nativeGuideButton: {
+    marginTop: 10,
+    backgroundColor: '#2477F3',
+    borderRadius: 14,
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+
+  nativeGuideButtonLabel: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+
   sheetButton: {
     flex: 1,
     backgroundColor: '#EAF1F7',
@@ -3827,87 +2768,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: '#10285B',
-  },
-
-  searchModalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  searchModal: {
-    width: '88%',
-    maxHeight: '70%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 16,
-  },
-
-  searchModalTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    marginBottom: 14,
-    color: '#10285B',
-  },
-
-  searchResultItem: {
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E6EDF3',
-  },
-
-  searchResultName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#10285B',
-  },
-
-  searchResultAddress: {
-    marginTop: 4,
-    fontSize: 12,
-    color: '#607195',
-  },
-
-  pagination: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 10,
-    gap: 10,
-  },
-
-  pageBtn: {
-    fontSize: 14,
-    fontWeight: '900',
-    paddingHorizontal: 6,
-  },
-
-  pageNumber: {
-    fontSize: 13,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    color: '#333',
-  },
-
-  pageActive: {
-    backgroundColor: '#2477F3',
-    color: '#fff',
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
-
-  closeButton: {
-    marginTop: 14,
-    backgroundColor: '#2477F3',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-
-  closeButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '900',
   },
 
   publicCategoryBox: {
@@ -3968,16 +2828,6 @@ const styles = StyleSheet.create({
   publicFacilityHandle: { width: 34, height: 4, borderRadius: 2, backgroundColor: '#CAD8E8', alignSelf: 'center', marginBottom: 8 },
   publicFacilityCollapsed: { position: 'absolute', bottom: 16, alignSelf: 'center', zIndex: 48, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE7F5', paddingHorizontal: 16, paddingVertical: 10, elevation: 7 },
   publicFacilityCollapsedText: { color: '#2477F3', fontSize: 12, fontWeight: '800' },
-  myDongPanel: { alignSelf: 'flex-end', alignItems: 'flex-end', marginTop: 5, zIndex: 25 },
-  myDongPanelToggle: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE7F5', borderRadius: 15, paddingHorizontal: 10, paddingVertical: 8, elevation: 5 },
-  myDongPanelToggleText: { color: '#2477F3', fontSize: 11, fontWeight: '800' },
-  myDongPanelList: { width: 170, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE7F5', borderRadius: 13, marginTop: 5, elevation: 5, overflow: 'hidden' },
-  myDongPanelListScrollable: { height: 6 * 39 + 2 },
-  myDongPanelRow: { minHeight: 39, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#EEF2F6', paddingHorizontal: 9, gap: 5 },
-  myDongPanelName: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
-  myDongPanelNameText: { color: '#10285B', fontSize: 11, fontWeight: '800', flex: 1 },
-  myDongPanelCount: { color: '#2477F3', fontSize: 10, fontWeight: '800' },
-  myDongPanelEmpty: { color: '#607195', fontSize: 11, padding: 12 },
   publicFacilityHeader: {
     flexDirection: 'row',
     alignItems: 'center',

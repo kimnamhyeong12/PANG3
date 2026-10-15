@@ -33,7 +33,7 @@ const formatShortDate = (value) => {
   const key = value ? String(value).slice(0, 10) : '';
   const parts = key.split('-');
   if (parts.length !== 3) return '';
-  return `${parts[1]}.${parts[2]}`;
+  return `${Number(parts[1])}월 ${Number(parts[2])}일`;
 };
 
 const getTaskId = (loc) =>
@@ -43,13 +43,6 @@ const getTaskId = (loc) =>
   null;
 
 const dongName = (value) => String(value || '').trim().split(/\s+/).pop().replace(/제(?=\d+동$)/, '') || '행정동 미확인';
-
-const isPersonalGroup = (group) =>
-  Boolean(
-    group?.personalWorkspace ||
-    group?.personal ||
-    group?.workspaceType === 'PERSONAL'
-  );
 
 export default function ReportListScreen({
   locations = [],
@@ -61,21 +54,24 @@ export default function ReportListScreen({
   onBack,
   onSelectLocation,
   onCreateReport,
+  selectedIds: selection,
+  onSelectionChange,
 }) {
-  const [selectedIds, setSelectedIds] = useState([]);
-
-  const assignmentMap = new Map(
-    groupAssignments.map((item) => [Number(item.taskId), item])
-  );
+  const [localSelectedIds, setLocalSelectedIds] = useState([]);
+  const selectedIds = selection ?? localSelectedIds;
+  const setSelectedIds = (next) => {
+    if (onSelectionChange) onSelectionChange(typeof next === 'function' ? next(selectedIds) : next);
+    else setLocalSelectedIds(next);
+  };
 
   const isReportable = (loc) =>
-    loc.status === 'working' || loc.status === 'complete';
+    getTaskId(loc) != null && ['working', 'complete'].includes(loc.status);
 
   const toggleSelect = (loc) => {
     if (!isReportable(loc)) {
       showAlert(
         '선택 불가',
-        '작업 전 방문지는 보고서에 포함할 수 없습니다.'
+        getTaskId(loc) == null ? '방문지 정보를 확인할 수 없습니다.' : '작업 전 방문지는 보고서에 포함할 수 없습니다.'
       );
       return;
     }
@@ -90,7 +86,7 @@ export default function ReportListScreen({
   };
 
   const selectedLocations = locations.filter((loc) =>
-    selectedIds.includes(getTaskId(loc))
+    isReportable(loc) && selectedIds.includes(getTaskId(loc))
   );
 
   const selectedDongName = selectedDong
@@ -107,8 +103,6 @@ export default function ReportListScreen({
       .sort((a, b) => Number(b.name === selectedDongName) - Number(a.name === selectedDongName)
         || a.name.localeCompare(b.name, 'ko'));
   }, [locations, selectedDongName]);
-
-  const personalWorkspace = true;
 
   const handleCreateReport = () => {
     if (selectedLocations.length === 0) {
@@ -160,15 +154,7 @@ export default function ReportListScreen({
             const taskId = getTaskId(loc);
 
             const checked =
-              selectedIds.includes(taskId);
-
-            const assignment =
-              assignmentMap.get(
-                Number(taskId)
-              );
-
-            // 이제 1인 그룹도 groupId와 담당자 배정을 가지므로 현재 그룹 유형으로 구분한다.
-            const isTeamLocation = !personalWorkspace;
+              reportable && selectedIds.includes(taskId);
 
             return (
               <View
@@ -177,6 +163,10 @@ export default function ReportListScreen({
               >
                 <TouchableOpacity
                   style={styles.checkArea}
+                  disabled={!reportable}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={`${loc.detailAddress || loc.roadAddress || '방문지'} 보고서 선택`}
+                  accessibilityState={{ disabled: !reportable, checked }}
                   onPress={() =>
                     toggleSelect(loc)
                   }
@@ -243,66 +233,11 @@ export default function ReportListScreen({
                             color="#2477F3"
                           />
                           <Text style={styles.taskDateText}>
-                            업무일 {formatShortDate(getWorkDateKey(loc))}
+                            {formatShortDate(getWorkDateKey(loc))}
                           </Text>
                         </View>
                       ) : null}
 
-                      {String(
-                        loc.task ||
-                          loc.taskCategory ||
-                          loc.task_category ||
-                          ''
-                      ).trim() ? (
-                        <View style={styles.taskCategoryRow}>
-                          <Ionicons
-                            name="pricetag-outline"
-                            size={11}
-                            color="#536477"
-                          />
-                          <Text style={styles.taskCategoryText}>
-                            {loc.task || loc.taskCategory || loc.task_category}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-
-                    <Text
-                      style={styles.itemAddr}
-                      numberOfLines={1}
-                    >
-                      {loc.roadAddress ||
-                        '주소 없음'}
-                    </Text>
-
-                    {isTeamLocation && (
-                      <View
-                        style={styles.assigneeRow}
-                      >
-                        <Ionicons
-                          name="person-outline"
-                          size={12}
-                          color="#2477F3"
-                        />
-
-                        <Text
-                          style={[
-                            styles.assigneeText,
-                            !assignment &&
-                              styles.assigneeEmpty,
-                          ]}
-                        >
-                          {assignment
-                            ? `담당자: ${
-                                assignment.assigneeName ||
-                                assignment.assigneeLoginId
-                              }`
-                            : '담당자 미지정'}
-                        </Text>
-                      </View>
-                    )}
-
-                    <View style={styles.statusRow}>
                       <Text
                         style={[
                           styles.statusBadge,
@@ -314,20 +249,10 @@ export default function ReportListScreen({
                           },
                         ]}
                       >
-                        {getStatusLabel(
-                          loc.status
-                        )}
+                        {getStatusLabel(loc.status)}
                       </Text>
 
-                      {!reportable && (
-                        <Text
-                          style={
-                            styles.disabledText
-                          }
-                        >
-                          보고서 포함 불가
-                        </Text>
-                      )}
+
                     </View>
                   </View>
 
@@ -346,12 +271,10 @@ export default function ReportListScreen({
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <Text style={styles.selectedText}>
-          선택 {selectedLocations.length}건
-        </Text>
+
 
         <PrimaryButton
-          title="선택한 방문지로 보고서 만들기"
+          title={`${selectedLocations.length}건 보고서 만들기`}
           onPress={handleCreateReport}
           disabled={
             selectedLocations.length === 0
@@ -366,7 +289,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    transform: [{ translateY: -15 }],
+    marginTop: -15,
   },
 
   body: {
@@ -465,9 +388,8 @@ const styles = StyleSheet.create({
 
   taskMetaRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 5,
+    gap: 8,
     marginTop: 5,
   },
 
@@ -549,7 +471,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: -15,
+    bottom: 0,
     backgroundColor: '#FFFFFF',
 
     paddingHorizontal: 14,

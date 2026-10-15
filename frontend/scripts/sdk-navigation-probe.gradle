@@ -1,0 +1,18 @@
+// From frontend/android: gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+//   --init-script ../scripts/sdk-navigation-probe.gradle -PreactNativeArchitectures=arm64-v8a
+// Install both APKs, then run:
+// adb shell am instrument -w com.pang3.fieldworkhelper.test/androidx.test.runner.AndroidJUnitRunner
+// This uses the registered host app key and performs eight real route queries.
+gradle.beforeProject { app ->
+    if (app.path != ':app') return
+    app.plugins.withId('com.android.application') {
+        app.android.defaultConfig.testInstrumentationRunner = 'androidx.test.runner.AndroidJUnitRunner'
+        app.android.sourceSets.androidTest.java.srcDir(new File(app.rootProject.projectDir.parentFile,
+            'modules/kakao-navigation/android/src/integrationTest/java'))
+        app.dependencies.add('androidTestImplementation', app.rootProject.project(':kakao-navigation'))
+        // Match the SDK's JUnit runtime constraint.
+        app.dependencies.add('androidTestImplementation', 'androidx.test:runner:1.4.0')
+        app.dependencies.add('androidTestImplementation', 'junit:junit:4.12')
+        app.dependencies.add('androidTestImplementation', 'com.kakaomobility.knsdk:knsdk_ui:1.12.8-hotfix02')
+    }
+}

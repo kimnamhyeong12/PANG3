@@ -10,9 +10,10 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
+import { colors } from '../constants/design';
 import { BackButton } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
-import { BUSAN_DISTRICT_CODES } from './PublicDataMapMode';
+import { BUSAN_DISTRICT_CODES } from '../constants/busanDistricts';
 import { koreaDayKey, isCurrentWork } from '../utils/completionDay';
 import { buildMemberColors } from '../utils/memberColors';
 import GroupDashboardScreen from './GroupDashboardScreen';
@@ -44,10 +45,8 @@ const STATUS = {
 };
 
 const safeJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
-const shortAreaName = (value) =>
-  (String(value || '').trim().split(/\s+/).pop() || '').replace(/제(?=\d+동$)/, '');
 
-const buildMapHtml = ({ boundaries, assignments, memberColors, selectedMemberId, focusedAreaBounds }) => `<!doctype html>
+const buildMapHtml = ({ boundaries, assignments, memberColors, selectedMemberId, focusedAreaBounds, districtView }) => `<!doctype html>
 <html><head>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
 <style>
@@ -63,6 +62,7 @@ const assignments=${safeJson(assignments || [])};
 const memberColors=${safeJson(memberColors || {})};
 const selectedMemberId=${safeJson(selectedMemberId ? String(selectedMemberId) : '')};
 const focusedAreaBounds=${safeJson(focusedAreaBounds || null)};
+const districtView=${safeJson(districtView || null)};
 const statusColors={pending:'#E53935',working:'#F5B400',complete:'#16A05D'};
 function statusOf(v){v=String(v||'pending').toLowerCase();if(['complete','completed','done'].includes(v))return'complete';if(['working','progress','in_progress'].includes(v))return'working';return'pending'}
 function shortName(v){const p=String(v||'').trim().split(/\\s+/);return(p[p.length-1]||'').replace(/제(?=\\d+동$)/,'')}
@@ -91,7 +91,7 @@ kakao.maps.load(function(){
  // 사용자가 행정동을 직접 눌렀을 때만 해당 동으로 확대한다.
  // 그 외 최초 진입/재진입은 SGIS 시군구 전체 경계를 최우선으로 사용한다.
  // 방문지 좌표 bounds는 SGIS 경계를 못 불러온 경우에만 최후의 fallback이다.
- if(focusedAreaBounds&&Number.isFinite(Number(focusedAreaBounds.south))&&Number.isFinite(Number(focusedAreaBounds.west))&&Number.isFinite(Number(focusedAreaBounds.north))&&Number.isFinite(Number(focusedAreaBounds.east))){const focused=new kakao.maps.LatLngBounds(new kakao.maps.LatLng(Number(focusedAreaBounds.south),Number(focusedAreaBounds.west)),new kakao.maps.LatLng(Number(focusedAreaBounds.north),Number(focusedAreaBounds.east)));map.setBounds(focused,35,35,35,35);}else if(hasRegionBounds)map.setBounds(regionBounds,35,35,35,35);else if(hasBounds)map.setBounds(bounds,35,35,35,35);
+ if(focusedAreaBounds&&Number.isFinite(Number(focusedAreaBounds.south))&&Number.isFinite(Number(focusedAreaBounds.west))&&Number.isFinite(Number(focusedAreaBounds.north))&&Number.isFinite(Number(focusedAreaBounds.east))){const focused=new kakao.maps.LatLngBounds(new kakao.maps.LatLng(Number(focusedAreaBounds.south),Number(focusedAreaBounds.west)),new kakao.maps.LatLng(Number(focusedAreaBounds.north),Number(focusedAreaBounds.east)));map.setBounds(focused,35,35,35,35);}else if(hasRegionBounds)map.setBounds(regionBounds,35,35,35,35);else if(districtView){map.setCenter(new kakao.maps.LatLng(districtView.lat,districtView.lng));map.setLevel(districtView.level);}else if(hasBounds)map.setBounds(bounds,35,35,35,35);
 });
 </script></body></html>`;
 
@@ -105,6 +105,25 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
   const [selectedAreaKey, setSelectedAreaKey] = useState(null);
   const [focusedAreaBounds, setFocusedAreaBounds] = useState(null);
   const [mapInteracting, setMapInteracting] = useState(false);
+  const [districtView, setDistrictView] = useState(null);
+  useEffect(() => {
+    let active = true;
+    setDistrictView(null); setFocusedAreaBounds(null); setSelectedAreaKey(null);
+    const sido = group?.regionSido || user?.workSido || '부산광역시';
+    const district = group?.regionSigungu || user?.workSigungu;
+    if (!district || !KAKAO_REST_API_KEY) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    fetch(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(`${sido} ${district}`)}`, {
+      signal: controller.signal, headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` },
+    }).then(response => response.ok ? response.json() : null).then(data => {
+      const point = data?.documents?.[0];
+      if (active && point && Number.isFinite(Number(point.x)) && Number.isFinite(Number(point.y))) {
+        setDistrictView({ lat: Number(point.y), lng: Number(point.x), level: district.endsWith('군') ? 9 : 8 });
+      }
+    }).catch(() => {}).finally(() => clearTimeout(timer));
+    return () => { active = false; clearTimeout(timer); controller.abort(); };
+  }, [group?.groupId, group?.regionSido, group?.regionSigungu, user?.workSido, user?.workSigungu]);
   const [groupMembers, setGroupMembers] = useState([]);
   const [today, setToday] = useState(() => koreaDayKey());
   const personalWorkspace = isPersonalGroup(group);
@@ -265,7 +284,8 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
     memberColors,
     selectedMemberId,
     focusedAreaBounds,
-  }), [boundaries, mapAssignments, memberColors, selectedMemberId, focusedAreaBounds]);
+    districtView,
+  }), [boundaries, mapAssignments, memberColors, selectedMemberId, focusedAreaBounds, districtView]);
   const selectedMember = memberProgress.find((member) => member.id === selectedMemberId);
 
   return (
@@ -273,13 +293,11 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
       {!embedded && <View style={styles.header}>
         <BackButton onPress={onBack} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>업무 현황</Text>
+          {!personalWorkspace && <Text style={styles.eyebrow}>업무 현황</Text>}
           <Text style={styles.title}>
             {personalWorkspace ? '내 업무 현황' : '팀 작업현황'}
           </Text>
-          <Text style={styles.desc}>
-            {group?.groupName || '현재 그룹'} · {personalWorkspace ? '개인 업무' : '팀 전체 현황'}
-          </Text>
+          {!personalWorkspace && <Text style={styles.desc}>{group?.groupName || '현재 그룹'} · 팀 전체 현황</Text>}
         </View>
       </View>}
 
@@ -377,56 +395,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
 
         {showDashboard && <GroupDashboardScreen assignments={assignments} group={group} embedded />}
 
-        {personalWorkspace && <View style={styles.memberCard}>
-          <View style={styles.memberHeader}>
-            <Text style={styles.memberTitle}>
-              {personalWorkspace ? '내 진행 현황' : '팀원별 진행 현황'}
-            </Text>
-            {(!!selectedMemberId || !!selectedAreaKey) && (
-              <TouchableOpacity onPress={() => { setSelectedMemberId(null); setSelectedAreaKey(null); setFocusedAreaBounds(null); }}>
-                <Text style={styles.showAllText}>전체 보기</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          {memberProgress.length === 0 ? (
-            <Text style={styles.emptyText}>
-              {personalWorkspace ? '등록된 업무가 없습니다.' : '공유된 팀원 업무가 없습니다.'}
-            </Text>
-          ) : (
-            <ScrollView style={styles.memberList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-              {memberProgress.map((member) => {
-                const percent = member.total ? Math.round((member.complete / member.total) * 100) : 0;
-                const selected = selectedMemberId === member.id;
-                return (
-                  <TouchableOpacity
-                    key={member.id}
-                    activeOpacity={0.75}
-                    style={[styles.memberRow, selected && styles.memberRowSelected]}
-                    onPress={() => {
-                      setSelectedMemberId(selected ? null : member.id);
-                      setSelectedAreaKey(null);
-                      setFocusedAreaBounds(null);
-                    }}
-                  >
-                    <View style={[styles.ownerDot, { backgroundColor: member.color }]} />
-                    <View style={styles.memberInfo}>
-                      <View style={styles.memberTextRow}>
-                        <Text style={styles.memberName}>{member.name}</Text>
-                        <Text style={styles.memberMeta}>
-                          {member.total}곳 중 {member.complete}곳 완료{member.working ? ` · ${member.working}곳 진행 중` : ''}
-                        </Text>
-                        <Text style={styles.memberPercent}>{percent}%</Text>
-                      </View>
-                      <View style={styles.progressTrack}>
-                        <View style={[styles.progressFill, { width: `${percent}%`, backgroundColor: member.color }]} />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          )}
-        </View>}
+
       </ScrollView>
     </View>
   );
@@ -437,7 +406,7 @@ function Summary({ value, label, color = '#FFFFFF' }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7F5' },
+  container: { flex: 1, backgroundColor: colors.background },
   header: {
   flexDirection: 'row',
   gap: 12,

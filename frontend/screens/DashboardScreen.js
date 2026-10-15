@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../utils/auth';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -1824,63 +1825,6 @@ function DistributionRow({
   );
 }
 
-function BarRow({
-  label,
-  count,
-  maxCount,
-  color,
-}) {
-  return (
-    <View
-      style={
-        styles.barRow
-      }
-    >
-      <Text
-        style={
-          styles.barLabel
-        }
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
-
-      <View
-        style={
-          styles.barTrack
-        }
-      >
-        {count > 0 ? (
-          <View
-            style={[
-              styles.barFill,
-              {
-                width:
-                  `${
-                    (
-                      count /
-                      maxCount
-                    ) *
-                    100
-                  }%`,
-                backgroundColor:
-                  color,
-              },
-            ]}
-          />
-        ) : null}
-      </View>
-
-      <Text
-        style={
-          styles.barCount
-        }
-      >
-        {count}건
-      </Text>
-    </View>
-  );
-}
 
 function EmptyText({
   children,
@@ -1958,7 +1902,7 @@ const styles =
       flex: 1,
       backgroundColor:
         colors.background,
-      transform: [{ translateY: -15 }],
+      marginTop: -15,
     },
 
     settingsButton: {

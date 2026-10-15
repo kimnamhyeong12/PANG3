@@ -71,6 +71,7 @@ public class TaskService {
                 })
                 .forEach(owned::add);
         return owned.stream()
+                .filter(task -> task.getGroup() == null || groupMemberRepository.existsByGroupAndUser(task.getGroup(), user))
                 .sorted((left, right) -> right.getTaskId().compareTo(left.getTaskId()))
                 .map(this::toFrontendMap)
                 .collect(Collectors.toList());
@@ -81,7 +82,7 @@ public class TaskService {
         User user = getUser(userId);
         WorkGroup group = getGroup(groupId);
         if (!groupMemberRepository.existsByGroupAndUser(group, user)) {
-            throw new RuntimeException("그룹 구성원이 아닙니다.");
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "그룹 구성원이 아닙니다.");
         }
         return taskRepository.findByGroupOrderByTaskIdDesc(group).stream()
                 .map(this::toFrontendMap)
@@ -98,6 +99,15 @@ public class TaskService {
         if (!assignments.isEmpty()) return assignments.get(assignments.size() - 1).getAssignee();
         if (task.getCreatedBy() != null) return task.getCreatedBy();
         return null;
+    }
+
+    public void requireEditor(Long taskId, Long userId) {
+        Task task = getById(taskId);
+        User owner = currentAssignee(task);
+        if (userId == null || owner == null || !userId.equals(owner.getUserId())
+                || (task.getGroup() != null && !groupMemberRepository.existsByGroupAndUser(task.getGroup(), owner))) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "현재 담당자만 업무를 변경할 수 있습니다.");
+        }
     }
 
     public Task getById(Long taskId) {
@@ -453,6 +463,8 @@ public class TaskService {
         map.put("assigneeUserId", owner == null ? null : owner.getUserId());
         map.put("assigneeName", owner == null ? null : owner.getName());
         map.put("assigneeLoginId", owner == null ? null : owner.getLoginId());
+        map.put("assigneeDeparted", owner != null && task.getGroup() != null
+                && !groupMemberRepository.existsByGroupAndUser(task.getGroup(), owner));
         map.put("createdByUserId", task.getCreatedBy() != null
                 ? task.getCreatedBy().getUserId()
                 : null);

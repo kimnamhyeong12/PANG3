@@ -1,4 +1,5 @@
 package com.fieldwork.controller;
+import com.fieldwork.security.CurrentUser;
 
 import com.fieldwork.service.TaskTransferService;
 import org.springframework.web.bind.annotation.*;
@@ -18,14 +19,14 @@ public class TaskTransferController {
 
     @GetMapping
     public List<Map<String, Object>> list(@PathVariable Long groupId, @RequestParam Long userId) {
-        return service.list(groupId, userId);
+        return service.list(groupId, CurrentUser.require(userId));
     }
 
     @PostMapping
     public Map<String, Object> create(@PathVariable Long groupId, @RequestBody Map<String, Object> body) {
         return service.create(
                 groupId,
-                asLong(body.get("senderUserId")),
+                CurrentUser.require(body.get("senderUserId")),
                 asLong(body.get("recipientUserId")),
                 asLongList(body.get("taskIds")),
                 text(body.get("sido")),
@@ -37,13 +38,13 @@ public class TaskTransferController {
     @PostMapping("/{requestId}/accept")
     public Map<String, Object> accept(@PathVariable Long groupId, @PathVariable Long requestId,
             @RequestBody Map<String, Object> body) {
-        return service.respond(groupId, requestId, asLong(body.get("userId")), true);
+        return service.respond(groupId, requestId, CurrentUser.require(body.get("userId")), true);
     }
 
     @PostMapping("/{requestId}/reject")
     public Map<String, Object> reject(@PathVariable Long groupId, @PathVariable Long requestId,
             @RequestBody Map<String, Object> body) {
-        return service.respond(groupId, requestId, asLong(body.get("userId")), false);
+        return service.respond(groupId, requestId, CurrentUser.require(body.get("userId")), false);
     }
 
     private Long asLong(Object value) {

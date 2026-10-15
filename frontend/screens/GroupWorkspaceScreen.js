@@ -1,20 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import WorkStatusScreen from './WorkStatusScreen';
 import { formatTransferTime } from './TransferScreen';
-import { CardTitle, ScreenHeader } from '../components/ui';
+import { CardTitle, PrimaryButton, ScreenHeader } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
 import { colors, shadow } from '../constants/design';
 import { groupApi } from '../utils/groupApi';
+import GroupLeaveButton from '../components/GroupLeaveButton';
 import { buildMemberColors, softMemberColor } from '../utils/memberColors';
 
 const shortDong = (value) => {
@@ -60,9 +63,9 @@ export default function GroupWorkspaceScreen({
   onBack,
   tab = 'dashboard',
   onTabChange,
-  onMembers,
   onTransfer,
   onReports,
+  onLeaveGroup,
 }) {
   const [detail, setDetail] = useState(group || null);
   const [sharedTasks, setSharedTasks] = useState(Array.isArray(assignments) ? assignments : []);
@@ -72,6 +75,41 @@ export default function GroupWorkspaceScreen({
   const [respondingRequestId, setRespondingRequestId] = useState(null);
   const [teamAlerts, setTeamAlerts] = useState(true);
   const [activityAlerts, setActivityAlerts] = useState(true);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteId, setInviteId] = useState('');
+  const [inviting, setInviting] = useState(false);
+
+  useEffect(() => {
+    setInviteOpen(false);
+    setInviteId('');
+  }, [group?.groupId]);
+
+  useEffect(() => {
+    if (tab !== 'settings') {
+      setInviteOpen(false);
+      setInviteId('');
+      Keyboard.dismiss();
+    }
+  }, [tab]);
+
+  const invite = async () => {
+    const loginId = inviteId.trim();
+    if (!loginId || inviting) return;
+    try {
+      setInviting(true);
+      await groupApi(`/api/groups/${group.groupId}/invitations`, {
+        method: 'POST',
+        body: JSON.stringify({ inviterUserId: user.userId, inviteeLoginId: loginId }),
+      });
+      showAlert('초대 완료', `${loginId} 사용자에게 초대를 보냈습니다.`);
+      setInviteId('');
+      setInviteOpen(false);
+    } catch (error) {
+      showAlert('초대 실패', error.message || '초대를 보내지 못했습니다. 다시 시도해 주세요.');
+    } finally {
+      setInviting(false);
+    }
+  };
 
   useEffect(() => {
     setDetail(group || null);
@@ -121,7 +159,8 @@ export default function GroupWorkspaceScreen({
   const transferRows = useMemo(() => buildMemberTransferRows(members, sharedTasks), [members, sharedTasks]);
   const memberColors = useMemo(() => buildMemberColors(members, sharedTasks), [members, sharedTasks]);
   const receivedRequests = useMemo(() => transferRequests
-    .filter((request) => Number(request.recipientUserId) === Number(user?.userId))
+    .filter((request) => Number(request.recipientUserId) === Number(user?.userId)
+      || Number(request.senderUserId) === Number(user?.userId))
     .sort((a, b) => Number(b.status === 'PENDING') - Number(a.status === 'PENDING')
       || new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()),
   [transferRequests, user?.userId]);
@@ -145,7 +184,7 @@ export default function GroupWorkspaceScreen({
         console.log('이관 후 업무 목록 갱신 실패:', refreshError);
       }
       showAlert(accept ? '이관 수락' : '이관 거절', accept
-        ? '지도에서 행정동을 선택해 방문지를 추가하세요.'
+        ? '담당자가 변경되었습니다. 지도와 보고서에서 확인할 수 있습니다.'
         : '기존 담당자가 유지됩니다.');
     } catch (error) {
       showAlert('요청 처리 실패', error.message);
@@ -189,7 +228,7 @@ export default function GroupWorkspaceScreen({
           showDashboard
         />
       ) : (
-        <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {tab === 'settings' ? <>
           <View style={styles.card}>
             <CardTitle icon="people" title="기본 정보" />
@@ -203,9 +242,26 @@ export default function GroupWorkspaceScreen({
               title="팀원 관리"
               suffix={`(${members.length}명)`}
               actionLabel="팀원 추가"
-              onAction={onMembers}
+              onAction={() => setInviteOpen((value) => !value)}
               tone="teal"
             />
+
+            {inviteOpen ? <View style={styles.inviteBox}>
+              <TextInput
+                style={styles.inviteInput}
+                value={inviteId}
+                onChangeText={setInviteId}
+                placeholder="상대방의 로그인 아이디"
+                placeholderTextColor={colors.textFaint}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus
+                editable={!inviting}
+                returnKeyType="send"
+                onSubmitEditing={invite}
+              />
+              <PrimaryButton title={inviting ? '전송 중' : '초대'} onPress={invite} disabled={!inviteId.trim() || inviting} style={styles.inviteButton} />
+            </View> : null}
 
             {loadingSettings && members.length === 0 ? (
               <View style={styles.loadingBox}>
@@ -237,7 +293,7 @@ export default function GroupWorkspaceScreen({
                       key={member.userId || `${member.loginId}-${index}`}
                       style={[styles.memberRow, index > 0 && styles.divider]}
                       activeOpacity={0.78}
-                      onPress={onMembers}
+                      disabled
                     >
                       <View
                         style={[
@@ -316,16 +372,16 @@ export default function GroupWorkspaceScreen({
             {loadingSettings && receivedRequests.length === 0 ? (
               <View style={styles.loadingBox}><ActivityIndicator color={colors.primary} /></View>
             ) : receivedRequests.length === 0 ? (
-              <Text style={styles.emptyText}>받은 이관 신청이 없습니다.</Text>
+              <Text style={styles.emptyText}>주고받은 이관 신청이 없습니다.</Text>
             ) : receivedRequests.map((request, index) => (
               <View key={request.id} style={[styles.requestRow, index > 0 && styles.requestDivider]}>
-                <Text style={styles.requestTitle}>{request.senderName || '팀원'} → {request.recipientName || '나'} · {request.taskIds?.length || 0}건</Text>
+                <Text style={styles.requestTitle}>{Number(request.senderUserId) === Number(user?.userId) ? '보낸 요청' : '받은 요청'} · {request.senderName || '팀원'} → {request.recipientName || '팀원'} · {request.taskIds?.length || 0}건</Text>
                 <Text style={styles.requestMeta}>{request.status === 'PENDING' ? '응답 대기' : request.status === 'ACCEPTED' ? '수락' : '거절'} · {formatTransferTime(request.requestedAt)}</Text>
                 <Text style={styles.requestMeta}>{(request.taskIds || []).map((id) => {
                   const task = sharedTasks.find((item) => Number(item.id ?? item.taskId ?? item.task_id) === Number(id));
                   return task ? `${shortDong(task.adminDong || task.admin_dong) || '지역 미확인'} ${task.detailAddress || task.roadAddress || `#${id}`}` : `방문지 #${id}`;
                 }).join(', ')}</Text>
-                {request.status === 'PENDING' && <View style={styles.requestActions}>
+                {request.status === 'PENDING' && Number(request.recipientUserId) === Number(user?.userId) && <View style={styles.requestActions}>
                   <TouchableOpacity style={[styles.requestAction, styles.requestReject]} disabled={respondingRequestId != null} onPress={() => respondToRequest(request, false)}>
                     <Text style={[styles.requestActionText, styles.requestRejectText]}>거절</Text>
                   </TouchableOpacity>
@@ -339,7 +395,7 @@ export default function GroupWorkspaceScreen({
 
           {tab === 'settings' && <>
           <TouchableOpacity style={styles.card} activeOpacity={0.78} onPress={onReports}>
-            <CardTitle icon="document-text" title="그룹 보고서 모아보기" />
+            <CardTitle icon="document-text" title="그룹 보고서 전체보기" />
             <View style={styles.reportBar}>
               <View style={styles.reportSummary}>
                 <Ionicons name="document-text-outline" size={22} color={colors.primary} />
@@ -373,6 +429,7 @@ export default function GroupWorkspaceScreen({
               last
             />
           </View>
+          <GroupLeaveButton key={group.groupId} group={group} user={user} onLeft={onLeaveGroup} />
           </>}
         </ScrollView>
       )}
@@ -407,7 +464,10 @@ function SettingSwitchRow({ icon, title, value, onValueChange, last }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background, transform: [{ translateY: -15 }] },
+  inviteBox: { marginTop: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  inviteInput: { flex: 1, minWidth: 0, height: 44, borderWidth: 1, borderColor: colors.line, borderRadius: 12, paddingHorizontal: 12, color: colors.text, backgroundColor: colors.background },
+  inviteButton: { width: 68, minHeight: 44, paddingVertical: 0, paddingHorizontal: 8, borderRadius: 12 },
+  root: { flex: 1, backgroundColor: colors.background, marginTop: -15 },
   tabs: {
     flexDirection: 'row',
     borderBottomWidth: 1,

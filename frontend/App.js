@@ -1,3 +1,4 @@
+import { apiFetch as fetch, session, subscribeAuthExpired } from './utils/auth';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BackHandler,
@@ -15,27 +16,29 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import RegisterScreen from './screens/RegisterScreen';
+import AppErrorBoundary from './components/AppErrorBoundary';
 import LoginScreen from './screens/LoginScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import MapScreen from './screens/MapScreen';
 import FieldActionScreen from './screens/FieldActionScreen';
-import ReportScreen from './screens/ReportScreen';
 import DownloadScreen from './screens/DownloadScreen';
 import ReportListScreen from './screens/ReportListScreen';
 import GroupReportsScreen from './screens/GroupReportsScreen';
 import GroupScreen from './screens/GroupScreen';
 import GroupCreateScreen from './screens/GroupCreateScreen';
 import GroupInvitationsScreen from './screens/GroupInvitationsScreen';
-import GroupDetailScreen from './screens/GroupDetailScreen';
+import GroupSettingsScreen from './screens/GroupSettingsScreen';
 import GroupWorkspaceScreen from './screens/GroupWorkspaceScreen';
 import AssignmentScreen from './screens/AssignmentScreen';
 import WorkStatusScreen from './screens/WorkStatusScreen';
+import PersonalWorkspaceScreen from './screens/PersonalWorkspaceScreen';
 import TransferScreen from './screens/TransferScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import { groupApi } from './utils/groupApi';
 import { CustomAlertHost, showAlert } from './components/CustomAlert';
 import { colors } from './constants/design';
 import { locationKey, numberVisits, restoreRouteSession } from './utils/routeSession';
+import { wasRouteSessionEnded, endRouteSession } from './modules/kakao-navigation';
 import { assignmentKey, splitWorkPlan } from './utils/workPlan';
 import {
   NOTIFICATION_TYPES,
@@ -77,8 +80,17 @@ const isTodayWork = (item) => {
 };
 
 export default function App() {
+  return <AppErrorBoundary><AppContent /></AppErrorBoundary>;
+}
+
+function AppContent() {
   const [screen, setScreen] = useState('login');
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState('');
+  const [mapRecordReturn, setMapRecordReturn] = useState(null);
+  const [reportSelections, setReportSelections] = useState({});
   const [groupWorkspaceTab, setGroupWorkspaceTab] = useState('dashboard');
+  const [personalWorkspaceTab, setPersonalWorkspaceTab] = useState('dashboard');
   const [mapInitialized, setMapInitialized] = useState(false);
   const [selectedDong, setSelectedDong] = useState(null);
   const selectedDongDayRef = useRef(getLocalDateKey());
@@ -121,12 +133,12 @@ export default function App() {
     setSelectedDong(null);
     AsyncStorage.removeItem('pang3:selectedDong').catch(() => {});
   }, [calendarDayKey]);
+  const [mapSearchVisible, setMapSearchVisible] = useState(false);
   const [user, setUser] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [actionType, setActionType] = useState(null);
 
   const [routeLocations, setRouteLocations] = useState([]);
-  const [reportTargets, setReportTargets] = useState([]);
   const [downloadInfo, setDownloadInfo] = useState(null);
 
   const [roadPath, setRoadPath] = useState([]);
@@ -150,7 +162,7 @@ export default function App() {
   const planBusyRef = useRef(false);
   const workPlanRef = useRef({ rows: [], choices: {}, key: null });
   const currentRouteRef = useRef(null);
-  currentRouteRef.current = { day: calendarDayKey, order: routeLocations.map(locationKey), visitNumbers: Object.fromEntries(routeLocations.map((row) => [locationKey(row), row.markerNumber])), locations: routeLocations, routeSegments, currentSegmentIndex, optimized, isGuiding };
+  currentRouteRef.current = { visitOrderVersion: routeLocations.every((row) => row.visitOrderVersion === 2) ? 2 : null, day: calendarDayKey, order: routeLocations.map(locationKey), visitNumbers: Object.fromEntries(routeLocations.map((row) => [locationKey(row), row.markerNumber])), locations: routeLocations, routeSegments, currentSegmentIndex, optimized, isGuiding };
 
   // 앱을 자정 넘겨 계속 켜둔 경우에도 오늘 업무/미처리 업무 기준을 자동 갱신한다.
   useEffect(() => {
@@ -191,6 +203,7 @@ export default function App() {
   const teamSaveQueueRef = useRef(Promise.resolve());
   const teamSessionRef = useRef(null);
   teamSessionRef.current = {
+    visitOrderVersion: teamLocations.every((row) => row.visitOrderVersion === 2) ? 2 : null,
     day: calendarDayKey, order: teamLocations.map(locationKey),
     visitNumbers: Object.fromEntries(teamLocations.map((row) => [locationKey(row), row.markerNumber])),
     locations: teamLocations, routeSegments: teamRouteSegments,
@@ -255,7 +268,24 @@ export default function App() {
     }
   }, []);
 
-  const go = (next, options = {}) => {
+  const navigationGuardRef = useRef(null);
+  const navigationBusyRef = useRef(false);
+  const navigationRequestRef = useRef(0);
+  const registerNavigationGuard = useCallback((guard) => {
+    navigationGuardRef.current = guard;
+    return () => { if (navigationGuardRef.current === guard) navigationGuardRef.current = null; };
+  }, []);
+  const navigateSafely = async (move, bypass = false) => {
+    if (navigationBusyRef.current && !bypass) return;
+    const request = ++navigationRequestRef.current;
+    navigationBusyRef.current = true;
+    try {
+      if (!bypass && screenRef.current === 'fieldAction' && navigationGuardRef.current && !await navigationGuardRef.current()) return;
+      if (request !== navigationRequestRef.current) return;
+      move();
+    } finally { if (request === navigationRequestRef.current) navigationBusyRef.current = false; }
+  };
+  const go = (next, options = {}) => navigateSafely(() => {
     if (next === screenRef.current) return;
 
     if (next === 'mapDirect') {
@@ -263,20 +293,20 @@ export default function App() {
     }
 
     if (!options.replace) {
-      historyRef.current.push(screen);
+      historyRef.current.push(screenRef.current);
     }
 
     screenRef.current = next;
     setScreen(next);
-  };
+  }, options.bypass);
 
-  const goBack = (fallback = 'main') => {
+  const goBack = (fallback = 'main', options = {}) => navigateSafely(() => {
     const previous = historyRef.current.pop();
     const next = previous || fallback;
 
     screenRef.current = next;
     setScreen(next);
-  };
+  }, options.bypass);
 
   const workspaceCacheKey = useCallback((targetUser = user, group = activeGroup) => {
     if (!targetUser?.userId) return null;
@@ -297,26 +327,8 @@ export default function App() {
     const legacyPersonalKey = isPersonalGroup(activeGroup) && personalGroupId
       ? `${WORKSPACE_LOCATIONS_KEY_PREFIX}_${user.userId}_group_${personalGroupId}`
       : null;
-    const acceptedTransfersKey = `${cacheKey}_accepted_transfer_ids`;
-    const loadAcceptedTransferIds = async () => {
-      if (isPersonalGroup(activeGroup)) return new Set();
-      try {
-        const transfers = await groupApi(`/api/groups/${activeGroup.groupId}/transfers?userId=${user.userId}`);
-        const ids = (Array.isArray(transfers) ? transfers : [])
-          .filter((request) => request.status === 'ACCEPTED'
-            && Number(request.recipientUserId) === Number(user.userId))
-          .flatMap((request) => request.taskIds || [])
-          .map(String);
-        AsyncStorage.setItem(acceptedTransfersKey, JSON.stringify(ids)).catch(() => {});
-        return new Set(ids);
-      } catch (error) {
-        const cached = await AsyncStorage.getItem(acceptedTransfersKey).catch(() => null);
-        try { return new Set(cached ? JSON.parse(cached) : []); }
-        catch { return new Set(); }
-      }
-    };
     setTodayLocationsLoaded(false);
-    const restoreRows = async (rows, legacyRows = [], heldTransferIds = new Set()) => {
+    const restoreRows = async (rows, legacyRows = []) => {
       await routeSaveQueueRef.current;
       let session = null;
       try {
@@ -337,8 +349,8 @@ export default function App() {
       if (loadedWorkspaceKeyRef.current === cacheKey) session = currentRouteRef.current;
       const personalWorkspace = true;
       const plan = splitWorkPlan(rows, choices, calendarDayKey, savedPlan ? [] : legacyRows,
-        { autoAddToday: personalWorkspace, holdUntilSelected: heldTransferIds });
-      plan.map = numberVisits(plan.map, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])));
+        { autoAddToday: personalWorkspace });
+      plan.map = numberVisits(plan.map, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])), { visitOrderVersion: session?.visitOrderVersion });
       // Personal visits scheduled for today go straight onto their owner's map.
       const autoAdded = personalWorkspace
         ? plan.map.filter((row) => row.status !== 'complete' && !choices[assignmentKey(row)])
@@ -354,10 +366,10 @@ export default function App() {
       workPlanRef.current = { rows, choices, key: cacheKey };
       setPendingWork(plan.pending);
       const sameMap = loadedWorkspaceKeyRef.current === cacheKey &&
-        JSON.stringify(plan.map.map((row) => [locationKey(row), row.status]).sort()) ===
-        JSON.stringify((currentRouteRef.current.locations || []).map((row) => [locationKey(row), row.status]).sort());
-      if (sameMap && (session?.routeSegments?.length || 0) <= plan.map.filter((row) => row.status !== 'complete').length) return;
-      const restored = restoreRouteSession(plan.map, session, calendarDayKey);
+        JSON.stringify(plan.map.map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort()) ===
+        JSON.stringify((currentRouteRef.current.locations || []).map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort());
+      if (sameMap && !wasRouteSessionEnded() && (session?.routeSegments?.length || 0) <= plan.map.filter((row) => row.status !== 'complete').length) return;
+      const restored = restoreRouteSession(plan.map, session, calendarDayKey, { singleDestinationOnly: true, explicitlyEnded: wasRouteSessionEnded() });
       setRouteLocations(restored?.locations || plan.map);
       setRouteSegments(restored?.segments || []);
       setRoadPath(restored?.segments.slice(restored.currentSegmentIndex).flatMap((segment) => segment?.path || []) || []);
@@ -370,7 +382,7 @@ export default function App() {
 
     try {
       const path = `/api/groups/${encodeURIComponent(activeGroup.groupId)}/assignments/mine?userId=${encodeURIComponent(user.userId)}`;
-      const [data, heldTransferIds] = await Promise.all([groupApi(path), loadAcceptedTransferIds()]);
+      const data = await groupApi(path);
       const rows = (Array.isArray(data) ? data : []).map((item) => ({
         ...item,
         id: item.id ?? item.taskId ?? item.locationId ?? item.task_id,
@@ -390,7 +402,7 @@ export default function App() {
       if (requestId !== workspaceLoadIdRef.current) return;
       const previous = cacheKey ? await AsyncStorage.getItem(cacheKey) ||
         (legacyPersonalKey ? await AsyncStorage.getItem(legacyPersonalKey) : null) : null;
-      await restoreRows(rows, previous ? JSON.parse(previous) : [], heldTransferIds);
+      await restoreRows(rows, previous ? JSON.parse(previous) : []);
 
       if (cacheKey) {
         await AsyncStorage.setItem(`${cacheKey}_all_work`, JSON.stringify(rows));
@@ -405,14 +417,9 @@ export default function App() {
           await AsyncStorage.getItem(cacheKey) ||
           (legacyPersonalKey ? await AsyncStorage.getItem(legacyPersonalKey) : null) : null;
         const parsed = cached ? JSON.parse(cached) : [];
-        const acceptedIds = await AsyncStorage.getItem(acceptedTransfersKey).catch(() => null);
-        let heldTransferIds = new Set();
-        try { heldTransferIds = new Set(acceptedIds ? JSON.parse(acceptedIds) : []); }
-        catch {}
         if (requestId !== workspaceLoadIdRef.current) return;
         await restoreRows(
-          Array.isArray(parsed) ? parsed : [], Array.isArray(parsed) ? parsed.filter(isTodayWork) : [],
-          heldTransferIds
+          Array.isArray(parsed) ? parsed : [], Array.isArray(parsed) ? parsed.filter(isTodayWork) : []
         );
       } catch {
         if (requestId !== workspaceLoadIdRef.current) return;
@@ -486,6 +493,7 @@ export default function App() {
     if (!cacheKey || loadedWorkspaceKeyRef.current !== cacheKey) return;
     const session = JSON.stringify({
       day: calendarDayKey,
+      visitOrderVersion: routeLocations.every((row) => row.visitOrderVersion === 2) ? 2 : null,
       order: routeLocations.map(locationKey),
       visitNumbers: Object.fromEntries(routeLocations.map((row) => [locationKey(row), row.markerNumber])),
       routeSegments, currentSegmentIndex, optimized, isGuiding,
@@ -625,13 +633,13 @@ export default function App() {
       await teamSaveQueueRef.current;
       const saved = await AsyncStorage.getItem(key);
       if (requestId !== teamLoadIdRef.current) return;
-      const session = teamLoadedKeyRef.current === key ? teamSessionRef.current : saved ? JSON.parse(saved) : null;
-      const numbered = numberVisits(rows, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])));
+      let session = teamLoadedKeyRef.current === key ? teamSessionRef.current : saved ? JSON.parse(saved) : null;
+      const numbered = numberVisits(rows, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])), { visitOrderVersion: session?.visitOrderVersion });
       const sameMap = teamLoadedKeyRef.current === key &&
-        JSON.stringify(numbered.map((row) => [locationKey(row), row.status]).sort()) ===
-        JSON.stringify((teamSessionRef.current.locations || []).map((row) => [locationKey(row), row.status]).sort());
-      if (sameMap && (session?.routeSegments?.length || 0) <= numbered.filter((row) => row.status !== 'complete').length) return;
-      const restored = restoreRouteSession(numbered, session, calendarDayKey);
+        JSON.stringify(numbered.map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort()) ===
+        JSON.stringify((teamSessionRef.current.locations || []).map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort());
+      if (sameMap && !wasRouteSessionEnded() && (session?.routeSegments?.length || 0) <= numbered.filter((row) => row.status !== 'complete').length) return;
+      const restored = restoreRouteSession(numbered, session, calendarDayKey, { singleDestinationOnly: true, explicitlyEnded: wasRouteSessionEnded() });
       setTeamLocations(restored?.locations || numbered);
       setTeamRouteSegments(restored?.segments || []);
       setTeamRoadPath(restored?.segments.slice(restored.currentSegmentIndex).flatMap((segment) => segment?.path || []) || []);
@@ -777,8 +785,11 @@ export default function App() {
           refreshCurrentWorkspace();
 
           // 알림을 눌렀을 때 현재 업무공간 홈으로 이동한다.
-          historyRef.current = [];
-          go('main', { replace: true });
+          navigateSafely(() => {
+            historyRef.current = [];
+            screenRef.current = 'main';
+            setScreen('main');
+          });
         }
       });
 
@@ -795,13 +806,8 @@ export default function App() {
     refreshGroupAssignments();
   }, [refreshGroupAssignments]);
 
-  const handleLogout = () => {
-    // 로그아웃 시 현재 사용자와 기기 Push Token 연결을 해제한다.
-    // 서버가 아직 해당 API를 제공하지 않아도 로그아웃 자체는 계속 진행된다.
-    if (user?.userId) {
-      unregisterPushTokenForUser(user);
-    }
-
+  const resetLoggedOut = () => {
+    if (currentRouteRef.current?.isGuiding || teamSessionRef.current?.isGuiding) endRouteSession();
     stopRouteNotification();
 
     setWorkspaceReady(false);
@@ -819,8 +825,9 @@ export default function App() {
     setSelectedLocation(null);
     setActionType(null);
     setRouteLocations([]);
-    setReportTargets([]);
     setDownloadInfo(null);
+    setMapRecordReturn(null);
+    setReportSelections({});
     setRoadPath([]);
     setRouteSegments([]);
     setCurrentSegmentIndex(0);
@@ -844,6 +851,45 @@ export default function App() {
     setScreen('login');
   };
 
+  const handleLogin = (loginUser) => {
+    setWorkspaceReady(false);
+    loadedWorkspaceKeyRef.current = null;
+    workspaceLoadIdRef.current++;
+    teamLoadedKeyRef.current = null;
+    teamLoadIdRef.current++;
+    setRouteLocations([]);
+    setTodayLocationsLoaded(false);
+    setUser(loginUser);
+    setGroupAssignments([]);
+    restoreActiveGroup(loginUser);
+    historyRef.current = [];
+    go('mapDirect', { replace: true });
+  };
+  const handleLogout = async () => {
+    setAuthLoading(true);
+    let timer;
+    try {
+      if (user?.userId) await Promise.race([
+        unregisterPushTokenForUser(user),
+        new Promise(resolve => { timer = setTimeout(resolve, 3000); }),
+      ]);
+    }
+    finally {
+      clearTimeout(timer);
+      try { await session.logout(); }
+      catch { showAlert('로그아웃', '이 기기에서는 로그아웃했습니다. 서버 연결이 없어 로그인 해제 확인은 완료하지 못했습니다.'); }
+      resetLoggedOut();
+      setAuthLoading(false);
+    }
+  };
+  const restoreLogin = async () => {
+    setAuthLoading(true); setAuthError('');
+    try { const restored = await session.restore(); if (restored) handleLogin(restored); }
+    catch { setAuthError('로그인 연결을 확인하지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.'); }
+    finally { setAuthLoading(false); }
+  };
+  useEffect(() => { restoreLogin(); return subscribeAuthExpired(resetLoggedOut); }, []);
+
   const handleLeaveGroup = async (leftGroupId) => {
     const refreshed = await refreshAvailableGroups();
     const groups = refreshed.length
@@ -863,11 +909,6 @@ export default function App() {
     type
   ) => {
     setSelectedLocation(loc);
-    if (loc?.status === 'complete') {
-      setReportTargets([loc]);
-      go('report');
-      return;
-    }
     setActionType(type);
     go('fieldAction');
   };
@@ -882,17 +923,13 @@ export default function App() {
     go('groupHome');
   };
 
-  const openTeamMap = async () => {
-    if (!activeGroup?.groupId) {
-      go('groupHome');
-      return;
-    }
-
-    await loadTeamLocations(activeGroup);
-    await refreshGroupAssignments();
-    go('teamLocations');
-  };
-
+  if (authLoading || authError) return <SafeAreaProvider><SafeAreaView style={styles.safe}>
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 28, gap: 20 }}>
+      <Text>{authLoading ? '로그인을 확인하고 있습니다…' : authError}</Text>
+      {!!authError && <TouchableOpacity onPress={restoreLogin}><Text style={{ color: colors.primary }}>다시 연결하기</Text></TouchableOpacity>}
+    </View>
+    <CustomAlertHost />
+  </SafeAreaView></SafeAreaProvider>;
   return (
     <SafeAreaProvider>
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -905,28 +942,7 @@ export default function App() {
         <View style={styles.screenHost}>
         {screen === 'login' && (
           <LoginScreen
-            onLogin={(loginUser) => {
-              setWorkspaceReady(false);
-              loadedWorkspaceKeyRef.current = null;
-              workspaceLoadIdRef.current++;
-              teamLoadedKeyRef.current = null;
-              teamLoadIdRef.current++;
-              setRouteLocations([]);
-              setReportTargets([]);
-              setTodayLocationsLoaded(false);
-              setUser(loginUser);
-              setGroupAssignments([]);
-              restoreActiveGroup(loginUser);
-
-                historyRef.current = [];
-
-                go(
-                  'mapDirect',
-                  {
-                    replace: true,
-                  }
-                );
-              }}
+            onLogin={handleLogin}
               onRegister={() =>
                 go('register')
               }
@@ -961,12 +977,13 @@ export default function App() {
               onInvitations={() =>
                 go('groupInvitations')
               }
-              onOpenGroup={(group) => {
+              onOpenGroup={async (group) => {
                 rememberAvailableGroup(group);
                 if (String(group?.groupId) !== String(activeGroup?.groupId)) {
-                  selectActiveGroup(group);
+                  await selectActiveGroup(group);
                   return;
                 }
+                setPersonalWorkspaceTab('dashboard');
                 setGroupWorkspaceTab('dashboard');
                 go(isPersonalGroup(group) ? 'workStatus' : 'groupWorkspace');
               }}
@@ -1015,21 +1032,22 @@ export default function App() {
               }}
               onRefresh={refreshCurrentWorkspace}
               onBack={() => goBack('groupHome')}
-              onMembers={() => go('groupMembers')}
               onTransfer={(member) => {
                 setTransferTargetMember(member || null);
                 go('transfer');
               }}
               onReports={() => go('groupReports')}
               onSettings={() => go('groupSettings')}
+              onLeaveGroup={handleLeaveGroup}
             />
           )}
 
-          {['groupMembers', 'groupSettings'].includes(screen) && activeGroup && (
-            <GroupDetailScreen
+          {screen === 'groupSettings' && activeGroup && (
+            <GroupSettingsScreen
+              key={screen}
               user={user}
               group={activeGroup}
-              mode={screen === 'groupMembers' ? 'members' : 'settings'}
+              mode="settings"
               onBack={() => goBack('groupWorkspace')}
               onUpdatedGroup={(group) => {
                 rememberAvailableGroup(group);
@@ -1041,7 +1059,7 @@ export default function App() {
 
           {screen === 'groupDetail' &&
             activeGroup && (
-              <GroupDetailScreen
+              <GroupSettingsScreen
                 user={user}
                 group={activeGroup}
                 onBack={() =>
@@ -1064,6 +1082,8 @@ export default function App() {
         {screen === 'publicDataAssignment' && activeGroup && (
           <MapScreen
             user={user}
+            onUpdatedUser={setUser}
+            onSearchVisibilityChange={setMapSearchVisible}
             selectedDong={selectedDong}
             onSelectedDongChange={updateSelectedDong}
             activeGroup={activeGroup}
@@ -1097,6 +1117,8 @@ export default function App() {
         {screen === 'teamLocations' && activeGroup && (
           <MapScreen
             user={user}
+            onUpdatedUser={setUser}
+            onSearchVisibilityChange={setMapSearchVisible}
             selectedDong={selectedDong}
             onSelectedDongChange={updateSelectedDong}
             locations={teamLocations}
@@ -1142,7 +1164,7 @@ export default function App() {
             )}
 
           {screen === 'workStatus' &&
-            activeGroup && (
+            activeGroup && !isPersonalGroup(activeGroup) && (
               <WorkStatusScreen
                 user={user}
                 group={activeGroup}
@@ -1151,6 +1173,20 @@ export default function App() {
                 onRefresh={refreshCurrentWorkspace}
               />
             )}
+
+          {activeGroup && user && isPersonalGroup(activeGroup) && (screen === 'workStatus' || personalWorkspaceTab === 'reports' && ['download', 'fieldAction'].includes(screen)) && (
+            <View style={[styles.persistentMapLayer, screen !== 'workStatus' && styles.hiddenMapLayer]} pointerEvents={screen === 'workStatus' ? 'auto' : 'none'} accessibilityElementsHidden={screen !== 'workStatus'}>
+              <PersonalWorkspaceScreen key={`${user.userId}:${activeGroup.groupId}`} user={user} group={activeGroup} assignments={groupAssignments}
+                tab={personalWorkspaceTab} onTabChange={setPersonalWorkspaceTab} isActive={screen === 'workStatus'}
+                onBack={() => go('groupHome')} onRefresh={refreshCurrentWorkspace}
+                onEditReport={report => {
+                  setSelectedLocation({ id: report.taskId, status: report.taskStatus || report.progressStatus,
+                    lat: report.latitude, lng: report.longitude, detailAddress: report.detailAddress, roadAddress: report.roadAddress, reportProgressId: report.progressId });
+                  setActionType('report'); go('fieldAction');
+                }}
+                onOpenReport={report => { setDownloadInfo({ progressId: report.progressId, userId: user.userId, returnTo: 'workStatus' }); go('download'); }} />
+            </View>
+          )}
 
           {screen === 'transfer' && activeGroup && !isPersonalGroup(activeGroup) && (
             <TransferScreen
@@ -1240,20 +1276,32 @@ export default function App() {
               isActive={screen === 'mapDirect'}
               persistNormalMap
               routeResumeToken={routeResumeToken}
+              recordReturn={mapRecordReturn?.workspace === workspaceCacheKey() && mapRecordReturn?.day === calendarDayKey ? mapRecordReturn : null}
               pendingWork={pendingWork}
               onAddWork={addWorkToMap}
+              onUpdatedUser={setUser}
+              onSearchVisibilityChange={setMapSearchVisible}
             />
           </View>
         )}
 
           {screen === 'fieldAction' && (
             <FieldActionScreen
+              key={`${selectedLocation?.id ?? selectedLocation?.taskId}:${selectedLocation?.reportProgressId || 'latest'}`}
+              workspaceKey={workspaceCacheKey()}
+              registerNavigationGuard={registerNavigationGuard}
               user={user}
               location={selectedLocation}
               actionType={actionType}
               onBack={() =>
                 goBack('reportList')
               }
+              onPositionChanged={(saved) => {
+                const apply = items => items.map(loc => Number(loc.id ?? loc.taskId) === Number(selectedLocation?.id ?? selectedLocation?.taskId)
+                  ? { ...loc, latitude: saved.taskLatitude, longitude: saved.taskLongitude, lat: saved.taskLatitude, lng: saved.taskLongitude } : loc);
+                setRouteLocations(apply); setTeamLocations(apply); setGroupAssignments(apply);
+                refreshCurrentWorkspace();
+              }}
               onSave={(savedReport) => {
                 const applySavedStatus = (items) =>
                   items.map((loc) =>
@@ -1262,32 +1310,40 @@ export default function App() {
                       ? {
                         ...loc,
                         status:
-                          savedReport.progressStatus ||
+                          savedReport.taskStatus || savedReport.progressStatus ||
                           savedReport.status ||
                           loc.status,
                         latitude:
-                          savedReport.latitude ?? loc.latitude,
+                          savedReport.taskLatitude ?? savedReport.latitude ?? loc.latitude,
                         longitude:
-                          savedReport.longitude ?? loc.longitude,
+                          savedReport.taskLongitude ?? savedReport.longitude ?? loc.longitude,
                         lat:
-                          savedReport.latitude ?? savedReport.lat ?? loc.lat ?? loc.latitude,
+                          savedReport.taskLatitude ?? savedReport.latitude ?? savedReport.lat ?? loc.lat ?? loc.latitude,
                         lng:
-                          savedReport.longitude ?? savedReport.lng ?? loc.lng ?? loc.longitude,
+                          savedReport.taskLongitude ?? savedReport.longitude ?? savedReport.lng ?? loc.lng ?? loc.longitude,
                       }
                       : loc
                   );
 
                 setRouteLocations(applySavedStatus);
                 setTeamLocations(applySavedStatus);
+                setGroupAssignments(applySavedStatus);
                 refreshCurrentWorkspace();
 
-                goBack('reportList');
+                if (!selectedLocation?.reportProgressId) {
+                  setMapRecordReturn({ taskId: String(selectedLocation?.id ?? selectedLocation?.taskId),
+                    lat: savedReport.taskLatitude ?? savedReport.latitude, lng: savedReport.taskLongitude ?? savedReport.longitude,
+                    status: savedReport.taskStatus || savedReport.progressStatus, workspace: workspaceCacheKey(), day: getLocalDateKey(), token: Date.now() });
+                }
+                goBack('reportList', { bypass: true });
               }}
             />
           )}
 
           {screen === 'reportList' && (
             <ReportListScreen
+              selectedIds={reportSelections[workspaceCacheKey()] || []}
+              onSelectionChange={(ids) => setReportSelections((previous) => ({ ...previous, [workspaceCacheKey()]: ids }))}
               locations={routeLocations}
               selectedDong={selectedDong}
               loading={!todayLocationsLoaded}
@@ -1301,58 +1357,44 @@ export default function App() {
               }
               onSelectLocation={(loc) => {
                 setSelectedLocation(loc);
-                if (loc.status === 'complete') {
-                  setReportTargets([loc]);
-                  go('report');
-                } else {
-                  setActionType('report');
-                  go('fieldAction');
-                }
+                setActionType('report');
+                go('fieldAction');
               }}
-              onCreateReport={(
-                selectedLocations
-              ) => {
-                setReportTargets(
-                  selectedLocations
-                );
-
-                go('report');
+              onCreateReport={selectedLocations => {
+                setDownloadInfo({ locations: selectedLocations, userId: user.userId, returnTo: 'reportList' });
+                go('download');
               }}
             />
           )}
 
-          {screen === 'groupReports' && activeGroup && (
+          {activeGroup && user && (!isPersonalGroup(activeGroup) || screen === 'groupReports') && ['groupReports', 'download', 'fieldAction'].includes(screen) && (
+            <View style={[styles.persistentMapLayer, screen !== 'groupReports' && styles.hiddenMapLayer]}
+              pointerEvents={screen === 'groupReports' ? 'auto' : 'none'} accessibilityElementsHidden={screen !== 'groupReports'}>
             <GroupReportsScreen
+              key={`${user.userId}:${activeGroup.groupId}`}
+              isActive={screen === 'groupReports'}
               group={activeGroup}
               user={user}
               selectedDong={selectedDong}
               onBack={() => goBack('groupWorkspace')}
+              onEditReport={(report) => {
+                setSelectedLocation({ id: report.taskId, status: report.taskStatus || report.progressStatus,
+                  lat: report.latitude, lng: report.longitude, detailAddress: report.detailAddress,
+                  roadAddress: report.roadAddress, reportProgressId: report.progressId });
+                setActionType('report'); go('fieldAction');
+              }}
               onOpenReport={(report) => {
-                setDownloadInfo({ progressId: report.progressId, reportDownloadUrl: report.reportDownloadUrl });
+                setDownloadInfo({ progressId: report.progressId, userId: user.userId, returnTo: 'groupReports' });
                 go('download');
               }}
             />
-          )}
-
-          {screen === 'report' && (
-            <ReportScreen
-              locations={reportTargets}
-              user={user}
-              activeGroup={activeGroup}
-              onBack={() =>
-                goBack('reportList')
-              }
-              onDownload={(info) => {
-                setDownloadInfo(info);
-                go('download');
-              }}
-            />
+            </View>
           )}
 
           {screen === 'download' && (
             <DownloadScreen
               onBack={() =>
-                goBack('groupReports')
+                goBack(downloadInfo?.returnTo || 'groupReports')
               }
               downloadInfo={
                 downloadInfo
@@ -1363,6 +1405,7 @@ export default function App() {
         </View>
 
         {user &&
+          !(['mapDirect', 'teamLocations', 'publicDataAssignment'].includes(screen) && mapSearchVisible) &&
           !['login', 'register', 'settings'].includes(screen) && (
             <BottomNavigation
               screen={screen}
@@ -1407,7 +1450,6 @@ function BottomNavigation({
           'groupInvitations',
           'groupDetail',
           'groupWorkspace',
-          'groupMembers',
           'groupSettings',
           'groupReports',
           'transfer',
@@ -1504,10 +1546,12 @@ const styles = StyleSheet.create({
 
   app: {
     flex: 1,
+    backgroundColor: colors.background,
   },
 
   screenHost: {
     flex: 1,
+    backgroundColor: colors.background,
     overflow: 'hidden',
   },
 
@@ -1527,7 +1571,7 @@ const styles = StyleSheet.create({
     height: 66,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderTopWidth: 1,
     borderTopColor: colors.line,
     elevation: 12,

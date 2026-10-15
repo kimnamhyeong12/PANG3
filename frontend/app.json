@@ -30,8 +30,6 @@
       "bundleIdentifier": "com.pang3.fieldworkhelper"
     },
     "plugins": [
-      "expo-router",
-      "expo-web-browser",
       "expo-notifications",
       [
         "expo-speech-recognition",
@@ -47,14 +45,21 @@
         "expo-build-properties",
         {
           "android": {
+            "minSdkVersion": 26,
             "usesCleartextTraffic": true,
-            "googleServicesFile": "./google-services.json"
+            "googleServicesFile": "./google-services.json",
+            "extraMavenRepos": [
+              "https://devrepo.kakaomobility.com/repository/kakao-mobility-android-knsdk-public/",
+              "https://devrepo.kakaomobility.com/repository/kakao-mobility-android-knsdk-release/",
+              "https://devrepo.kakaomobility.com/repository/kakao-mobility-android-locationsdk-release/",
+              "https://www.jitpack.io"
+            ]
           }
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "extra": {
-      "router": {},
       "eas": {
         "projectId": "f6957131-791d-48a6-8e1d-9f7d5030c52a"
       }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { isServerDown } from '../api/client.js';
 import { IconLogo } from '../components/Icons.jsx';
@@ -70,6 +70,7 @@ export default function LoginPage() {
         <button type="submit" className="btn-primary" disabled={submitting}>
           {submitting ? '로그인 중…' : '로그인'}
         </button>
+        <Link to="/forgot-password">비밀번호 찾기</Link>
       </form>
     </div>
   );

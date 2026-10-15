@@ -1,5 +1,5 @@
 import { showAlert } from './CustomAlert';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Text,
   TextInput,
@@ -40,6 +40,8 @@ export default function VoiceTextInput({
   inputStyle,
   multiline = true,
   placeholder,
+  replaceTranscript = false,
+  ...inputProps
 }) {
   const [recording, setRecording] = useState(false);
 
@@ -61,13 +63,17 @@ export default function VoiceTextInput({
 
     const current = String(valueRef.current || '').trimEnd();
 
-    const next = current
+    const next = current && !replaceTranscript
       ? `${current} ${transcript}`
       : transcript;
 
     valueRef.current = next;
     onChangeText(next);
   };
+
+  useEffect(() => () => {
+    if (activeRef.current) { activeRef.current = false; try { ExpoSpeechRecognitionModule.stop(); } catch {} }
+  }, []);
 
   useSpeechRecognitionEvent('start', () => {
     if (!activeRef.current) {
@@ -211,6 +217,7 @@ export default function VoiceTextInput({
     <View style={styles.container}>
       <View style={styles.inputWrapper}>
         <TextInput
+          {...inputProps}
           value={value}
           onChangeText={onChangeText}
           multiline={multiline}
@@ -229,6 +236,7 @@ export default function VoiceTextInput({
           ]}
           onPress={handleVoicePress}
           activeOpacity={0.7}
+          accessibilityLabel={recording ? '음성 입력 중지' : '음성 입력 시작'}
         >
           <Ionicons
             name={recording ? 'stop' : 'mic-outline'}

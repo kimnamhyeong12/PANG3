@@ -1,12 +1,28 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch as fetch } from '../utils/auth';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { showNativeRouteNotification, stopNativeRouteNotification } from '../modules/kakao-navigation';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 const ROUTE_NOTIFICATION_ID = 'fieldwork-route-guidance';
 const TASK_CHANNEL_ID = 'task';
 const ROUTE_CHANNEL_ID = 'route';
+let routeNotificationVersion = 0;
+let taskAlertsEnabled = true;
+export async function getTaskNotificationPreference(userOrId) {
+  const value = await AsyncStorage.getItem(`pang3.task-alerts.${getUserId(userOrId)}`);
+  taskAlertsEnabled = value !== 'off';
+  return taskAlertsEnabled;
+}
+export async function setTaskNotificationPreference(userOrId, enabled) {
+  await AsyncStorage.setItem(`pang3.task-alerts.${getUserId(userOrId)}`, enabled ? 'on' : 'off');
+  taskAlertsEnabled = enabled;
+  if (enabled) await syncPushTokenForUser(userOrId);
+  else await unregisterPushTokenForUser(userOrId);
+}
 
 export const NOTIFICATION_TYPES = {
   TASK_ASSIGNED: 'TASK_ASSIGNED',
@@ -18,10 +34,10 @@ export const NOTIFICATION_TYPES = {
 };
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
+  handleNotification: async (notification) => ({
+    shouldShowBanner: taskAlertsEnabled || notification?.request?.content?.data?.type === NOTIFICATION_TYPES.ROUTE_GUIDANCE,
+    shouldShowList: taskAlertsEnabled || notification?.request?.content?.data?.type === NOTIFICATION_TYPES.ROUTE_GUIDANCE,
+    shouldPlaySound: taskAlertsEnabled,
     shouldSetBadge: false,
   }),
 });
@@ -167,6 +183,7 @@ function getUserId(userOrId) {
 }
 
 export async function registerPushTokenForUser(userOrId, token) {
+  if (!await getTaskNotificationPreference(userOrId)) return { success: false, reason: 'disabled' };
   const userId = getUserId(userOrId);
 
   if (!API_BASE_URL || !userId || !token) {
@@ -233,6 +250,7 @@ export async function registerPushTokenForUser(userOrId, token) {
 }
 
 export async function syncPushTokenForUser(userOrId) {
+  if (!await getTaskNotificationPreference(userOrId)) return { success: false, reason: 'disabled' };
   const userId = getUserId(userOrId);
 
   if (!userId) {
@@ -333,10 +351,11 @@ export async function showRouteNotification({
   distance,
   remainingCount,
 }) {
+  const version = ++routeNotificationVersion;
   try {
     const granted = await checkNotificationPermission();
 
-    if (!granted) {
+    if (version !== routeNotificationVersion) {
       return false;
     }
 
@@ -350,6 +369,10 @@ export async function showRouteNotification({
         ? Number(remainingCount)
         : 0;
 
+    if (showNativeRouteNotification('📍 외근도우미 · 경로 안내 중',
+      `${safeFrom} → ${safeTo}\n예상 ${safeDuration} · ${safeDistance}\n남은 방문지 ${count}곳`)) return true;
+    if (!granted) return false;
+
     try {
       await Notifications.dismissNotificationAsync(
         ROUTE_NOTIFICATION_ID
@@ -358,6 +381,7 @@ export async function showRouteNotification({
       // 기존 경로 알림이 없으면 무시
     }
 
+    if (version !== routeNotificationVersion) return false;
     await Notifications.scheduleNotificationAsync({
       identifier: ROUTE_NOTIFICATION_ID,
 
@@ -400,7 +424,9 @@ export async function updateRouteNotification(data) {
 }
 
 export async function stopRouteNotification() {
+  routeNotificationVersion++;
   try {
+    stopNativeRouteNotification();
     await Notifications.dismissNotificationAsync(
       ROUTE_NOTIFICATION_ID
     );

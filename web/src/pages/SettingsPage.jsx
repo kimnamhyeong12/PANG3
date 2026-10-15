@@ -10,6 +10,7 @@ import Modal from '../components/Modal.jsx';
 import ErrorBlock from '../components/ErrorBlock.jsx';
 import { SkeletonTable, Spinner } from '../components/Loading.jsx';
 import { IconLogout, IconPlus } from '../components/Icons.jsx';
+import { EmailEnrollment } from './AccountRecoveryPage.jsx';
 
 function InviteModal({ groupId, user, onClose, onInvited }) {
   const [loginId, setLoginId] = useState('');
@@ -321,6 +322,7 @@ export default function SettingsPage() {
       <div className="settings-grid">
         <MembersSection groupId={groupId} user={user} />
         <div className="settings-side">
+          <EmailEnrollment />
           <RegionSection groupId={groupId} group={currentGroup} user={user} onSaved={reload} />
           <section className="panel">
             <div className="panel-header">

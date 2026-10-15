@@ -13,9 +13,12 @@ import MapPage from './pages/MapPage.jsx';
 import ReportsPage from './pages/ReportsPage.jsx';
 import PublicDataPage from './pages/PublicDataPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
+import AccountRecoveryPage from './pages/AccountRecoveryPage.jsx';
 
 function RequireAuth() {
-  const { user } = useAuth();
+  const { user, loading, error, restore } = useAuth();
+  if (loading) return <LoadingScreen label="로그인을 확인하고 있습니다…" />;
+  if (error) return <div style={{ padding: 32 }}><p>{error}</p><button onClick={restore}>다시 연결하기</button></div>;
   return user ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
@@ -34,6 +37,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<AccountRecoveryPage mode="forgot" />} />
+      <Route path="/reset-password" element={<AccountRecoveryPage mode="reset" />} />
+      <Route path="/verify-email" element={<AccountRecoveryPage mode="verify" />} />
       <Route element={<RequireAuth />}>
         <Route path="/groups/select" element={<GroupSelectPage />} />
         <Route element={<RequireGroup />}>

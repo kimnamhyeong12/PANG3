@@ -12,13 +12,14 @@ import java.nio.file.Path;
 
 @RestController
 @RequestMapping("/api/files")
-@CrossOrigin(origins = "*")
 public class FileController {
 
     private final Path baseDir;
+    private final com.fieldwork.service.TaskProgressService progress;
 
-    public FileController(FieldworkProperties properties) {
+    public FileController(FieldworkProperties properties, com.fieldwork.service.TaskProgressService progress) {
         this.baseDir = ProjectPaths.resolve(properties.getUpload().getBaseDir()).toAbsolutePath().normalize();
+        this.progress = progress;
     }
 
     @GetMapping("/{taskId}/{fileName}")
@@ -26,10 +27,15 @@ public class FileController {
             @PathVariable Long taskId,
             @PathVariable String fileName
     ) {
+        progress.validateTaskReader(taskId, com.fieldwork.security.CurrentUser.id());
         Path file = baseDir.resolve(String.valueOf(taskId)).resolve(fileName).normalize();
-        if (!file.startsWith(baseDir) || !file.toFile().exists()) {
+        if (!file.startsWith(baseDir) || !file.toFile().isFile()) {
             return ResponseEntity.notFound().build();
         }
+        try {
+            Path taskDirectory = baseDir.resolve(taskId.toString()).toRealPath();
+            if (!taskDirectory.startsWith(baseDir.toRealPath()) || !file.toRealPath().startsWith(taskDirectory)) return ResponseEntity.notFound().build();
+        } catch (java.io.IOException ex) { return ResponseEntity.notFound().build(); }
 
         FileSystemResource resource = new FileSystemResource(file);
         return ResponseEntity.ok()

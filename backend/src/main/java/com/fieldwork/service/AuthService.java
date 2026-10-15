@@ -121,6 +121,7 @@ public class AuthService {
         user.setWorkSigungu(null);
         user.setWorkplaceAddress(null); user.setWorkplaceLat(null); user.setWorkplaceLng(null);
         user.setRole("DELETED");
+        user.setEmail(null);
 
         return Map.of("message", "계정 탈퇴가 완료되었습니다.");
     }

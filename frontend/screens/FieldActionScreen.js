@@ -1,16 +1,24 @@
+import ProtectedImage from '../components/ProtectedImage';
+import { apiFetch as fetch } from '../utils/auth';
 import { showAlert } from '../components/CustomAlert';
 import React, { useEffect, useRef, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { File } from 'expo-file-system';
+import { apiFetch as expoFetch } from '../utils/auth';
 
 import {
   View,
   Text,
-  TextInput,
   BackHandler,
+  ActivityIndicator,
+  AppState,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Image,
-} from 'react-native';
+  } from 'react-native';
+
+import { emptyPhotos, restorePhotos, photoManifest, isLocalPhoto } from '../utils/reportPhotos';
+import { draftKey, readDraft, writeDraft, clearDraft, preservePhoto, beginPhotoPick, pendingPhotoPick, endPhotoPick } from '../utils/reportDraft';
 
 import * as ImagePicker from 'expo-image-picker';
 import { WebView } from 'react-native-webview';
@@ -33,28 +41,7 @@ const KAKAO_JAVASCRIPT_KEY =
   process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY || '';
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY || '';
 
-const PHOTO_TYPES = [
-  {
-    key: 'before',
-    label: '작업 전',
-  },
-  {
-    key: 'during',
-    label: '작업 중',
-  },
-  {
-    key: 'after',
-    label: '작업 후',
-  },
-];
-
-const createEmptyPhotos = () =>
-  PHOTO_TYPES.map((type) => ({
-    type: type.key,
-    label: type.label,
-    uri: null,
-    comment: '',
-  }));
+const createEmptyPhotos = emptyPhotos;
 
 function getAiRecommendation(memo) {
   const text = (memo || '').toLowerCase();
@@ -395,6 +382,9 @@ export default function FieldActionScreen({
   actionType,
   onBack,
   onSave,
+  onPositionChanged,
+  workspaceKey,
+  registerNavigationGuard,
 }) {
   const mapRef = useRef(null);
   const mapWrapperRef = useRef(null);
@@ -436,6 +426,8 @@ export default function FieldActionScreen({
     );
   const [locationAddress, setLocationAddress] = useState(location?.roadAddress || location?.detailAddress || '');
   const [editingLocation, setEditingLocation] = useState(false);
+  const [positionSaving, setPositionSaving] = useState(false);
+  const positionSavingRef = useRef(false);
 
   const [photos, setPhotos] =
     useState(createEmptyPhotos());
@@ -482,194 +474,134 @@ export default function FieldActionScreen({
     setMarkedMapUri,
   ] = useState(null);
 
-  const formSnapshot = JSON.stringify({ status, latitude, longitude, photos, fieldMemo, markedMapUri });
-  const initialFormRef = useRef(formSnapshot);
-  const currentFormRef = useRef(formSnapshot);
-  currentFormRef.current = formSnapshot;
+  const taskId = location?.id ?? location?.taskId ?? location?.task_id;
+  const [progressId, setProgressId] = useState(location?.reportProgressId || null);
+  const [revision, setRevision] = useState(null);
+  const [recordedAt, setRecordedAt] = useState('');
+  const [mainComment, setMainComment] = useState('');
+  const [loadingReport, setLoadingReport] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const readyRef = useRef(false);
+  const savedRef = useRef(false);
+  const savingRef = useRef(false);
+  const key = draftKey(user?.userId, workspaceKey, taskId,
+    location?.reportProgressId || 'latest');
+  const snapshot = { status, latitude, longitude, locationAddress, photos, fieldMemo,
+    markedMapUri, progressId, revision, recordedAt, photoEditor, mainComment };
+  const currentFormRef = useRef(snapshot);
+  currentFormRef.current = snapshot;
+  const initialFormRef = useRef('');
+  const editSnapshot = (form) => JSON.stringify({ status: form.status, latitude: form.latitude,
+    longitude: form.longitude, locationAddress: form.locationAddress, photos: form.photos,
+    fieldMemo: form.fieldMemo, markedMapUri: form.markedMapUri, progressId: form.progressId,
+    revision: form.revision, recordedAt: form.recordedAt, mainComment: form.mainComment || '' });
 
-  const requestBack = () => {
-    if (saving) {
-      showAlert('저장 중', '보고서 저장이 끝난 뒤 다시 시도하세요.');
-      return;
+  const recoverPhotoPick = async (form) => {
+    const pending = await pendingPhotoPick(key);
+    if (!pending) return form;
+    const result = await ImagePicker.getPendingResultAsync();
+    if (result?.assets?.[0]?.uri && !result.canceled) {
+      const recovered = { ...form, photoEditor: { visible: true, isNew: true, index: pending.index,
+        uri: preservePhoto(key, result.assets[0].uri) } };
+      await writeDraft(key, recovered);
+      await endPhotoPick(key);
+      return recovered;
     }
-    if (currentFormRef.current === initialFormRef.current) {
-      onBack?.();
-      return;
-    }
-    showAlert('작성 중인 보고서', '저장하지 않은 변경 내용이 있습니다. 나가면 변경 내용이 사라집니다.', [
-      { text: '계속 작성', style: 'cancel' },
-      { text: '저장하지 않고 나가기', style: 'destructive', onPress: onBack },
-    ]);
+    await endPhotoPick(key);
+    return form;
   };
 
-  useEffect(() => {
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      requestBack();
+  const flushDraft = async () => {
+    if (!readyRef.current || savedRef.current) return true;
+    try {
+      await writeDraft(key, currentFormRef.current);
       return true;
-    });
+    } catch {
+      return false;
+    }
+  };
+
+  const leaveGuard = async () => {
+    if (savingRef.current || positionSavingRef.current) {
+      showAlert('저장 중', '보고서 저장이 끝난 뒤 이동해 주세요.');
+      return false;
+    }
+    if (!readyRef.current || savedRef.current || editSnapshot(currentFormRef.current) === initialFormRef.current && !currentFormRef.current.photoEditor?.visible) return true;
+    if (await flushDraft()) return !savingRef.current;
+    showAlert('작성 내용 보관 실패', '내용을 보호하기 위해 이 화면에 머물렀습니다. 보고서 저장 후 이동해 주세요.');
+    return false;
+  };
+  const guardRef = useRef(leaveGuard);
+  guardRef.current = leaveGuard;
+  useEffect(() => registerNavigationGuard?.(() => guardRef.current()), [registerNavigationGuard]);
+  const requestBack = () => onBack?.();
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => { requestBack(); return true; });
     return () => subscription.remove();
   });
 
-  const taskId =
-    location?.id ??
-    location?.taskId ??
-    location?.task_id;
-
-  /*
-   * 기존 저장 보고서 불러오기
-   */
   useEffect(() => {
-    const loadSavedReport =
-      async () => {
-        if (
-          !taskId ||
-          !API_BASE_URL
-        ) {
-          return;
-        }
-
+    let active = true;
+    (async () => {
+      try {
+        const endpoint = location?.reportProgressId
+          ? `/api/task-progress/${location.reportProgressId}?userId=${user.userId}`
+          : `/api/task-progress/task/${taskId}`;
+        const response = await fetch(`${API_BASE_URL}${endpoint}`);
+        if (!response.ok) throw new Error('보고서 조회 실패');
+        const text = await response.text();
+        const data = text.trim() ? JSON.parse(text) : null;
+        const local = await readDraft(key);
+        if (!active) return;
+        const base = { status: location?.reportProgressId ? data?.progressStatus || 'pending' : location?.status || data?.progressStatus || 'pending',
+          latitude: String(data?.latitude ?? location?.latitude ?? location?.lat ?? ''),
+          longitude: String(data?.longitude ?? location?.longitude ?? location?.lng ?? ''),
+          locationAddress: data?.locationAddress || location?.roadAddress || location?.detailAddress || '',
+          photos: restorePhotos(data?.fieldPhotos, resolveApiUrl), fieldMemo: data?.fieldMemo || '',
+          mainComment: data?.mainComment || '',
+          markedMapUri: null, progressId: data?.progressId || null, revision: data?.revision ?? null, recordedAt: data?.createdAt || '',
+          photoEditor: { visible: false, uri: null, index: null } };
+        initialFormRef.current = editSnapshot(base);
+        const form = await recoverPhotoPick(local || base);
+        if (!active) return;
+        setStatus(location?.status === 'complete' && !location?.reportProgressId ? 'complete' : form.status);
+        setLatitude(form.latitude); setLongitude(form.longitude); setLocationAddress(form.locationAddress);
+        setPhotos(form.photos); setFieldMemo(form.fieldMemo); setMarkedMapUri(form.markedMapUri);
+        setMainComment(form.mainComment || '');
+        setProgressId(form.progressId); setRevision(form.revision); setRecordedAt(form.recordedAt || '');
+        setPhotoEditor(form.photoEditor || base.photoEditor);
+        readyRef.current = true;
+      } catch {
+        // An offline draft is still recoverable; never silently replace saved data with an empty form.
         try {
-          console.log(
-            '보고서 불러오기 taskId:',
-            taskId
-          );
+          let local = await readDraft(key);
+          if (!active) return;
+          if (!local) throw new Error();
+          local = await recoverPhotoPick(local);
+          if (!active) return;
+          setStatus(location?.status === 'complete' && !location?.reportProgressId ? 'complete' : local.status);
+          setLatitude(local.latitude); setLongitude(local.longitude); setLocationAddress(local.locationAddress);
+          setPhotos(local.photos); setFieldMemo(local.fieldMemo); setMarkedMapUri(local.markedMapUri);
+          setMainComment(local.mainComment || '');
+          setProgressId(local.progressId); setRevision(local.revision); setRecordedAt(local.recordedAt || '');
+          setPhotoEditor(local.photoEditor || { visible: false, uri: null, index: null });
+          readyRef.current = true;
+        } catch { if (active) setLoadError('저장된 내용을 불러오지 못했습니다. 돌아가서 다시 시도해 주세요.'); }
+      } finally { if (active) setLoadingReport(false); }
+    })();
+    return () => { active = false; };
+  }, [key]);
 
-          const res =
-            await fetch(
-              `${API_BASE_URL}/api/task-progress/task/${taskId}`
-            );
-
-          if (!res.ok) {
-            console.log(
-              '보고서 불러오기 실패 status:',
-              res.status
-            );
-            return;
-          }
-
-          /*
-           * 응답이 비어있는 경우
-           * JSON parse 오류 방지
-           */
-          const responseText =
-            await res.text();
-
-          if (
-            !responseText ||
-            !responseText.trim()
-          ) {
-            return;
-          }
-
-          let data;
-
-          try {
-            data =
-              JSON.parse(responseText);
-          } catch (error) {
-            console.log(
-              '보고서 응답 JSON 변환 실패:',
-              error
-            );
-            return;
-          }
-
-          if (!data || currentFormRef.current !== initialFormRef.current) {
-            return;
-          }
-
-          console.log(
-            '저장된 보고서 불러오기 성공:',
-            data
-          );
-
-          if (
-            data.latitude !== null &&
-            data.latitude !== undefined
-          ) {
-            setLatitude(
-              String(data.latitude)
-            );
-          }
-
-          if (
-            data.longitude !== null &&
-            data.longitude !== undefined
-          ) {
-            setLongitude(
-              String(data.longitude)
-            );
-          }
-          if (data.locationAddress) setLocationAddress(data.locationAddress);
-
-          const savedPhotos =
-            data.fieldPhotos || [];
-
-          const loadedPhotos = PHOTO_TYPES.map(
-              (type, index) => {
-                const savedPhoto =
-                  savedPhotos[index];
-
-                return {
-                  type: type.key,
-                  label: type.label,
-
-                  uri: savedPhoto
-                    ? resolveApiUrl(
-                        savedPhoto.uri ||
-                          savedPhoto.path
-                      ) ||
-                      savedPhoto.uri ||
-                      savedPhoto.path
-                    : null,
-
-                  comment:
-                    savedPhoto?.comment ||
-                    '',
-                };
-              }
-            );
-          setPhotos(loadedPhotos);
-
-          setFieldMemo(
-            data.fieldMemo || ''
-          );
-
-          setAiRefinedContent(
-            data.aiRefinedContent || ''
-          );
-
-          setReportDownloadUrl(
-            data.reportDownloadUrl
-              ? resolveApiUrl(
-                  data.reportDownloadUrl
-                )
-              : null
-          );
-
-          const currentLocationStatus = location?.status;
-          const loadedStatus = currentLocationStatus === 'working' || currentLocationStatus === 'complete'
-              ? currentLocationStatus
-              : data.progressStatus || currentLocationStatus || 'pending';
-          setStatus(loadedStatus);
-          initialFormRef.current = JSON.stringify({
-            status: loadedStatus,
-            latitude: data.latitude == null ? latitude : String(data.latitude),
-            longitude: data.longitude == null ? longitude : String(data.longitude),
-            photos: loadedPhotos,
-            fieldMemo: data.fieldMemo || '',
-            markedMapUri: null,
-          });
-        } catch (error) {
-          console.log(
-            '저장된 보고서 불러오기 실패:',
-            error
-          );
-        }
-      };
-
-    loadSavedReport();
-  }, [taskId]);
+  useEffect(() => {
+    if (!readyRef.current || savedRef.current || savingRef.current) return;
+    if (editSnapshot(snapshot) === initialFormRef.current && !photoEditor.visible) return;
+    const timer = setTimeout(flushDraft, 350);
+    return () => clearTimeout(timer);
+  }, [JSON.stringify(snapshot), loadingReport]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) => { if (next !== 'active') flushDraft(); });
+    return () => subscription.remove();
+  }, [key]);
 
   const rec =
     getAiRecommendation(
@@ -692,6 +624,7 @@ export default function FieldActionScreen({
         data.type ===
         'LOCATION_SELECTED'
       ) {
+        if (positionSavingRef.current) return;
         lastMapCoordinateRef.current = `${Number(data.latitude).toFixed(6)}:${Number(data.longitude).toFixed(6)}`;
         if (editingLocation) setMarkedMapUri(null);
         setLatitude(
@@ -818,20 +751,7 @@ export default function FieldActionScreen({
       return;
     }
 
-    const result =
-      await ImagePicker
-        .launchCameraAsync({
-          quality: 0.7,
-        });
-
-    if (!result.canceled) {
-      setPhotoEditor({
-        visible: true,
-        uri:
-          result.assets[0].uri,
-        index,
-      });
-    }
+    await launchPhotoPick(index, () => ImagePicker.launchCameraAsync({ quality: 0.7 }));
   };
 
   /*
@@ -850,24 +770,27 @@ export default function FieldActionScreen({
         return;
       }
 
-      const result =
-        await ImagePicker
-          .launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            allowsMultipleSelection:
-              false,
-            quality: 0.7,
-          });
-
-      if (!result.canceled) {
-        setPhotoEditor({
-          visible: true,
-          uri:
-            result.assets[0].uri,
-          index,
-        });
-      }
+      await launchPhotoPick(index, () => ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'], allowsMultipleSelection: false, quality: 0.7,
+      }));
     };
+
+  const launchPhotoPick = async (index, launch) => {
+    try {
+      await beginPhotoPick(key, index, currentFormRef.current);
+      const result = await launch();
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        const rawEditor = { visible: true, uri: result.assets[0].uri, isNew: true, index };
+        setPhotoEditor(rawEditor);
+        const editor = { ...rawEditor, uri: preservePhoto(key, rawEditor.uri) };
+        setPhotoEditor(editor);
+        await writeDraft(key, { ...currentFormRef.current, photoEditor: editor });
+      }
+      await endPhotoPick(key);
+    } catch {
+      showAlert('사진 보관 실패', '사진을 안전하게 보관하지 못했습니다. 저장 공간과 사진 접근 권한을 확인해 주세요.');
+    }
+  };
 
   /*
    * 사진 선택 버튼
@@ -1003,7 +926,7 @@ export default function FieldActionScreen({
 
   const completeMapEdit = (editedUri) => {
     if (editedUri) {
-      setMarkedMapUri(editedUri);
+      setMarkedMapUri(preservePhoto(key, editedUri));
     }
     closeMapEditor();
   };
@@ -1036,7 +959,8 @@ export default function FieldActionScreen({
           photoEditor.index
             ? {
                 ...photo,
-                uri: editedUri,
+                uri: preservePhoto(key, editedUri),
+                path: editedUri === photo.uri ? photo.path : null,
               }
             : photo
       )
@@ -1048,7 +972,44 @@ export default function FieldActionScreen({
   /*
    * 보고서 저장
    */
+  const toggleLocation = async () => {
+    if (savingRef.current || positionSavingRef.current || loadingReport || loadError) return;
+    if (!editingLocation) { setEditingLocation(true); return; }
+    if (!isValidCoordinate(latitude, longitude)) { showAlert('위치를 확인해 주세요.'); return; }
+    positionSavingRef.current = true; setPositionSaving(true);
+    mapRef.current?.injectJavaScript('window.setSelectionMode?.(false); true;');
+    try {
+      const form = new FormData();
+      form.append('latitude', String(latitude)); form.append('longitude', String(longitude));
+      form.append('locationAddress', locationAddress || '');
+      if (progressId) { form.append('progressId', String(progressId)); form.append('expectedRevision', revision || ''); }
+      try {
+        mapRef.current?.injectJavaScript('if (window.map) window.map.relayout(); true;');
+        await new Promise(resolve => setTimeout(resolve, 400));
+        const uri = await captureRef(mapWrapperRef, { format: 'jpg', quality: 0.8 });
+        form.append('mapImage', new File(uri));
+      } catch (captureError) { console.log('Position map capture failed:', captureError?.message); }
+      const response = await expoFetch(`${API_BASE_URL}/api/task-progress/task/${taskId}/location`, {
+        method: 'PATCH', body: form,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || '위치를 저장하지 못했습니다.');
+      const patch = { latitude, longitude, locationAddress, markedMapUri: null,
+        revision: result.revision ?? revision };
+      setRevision(patch.revision); setMarkedMapUri(null);
+      currentFormRef.current = { ...currentFormRef.current, ...patch };
+      if (initialFormRef.current) initialFormRef.current = editSnapshot({ ...JSON.parse(initialFormRef.current), ...patch });
+      await writeDraft(key, currentFormRef.current);
+      setLocationMoving(false); setEditingLocation(false);
+      onPositionChanged?.(result);
+    } catch (error) {
+      showAlert(error.message || '위치를 저장하지 못했습니다.');
+      mapRef.current?.injectJavaScript('window.setSelectionMode?.(true); true;');
+    } finally { positionSavingRef.current = false; setPositionSaving(false); }
+  };
+
   const handleSave = async () => {
+    if (savingRef.current || positionSavingRef.current || loadingReport || loadError) return;
     try {
       if (!taskId) {
         showAlert(
@@ -1076,7 +1037,9 @@ export default function FieldActionScreen({
         return;
       }
 
+      savingRef.current = true;
       setSaving(true);
+      await flushDraft();
 
       console.log('보고서 저장 좌표:', latitude, longitude);
 
@@ -1112,6 +1075,9 @@ export default function FieldActionScreen({
         String(taskId)
       );
       if (user?.userId) form.append('userId', String(user.userId));
+      if (progressId) form.append('progressId', String(progressId));
+      if (progressId && revision != null) form.append('expectedRevision', String(revision));
+      form.append('photoSlots', JSON.stringify(photoManifest(photos)));
 
       form.append(
         'latitude',
@@ -1126,7 +1092,7 @@ export default function FieldActionScreen({
 
       form.append(
         'mainComment',
-        ''
+        mainComment || ''
       );
 
       form.append(
@@ -1139,24 +1105,7 @@ export default function FieldActionScreen({
         status || 'pending'
       );
 
-      const isLocalUri = (
-        uri
-      ) =>
-        uri &&
-        (
-          uri.startsWith(
-            'file://'
-          ) ||
-          uri.startsWith(
-            'content://'
-          )
-        );
-
-      // 실제로 업로드되는 사진만 골라서, 코멘트 배열과 파일 배열의 순서를
-      // 1:1로 맞춘다 (전/중/후 라벨이 엉뚱한 사진에 붙는 것을 방지).
-      const uploadPhotos = photos.filter(
-        (photo) => photo.uri && isLocalUri(photo.uri)
-      );
+      const uploadPhotos = photos.filter((photo) => photo.uri && isLocalPhoto(photo.uri));
 
       form.append(
         'photoComments',
@@ -1167,21 +1116,14 @@ export default function FieldActionScreen({
         )
       );
 
-      for (const photo of uploadPhotos) {
-        const photoResponse = await fetch(photo.uri);
-        const photoBlob = await photoResponse.blob();
-        const fileName = photo.type === 'before' ? 'before.jpg' : photo.type === 'during' ? 'during.jpg' : 'after.jpg';
-        form.append('fieldPhotos', photoBlob, fileName);
-      }
-
-      if (mapImageUri) {
-        const mapResponse = await fetch(mapImageUri);
-        const mapBlob = await mapResponse.blob();
-        form.append('mapImage', mapBlob, 'map.jpg');
-      }
+      const appendImage = (name, uri) => {
+        form.append(name, new File(uri));
+      };
+      for (const photo of uploadPhotos) appendImage('fieldPhotos', photo.uri);
+      if (mapImageUri) appendImage('mapImage', mapImageUri);
 
       const res =
-        await fetch(
+        await expoFetch(
           `${API_BASE_URL}/api/task-progress`,
           {
             method: 'POST',
@@ -1190,9 +1132,8 @@ export default function FieldActionScreen({
         );
 
       if (!res.ok) {
-        throw new Error(
-          `보고서 저장 실패: ${res.status}`
-        );
+        const errorBody = await res.json().catch(() => null);
+        throw new Error(errorBody?.message || '저장하지 못했습니다. 작성 내용은 임시 보관됩니다.');
       }
 
       const savedReport =
@@ -1214,47 +1155,11 @@ export default function FieldActionScreen({
           : null
       );
 
-      if (
-        savedReport.fieldPhotos
-      ) {
-        const savedPhotos =
-          savedReport.fieldPhotos;
-
-        setPhotos(
-          PHOTO_TYPES.map(
-            (type, index) => {
-              const savedPhoto =
-                savedPhotos[index];
-
-              return {
-                type:
-                  type.key,
-
-                label:
-                  type.label,
-
-                uri: savedPhoto
-                  ? resolveApiUrl(
-                      savedPhoto.uri ||
-                        savedPhoto.path
-                    ) ||
-                    savedPhoto.uri ||
-                    savedPhoto.path
-                  : null,
-
-                comment:
-                  savedPhoto
-                    ?.comment ||
-                  photos[index]
-                    ?.comment ||
-                  '',
-              };
-            }
-          )
-        );
-      }
-
-      initialFormRef.current = currentFormRef.current;
+      setPhotos(restorePhotos(savedReport.fieldPhotos, resolveApiUrl));
+      setProgressId(savedReport.progressId);
+      setRevision(savedReport.revision);
+      savedRef.current = true;
+      try { await clearDraft(key); } catch (error) { console.warn('보고서 임시 자료 정리 실패', error); }
       onSave?.({
         ...savedReport,
         taskId,
@@ -1264,7 +1169,7 @@ export default function FieldActionScreen({
           savedReport?.progressStatus ||
           'pending',
         status:
-          status ||
+          savedReport.taskStatus || status ||
           savedReport?.progressStatus ||
           'pending',
         latitude: Number(latitude),
@@ -1280,10 +1185,9 @@ export default function FieldActionScreen({
     } catch (error) {
       console.log(error);
 
-      showAlert(
-        '보고서 저장 중 문제가 발생했습니다.'
-      );
+      showAlert('저장 실패', error.message || '보고서 저장 중 문제가 발생했습니다. 작성 내용은 유지됩니다.');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -1304,8 +1208,14 @@ export default function FieldActionScreen({
       }
     >
       <ScreenHeader title="보고서 양식 작성" onBack={requestBack} />
+      {loadingReport ? <ActivityIndicator style={{ padding: 16 }} /> : null}
+      {loadError ? <Text style={{ color: '#DC2626', padding: 16 }}>{loadError}</Text> : null}
+      {!loadingReport && !loadError && <View style={{ paddingHorizontal: 20, paddingVertical: 8, gap: 6 }}>
+        <PrimaryButton title={saving ? '저장 중...' : '보고서 저장'} onPress={handleSave} disabled={saving} />
+      </View>}
 
       <ScrollView
+        pointerEvents={loadingReport || loadError || saving ? 'none' : 'auto'}
         contentContainerStyle={
           styles.body
         }
@@ -1367,7 +1277,7 @@ export default function FieldActionScreen({
           </Text>
 
           {markedMapUri ? (
-            <Image source={{ uri: markedMapUri }} style={styles.mapPreviewImage} />
+            <ProtectedImage source={{ uri: markedMapUri }} style={styles.mapPreviewImage} />
           ) : null}
 
           <View style={styles.locationActionRow}>
@@ -1376,19 +1286,17 @@ export default function FieldActionScreen({
                 styles.photoSmallButton,
                 editingLocation && styles.locationSettingActive,
               ]}
-              onPress={() => {
-                setLocationMoving(false);
-                setEditingLocation((value) => !value);
-              }}
+              disabled={saving || positionSaving || loadingReport || !!loadError}
+              onPress={toggleLocation}
             >
-              <Text style={styles.photoSmallButtonText}>위치 설정</Text>
+              <Ionicons name="location-outline" size={16} color="#FFFFFF" /><Text style={styles.photoSmallButtonText}>{positionSaving ? '위치 저장 중…' : editingLocation ? '위치 확정' : '위치 바꾸기'}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.photoSmallButton}
               onPress={openMapEditor}
             >
-              <Text style={styles.photoSmallButtonText}>위치도 편집</Text>
+              <Ionicons name="create-outline" size={16} color="#FFFFFF" /><Text style={styles.photoSmallButtonText}>{markedMapUri ? '위치도 수정하기' : '위치도 표시하기'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -1439,7 +1347,7 @@ export default function FieldActionScreen({
 
                 {item.uri ? (
                   <>
-                    <Image
+                    <ProtectedImage
                       source={{
                         uri:
                           item.uri,
@@ -1562,7 +1470,7 @@ export default function FieldActionScreen({
                     )
                   }
 
-                  placeholder={`${item.label} 사진 메모`}
+                  placeholder="메모를 입력하세요"
 
                   inputStyle={
                     styles.photoMemo
@@ -1590,7 +1498,7 @@ export default function FieldActionScreen({
               setFieldMemo
             }
 
-            placeholder="예: 담당자 확인 필요, 추가 점검 예정, 민원인 요청사항 등"
+            placeholder="메모를 입력하세요"
 
             inputStyle={
               styles.memo
@@ -1619,6 +1527,7 @@ export default function FieldActionScreen({
           <View style={styles.statusRow}>
             <TouchableOpacity
               style={[styles.statusBtn, status === 'pending' && styles.statusActive]}
+              disabled={location?.status === 'complete'}
               onPress={() => setStatus('pending')}
             >
               <Text style={[styles.statusText, status === 'pending' && styles.statusTextActive]}>
@@ -1628,6 +1537,7 @@ export default function FieldActionScreen({
 
             <TouchableOpacity
               style={[styles.statusBtn, status === 'working' && styles.statusActive]}
+              disabled={location?.status === 'complete'}
               onPress={() => setStatus('working')}
             >
               <Text style={[styles.statusText, status === 'working' && styles.statusTextActive]}>
@@ -1646,18 +1556,6 @@ export default function FieldActionScreen({
           </View>
         </View>
 
-        <PrimaryButton
-          title={
-            saving
-              ? '저장 중...'
-              : '보고서 저장'
-          }
-
-          onPress={
-            handleSave
-          }
-          disabled={saving}
-        />
       </ScrollView>
 
       <PhotoMarkupEditor
@@ -1694,7 +1592,7 @@ const styles =
       flex: 1,
       backgroundColor:
         '#F4F8FF',
-      transform: [{ translateY: -15 }],
+      marginTop: -15,
     },
 
     body: {
@@ -1943,6 +1841,9 @@ const styles =
 
     photoSmallButton: {
       flex: 1,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 5,
 
       backgroundColor:
         '#2477F3',

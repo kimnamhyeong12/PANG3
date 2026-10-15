@@ -113,6 +113,7 @@ public class TaskProgressService {
 
         Object mapObj = body.get("locationMapImage");
         if (mapObj != null) {
+            fileStorageService.requireTaskFile(taskId, mapObj.toString());
             progress.setLocationMapImage(mapObj.toString());
         }
 
@@ -124,6 +125,7 @@ public class TaskProgressService {
                     Map<String, Object> normalized = new HashMap<>();
                     Object uri = photoMap.get("uri");
                     Object path = photoMap.get("path");
+                    fileStorageService.requireTaskFile(taskId, path != null ? path.toString() : (uri == null ? null : uri.toString()));
                     normalized.put("path", path != null ? path.toString() : (uri != null ? uri.toString() : null));
                     normalized.put("comment", photoMap.get("comment"));
                     normalized.put("performedByUserId", performerId);
@@ -141,19 +143,48 @@ public class TaskProgressService {
         return toResponseMap(progress, task);
     }
 
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> updatePosition(Long taskId, Long userId, Map<String, Object> body, MultipartFile mapImage) throws Exception {
+        taskService.requireEditor(taskId, userId);
+        Task task = taskService.getById(taskId);
+        Double lat = parseDoubleObj(body.get("latitude")), lng = parseDoubleObj(body.get("longitude"));
+        if (lat == null || lng == null || !Double.isFinite(lat) || !Double.isFinite(lng)
+                || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new IllegalArgumentException("위치를 확인해 주세요.");
+        Long id = parseLong(str(body.get("progressId")));
+        if (id == null) {
+            if (taskProgressRepository.findTopByTask_TaskIdOrderByCreatedAtDesc(taskId).isPresent())
+                throw new IllegalArgumentException("최신 보고서를 다시 불러온 뒤 위치를 변경해 주세요.");
+            syncTaskLocation(task, lat, lng);
+            return Map.of("taskLatitude", lat, "taskLongitude", lng);
+        }
+        TaskProgress record = editableProgress(task, id);
+        validateRevision(record, str(body.get("expectedRevision")));
+        record.setLatitude(lat); record.setLongitude(lng);
+        record.setLocationAddress(str(body.get("locationAddress")));
+        record.setLocationMapImage(mapImage != null && !mapImage.isEmpty()
+            ? fileStorageService.saveMultipart(taskId, "map", mapImage) : null);
+        record.setReportFilePath(null); record.setAiRefinedContent(null);
+        if (isCurrentRecord(task, record)) syncTaskLocation(task, lat, lng);
+        return toResponseMap(taskProgressRepository.saveAndFlush(record), task);
+    }
+
     public Map<String, Object> getLatestByTaskId(Long taskId) {
         return taskProgressRepository
                 .findTopByTask_TaskIdOrderByCreatedAtDesc(taskId)
+                .filter(ReportRetentionService::available)
                 .map(p -> toResponseMap(p, p.getTask()))
                 .orElse(null);
     }
 
     public TaskProgress getById(Long progressId) {
-        return taskProgressRepository.findById(progressId)
+        TaskProgress report = taskProgressRepository.findById(progressId)
                 .orElseThrow(() -> new RuntimeException("Progress not found: " + progressId));
+        ReportRetentionService.requireAvailable(report);
+        return report;
     }
 
     private void validateEditor(Task task, Long performerId) {
+        taskService.requireEditor(task.getTaskId(), performerId);
         var owner = taskService.currentAssignee(task);
         if (performerId == null || owner == null || !performerId.equals(owner.getUserId())) {
             throw new IllegalArgumentException("현재 담당자만 작업 자료를 등록할 수 있습니다.");
@@ -164,6 +195,7 @@ public class TaskProgressService {
         if (progressId == null) return new TaskProgress();
         TaskProgress progress = taskProgressRepository.findLocked(progressId)
                 .orElseThrow(() -> new IllegalArgumentException("보고서를 찾을 수 없습니다."));
+        ReportRetentionService.requireAvailable(progress);
         if (!task.getTaskId().equals(progress.getTask().getTaskId())) {
             throw new IllegalArgumentException("방문지와 보고서가 일치하지 않습니다.");
         }
@@ -215,6 +247,8 @@ public class TaskProgressService {
         return toResponseMap(progress, progress.getTask());
     }
 
+    public void validateTaskReader(Long taskId, Long userId) { validateReader(taskService.getById(taskId), userId); }
+
     public void validateReader(Task task, Long userId) {
         if (userId == null) throw new IllegalArgumentException("사용자 정보가 필요합니다.");
         if (task.getGroup() != null) {
@@ -222,10 +256,11 @@ public class TaskProgressService {
                     .anyMatch(row -> task.getTaskId().equals(((Number) row.get("id")).longValue()));
             if (allowed) return;
         } else if (taskService.currentAssignee(task) != null && userId.equals(taskService.currentAssignee(task).getUserId())) return;
-        throw new IllegalArgumentException("보고서를 확인할 권한이 없습니다.");
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "보고서를 확인할 권한이 없습니다.");
     }
 
     public void validateDownloadable(TaskProgress progress) {
+        ReportRetentionService.requireAvailable(progress);
         String status = progress.getProgressStatus();
         if (!"working".equalsIgnoreCase(status) && !"complete".equalsIgnoreCase(status)) {
             throw new org.springframework.web.server.ResponseStatusException(
@@ -273,6 +308,7 @@ public class TaskProgressService {
         Map<String, Object> result = new HashMap<>();
 
         result.put("progressId", progress.getProgressId());
+        result.put("retentionExpiresAt", ReportRetentionService.expiresAt(progress));
         result.put("revision", revisionOf(progress));
         result.put("taskStatus", task.getTaskStatus());
         result.put("taskLatitude", task.getLat());

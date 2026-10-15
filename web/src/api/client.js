@@ -1,4 +1,4 @@
-// 백엔드는 토큰 인증이 없고 userId를 쿼리/바디로 직접 넘긴다 (AuthController /api/auth/login 응답의 userId 사용).
+import { webSession } from './session.js';
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 async function request(method, path, { params, body } = {}) {
@@ -8,7 +8,7 @@ async function request(method, path, { params, body } = {}) {
       if (value !== undefined && value !== null) url.searchParams.set(key, value);
     });
   }
-  const res = await fetch(url, {
+  const res = await webSession.fetch(url, {
     method,
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -66,7 +66,7 @@ export function isServerDown(error) {
 
 // 파일 다운로드: Blob으로 받는다 (실패 시 ApiError)
 async function download(path) {
-  const res = await fetch(new URL(BASE_URL + path, window.location.origin));
+  const res = await webSession.fetch(new URL(BASE_URL + path, window.location.origin));
   if (!res.ok) {
     let data = null;
     try {

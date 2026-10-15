@@ -13,6 +13,7 @@ const isWorking = (item) =>
   );
 
 export default function GroupDashboardScreen({ assignments = [], group, embedded = false }) {
+  const personal = Boolean(group?.personal || group?.personalWorkspace || group?.workspaceType === 'PERSONAL');
   const [today, setToday] = useState(() => koreaDayKey());
 
   useEffect(() => {
@@ -57,17 +58,18 @@ export default function GroupDashboardScreen({ assignments = [], group, embedded
 
   const content = (
     <>
-      <Text style={styles.heading}>{group?.groupName || '그룹'} 누적 업무</Text>
+      <Text style={styles.heading}>{personal ? '내 누적 업무' : `${group?.groupName || '그룹'} 누적 업무`}</Text>
 
       <View style={styles.summaryGrid}>
         <Stat label="전체 방문지" value={stats.total} />
+        {personal && <Stat label="작업 전" value={stats.total - stats.working - stats.complete} />}
         <Stat label="작업 중" value={stats.working} />
         <Stat label="누적 완료" value={stats.complete} />
         <Stat label="이번 달 완료" value={stats.month} />
         <Stat label="오늘 완료" value={stats.today} />
       </View>
 
-      <View style={styles.card}>
+      {!personal && <View style={styles.card}>
         <Text style={styles.cardTitle}>팀원별 누적 현황</Text>
         {stats.members.length === 0 ? (
           <Text style={styles.empty}>등록된 업무가 없습니다.</Text>
@@ -77,7 +79,7 @@ export default function GroupDashboardScreen({ assignments = [], group, embedded
             <Text style={styles.memberCount}>{member.total}곳 · 작업 중 {member.working}곳 · 완료 {member.complete}곳</Text>
           </View>
         ))}
-      </View>
+      </View>}
     </>
   );
   return embedded
