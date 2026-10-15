@@ -8,7 +8,7 @@ const babel = require('../node_modules/@babel/core');
 // GPS, backend responses, and workspace refreshes are controlled by each scenario.
 function createScreen({ nativeNavigation = false, taskRemoved = false } = {}) {
   let slots = [], cursor = 0, effects = [], dirty = true, tree;
-  const calls = [], alerts = [], requests = [], storage = new Map(), sdkPreviews = new Set();
+  const calls = [], alerts = [], requests = [], orderRequests = [], storage = new Map(), sdkPreviews = new Set();
   let sdkSequence = 0;
   const same = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
   const react = {
@@ -73,7 +73,13 @@ function createScreen({ nativeNavigation = false, taskRemoved = false } = {}) {
     };
     const context = { module, exports: module.exports, require: requireMock, console, URLSearchParams, AbortController, setTimeout, clearTimeout,
       process: { env: { EXPO_PUBLIC_API_BASE_URL: 'https://backend.test', EXPO_PUBLIC_KAKAO_REST_API_KEY: 'test' } },
-      fetch: (url, options = {}) => new Promise((resolve, reject) => requests.push({ url, options, resolve, reject })) };
+      fetch: (url, options = {}) => {
+        if (url.endsWith('/api/routes/order')) {
+          orderRequests.push(JSON.parse(options.body));
+          return Promise.resolve({ ok: false }); // Exercise offline distance recommendations independently of guidance.
+        }
+        return new Promise((resolve, reject) => requests.push({ url, options, resolve, reject }));
+      } };
     vm.runInNewContext(code, context, { filename: file });
     return module.exports;
   }
@@ -117,7 +123,7 @@ function createScreen({ nativeNavigation = false, taskRemoved = false } = {}) {
       sdkPreviews.add(segment.sdkPreviewId); request.resolve(segment);
     } else request.resolve({ ok: true, text: async () => JSON.stringify(data), json: async () => data });
   }
-  return { props, render, settle, find, nodes, text, requests, response, calls, alerts,
+  return { props, render, settle, find, nodes, text, requests, orderRequests, response, calls, alerts,
     markTaskRemoved: () => { taskRemoved = true; }, expireSdkPreviews: () => sdkPreviews.clear() };
 }
 
@@ -140,13 +146,14 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   app.render();
   assert.equal(app.find('MapCanvas').props.locations.length, 3, 'all administrative dongs appear together');
   assert.equal(app.requests.length, 0, 'registration/GPS never requests a full road route');
+  assert.equal(app.orderRequests.length, 1, 'registration requests summary costs for visit ordering only');
 
   app.find('MapCanvas').props.onMarkerClick(app.props.locations[2]);
   app.render();
   const first = (await app.settle(), app.requests.shift());
   assert.equal(first.url, 'sdk:preview', 'vehicle preview uses SDK, never REST');
   app.response(first, route(app.props.locations[2])); await app.settle();
-  assert.deepEqual(app.props.locations.map(row => row.id), [1, 2, 3], 'preview preserves numbering');
+  assert.deepEqual(Array.from(app.props.locations, row => row.id), [1, 2, 3], 'preview preserves numbering');
   assert.equal(app.props.routeSegments.length, 0, 'preview does not change active guidance');
   app.find('MapCanvas').props.onMarkerClick(app.props.locations[2]);
   assert.equal(app.calls.length, 1, 'second press opens report');
@@ -154,7 +161,7 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   const begin = app.find('TouchableOpacity', '안내 시작').props.onPress();
   app.render();
   app.response((await app.settle(), app.requests.shift()), route(app.props.locations[2])); await begin; await app.settle();
-  assert.deepEqual(Array.from(app.props.locations, row => row.id), [3, 1, 2]);
+  assert.deepEqual(Array.from(app.props.locations, row => row.id), [3, 2, 1], 'remaining visits are recommended from the user-selected first stop');
   assert.deepEqual(Array.from(app.props.locations, row => row.markerNumber), [1, 2, 3]);
   assert.equal(app.props.routeSegments.length, 1);
   assert.equal(app.props.routeSegments[0].destinationKey, '3');
@@ -165,7 +172,7 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   assert.equal(app.props.routeSegments[0].destinationKey, '3', 'browsing during guidance preserves destination');
   assert.equal(app.props.locations[0].id, 3);
   assert.equal(app.find('MapCanvas').props.guideTarget.id, 3, 'arrival detection follows committed destination');
-  assert.equal(app.find('MapCanvas').props.previewRouteSegment.destinationKey, '1');
+  assert.equal(app.find('MapCanvas').props.previewRouteSegment.destinationKey, '2');
 
   app.props.locations = app.props.locations.filter(row => row.id !== 3); app.render();
   assert.equal(app.props.isGuiding, false, 'transferring out the destination stops guidance');

@@ -90,7 +90,7 @@ let controls = [];
 rn.TouchableOpacity = props => { controls.push(props); return React.createElement(Surface, null, props.children); };
 const reportLocations = [
   { id: 1, status: 'pending', detailAddress: '작업 전 장소' },
-  { id: 2, status: 'working', detailAddress: '작업 중 장소' },
+  { id: 2, status: 'working', detailAddress: '작업 중 장소', workDate: '2026-10-15', roadAddress: '카드에서 숨길 주소', task: '카드에서 숨길 업무' },
   { id: 3, status: 'complete', detailAddress: '작업 후 장소' },
 ];
 let selectedRows; let selectionChanges = 0;
@@ -105,7 +105,11 @@ assert.equal(checkboxes[1].disabled, false);
 assert.equal(checkboxes[2].disabled, false);
 checkboxes[0].onPress();
 assert.equal(selectionChanges, 0, 'pre-work selection is guarded even if its handler is invoked');
-assert.ok(reportHtml.includes('작업 전 · 선택 불가'));
+assert.ok(reportHtml.includes('10월 15일'));
+assert.ok(!reportHtml.includes('업무일'));
+assert.ok(!reportHtml.includes('카드에서 숨길 주소'));
+assert.ok(!reportHtml.includes('카드에서 숨길 업무'));
+assert.ok(!reportHtml.includes('작업 전 · 선택 불가'));
 const isCreateReportButton = control => React.Children.toArray(control.children)
   .some(child => /^\d+건 보고서 만들기$/.test(child.props?.children || ''));
 controls.find(isCreateReportButton).onPress();

@@ -33,7 +33,7 @@ const formatShortDate = (value) => {
   const key = value ? String(value).slice(0, 10) : '';
   const parts = key.split('-');
   if (parts.length !== 3) return '';
-  return `${parts[1]}.${parts[2]}`;
+  return `${Number(parts[1])}월 ${Number(parts[2])}일`;
 };
 
 const getTaskId = (loc) =>
@@ -63,10 +63,6 @@ export default function ReportListScreen({
     if (onSelectionChange) onSelectionChange(typeof next === 'function' ? next(selectedIds) : next);
     else setLocalSelectedIds(next);
   };
-
-  const assignmentMap = new Map(
-    groupAssignments.map((item) => [Number(item.taskId), item])
-  );
 
   const isReportable = (loc) =>
     getTaskId(loc) != null && ['working', 'complete'].includes(loc.status);
@@ -107,8 +103,6 @@ export default function ReportListScreen({
       .sort((a, b) => Number(b.name === selectedDongName) - Number(a.name === selectedDongName)
         || a.name.localeCompare(b.name, 'ko'));
   }, [locations, selectedDongName]);
-
-  const personalWorkspace = true;
 
   const handleCreateReport = () => {
     if (selectedLocations.length === 0) {
@@ -161,14 +155,6 @@ export default function ReportListScreen({
 
             const checked =
               reportable && selectedIds.includes(taskId);
-
-            const assignment =
-              assignmentMap.get(
-                Number(taskId)
-              );
-
-            // 이제 1인 그룹도 groupId와 담당자 배정을 가지므로 현재 그룹 유형으로 구분한다.
-            const isTeamLocation = !personalWorkspace;
 
             return (
               <View
@@ -247,66 +233,11 @@ export default function ReportListScreen({
                             color="#2477F3"
                           />
                           <Text style={styles.taskDateText}>
-                            업무일 {formatShortDate(getWorkDateKey(loc))}
+                            {formatShortDate(getWorkDateKey(loc))}
                           </Text>
                         </View>
                       ) : null}
 
-                      {String(
-                        loc.task ||
-                          loc.taskCategory ||
-                          loc.task_category ||
-                          ''
-                      ).trim() ? (
-                        <View style={styles.taskCategoryRow}>
-                          <Ionicons
-                            name="pricetag-outline"
-                            size={11}
-                            color="#536477"
-                          />
-                          <Text style={styles.taskCategoryText}>
-                            {loc.task || loc.taskCategory || loc.task_category}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-
-                    <Text
-                      style={styles.itemAddr}
-                      numberOfLines={1}
-                    >
-                      {loc.roadAddress ||
-                        '주소 없음'}
-                    </Text>
-
-                    {isTeamLocation && (
-                      <View
-                        style={styles.assigneeRow}
-                      >
-                        <Ionicons
-                          name="person-outline"
-                          size={12}
-                          color="#2477F3"
-                        />
-
-                        <Text
-                          style={[
-                            styles.assigneeText,
-                            !assignment &&
-                              styles.assigneeEmpty,
-                          ]}
-                        >
-                          {assignment
-                            ? `담당자: ${
-                                assignment.assigneeName ||
-                                assignment.assigneeLoginId
-                              }`
-                            : '담당자 미지정'}
-                        </Text>
-                      </View>
-                    )}
-
-                    <View style={styles.statusRow}>
                       <Text
                         style={[
                           styles.statusBadge,
@@ -318,7 +249,7 @@ export default function ReportListScreen({
                           },
                         ]}
                       >
-                        {reportable ? getStatusLabel(loc.status) : '작업 전 · 선택 불가'}
+                        {getStatusLabel(loc.status)}
                       </Text>
 
 
@@ -457,9 +388,8 @@ const styles = StyleSheet.create({
 
   taskMetaRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 5,
+    gap: 8,
     marginTop: 5,
   },
 

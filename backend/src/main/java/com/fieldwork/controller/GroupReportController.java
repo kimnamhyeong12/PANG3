@@ -44,6 +44,7 @@ public class GroupReportController {
                 .collect(Collectors.toSet());
         if (taskIds.isEmpty()) return List.of();
         return progressRepository.findByTask_TaskIdInOrderByCreatedAtDesc(taskIds).stream()
+                .filter(com.fieldwork.service.ReportRetentionService::available)
                 .map(this::toReportMap)
                 .toList();
     }

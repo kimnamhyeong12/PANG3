@@ -1,6 +1,7 @@
 import { apiFetch, downloadProtectedFile } from '../utils/auth';
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { saveReportToDownloads } from '../modules/kakao-navigation';
 import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import { PrimaryButton, ScreenHeader, SecondaryButton } from '../components/ui';
@@ -40,7 +41,6 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
     return () => { active = false; };
   }, [downloadInfo, reload]);
   const canOpen = !!downloadInfo?.userId && !loading && ids.length > 0;
-  const readyCount = files.filter(file => file.uri).length;
   const update = (id, values) => {
     const next = filesRef.current.map(file => file.progressId === id ? { ...file, ...values } : file);
     filesRef.current = next;
@@ -63,7 +63,13 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
   const getFile = async id => {
     if (busy.current || !canOpen) return;
     busy.current = true; setPreparing(true); setError('');
-    try { await share(await prepare(id)); }
+    try {
+      const file = await prepare(id);
+      if (Platform.OS === 'android') {
+        await saveReportToDownloads(file.uri, file.filename);
+        update(id, { saved: true });
+      } else await share(file);
+    }
     catch (failure) { update(id, { error: failure.message || '파일을 받지 못했습니다.' }); }
     finally { busy.current = false; if (mounted.current) { setPreparing(false); setActiveId(null); } }
   };
@@ -75,7 +81,11 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
     try {
       for (const id of ids) {
         if (!mounted.current) break;
-        try { await prepare(id); }
+        try {
+          const file = await prepare(id);
+          if (Platform.OS === 'android') { await saveReportToDownloads(file.uri, file.filename); update(id, { saved: true }); }
+          else await share(file);
+        }
         catch (failure) { failures++; update(id, { error: failure.message || '파일을 만들지 못했습니다.' }); }
       }
       if (mounted.current && failures) setError(`${failures}개 파일을 준비하지 못했습니다. 해당 파일을 다시 받아 주세요.`);
@@ -86,6 +96,7 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
       <View style={styles.icon}><Ionicons name={files.length > 0 && files.every(file => file.uri) ? 'checkmark' : 'document-text-outline'} size={32} color="#FFFFFF" /></View>
       <Text style={styles.title}>{preparing ? 'HWPX 파일을 준비하고 있습니다' : files.length > 0 && files.every(file => file.uri) ? '보고서 파일이 준비되었습니다' : '보고서 다운로드'}</Text>
 
+      <Text style={styles.description}>보고서는 작성일로부터 1년간 보관됩니다.{Platform.OS === 'android' ? '\n다운로드한 파일은 휴대폰 Download 폴더에 저장됩니다.' : ''}</Text>
       {loading && <Text style={styles.description}>보고서를 불러오고 있습니다.</Text>}
       {!loading && files.some(file => file.loadError) && <SecondaryButton title="다시 불러오기" onPress={() => setReload(value => value + 1)} />}
       {!!error && <Text style={styles.error}>{error}</Text>}
@@ -95,10 +106,11 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
           <Text style={styles.fileState}>{file.progressId ? `${file.progressStatus === 'complete' ? '작업 후' : file.progressStatus === 'working' ? '작업 중' : '작업 전'} · ${String(file.createdAt || '').slice(0, 10)}` : ''}</Text>
           {activeId === file.progressId && <Text style={styles.fileState}>파일 준비 중…</Text>}
           {!!file.error && <Text style={styles.error}>{file.error}</Text>}
+          {file.saved && <Text style={styles.fileState}>Download 폴더에 저장했습니다.</Text>}
         </View>
-        <SecondaryButton title="파일 받기" disabled={preparing || !canOpen || !file.progressId || !canDownloadReport(file)} onPress={() => getFile(file.progressId)} style={styles.fileButton} />
+        <SecondaryButton title={file.saved ? '다시 다운로드' : '다운로드'} disabled={preparing || !canOpen || !file.progressId || !canDownloadReport(file)} onPress={() => getFile(file.progressId)} style={styles.fileButton} />
       </View>)}
-      {ids.length > 1 && readyCount < ids.length && <PrimaryButton title={preparing ? '파일 준비 중…' : `${ids.length}개 파일 준비`} icon="download-outline" disabled={preparing || !canOpen} onPress={prepareAll} />}
+      {ids.length > 1 && <PrimaryButton title={preparing ? '다운로드 중…' : `${ids.length}개 모두 다운로드`} icon="download-outline" disabled={preparing || !canOpen} onPress={prepareAll} />}
       <SecondaryButton title="이전 화면으로" onPress={onBack} />
     </ScrollView>
   </View>;

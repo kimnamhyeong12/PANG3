@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TaskProgressController {
 
     private final TaskProgressService taskProgressService;
-    private record CombinedFile(Long userId, String path, List<Long> progressIds) {}
+    private record CombinedFile(Long userId, String path, List<Long> progressIds, java.time.Instant expiresAt) {}
     public record ReportBatchRequest(Long userId, List<Long> progressIds) {}
     private final Map<String, CombinedFile> combinedFiles = new ConcurrentHashMap<>();
 
@@ -91,7 +91,7 @@ public class TaskProgressController {
         }
         String file = taskProgressService.prepareCombined(ids, userId);
         String key = UUID.randomUUID().toString();
-        combinedFiles.put(key, new CombinedFile(userId, file, List.copyOf(ids)));
+        combinedFiles.put(key, new CombinedFile(userId, file, List.copyOf(ids), java.time.Instant.now().plusSeconds(86400)));
         return Map.of("reportDownloadUrl", "/api/task-progress/reports/" + key + "/download?userId=" + userId,
                 "reportCount", ids.stream().distinct().count());
     }
@@ -100,7 +100,7 @@ public class TaskProgressController {
     public ResponseEntity<Resource> downloadCombined(@PathVariable String key, @RequestParam Long userId) {
         CurrentUser.require(userId);
         CombinedFile file = combinedFiles.get(key);
-        if (file == null || !file.userId().equals(userId)) return ResponseEntity.notFound().build();
+        if (file == null || !file.expiresAt().isAfter(java.time.Instant.now()) || !file.userId().equals(userId)) return ResponseEntity.notFound().build();
         for (Long id : file.progressIds()) {
             TaskProgress progress = taskProgressService.getById(id);
             taskProgressService.validateReader(progress.getTask(), CurrentUser.require(userId));
@@ -113,6 +113,11 @@ public class TaskProgressController {
         if (reportPath == null || !Paths.get(reportPath).toFile().isFile()) return ResponseEntity.notFound().build();
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
                 .contentType(MediaType.APPLICATION_OCTET_STREAM).body(new FileSystemResource(Paths.get(reportPath)));
+    }
+
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 3600000)
+    public void expireCombinedDownloads() {
+        combinedFiles.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(java.time.Instant.now()));
     }
 
     @GetMapping("/{progressId}/report/download")

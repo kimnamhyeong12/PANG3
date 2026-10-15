@@ -23,9 +23,9 @@ export function numberVisitOrder(rows) {
     markerNumber: isVisitComplete(row) ? null : ++number }));
 }
 
-// Recommend an open route using distance, without requesting or drawing road paths.
+// Immediate offline recommendation, including the fixed return endpoint when registered.
 // Keep a destination already being guided to at the front when visits are added.
-export function recommendVisitOrder(rows, start, pinnedKey = null) {
+export function recommendVisitOrder(rows, start, pinnedKey = null, returnLocation = null) {
   const pending = rows.filter((row) => !isVisitComplete(row));
   const completed = rows.filter(isVisitComplete);
   const pinned = pending.find((row) => locationKey(row) === pinnedKey);
@@ -43,13 +43,13 @@ export function recommendVisitOrder(rows, start, pinnedKey = null) {
     cursor = next;
   }
   // Bound work for large imported lists so numbering never stalls the map.
-  if (ordered.length <= 100) {
-    for (let pass = 0; pass < 4; pass++) {
+  if (ordered.length <= 500) {
+    for (let pass = 0; pass < (ordered.length <= 100 ? 4 : 1); pass++) {
       let improved = false;
       for (let i = 0; i < ordered.length - 1; i++) {
         for (let j = i + 1; j < ordered.length; j++) {
           const before = i === 0 ? pinned || start : ordered[i - 1];
-          const after = ordered[j + 1];
+          const after = ordered[j + 1] || (hasVisitCoordinates(returnLocation) ? returnLocation : null);
           const oldCost = visitDistance(before, ordered[i]) + (after ? visitDistance(ordered[j], after) : 0);
           const newCost = visitDistance(before, ordered[j]) + (after ? visitDistance(ordered[i], after) : 0);
           if (newCost + 0.5 < oldCost) {

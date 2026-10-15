@@ -171,13 +171,16 @@ public class TaskProgressService {
     public Map<String, Object> getLatestByTaskId(Long taskId) {
         return taskProgressRepository
                 .findTopByTask_TaskIdOrderByCreatedAtDesc(taskId)
+                .filter(ReportRetentionService::available)
                 .map(p -> toResponseMap(p, p.getTask()))
                 .orElse(null);
     }
 
     public TaskProgress getById(Long progressId) {
-        return taskProgressRepository.findById(progressId)
+        TaskProgress report = taskProgressRepository.findById(progressId)
                 .orElseThrow(() -> new RuntimeException("Progress not found: " + progressId));
+        ReportRetentionService.requireAvailable(report);
+        return report;
     }
 
     private void validateEditor(Task task, Long performerId) {
@@ -192,6 +195,7 @@ public class TaskProgressService {
         if (progressId == null) return new TaskProgress();
         TaskProgress progress = taskProgressRepository.findLocked(progressId)
                 .orElseThrow(() -> new IllegalArgumentException("보고서를 찾을 수 없습니다."));
+        ReportRetentionService.requireAvailable(progress);
         if (!task.getTaskId().equals(progress.getTask().getTaskId())) {
             throw new IllegalArgumentException("방문지와 보고서가 일치하지 않습니다.");
         }
@@ -256,6 +260,7 @@ public class TaskProgressService {
     }
 
     public void validateDownloadable(TaskProgress progress) {
+        ReportRetentionService.requireAvailable(progress);
         String status = progress.getProgressStatus();
         if (!"working".equalsIgnoreCase(status) && !"complete".equalsIgnoreCase(status)) {
             throw new org.springframework.web.server.ResponseStatusException(
@@ -303,6 +308,7 @@ public class TaskProgressService {
         Map<String, Object> result = new HashMap<>();
 
         result.put("progressId", progress.getProgressId());
+        result.put("retentionExpiresAt", ReportRetentionService.expiresAt(progress));
         result.put("revision", revisionOf(progress));
         result.put("taskStatus", task.getTaskStatus());
         result.put("taskLatitude", task.getLat());

@@ -22,4 +22,7 @@ public interface TaskProgressRepository
     List<TaskProgress> findByTask_TaskIdInOrderByCreatedAtDesc(Collection<Long> taskIds);
 
     void deleteByTask_TaskId(Long taskId);
+
+    @Query("select p.progressId from TaskProgress p where p.createdAt <= :cutoff order by p.createdAt")
+    List<Long> findExpiredIds(@Param("cutoff") java.time.LocalDateTime cutoff, org.springframework.data.domain.Pageable page);
 }

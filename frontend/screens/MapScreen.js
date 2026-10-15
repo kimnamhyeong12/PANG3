@@ -33,7 +33,7 @@ import {
 import { isRegisteredPlace, placeLocation, searchViewportPlaces } from '../utils/placeSearch';
 import { locationKey } from '../utils/routeSession';
 import { remainingRouteProgress } from '../utils/routeProgress';
-import { hasVisitCoordinates, promoteVisit, recommendVisitOrder, visitSetKey } from '../utils/visitOrder';
+import { hasVisitCoordinates, numberVisitOrder, promoteVisit, recommendVisitOrder, visitSetKey } from '../utils/visitOrder';
 import { BUSAN_DISTRICT_CODES } from '../constants/busanDistricts';
 // 엑셀,csv 데이터 업로드
 import BulkUploadModal from '../components/BulkUploadModal';
@@ -195,6 +195,7 @@ function NormalMapScreen({
   const [coordLng, setCoordLng] = useState('');
 
   const [returnLocation, setReturnLocation] = useState(null);
+  const [includeReturn, setIncludeReturn] = useState(true);
   const [publicFacilityMode, setPublicFacilityMode] = useState(false);
   const [publicSheetOpen, setPublicSheetOpen] = useState(true);
   const [publicCategoryOpen, setPublicCategoryOpen] = useState(false);
@@ -1085,6 +1086,11 @@ function NormalMapScreen({
 
   const scopeKey = `${user?.userId}:${activeGroup?.groupId}:${locationScope}`;
   const membershipKey = visitSetKey(locations || []);
+  const [recommendationBasis, setRecommendationBasis] = useState('distance');
+  const [recommendationBusy, setRecommendationBusy] = useState(false);
+  const recommendationReturn = includeReturn ? returnDisplayMarker : null;
+  const returnOrderKey = recommendationReturn ? `${recommendationReturn.lat}:${recommendationReturn.lng}` : '';
+  const locationReady = hasVisitCoordinates(currentLocation);
   const liveVisitsRef = useRef(allVisits);
   liveVisitsRef.current = allVisits;
   const resumedRouteRef = useRef(null);
@@ -1116,16 +1122,42 @@ function NormalMapScreen({
   }, [scopeKey]);
 
   useEffect(() => {
-    if (!isActive || !hasVisitCoordinates(currentLocation)) return;
-    if (orderSetRef.current === membershipKey) return;
-    const first = orderSetRef.current === null;
-    orderSetRef.current = membershipKey;
-    if (first && (locations || []).every((row) => row.visitOrderVersion === 2)) return;
+    if (!isActive || !locationReady) return;
     const pinnedKey = isGuiding ? activeSegment?.destinationKey : null;
+    const recommendationKey = `${scopeKey}:${membershipKey}:${returnOrderKey}:${transportMode}:${pinnedKey || ''}`;
+    if (orderSetRef.current === recommendationKey) return;
+    orderSetRef.current = recommendationKey;
+    let active = true;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 35000);
+    setRecommendationBasis('distance');
+    setRecommendationBusy(true);
     setLocations?.((previous) => recommendVisitOrder(
-      Array.isArray(previous) ? previous : locations || [], currentLocation, pinnedKey
+      Array.isArray(previous) ? previous : locations || [], currentLocation, pinnedKey, recommendationReturn
     ));
-  }, [isActive, membershipKey, currentLocation, scopeKey, isGuiding, activeSegment?.destinationKey]);
+    const pending = (locations || []).filter(row => !isCompleted(row));
+    if (!pending.length) { clearTimeout(timer); setRecommendationBusy(false); return; }
+    fetch(`${API_BASE_URL}/api/routes/order`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+      body: JSON.stringify({ currentLocation, locations: pending, returnLocation: recommendationReturn,
+        pinnedKey, transportMode }),
+    }).then(async response => {
+      if (!response.ok) throw new Error('추천 순서를 불러오지 못했습니다.');
+      const result = await response.json();
+      if (!active || orderSetRef.current !== recommendationKey || !Array.isArray(result.optimizedLocations)) return;
+      const keys = result.optimizedLocations.map(locationKey);
+      if (keys.length !== pending.length || new Set(keys).size !== pending.length ||
+          pending.some(row => !keys.includes(locationKey(row)))) return;
+      setLocations?.(previous => {
+        const rows = Array.isArray(previous) ? previous : locations || [];
+        const byKey = new Map(rows.map(row => [locationKey(row), row]));
+        return numberVisitOrder([...keys.map(key => byKey.get(key)).filter(Boolean), ...rows.filter(isCompleted)]);
+      });
+      setRecommendationBasis(result.basis === 'roadDuration' ? 'roadDuration' : 'distance');
+    }).catch(() => { /* The visible distance recommendation remains available. */ })
+      .finally(() => { clearTimeout(timer); if (active) setRecommendationBusy(false); });
+    return () => { active = false; clearTimeout(timer); controller.abort(); orderSetRef.current = null; };
+  }, [isActive, membershipKey, locationReady, scopeKey, returnOrderKey, transportMode, isGuiding, activeSegment?.destinationKey]);
 
   const clearGuidance = () => {
     if (isGuiding) endRouteSession();
@@ -1200,7 +1232,7 @@ function NormalMapScreen({
   const handledRecordRef = useRef(null);
   const [recordNextOffer, setRecordNextOffer] = useState(null);
   const nextVisit = (excluded) => markers.find((row) => !isCompleted(row) && !row.isReturnLocation &&
-    locationKey(row) !== String(excluded) && hasVisitCoordinates(row));
+    locationKey(row) !== String(excluded) && hasVisitCoordinates(row)) || recommendationReturn;
   useEffect(() => {
     if (!isActive || !recordReturn || recordReturn.token === handledRecordRef.current) return;
     handledRecordRef.current = recordReturn.token;
@@ -1356,7 +1388,7 @@ function NormalMapScreen({
         accessibilityRole="button" accessibilityLabel="다음 방문지 경로 보기"
         style={{ position: 'absolute', top: 110, right: 16, zIndex: 20, backgroundColor: '#FFFFFF', padding: 12, borderRadius: 12 }}
         onPress={() => { const next = nextVisit(recordNextOffer.taskId); setRecordNextOffer(null); if (next) previewVisit(next); }}>
-        <Text style={{ color: '#2477F3', fontWeight: '700' }}>다음 방문지</Text>
+        <Text style={{ color: '#2477F3', fontWeight: '700' }}>{nextVisit(recordNextOffer.taskId)?.isReturnLocation ? '근무지 복귀' : '다음 방문지'}</Text>
       </TouchableOpacity>}
       <KakaoMapWebView
         locations={displayLocations}
@@ -1716,6 +1748,16 @@ function NormalMapScreen({
               </TouchableOpacity>
             </View>
 
+            <Text style={{ color: '#64748B', fontSize: 12, paddingHorizontal: 12, paddingBottom: 8 }}>
+              {recommendationBusy ? '추천 순서 계산 중' : recommendationBasis === 'roadDuration' ? '이동시간 기준 추천' : '거리 기준 추천'}
+              {recommendationReturn ? ' · 근무지 복귀 포함' : returnDisplayMarker ? ' · 복귀 제외' : ' · 근무지 미등록'}{'\n'}원하는 방문지를 선택해 먼저 방문할 수 있습니다.
+            </Text>
+            <TouchableOpacity accessibilityRole="switch" accessibilityLabel="근무지 복귀 포함 경로 추천"
+              accessibilityState={{ checked: includeReturn && !!returnDisplayMarker }}
+              onPress={() => returnDisplayMarker ? setIncludeReturn(value => !value) : setWorkplaceOpen(true)}
+              style={{ paddingHorizontal: 12, paddingBottom: 10 }}>
+              <Text style={{ color: '#2477F3', fontSize: 12 }}>{returnDisplayMarker ? `근무지 복귀 포함: ${includeReturn ? '켜짐' : '꺼짐'}` : '복귀 근무지 등록'}</Text>
+            </TouchableOpacity>
             {visitDisplayMarkers.map((loc, index) => (
               <View
                 key={`${loc.detailAddress || 'loc'}-${loc.lat}-${loc.lng}-${index}`}
@@ -1761,6 +1803,14 @@ function NormalMapScreen({
                 )}
               </View>
             ))}
+            {recommendationReturn && <TouchableOpacity style={styles.visitItem} accessibilityRole="button"
+              accessibilityLabel="마지막 목적지 근무지 복귀 경로 보기" onPress={() => previewVisit(recommendationReturn)}>
+              <Ionicons name="home-outline" size={20} color="#2477F3" />
+              <View style={styles.visitTextWrap}>
+                <Text style={styles.visitName}>마지막 목적지 · 근무지 복귀</Text>
+                <Text style={styles.visitTask} numberOfLines={1}>{recommendationReturn.roadAddress}</Text>
+              </View>
+            </TouchableOpacity>}
           </View>
         )}
 

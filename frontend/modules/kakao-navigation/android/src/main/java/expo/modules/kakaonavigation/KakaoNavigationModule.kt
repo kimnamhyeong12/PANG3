@@ -8,6 +8,10 @@ class KakaoNavigationModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("KakaoNavigation")
 
+    AsyncFunction("saveReportToDownloads") { uri: String, filename: String ->
+      ReportDownloads.save(requireNotNull(appContext.reactContext), uri, filename)
+    }
+
     AsyncFunction("previewRoute") { request: Map<String, Any?>, promise: Promise ->
       KakaoRouteEngine.preview(requireNotNull(appContext.reactContext), request,
         { promise.resolve(it) }, { promise.reject("SDK_ROUTE_ERROR", it, null) })
