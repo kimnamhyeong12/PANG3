@@ -15,7 +15,6 @@ import com.fieldwork.service.RouteService;
 @SuppressWarnings("unchecked")
 @RestController
 @RequestMapping("/api/routes")
-@CrossOrigin("*")
 public class RouteController {
 
     private final RouteService routeService;
@@ -23,6 +22,7 @@ public class RouteController {
     public RouteController(RouteService routeService) {
         this.routeService = routeService;
     }
+
 
     @PostMapping("/optimize")
     public Map<String, Object> optimizeRoute(@RequestBody Map<String, Object> body, @RequestHeader(value = "X-Kakao-Walk-Key", required = false) String walkingKey) {

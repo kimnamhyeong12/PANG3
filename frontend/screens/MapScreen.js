@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../utils/auth';
 import { showAlert } from '../components/CustomAlert';
 // 키보드 자판 내 엔터가 안먹힘
 import { Ionicons } from '@expo/vector-icons';
@@ -24,12 +25,12 @@ import KakaoMapWebView from '../components/KakaoMapWebView';
 import PlaceSearchOverlay from '../components/PlaceSearchOverlay';
 import SearchResultSheet from '../components/SearchResultSheet';
 import WorkplaceField from '../components/WorkplaceField';
-import { KakaoNavigationView, beginRouteSession, isKakaoNavigationAvailable, previewSdkRoute, isSdkPreviewAvailable, discardSdkPreview } from '../modules/kakao-navigation';
+import { KakaoNavigationView, beginRouteSession, endRouteSession, wasRouteTaskRemoved, isKakaoNavigationAvailable, previewSdkRoute, isSdkPreviewAvailable, discardSdkPreview } from '../modules/kakao-navigation';
 import {
   stopRouteNotification,
   updateRouteNotification,
 } from '../services/notificationService';
-import { isRegisteredPlace, placeLocation } from '../utils/placeSearch';
+import { isRegisteredPlace, placeLocation, searchViewportPlaces } from '../utils/placeSearch';
 import { locationKey } from '../utils/routeSession';
 import { remainingRouteProgress } from '../utils/routeProgress';
 import { hasVisitCoordinates, promoteVisit, recommendVisitOrder, visitSetKey } from '../utils/visitOrder';
@@ -342,7 +343,7 @@ function NormalMapScreen({
     .map((item) => ({ ...item, displayMarkerLabel: item.markerLabel })), [activeDisplayMarkers, completedDisplayMarkers]);
   const returnDisplayMarker = useMemo(() => hasVisitCoordinates(returnLocation) ? {
     ...returnLocation, id: '__return_location__', status: 'return', isReturnLocation: true,
-    markerLabel: '복귀', markerColor: '#2477F3',
+    markerLabel: '', markerColor: '#2477F3',
   } : null, [returnLocation]);
   const mapOnlyMarkers = useMemo(() => {
     const keys = new Set(markers.map(locationKey));
@@ -373,8 +374,10 @@ function NormalMapScreen({
       markerColor: publicSelectedIds.includes(item.id) ? '#0CA678' : '#2477F3',
     }));
   }, [publicItems, publicSelectedIds, publicCategory]);
+  const showReturnMarker = Boolean(returnDisplayMarker && (preview?.targetKey === locationKey(returnDisplayMarker)
+    || (isGuiding && activeSegment?.destinationKey === locationKey(returnDisplayMarker))));
   const displayLocations = useMemo(() => [...activeDisplayMarkers, ...completedDisplayMarkers,
-    ...(returnDisplayMarker ? [returnDisplayMarker] : [])], [activeDisplayMarkers, completedDisplayMarkers, returnDisplayMarker]);
+    ...(showReturnMarker ? [returnDisplayMarker] : [])], [activeDisplayMarkers, completedDisplayMarkers, returnDisplayMarker, showReturnMarker]);
   const searchPins = resultsMode ? searchResults.map((place, index) => {
     const id = `search:${place.id}:${index}`; const selected = id === selectedSearchPinId;
     return { ...placeLocation(place), id, isSearchResult: true, isSelectedSearch: selected, markerLabel: selected ? '✓' : '⌕', markerColor: selected ? '#F97316' : '#168DE2', status: 'search' };
@@ -723,7 +726,7 @@ function NormalMapScreen({
   const showResults = (rows, query) => {
     setSelectedSearchPinId(null);
     setSearchResults(rows); setResultQuery(query); setKeyword(query); setResultsMode(true); setSearchOpen(false);
-    focusPlaces(rows.map(placeLocation));
+    focusPlaces(searchViewportPlaces(rows).map(placeLocation));
   };
   const addSearchPlace = (place) => {
     if (isRegisteredPlace(place, locations || [])) return;
@@ -1085,6 +1088,13 @@ function NormalMapScreen({
   const liveVisitsRef = useRef(allVisits);
   liveVisitsRef.current = allVisits;
   const resumedRouteRef = useRef(null);
+  const [resumeRetryToken, setResumeRetryToken] = useState(0);
+  const resumeRetryTimerRef = useRef(null);
+  const resumeFailureCountRef = useRef(0);
+  useEffect(() => () => {
+    clearTimeout(resumeRetryTimerRef.current);
+    resumeFailureCountRef.current = 0;
+  }, [isActive, isGuiding, scopeKey]);
 
   useEffect(() => {
     workspaceScopeRef.current = scopeKey;
@@ -1118,6 +1128,7 @@ function NormalMapScreen({
   }, [isActive, membershipKey, currentLocation, scopeKey, isGuiding, activeSegment?.destinationKey]);
 
   const clearGuidance = () => {
+    if (isGuiding) endRouteSession();
     guideRequestRef.current += 1;
     setIsGuiding(false);
     setKakaoDestination(null);
@@ -1195,6 +1206,7 @@ function NormalMapScreen({
     handledRecordRef.current = recordReturn.token;
     clearGuidance();
     previewRequestRef.current += 1; setPreview(null);
+    if (hasVisitCoordinates(recordReturn)) focusPlaces([recordReturn]);
     const next = nextVisit(recordReturn.taskId);
     if (recordReturn.status === 'complete') {
       setRecordNextOffer(null);
@@ -1289,6 +1301,9 @@ function NormalMapScreen({
     const key = `${scopeKey}:${routeResumeToken}:${activeSegment?.destinationKey}`;
     if (!isActive || !isGuiding || !activeTarget || !hasVisitCoordinates(currentLocation) || resumedRouteRef.current === key) return;
     resumedRouteRef.current = key;
+    // Task removal stopped the old SDK/notification, but did not end the user's
+    // destination. Begin a fresh native session before rebuilding that route.
+    beginRouteSession();
     if (activeSegment.mode === 'car') {
       if (!isKakaoNavigationAvailable()) { clearGuidance(); return; }
       if (!isSdkPreviewAvailable(activeSegment.sdkPreviewId)) {
@@ -1297,17 +1312,29 @@ function NormalMapScreen({
         const request = ++guideRequestRef.current;
         fetchRouteSegment(cleanLocation(currentLocation), cleanLocation(activeTarget), 'car', activeSegment.arrivalMode === 'MULTI').then(result => {
           if (request !== guideRequestRef.current) return;
+          resumeFailureCountRef.current = 0;
+          clearTimeout(resumeRetryTimerRef.current);
           resumedRouteRef.current = null;
           setRouteSegments([{ ...result.segment, destinationKey: activeSegment.destinationKey }]);
           setRoadPath(result.segment.path || []);
           setTotalDuration(result.totalDuration);
-        }).catch(() => { if (request === guideRequestRef.current) clearGuidance(); });
+        }).catch(() => {
+          if (request !== guideRequestRef.current) return;
+          // A transient route request failure must not turn an unfinished
+          // destination into an explicit stop. Retry without adding a button.
+          if (++resumeFailureCountRef.current < 3) {
+            resumeRetryTimerRef.current = setTimeout(() => {
+              resumedRouteRef.current = null;
+              setResumeRetryToken(value => value + 1);
+            }, 5000);
+          } else showAlert('안내 재개 대기', '목적지는 보관했습니다. 인터넷 연결을 확인한 뒤 앱을 다시 열어 주세요.');
+        });
         return;
       }
       setNativeProgress(null);
       setKakaoDestination({ previewId: activeSegment.sdkPreviewId, destinationKey: activeSegment.destinationKey });
     } else handleReroute(currentLocation);
-  }, [isActive, isGuiding, routeResumeToken, scopeKey, activeTarget, activeSegment, currentLocation]);
+  }, [isActive, isGuiding, routeResumeToken, resumeRetryToken, scopeKey, activeTarget, activeSegment, currentLocation]);
 
   const handleTransportPress = (mode) => {
     setTransportMode(mode);
@@ -1383,10 +1410,12 @@ function NormalMapScreen({
             setTotalDuration(data.totalDuration);
           }}
           onError={(event) => {
+            if (wasRouteTaskRemoved()) return;
             clearGuidance();
             showAlert('카카오 길안내 오류', event.nativeEvent?.message || '길안내를 시작하지 못했습니다.');
           }}
           onEnded={(event) => {
+            if (wasRouteTaskRemoved() || event.nativeEvent?.reason === 'task_removed') return;
             if (event.nativeEvent?.destinationKey === activeSegment?.destinationKey) handleStopGuidance();
           }}
           onProgress={(event) => {
@@ -1466,7 +1495,7 @@ function NormalMapScreen({
               setTask('');
             }}
           >
-            <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>이 위치로 설정</Text>
+            <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>위치 선택</Text>
           </TouchableOpacity>
         </View>
       </View>}
@@ -1506,7 +1535,7 @@ function NormalMapScreen({
         </View>
         {addMenuOpen && (
           <View style={styles.addMenuBox}>
-            <TouchableOpacity style={styles.addMenuItem} onPress={() => { setAddMenuOpen(false); returnDisplayMarker ? handleStartGuidance(returnDisplayMarker) : setWorkplaceOpen(true); }}><Ionicons name="home-outline" size={18} color="#2477F3" /><View style={{ flex: 1 }}><Text style={styles.addMenuTitle}>근무지 복귀</Text><Text style={styles.addMenuDesc}>{user?.workplaceAddress || '근무지를 등록하고 복귀 안내 시작'}</Text></View></TouchableOpacity>
+            <TouchableOpacity style={styles.addMenuItem} onPress={() => { setAddMenuOpen(false); returnDisplayMarker ? previewVisit(returnDisplayMarker) : setWorkplaceOpen(true); }}><Ionicons name="home-outline" size={18} color="#2477F3" /><View style={{ flex: 1 }}><Text style={styles.addMenuTitle}>근무지 복귀</Text><Text style={styles.addMenuDesc}>{user?.workplaceAddress || '근무지를 등록하고 복귀 경로 확인'}</Text></View></TouchableOpacity>
             <TouchableOpacity
               style={styles.addMenuItem}
               onPress={() => {
@@ -1802,7 +1831,7 @@ function NormalMapScreen({
           accessibilityLabel="미처리 업무 목록 펼치기"
         >
           <Text style={styles.publicFacilityCollapsedText}>
-            미처리 업무 {pendingWork.length}건 보기
+            미처리 업무 {pendingWork.length}건
           </Text>
         </TouchableOpacity>
       )}
@@ -2063,7 +2092,7 @@ function NormalMapScreen({
         setSelectedSearchPinId(`search:${place.id}:${index}`);
         focusPlaces([placeLocation(place)]);
       }} onAdd={addSearchPlace} />}
-      {searchOpen && isActive && <PlaceSearchOverlay userId={user?.userId} initialQuery={searchInitialQuery} center={currentLocation} districtOnly locations={locations || []} onClose={() => setSearchOpen(false)} onResults={showResults} onAdd={addSearchPlace} />}
+      {searchOpen && isActive && <PlaceSearchOverlay userId={user?.userId} initialQuery={searchInitialQuery} center={currentLocation} locations={locations || []} onClose={() => setSearchOpen(false)} onResults={showResults} onAdd={addSearchPlace} />}
       <Modal visible={workplaceOpen} transparent animationType="fade" onRequestClose={() => !workplaceBusy && setWorkplaceOpen(false)}>
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.35)' }}><View style={{ padding: 20, borderRadius: 18, backgroundColor: '#FFFFFF' }}>
           <Text style={{ fontSize: 18, fontWeight: '700', color: '#10285B' }}>근무지 등록</Text>

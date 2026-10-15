@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../utils/auth';
 import { API_BASE_URL } from './api';
 
 export async function groupApi(path, options = {}) {

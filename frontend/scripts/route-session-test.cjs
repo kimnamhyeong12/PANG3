@@ -15,6 +15,16 @@ const path = require('node:path');
   assert.equal(restored.currentSegmentIndex, 0);
   assert.equal(restored.isGuiding, true);
   assert.equal(restoreRouteSession(rows, session, '2026-09-28'), null);
+  const single = { ...session, order: ['3'], routeSegments: [{ destinationKey: '3', mode: 'car', sdkPreviewId: 'old-process' }] };
+  assert.equal(restoreRouteSession(rows, single, day, { singleDestinationOnly: true }).isGuiding, true);
+  assert.equal(restoreRouteSession(rows, single, day, { singleDestinationOnly: true, explicitlyEnded: true }), null);
+  assert.equal(restoreRouteSession(rows.filter(row => row.id !== 3), single, day, { singleDestinationOnly: true }), null);
+  assert.equal(restoreRouteSession(rows.map(row => ({ ...row, status: 'complete' })), single, day, { singleDestinationOnly: true }), null);
+  assert.equal(restoreRouteSession(rows, { ...single, isGuiding: false }, day, { singleDestinationOnly: true }).isGuiding, false);
+  const originalTarget = rows.map(row => ({ ...row, lat: 35, lng: 129 }));
+  const movedTarget = originalTarget.map(row => row.id === 3 ? { ...row, lat: 35.01 } : row);
+  assert.equal(restoreRouteSession(movedTarget, { ...single, locations: originalTarget }, day, { singleDestinationOnly: true }), null,
+    'moving the saved destination invalidates its old guidance geometry');
   const expanded = restoreRouteSession([...rows, { id: 4, status: 'pending' }], session, day);
   assert.deepEqual(expanded.locations.map(row => row.id), [3, 4, 1, 2]);
   assert.deepEqual(expanded.segments, [{ to: 3 }, null]);

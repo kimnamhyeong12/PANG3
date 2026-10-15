@@ -318,20 +318,10 @@ export default function ReportListScreen({
                           },
                         ]}
                       >
-                        {getStatusLabel(
-                          loc.status
-                        )}
+                        {reportable ? getStatusLabel(loc.status) : '작업 전 · 선택 불가'}
                       </Text>
 
-                      {!reportable && (
-                        <Text
-                          style={
-                            styles.disabledText
-                          }
-                        >
-                          {taskId == null ? '보고서 포함 불가' : '작업 전 · 선택 불가'}
-                        </Text>
-                      )}
+
                     </View>
                   </View>
 
@@ -350,12 +340,10 @@ export default function ReportListScreen({
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <Text style={styles.selectedText}>
-          선택 {selectedLocations.length}건
-        </Text>
+
 
         <PrimaryButton
-          title="선택한 방문지로 보고서 만들기"
+          title={`${selectedLocations.length}건 보고서 만들기`}
           onPress={handleCreateReport}
           disabled={
             selectedLocations.length === 0
@@ -370,7 +358,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    transform: [{ translateY: -15 }],
+    marginTop: -15,
   },
 
   body: {
@@ -553,7 +541,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: -15,
+    bottom: 0,
     backgroundColor: '#FFFFFF',
 
     paddingHorizontal: 14,

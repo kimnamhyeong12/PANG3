@@ -1,4 +1,5 @@
 package com.fieldwork.controller;
+import com.fieldwork.security.CurrentUser;
 
 import com.fieldwork.service.GroupService;
 import com.fieldwork.service.TaskService;
@@ -9,7 +10,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/groups")
-@CrossOrigin("*")
 public class GroupController {
 
     private final GroupService groupService;
@@ -24,7 +24,7 @@ public class GroupController {
     public Map<String, Object> createGroup(@RequestBody Map<String, Object> body) {
         return groupService.createGroup(
                 stringValue(body.get("name")),
-                longValue(body.get("userId")),
+                CurrentUser.require(body.get("userId")),
                 stringValue(body.get("regionSido")),
                 stringValue(body.get("regionSigungu")),
                 stringValue(body.get("regionAdmCode")));
@@ -32,6 +32,7 @@ public class GroupController {
 
     @GetMapping("/user/{userId}")
     public List<Map<String, Object>> getUserGroups(@PathVariable Long userId) {
+        CurrentUser.require(userId);
         return groupService.getUserGroups(userId);
     }
 
@@ -39,14 +40,14 @@ public class GroupController {
     public Map<String, Object> getGroupDetail(
             @PathVariable Long groupId,
             @RequestParam Long userId) {
-        return groupService.getGroupDetail(groupId, userId);
+        return groupService.getGroupDetail(groupId, CurrentUser.require(userId));
     }
 
     @DeleteMapping("/{groupId}/members/me")
     public Map<String, Object> leaveGroup(
             @PathVariable Long groupId,
             @RequestBody Map<String, Object> body) {
-        return groupService.leaveGroup(groupId, longValue(body.get("userId")), stringValue(body.get("password")));
+        return groupService.leaveGroup(groupId, CurrentUser.require(body.get("userId")), stringValue(body.get("password")));
     }
 
     @PatchMapping("/{groupId}/region")
@@ -55,7 +56,7 @@ public class GroupController {
             @RequestBody Map<String, Object> body) {
         return groupService.updateGroupRegion(
                 groupId,
-                longValue(body.get("leaderUserId")),
+                CurrentUser.require(body.get("leaderUserId")),
                 stringValue(body.get("regionSido")),
                 stringValue(body.get("regionSigungu")),
                 stringValue(body.get("regionAdmCode")));
@@ -65,7 +66,7 @@ public class GroupController {
     public List<Map<String, Object>> getMembers(
             @PathVariable Long groupId,
             @RequestParam Long userId) {
-        return groupService.getMembers(groupId, userId);
+        return groupService.getMembers(groupId, CurrentUser.require(userId));
     }
 
     @PostMapping("/{groupId}/invitations")
@@ -74,7 +75,7 @@ public class GroupController {
             @RequestBody Map<String, Object> body) {
         return groupService.inviteMember(
                 groupId,
-                longValue(body.get("inviterUserId")),
+                CurrentUser.require(body.get("inviterUserId")),
                 stringValue(body.get("inviteeLoginId")));
     }
 
@@ -82,6 +83,7 @@ public class GroupController {
     public List<Map<String, Object>> getInvitations(
             @RequestParam Long userId,
             @RequestParam(defaultValue = "PENDING") String status) {
+        CurrentUser.require(userId);
         return groupService.getInvitations(userId, status);
     }
 
@@ -91,7 +93,7 @@ public class GroupController {
             @RequestBody Map<String, Object> body) {
         return groupService.acceptInvitation(
                 invitationId,
-                longValue(body.get("userId")));
+                CurrentUser.require(body.get("userId")));
     }
 
     @PostMapping("/invitations/{invitationId}/reject")
@@ -100,19 +102,20 @@ public class GroupController {
             @RequestBody Map<String, Object> body) {
         return groupService.rejectInvitation(
                 invitationId,
-                longValue(body.get("userId")));
+                CurrentUser.require(body.get("userId")));
     }
 
     // Older app builds still use these read paths for their analysis dashboard.
     @GetMapping("/{groupId}/assignments")
     public List<Map<String, Object>> getSharedWorkForLegacyApp(
             @PathVariable Long groupId, @RequestParam Long userId) {
-        return taskService.getGroupLocations(groupId, userId);
+        return taskService.getGroupLocations(groupId, CurrentUser.require(userId));
     }
 
     @GetMapping("/{groupId}/assignments/mine")
     public List<Map<String, Object>> getMyWorkForLegacyApp(
             @PathVariable Long groupId, @RequestParam Long userId) {
+        CurrentUser.require(userId);
         return taskService.getGroupLocations(groupId, userId).stream()
                 .filter(task -> userId.equals(task.get("assigneeUserId")))
                 .toList();

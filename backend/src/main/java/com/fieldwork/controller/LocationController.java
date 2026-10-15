@@ -1,4 +1,5 @@
 package com.fieldwork.controller;
+import com.fieldwork.security.CurrentUser;
 
 import com.fieldwork.service.TaskService;
 import org.springframework.web.bind.annotation.*;
@@ -8,7 +9,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/locations")
-@CrossOrigin(origins = "*")
 public class LocationController {
 
     private final TaskService taskService;
@@ -25,7 +25,7 @@ public class LocationController {
             @RequestParam Long userId,
             @RequestParam(required = false) Long groupId
     ) {
-        return taskService.getForFrontend(userId, groupId);
+        return taskService.getForFrontend(CurrentUser.require(userId), groupId);
     }
 
     /** 그룹에 등록된 전체 팀 방문지 조회 */
@@ -34,7 +34,7 @@ public class LocationController {
             @PathVariable Long groupId,
             @RequestParam Long userId
     ) {
-        return taskService.getGroupLocations(groupId, userId);
+        return taskService.getGroupLocations(groupId, CurrentUser.require(userId));
     }
 
     /**
@@ -56,6 +56,8 @@ public class LocationController {
             }
         }
 
+        body.put("createdByUserId", CurrentUser.require(body.get("createdByUserId")));
+        CurrentUser.require(body.get("userId"));
         return taskService.createFromFrontendBody(body);
     }
 
@@ -75,6 +77,7 @@ public class LocationController {
             status = body.get("taskStatus").toString();
         }
 
+        taskService.requireEditor(id, CurrentUser.id());
         return taskService.updateStatus(id, status);
     }
 
@@ -90,6 +93,7 @@ public class LocationController {
         String scheduledDate = body != null && body.get("scheduledDate") != null
                 ? body.get("scheduledDate").toString()
                 : null;
+        taskService.requireEditor(id, CurrentUser.id());
         return taskService.updateScheduledDate(id, scheduledDate);
     }
 
@@ -100,6 +104,7 @@ public class LocationController {
     public Map<String, Object> deleteLocation(
             @PathVariable Long id
     ) {
+        taskService.requireEditor(id, CurrentUser.id());
         return taskService.deletePendingTask(id);
     }
 }

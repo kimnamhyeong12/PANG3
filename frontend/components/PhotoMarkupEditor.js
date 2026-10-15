@@ -11,10 +11,15 @@ import {
   View,
 } from 'react-native';
 
+import { Ionicons } from '@expo/vector-icons';
+import { ScreenHeader } from './ui';
+import { colors } from '../constants/design';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Polyline } from 'react-native-svg';
 import { captureRef } from 'react-native-view-shot';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { showAlert } from './CustomAlert';
+import { localImageForEditing } from '../utils/auth';
 
 const SCREEN = Dimensions.get('window');
 
@@ -63,10 +68,17 @@ export default function PhotoMarkupEditor({
   onCancel,
   onComplete,
 }) {
+  const insets = useSafeAreaInsets();
   const stageRef = useRef(null);
   const originalSizeRef = useRef(null);
   const sessionRef = useRef(0);
   const operationRef = useRef(false);
+  const originalUriRef = useRef(uri);
+  const snapshotRef = useRef(null);
+  const historyRef = useRef({ past: [], future: [] });
+  const cropCommitRef = useRef(null);
+  const strokeCommitRef = useRef(null);
+  const [historyVersion, setHistoryVersion] = useState(0);
   const [imageReady, setImageReady] = useState(false);
 
   const cropRef = useRef({
@@ -82,7 +94,9 @@ export default function PhotoMarkupEditor({
   });
 
   const penModeRef = useRef(false);
+  const canEditRef = useRef(false);
   const dragRef = useRef(null);
+  const activePathRef = useRef([]);
 
   const [currentUri, setCurrentUri] =
     useState(uri);
@@ -105,7 +119,7 @@ export default function PhotoMarkupEditor({
     useState(false);
 
   const [cropMode, setCropMode] =
-    useState(false);
+    useState(true);
 
   const [paths, setPaths] =
     useState([]);
@@ -125,7 +139,19 @@ export default function PhotoMarkupEditor({
     [imageSize]
   );
 
+  snapshotRef.current = { uri: currentUri, width: imageSize.width, height: imageSize.height, paths };
+  const pushHistory = () => {
+    historyRef.current = { past: [...historyRef.current.past, snapshotRef.current], future: [] };
+    setHistoryVersion(value => value + 1);
+  };
+  strokeCommitRef.current = path => {
+    if (operationRef.current) return;
+    pushHistory();
+    setPaths(previous => [...previous, path]);
+  };
+
   const canEdit = imageReady && imageSize.width > 0 && imageSize.height > 0;
+  canEditRef.current = canEdit;
 
   useEffect(() => {
     cropRef.current = crop;
@@ -164,16 +190,24 @@ export default function PhotoMarkupEditor({
     originalSizeRef.current = null;
     if (!visible || !uri) return;
 
-    setCurrentUri(uri);
+    setCurrentUri(null);
     setImageSize({ width: 0, height: 0 });
 
     setPaths([]);
     setActivePath([]);
+    activePathRef.current = [];
     setPenMode(false);
-    setCropMode(false);
+    setCropMode(true);
+    penModeRef.current = false;
+    historyRef.current = { past: [], future: [] };
+    setHistoryVersion(value => value + 1);
 
+    const load = (localUri) => {
+    if (session !== sessionRef.current) return;
+    originalUriRef.current = localUri;
+    setCurrentUri(localUri);
     Image.getSize(
-      uri,
+      localUri,
 
       (width, height) => {
         if (session !== sessionRef.current) return;
@@ -186,6 +220,11 @@ export default function PhotoMarkupEditor({
         setImageSize(originalSizeRef.current);
       }
     );
+    };
+    if (/^https?:/.test(uri)) localImageForEditing(uri).then(load).catch(() => {
+      if (session === sessionRef.current) showAlert('사진 불러오기 실패', '연결과 사진 접근 권한을 확인해 주세요.');
+    });
+    else load(uri);
   }, [uri, visible]);
 
   useEffect(() => {
@@ -276,7 +315,7 @@ export default function PhotoMarkupEditor({
           onStartShouldSetPanResponder:
             (event) => {
               if (
-                penModeRef.current
+                penModeRef.current || operationRef.current || !canEditRef.current
               ) {
                 return false;
               }
@@ -307,7 +346,7 @@ export default function PhotoMarkupEditor({
           onPanResponderGrant:
             (event) => {
               if (
-                penModeRef.current
+                penModeRef.current || operationRef.current || !canEditRef.current
               ) {
                 return;
               }
@@ -340,6 +379,7 @@ export default function PhotoMarkupEditor({
 
           onPanResponderMove:
             (_, gesture) => {
+              if (operationRef.current || !canEditRef.current) return;
               const drag =
                 dragRef.current;
 
@@ -427,8 +467,8 @@ export default function PhotoMarkupEditor({
 
           onPanResponderRelease:
             () => {
-              dragRef.current =
-                null;
+              dragRef.current = null;
+              return cropCommitRef.current?.();
             },
 
           onPanResponderTerminate:
@@ -466,12 +506,9 @@ export default function PhotoMarkupEditor({
               } =
                 event.nativeEvent;
 
-              setActivePath([
-                {
-                  x: locationX,
-                  y: locationY,
-                },
-              ]);
+              if (operationRef.current) return;
+              activePathRef.current = [{ x: locationX, y: locationY }];
+              setActivePath(activePathRef.current);
             },
 
           onPanResponderMove:
@@ -488,43 +525,17 @@ export default function PhotoMarkupEditor({
               } =
                 event.nativeEvent;
 
-              setActivePath(
-                (prev) => [
-                  ...prev,
-                  {
-                    x: locationX,
-                    y: locationY,
-                  },
-                ]
-              );
+              if (operationRef.current) return;
+              activePathRef.current = [...activePathRef.current, { x: locationX, y: locationY }];
+              setActivePath(activePathRef.current);
             },
 
-          onPanResponderRelease:
-            () => {
-              setActivePath(
-                (prev) => {
-                  if (
-                    prev.length >
-                    1
-                  ) {
-                    setPaths(
-                      (all) => [
-                        ...all,
-                        prev,
-                      ]
-                    );
-                  }
-
-                  return [];
-                }
-              );
-            },
-
-          onPanResponderTerminate:
-            () =>
-              setActivePath(
-                []
-              ),
+          onPanResponderRelease: () => {
+            const path = activePathRef.current;
+            activePathRef.current = []; setActivePath([]);
+            if (path.length > 1) strokeCommitRef.current?.(path);
+          },
+          onPanResponderTerminate: () => { activePathRef.current = []; setActivePath([]); },
         }),
       []
     );
@@ -572,6 +583,11 @@ export default function PhotoMarkupEditor({
 
   // Crop the actual base image before changing tools. Existing pen marks are
   // flattened first so their position is preserved through crops and rotations.
+  const hasPendingCrop = () => {
+    const selected = cropRef.current;
+    return Math.abs(selected.left) > 0.5 || Math.abs(selected.top) > 0.5
+      || Math.abs(selected.right - displaySize.width) > 0.5 || Math.abs(selected.bottom - displaySize.height) > 0.5;
+  };
   const renderImage = async (includeCrop, extraActions = []) => {
     let source = { uri: currentUri, ...imageSize };
     if (paths.length || activePath.length > 1) {
@@ -582,7 +598,7 @@ export default function PhotoMarkupEditor({
       };
     }
     const actions = [];
-    if (includeCrop) {
+    if (includeCrop && hasPendingCrop()) {
       const selected = cropRef.current;
       const scaleX = source.width / displaySize.width;
       const scaleY = source.height / displaySize.height;
@@ -607,9 +623,7 @@ export default function PhotoMarkupEditor({
     resetCrop(size.width, size.height);
     setPaths([]);
     setActivePath([]);
-    setCropMode(false);
-    setPenMode(false);
-    penModeRef.current = false;
+    activePathRef.current = [];
     dragRef.current = null;
   };
 
@@ -633,36 +647,40 @@ export default function PhotoMarkupEditor({
     }
   };
 
-  const applyCrop = (startPen = false) => runEdit(
-    () => renderImage(true),
-    (result) => {
-      replaceImage(result);
-      setPenMode(startPen);
-      penModeRef.current = startPen;
-    }
-  );
+  const commitImage = result => { pushHistory(); replaceImage(result); };
+  const applyCrop = () => {
+    if (!hasPendingCrop()) return;
+    return runEdit(() => renderImage(true), commitImage);
+  };
+  cropCommitRef.current = applyCrop;
 
   const toggleCrop = () => {
-    if (cropMode) return applyCrop();
-    setCropMode(true);
-    setPenMode(false);
-    penModeRef.current = false;
+    setCropMode(true); setPenMode(false); penModeRef.current = false;
   };
-
   const togglePen = () => {
-    if (cropMode) return applyCrop(true);
-    penModeRef.current = !penMode;
-    setPenMode(!penMode);
+    if (hasPendingCrop()) return runEdit(() => renderImage(true), result => {
+      commitImage(result); setCropMode(false); setPenMode(true); penModeRef.current = true;
+    });
+    setCropMode(false); setPenMode(true); penModeRef.current = true;
   };
-
-  const rotate90 = () => runEdit(
-    () => renderImage(cropMode, [{ rotate: 90 }]),
-    replaceImage
-  );
-
+  const rotate90 = () => runEdit(() => renderImage(cropMode, [{ rotate: 90 }]), commitImage);
   const restoreOriginal = () => {
     if (operationRef.current || !originalSizeRef.current) return;
-    replaceImage({ uri, ...originalSizeRef.current });
+    pushHistory();
+    replaceImage({ uri: originalUriRef.current, ...originalSizeRef.current });
+    setCropMode(true); setPenMode(false); penModeRef.current = false;
+  };
+  const moveHistory = direction => {
+    if (operationRef.current || !imageReady) return;
+    const history = historyRef.current;
+    const source = direction === 'undo' ? history.past : history.future;
+    if (!source.length) return;
+    const target = source[source.length - 1];
+    historyRef.current = direction === 'undo'
+      ? { past: history.past.slice(0, -1), future: [...history.future, snapshotRef.current] }
+      : { past: [...history.past, snapshotRef.current], future: history.future.slice(0, -1) };
+    replaceImage(target); setPaths(target.paths);
+    setHistoryVersion(value => value + 1);
   };
 
   const save = () => runEdit(
@@ -712,57 +730,25 @@ export default function PhotoMarkupEditor({
       navigationBarTranslucent
     >
       <View
-        style={
-          styles.container
-        }
+        style={[styles.container, { paddingBottom: Math.max(insets.bottom, 12) }]}
       >
-        <View
-          style={
-            styles.header
-          }
-        >
-          <TouchableOpacity
-            onPress={
-              onCancel
-            }
-            disabled={saving}
-            style={[styles.headerTouch, styles.cancelHeaderTouch]}
-          >
-            <Text
-              style={[styles.headerButton, styles.cancelHeaderButton]}
-            >
-              취소
-            </Text>
-          </TouchableOpacity>
-
-          <Text
-            style={
-              styles.title
-            }
-          >
-            사진 편집
-          </Text>
-          <TouchableOpacity onPress={restoreOriginal} disabled={saving || !originalSizeRef.current} style={styles.headerTouch}>
-            <Text style={styles.headerButton}>원본 복원</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={save}
-            disabled={saving || !canEdit}
-            style={
-              styles.headerTouch
-            }
-          >
-            <Text
-              style={
-                styles.headerButton
-              }
-            >
-              {saving
-                ? '처리 중'
-                : '저장'}
-            </Text>
-          </TouchableOpacity>
+        <ScreenHeader title="사진편집" onBack={() => { if (!operationRef.current) onCancel?.(); }} />
+        <View style={styles.actionRow}>
+          <View style={styles.historyPill}>
+            <TouchableOpacity accessibilityLabel="이전" onPress={() => moveHistory('undo')} disabled={saving || !canEdit || !historyRef.current.past.length} style={styles.historyButton}>
+              <Ionicons name="arrow-undo-outline" size={23} color={historyRef.current.past.length && !saving ? colors.text : colors.textFaint} />
+            </TouchableOpacity>
+            <View style={styles.pillDivider} />
+            <TouchableOpacity accessibilityLabel="이후" onPress={() => moveHistory('redo')} disabled={saving || !canEdit || !historyRef.current.future.length} style={styles.historyButton}>
+              <Ionicons name="arrow-redo-outline" size={23} color={historyRef.current.future.length && !saving ? colors.text : colors.textFaint} />
+            </TouchableOpacity>
+          </View>
+          <View style={{ flex: 1 }} />
+          <View style={styles.historyPill}>
+            <TouchableOpacity accessibilityLabel="원본 복원" onPress={restoreOriginal} disabled={saving || !canEdit} style={styles.textAction}><Text style={styles.headerButton}>원본 복원</Text></TouchableOpacity>
+            <View style={styles.pillDivider} />
+            <TouchableOpacity accessibilityLabel="저장" onPress={save} disabled={saving || !canEdit} style={styles.textAction}><Text style={styles.headerButton}>{saving ? '처리 중' : '저장'}</Text></TouchableOpacity>
+          </View>
         </View>
 
         <View
@@ -1003,99 +989,19 @@ export default function PhotoMarkupEditor({
           </View>
         </View>
 
-        <View
-          style={
-            styles.toolbar
-          }
-        >
-          <TouchableOpacity
-            style={
-              styles.toolButton
-            }
-            onPress={
-              rotate90
-            }
-            disabled={saving || !canEdit}
-          >
-            <Text
-              style={
-                styles.toolText
-              }
-            >
-              ↻ 회전
-            </Text>
+        <View style={styles.toolbar}>
+          <TouchableOpacity style={styles.iconTool} accessibilityLabel="자르기" accessibilityState={{ selected: cropMode }} onPress={toggleCrop} disabled={saving || !canEdit}>
+            <Ionicons name="crop-outline" size={29} color={cropMode ? colors.primary : colors.textSoft} />
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.toolButton, cropMode && styles.toolButtonActive]}
-            onPress={toggleCrop}
-            disabled={saving || !canEdit}
-          >
-            <Text style={[styles.toolText, cropMode && styles.toolTextActive]}>{cropMode ? '자르기 적용' : '자르기'}</Text>
+          <TouchableOpacity style={styles.iconTool} accessibilityLabel="펜" accessibilityState={{ selected: penMode }} onPress={togglePen} disabled={saving || !canEdit}>
+            <Ionicons name="pencil-outline" size={29} color={penMode ? colors.primary : colors.textSoft} />
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.toolButton,
-
-              penMode &&
-                styles.toolButtonActive,
-            ]}
-            onPress={togglePen}
-            disabled={saving || !canEdit}
-          >
-            <Text
-              style={[
-                styles.toolText,
-
-                penMode &&
-                  styles.toolTextActive,
-              ]}
-            >
-              ✎ 펜
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={
-              styles.toolButton
-            }
-            onPress={() =>
-              setPaths(
-                (prev) =>
-                  prev.slice(
-                    0,
-                    -1
-                  )
-              )
-            }
-            disabled={
-              saving ||
-              paths.length ===
-                0
-            }
-          >
-            <Text
-              style={
-                styles.toolText
-              }
-            >
-              ↶ 되돌리기
-            </Text>
+          <TouchableOpacity style={styles.iconTool} accessibilityLabel="회전" onPress={rotate90} disabled={saving || !canEdit}>
+            <Ionicons name="refresh-outline" size={29} color={colors.textSoft} />
           </TouchableOpacity>
         </View>
 
-        {cropMode && <Text style={styles.guide}>모서리로 영역을 조절한 뒤 ‘자르기 적용’을 누르세요. 펜으로 바꿔도 선택한 영역이 적용됩니다.</Text>}
 
-        {penMode && (
-          <Text
-            style={
-              styles.guide
-            }
-          >
-            사진 위를 손가락으로 그리세요.
-          </Text>
-        )}
       </View>
     </Modal>
   );
@@ -1106,16 +1012,21 @@ const styles =
     container: {
       flex: 1,
 
-      backgroundColor:
-        '#F4F7FA',
+      backgroundColor: colors.background,
 
       // 상단 상태바를 피함
-      paddingTop: 36,
+      marginTop: -15,
 
       // 갤럭시 하단 내비게이션 영역을 피함
       paddingBottom: 28,
     },
 
+    actionRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, gap: 8, paddingVertical: 8 },
+    historyPill: { flexDirection: 'row', alignItems: 'center', borderRadius: 24, backgroundColor: '#E5EBF3', overflow: 'hidden' },
+    historyButton: { width: 43, height: 44, alignItems: 'center', justifyContent: 'center' },
+    pillDivider: { width: 1, height: 22, backgroundColor: '#CCD5E2' },
+    textAction: { minHeight: 44, paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center' },
+    iconTool: { width: 64, height: 52, alignItems: 'center', justifyContent: 'center' },
     header: {
       height: 58,
 
@@ -1234,6 +1145,7 @@ const styles =
     toolbar: {
       flexDirection:
         'row',
+      justifyContent: 'space-evenly',
 
       gap: 8,
 
@@ -1241,7 +1153,7 @@ const styles =
 
       paddingTop: 12,
 
-      paddingBottom: 35,
+      paddingBottom: 12,
     },
 
     toolButton: {

@@ -1,4 +1,6 @@
 const regionAliases = { 서울: '서울', 부산: '부산', 대구: '대구', 인천: '인천', 광주: '광주', 대전: '대전', 울산: '울산', 세종: '세종', 경기: '경기', 강원: '강원', 충북: '충청북', 충남: '충청남', 전북: '전북', 전남: '전라남', 경북: '경상북', 경남: '경상남', 제주: '제주' };
+const nearbyCategories = new Set(['학교', '초등학교', '중학교', '고등학교', '대학교', '병원', '약국', '편의점', '마트', '식당', '음식점', '카페', '주유소', '공원', '은행', '우체국', '주민센터', '행정복지센터', '경찰서', '지구대', '파출소', '소방서', '어린이집', '유치원']);
+export const isNearbyCategoryQuery = query => /^(내\s*주변|근처|주변)\s+\S/.test(query.trim()) || nearbyCategories.has(query.trim().replace(/^(내\s*주변|근처|주변)\s*/, ''));
 export function explicitRegion(query) {
   const first = query.trim().split(/\s+/)[0];
   return Object.entries(regionAliases).find(([short, full]) => first === short || first.startsWith(`${full}도`) || first.startsWith(`${full}광역시`) || first === `${full}특별시` || first === `${full}특별자치도`)?.[1] || '';
@@ -10,6 +12,14 @@ export function distanceMeters(a, b) {
   const [lat1, lng1, lat2, lng2] = values.map(x => x * Math.PI / 180);
   const h = Math.sin((lat2 - lat1) / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin((lng2 - lng1) / 2) ** 2;
   return 6371000 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+export function searchViewportPlaces(places) {
+  if (!places.length) return [];
+  const anchor = { lat: places[0].y, lng: places[0].x };
+  return places.filter(place => {
+    const distance = distanceMeters(anchor, { lat: place.y, lng: place.x });
+    return distance != null && distance <= 20000;
+  });
 }
 export function mergePlaceResults(addresses, places, query, center, limit = 7) {
   const region = explicitRegion(query);
@@ -85,11 +95,22 @@ export async function searchPlaces(query, { center, signal, limit = 7, districtO
     if (!coords) throw new Error('현재 위치를 확인한 뒤 검색해 주세요. 위치 권한과 GPS를 확인해 주세요.');
     return searchCurrentDistrict(q, coords, key, signal, limit);
   }
+  if (isNearbyCategoryQuery(q)) {
+    if (!coords) throw new Error('현재 위치를 확인한 뒤 주변 장소를 검색해 주세요.');
+    const category = q.replace(/^(내\s*주변|근처|주변)\s*/, '');
+    for (const radius of [5000, 10000, 20000]) {
+      const url = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(category)}&size=15&sort=distance&x=${coords.lng}&y=${coords.lat}&radius=${radius}`;
+      const response = await fetch(url, { signal, headers: { Authorization: `KakaoAK ${key}` } });
+      if (!response.ok) throw new Error('주변 검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
+      const items = (await response.json()).documents || [];
+      if (items.length) return mergePlaceResults([], items, category, coords, limit);
+    }
+    return [];
+  }
   const keywordUrl = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=15&sort=accuracy`;
-  const urls = [`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(q)}&size=15&analyze_type=similar`, keywordUrl];
-  // Search the local area by relevance, then supplement with national results.
-  // Explicitly named regions take precedence over the user's current location.
-  if (coords && !explicitRegion(q)) urls.push(`${keywordUrl}&x=${coords.lng}&y=${coords.lat}&radius=20000`);
+  // Give the provider a nearby reference point without excluding other districts.
+  const positionedKeyword = coords && !explicitRegion(q) ? `${keywordUrl}&x=${coords.lng}&y=${coords.lat}` : keywordUrl;
+  const urls = [`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(q)}&size=15&analyze_type=similar`, positionedKeyword];
   const responses = await Promise.allSettled(urls.map(async url => {
     const response = await fetch(url, { signal, headers: { Authorization: `KakaoAK ${key}` } });
     if (!response.ok) throw new Error('검색 결과를 불러오지 못했습니다.');
@@ -97,7 +118,7 @@ export async function searchPlaces(query, { center, signal, limit = 7, districtO
   }));
   if (signal?.aborted) throw new Error('검색 취소');
   if (responses.every(result => result.status === 'rejected')) throw new Error('검색 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
-  const places = [...(responses[2]?.value || []), ...(responses[1].value || [])];
+  const places = responses[1].value || [];
   return mergePlaceResults(responses[0].value || [], places, q, coords, limit);
 }
 export function placeLocation(place) {

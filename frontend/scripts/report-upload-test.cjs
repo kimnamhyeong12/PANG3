@@ -44,7 +44,7 @@ function loadExpo(relative, dependencies = {}) {
   assert.ok(multipart.includes('name="mapImage"; filename="map.jpg"'));
   assert.ok(multipart.includes('현장 기록'));
   for (const filename of ['before.jpg', 'during.jpg', 'after.jpg', 'map.jpg']) assert.ok(multipart.includes(`image:${filename}`));
-  assert.match(screen, /import \{ fetch as expoFetch \} from 'expo\/fetch'/);
+  assert.match(screen, /import \{ apiFetch as expoFetch \} from '\.\.\/utils\/auth'/);
   assert.match(screen, /await expoFetch\(\s*`\$\{API_BASE_URL\}\/api\/task-progress`/);
   console.log('Report upload checks passed: legacy error reproduced; text, three photos and map serialized by installed Expo');
 })().catch(error => { console.error(error); process.exitCode = 1; });

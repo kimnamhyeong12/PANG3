@@ -19,6 +19,10 @@ public class User {
     private String name;
 
     private String role;
+    @Column(unique = true, length = 254)
+    private String email;
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
 
     @Column(name = "work_sido")
     private String workSido;
@@ -57,6 +61,7 @@ public class User {
         this.loginId = loginId;
     }
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
     public String getPassword() {
         return password;
     }

@@ -5,11 +5,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import PlaceSearchOverlay from './PlaceSearchOverlay';
 import KakaoMapWebView from './KakaoMapWebView';
 import { placeLocation } from '../utils/placeSearch';
+import { colors } from '../constants/design';
 
 export default function WorkplaceField({ value, onChange, userId, disabled = false, required = false }) {
   const [open, setOpen] = useState(false); const [candidate, setCandidate] = useState(null);
   return <View style={{ marginVertical: 12 }}>
-    <Text style={{ fontSize: 13, fontWeight: '700', color: '#10285B', marginBottom: 8 }}>근무지 주소{required ? ' (필수)' : ''}</Text>
+    <Text style={{ fontSize: 13, fontWeight: '700', color: '#10285B', marginBottom: 8 }}>근무지 주소{required ? <Text style={{ color: colors.danger }}> *</Text> : null}</Text>
     <TouchableOpacity style={s.field} disabled={disabled} onPress={() => { setCandidate(null); setOpen(true); }} accessibilityLabel="근무지 주소 검색 및 변경"><Ionicons name="home-outline" size={22} color="#2477F3" /><View style={{ flex: 1 }}><Text style={{ color: '#10285B', fontSize: 13 }}>{value?.workplaceAddress || '주소를 검색해 근무지를 등록하세요'}</Text><Text style={{ color: '#7C8794', fontSize: 11, marginTop: 4 }}>복귀 안내에 사용할 위치입니다.</Text></View><Ionicons name="chevron-forward" size={20} color="#7C8794" /></TouchableOpacity>
     <Modal visible={open} animationType="slide" onRequestClose={() => candidate ? setCandidate(null) : setOpen(false)}>
       <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>

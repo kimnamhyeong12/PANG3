@@ -22,6 +22,8 @@ export function isSdkPreviewAvailable(id) { return Boolean(id && nativeModule?.i
 export function discardSdkPreview(id) { if (id) nativeModule?.discardPreview?.(id); }
 
 export function wasRouteTaskRemoved() { return nativeModule?.wasRouteTaskRemoved?.() || false; }
+export function wasRouteSessionEnded() { return nativeModule?.wasRouteSessionEnded?.() || false; }
+export function endRouteSession() { nativeModule?.endRouteSession?.(); }
 export function beginRouteSession() { nativeModule?.beginRouteSession?.(); }
 export function showNativeRouteNotification(title, body) {
   if (!nativeModule?.showRouteNotification) return false;

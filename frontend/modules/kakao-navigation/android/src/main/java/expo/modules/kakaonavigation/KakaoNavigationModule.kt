@@ -17,6 +17,8 @@ class KakaoNavigationModule : Module() {
 
     Function("beginRouteSession") { RouteGuidanceService.beginSession(requireNotNull(appContext.reactContext)) }
     Function("wasRouteTaskRemoved") { RouteGuidanceService.wasTaskRemoved(requireNotNull(appContext.reactContext)) }
+    Function("wasRouteSessionEnded") { RouteGuidanceService.wasSessionEnded(requireNotNull(appContext.reactContext)) }
+    Function("endRouteSession") { RouteGuidanceService.endSession(requireNotNull(appContext.reactContext)) }
     Function("showRouteNotification") { title: String, body: String ->
       RouteGuidanceService.show(requireNotNull(appContext.reactContext), title, body)
     }

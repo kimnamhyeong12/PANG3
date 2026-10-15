@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../utils/auth';
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -154,6 +155,19 @@ const buildKakaoMapHtml = (
     line-height: 22px;
     text-align: center;
     transform: rotate(45deg);
+  }
+
+  .marker-number.marker-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .marker-icon svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+    margin: 0;
   }
 
   .marker-wrap.highlighted .marker {
@@ -634,7 +648,8 @@ const buildKakaoMapHtml = (
     pulse,
     label,
     highlighted,
-    selectedSearch
+    selectedSearch,
+    returnLocation
   ) {
     var wrapper =
       document.createElement("div");
@@ -672,8 +687,13 @@ const buildKakaoMapHtml = (
     markerNumber.className =
       "marker-number";
 
-    markerNumber.innerText =
-      label != null ? String(label) : String(index + 1);
+    if (returnLocation) {
+      markerNumber.className += ' marker-icon';
+      markerNumber.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V3h14v18M3 21h18M10 21v-4h4v4M9 7h1m4 0h1M9 11h1m4 0h1"/></svg>';
+      wrapper.setAttribute('aria-label', '근무지');
+    } else {
+      markerNumber.innerText = label != null ? String(label) : String(index + 1);
+    }
 
     marker.appendChild(markerNumber);
 
@@ -889,7 +909,8 @@ const buildKakaoMapHtml = (
             !!location.pulse,
             location.markerLabel,
             !!location.highlighted,
-            !!location.isSelectedSearch
+            !!location.isSelectedSearch,
+            !!location.isReturnLocation
           );
 
         var overlay =
@@ -1216,12 +1237,13 @@ const buildKakaoMapHtml = (
     }
 
     if (commandData.type === "SELECTION_SESSION") {
+      var startingSelection = Boolean(commandData.enabled) && !selectionSessionActive;
       selectionSessionActive = Boolean(commandData.enabled);
 
       if (selectionSessionActive && map) {
         // 새 방문지를 "지도에서 직접 선택"할 때는 기존/최근 마커로 이동하지 않는다.
         // 사용자가 현재 보고 있던 지도 중심을 그대로 첫 선택 좌표로 잡고 즉시 마커를 표시한다.
-        if (!selectedCenter) {
+        if (startingSelection || !selectedCenter) {
           selectedCenter = map.getCenter();
         }
         ensureSelectionOverlay();

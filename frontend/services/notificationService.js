@@ -1,3 +1,5 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch as fetch } from '../utils/auth';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
@@ -9,6 +11,18 @@ const ROUTE_NOTIFICATION_ID = 'fieldwork-route-guidance';
 const TASK_CHANNEL_ID = 'task';
 const ROUTE_CHANNEL_ID = 'route';
 let routeNotificationVersion = 0;
+let taskAlertsEnabled = true;
+export async function getTaskNotificationPreference(userOrId) {
+  const value = await AsyncStorage.getItem(`pang3.task-alerts.${getUserId(userOrId)}`);
+  taskAlertsEnabled = value !== 'off';
+  return taskAlertsEnabled;
+}
+export async function setTaskNotificationPreference(userOrId, enabled) {
+  await AsyncStorage.setItem(`pang3.task-alerts.${getUserId(userOrId)}`, enabled ? 'on' : 'off');
+  taskAlertsEnabled = enabled;
+  if (enabled) await syncPushTokenForUser(userOrId);
+  else await unregisterPushTokenForUser(userOrId);
+}
 
 export const NOTIFICATION_TYPES = {
   TASK_ASSIGNED: 'TASK_ASSIGNED',
@@ -20,10 +34,10 @@ export const NOTIFICATION_TYPES = {
 };
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
+  handleNotification: async (notification) => ({
+    shouldShowBanner: taskAlertsEnabled || notification?.request?.content?.data?.type === NOTIFICATION_TYPES.ROUTE_GUIDANCE,
+    shouldShowList: taskAlertsEnabled || notification?.request?.content?.data?.type === NOTIFICATION_TYPES.ROUTE_GUIDANCE,
+    shouldPlaySound: taskAlertsEnabled,
     shouldSetBadge: false,
   }),
 });
@@ -169,6 +183,7 @@ function getUserId(userOrId) {
 }
 
 export async function registerPushTokenForUser(userOrId, token) {
+  if (!await getTaskNotificationPreference(userOrId)) return { success: false, reason: 'disabled' };
   const userId = getUserId(userOrId);
 
   if (!API_BASE_URL || !userId || !token) {
@@ -235,6 +250,7 @@ export async function registerPushTokenForUser(userOrId, token) {
 }
 
 export async function syncPushTokenForUser(userOrId) {
+  if (!await getTaskNotificationPreference(userOrId)) return { success: false, reason: 'disabled' };
   const userId = getUserId(userOrId);
 
   if (!userId) {

@@ -10,6 +10,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class WorkplaceContractTest {
     public static void main(String[] args) {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(7L, null, java.util.List.of()));
         User user = new User(); user.setUserId(7L); user.setRole("USER");
         AtomicInteger saves = new AtomicInteger();
         UserRepository repository = (UserRepository) Proxy.newProxyInstance(UserRepository.class.getClassLoader(), new Class[]{UserRepository.class}, (proxy, method, values) -> {
@@ -17,7 +19,7 @@ public class WorkplaceContractTest {
             if (method.getName().equals("save")) { saves.incrementAndGet(); return values[0]; }
             throw new UnsupportedOperationException(method.getName());
         });
-        UserController controller = new UserController(repository);
+        UserController controller = new UserController(repository, null, null);
         Map<String, Object> result = controller.updateWorkplace(7L, new UserController.WorkplaceRequest(" 부산 사상구 백양대로494번길 10 ", 35.16, 129.02));
         assert result.get("workplaceAddress").equals("부산 사상구 백양대로494번길 10");
         assert user.getWorkplaceLat().equals(35.16) && user.getWorkplaceLng().equals(129.02);

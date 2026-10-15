@@ -16,6 +16,7 @@ public class TaskProgressContractTest {
         Tasks(Task task, User owner) { super(null,null,null,null,null,null,null,null); this.task=task; this.owner=owner; }
         @Override public Task getById(Long id) { return task; }
         @Override public User currentAssignee(Task task) { return owner; }
+        @Override public void requireEditor(Long id, Long userId) { if (!owner.getUserId().equals(userId)) throw new IllegalArgumentException("\uD604\uC7AC \uB2F4\uB2F9\uC790\uB9CC \uBCC0\uACBD\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4."); }
         @Override public Task updateStatusEntity(Task task, String status) { statusWrites++; task.setTaskStatus(status); return task; }
         @Override public Task updateLocationEntity(Task task, Double lat, Double lng) { return task; }
     }
@@ -30,6 +31,8 @@ public class TaskProgressContractTest {
         Field field=TaskProgress.class.getDeclaredField("progressId"); field.setAccessible(true); field.set(report,id);
     }
     public static void main(String[] args) throws Exception {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(7L, null, List.of()));
         Task task=new Task(); task.setTaskId(1L); task.setTaskStatus("complete");
         User owner=new User(); owner.setUserId(7L);
         TaskProgress report=new TaskProgress(); report.setTask(task); report.setProgressStatus("complete"); id(report,11L);

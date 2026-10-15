@@ -21,7 +21,6 @@ import {
 } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
 import { colors, shadow } from '../constants/design';
-import { buildMemberColors, softMemberColor } from '../utils/memberColors';
 
 const DISTRICTS = [
   '중구',
@@ -61,7 +60,7 @@ const DISTRICT_CODES = {
   기장군: '21310',
 };
 
-export default function GroupDetailScreen({
+export default function GroupSettingsScreen({
   user,
   group,
   onBack,
@@ -73,11 +72,7 @@ export default function GroupDetailScreen({
   mode = 'all',
 }) {
   const [detail, setDetail] = useState(group || null);
-  const [sharedTasks, setSharedTasks] = useState([]);
-  const [inviteId, setInviteId] = useState('');
   const [loading, setLoading] = useState(true);
-  const [inviting, setInviting] = useState(false);
-  const [inviteOpen, setInviteOpen] = useState(false);
   const [teamAlerts, setTeamAlerts] = useState(true);
   const [activityAlerts, setActivityAlerts] = useState(true);
   const [regionOpen, setRegionOpen] = useState(false);
@@ -98,8 +93,6 @@ export default function GroupDetailScreen({
       );
 
       setDetail(data);
-      const rows = await groupApi(`/api/locations/group/${group.groupId}?userId=${user.userId}`);
-      setSharedTasks(Array.isArray(rows) ? rows : []);
       onUpdatedGroup?.(data);
     } catch (error) {
       showAlert('그룹 조회 실패', error.message);
@@ -111,34 +104,6 @@ export default function GroupDetailScreen({
   useEffect(() => {
     load();
   }, [load]);
-
-  const invite = async () => {
-    if (!inviteId.trim() || inviting) return;
-
-    try {
-      setInviting(true);
-
-      await groupApi(`/api/groups/${group.groupId}/invitations`, {
-        method: 'POST',
-        body: JSON.stringify({
-          inviterUserId: user.userId,
-          inviteeLoginId: inviteId.trim(),
-        }),
-      });
-
-      showAlert(
-        '초대 완료',
-        `${inviteId.trim()} 사용자에게 초대를 보냈습니다.`
-      );
-
-      setInviteId('');
-      setInviteOpen(false);
-    } catch (error) {
-      showAlert('초대 실패', error.message);
-    } finally {
-      setInviting(false);
-    }
-  };
 
   const saveRegion = async () => {
     if (!draftDistrict || regionSaving) return;
@@ -191,9 +156,6 @@ export default function GroupDetailScreen({
     }
   };
 
-  const members = detail?.members || [];
-  const memberColors = buildMemberColors(members, sharedTasks);
-  const assignments = sharedTasks;
 
 
   const groupName =
@@ -234,7 +196,7 @@ export default function GroupDetailScreen({
   return (
     <View style={styles.container}>
       <ScreenHeader
-        title={mode === 'members' ? '팀원 관리' : '그룹 설정'}
+        title="그룹 설정"
         onBack={onBack}
       />
 
@@ -278,121 +240,6 @@ export default function GroupDetailScreen({
               }}
               style={styles.fullButton}
             />
-        </View>}
-
-        {mode !== 'settings' && <View style={styles.card}>
-          <CardTitle
-            icon="people"
-            title="팀원 관리"
-            suffix={`(${members.length}명)`}
-            actionLabel="팀원 추가"
-            onAction={() =>
-              setInviteOpen((value) => !value)
-            }
-            tone="teal"
-          />
-
-          {inviteOpen ? (
-            <View style={styles.inviteBox}>
-              <TextInput
-                style={styles.inviteInput}
-                value={inviteId}
-                onChangeText={setInviteId}
-                placeholder="상대방의 로그인 아이디"
-                placeholderTextColor={colors.textFaint}
-                autoCapitalize="none"
-              />
-
-              <PrimaryButton
-                title={inviting ? '전송 중' : '초대'}
-                onPress={invite}
-                disabled={!inviteId.trim() || inviting}
-                style={styles.inviteButton}
-              />
-            </View>
-          ) : null}
-
-          <View style={styles.memberList}>
-            {members.map((member, index) => {
-              const assignedCount =
-                assignments.filter(
-                  (item) =>
-                    Number(item.assigneeUserId) ===
-                    Number(member.userId)
-                ).length;
-
-              return (
-                <View
-                  key={member.userId}
-                  style={[
-                    styles.memberRow,
-                    index > 0 && styles.divider,
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.avatar,
-                      {
-                        backgroundColor: softMemberColor(memberColors[String(member.userId)]),
-                        borderColor: memberColors[String(member.userId)] || '#DCE7F5',
-                      },
-                    ]}
-                  >
-                    <Text style={styles.avatarText}>
-                      {String(
-                        member.name ||
-                          member.loginId ||
-                          '?'
-                      ).slice(0, 1)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.memberInfo}>
-                    <Text style={styles.memberName}>
-                      {member.name ||
-                        member.loginId}
-                    </Text>
-
-                    <Text
-                      style={styles.memberRole}
-                    >
-                      {`${member.workSigungu || '근무지역 미설정'}${assignedCount ? ` · ${assignedCount}건` : ''}`}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      assignedCount
-                        ? styles.statusBlue
-                        : styles.statusGray,
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.statusDot,
-                        assignedCount
-                          ? styles.dotBlue
-                          : styles.dotGray,
-                      ]}
-                    />
-
-                    <Text
-                      style={[
-                        styles.statusText,
-                        assignedCount
-                          ? styles.textBlue
-                          : styles.textGray,
-                      ]}
-                    >
-                      {assignedCount ? '업무 중' : '대기'}
-                    </Text>
-                  </View>
-
-                </View>
-              );
-            })}
-          </View>
         </View>}
 
         {mode === 'all' && <View style={styles.managementGrid}>
@@ -456,7 +303,7 @@ export default function GroupDetailScreen({
         </View>}
 
         {mode === 'all' && <TouchableOpacity style={styles.card} activeOpacity={0.76} onPress={onReports}>
-          <CardTitle icon="document-text" title="그룹 보고서 모아보기" />
+          <CardTitle icon="document-text" title="그룹 보고서 전체보기" />
           <Text style={styles.memberRole}>팀원별 · 행정동별 · 기간별 보고서를 확인합니다.</Text>
         </TouchableOpacity>}
 
@@ -712,7 +559,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    transform: [{ translateY: -15 }],
+    marginTop: -15,
   },
 
   body: {
@@ -801,142 +648,15 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  inviteBox: {
-    marginTop: 12,
-    flexDirection: 'row',
-    gap: 8,
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: 14,
-    padding: 9,
-  },
-
-  inviteInput: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 12,
-    color: colors.text,
-    fontSize: 12,
-  },
-
-  inviteButton: {
-    minHeight: 44,
-    width: 74,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-  },
-
-  memberList: {
-    marginTop: 6,
-  },
-
-  memberRow: {
-    minHeight: 62,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 2,
-  },
-
   divider: {
     borderTopWidth: 1,
     borderTopColor: colors.line,
-  },
-
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-
-  avatarText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '900',
-  },
-
-  memberInfo: {
-    flex: 1,
-  },
-
-  memberName: {
-    color: colors.text,
-    fontSize: 12.5,
-    fontWeight: '900',
   },
 
   memberRole: {
     color: colors.textSoft,
     fontSize: 9.5,
     marginTop: 3,
-  },
-
-  leaderRole: {
-    color: colors.primary,
-    fontWeight: '800',
-  },
-
-  statusBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-
-  statusGreen: {
-    backgroundColor: colors.successSoft,
-  },
-
-  statusBlue: {
-    backgroundColor: colors.primarySoft,
-  },
-
-  statusGray: {
-    backgroundColor: '#F1F3F7',
-  },
-
-  statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
-
-  dotGreen: {
-    backgroundColor: colors.success,
-  },
-
-  dotBlue: {
-    backgroundColor: colors.primary,
-  },
-
-  dotGray: {
-    backgroundColor: '#98A4B8',
-  },
-
-  statusText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-
-  textGreen: {
-    color: '#07805D',
-  },
-
-  textBlue: {
-    color: colors.primary,
-  },
-
-  textGray: {
-    color: colors.textSoft,
   },
 
   managementGrid: {

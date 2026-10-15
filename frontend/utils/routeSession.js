@@ -34,12 +34,15 @@ export function numberOptimizedVisits(optimized, completed) {
 }
 
 // Server task status remains authoritative; the session only owns visit order and geometry.
-export function restoreRouteSession(rows, session, day, { singleDestinationOnly = false } = {}) {
-  if (!session || session.day !== day || !session.optimized || !Array.isArray(session.order) || !Array.isArray(session.routeSegments)) return null;
+export function restoreRouteSession(rows, session, day, { singleDestinationOnly = false, explicitlyEnded = false } = {}) {
+  if (explicitlyEnded || !session || session.day !== day || !session.optimized || !Array.isArray(session.order) || !Array.isArray(session.routeSegments)) return null;
   const segment = session.routeSegments[0];
   if (segment?.destinationKey) {
     const target = rows.find((row) => locationKey(row) === segment.destinationKey);
     if (!target || ['complete', 'completed', 'done'].includes(String(target.status).toLowerCase())) return null;
+    const previousTarget = session.locations?.find((row) => locationKey(row) === segment.destinationKey);
+    if (previousTarget && (Math.abs(Number(previousTarget.lat) - Number(target.lat)) > 0.000001
+      || Math.abs(Number(previousTarget.lng) - Number(target.lng)) > 0.000001)) return null;
     const numbers = session.visitNumbers || {};
     const ordered = [...rows].sort((a, b) =>
       (a.markerNumber || numbers[locationKey(a)] || Infinity) - (b.markerNumber || numbers[locationKey(b)] || Infinity));

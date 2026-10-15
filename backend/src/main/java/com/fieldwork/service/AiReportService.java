@@ -113,19 +113,23 @@ public class AiReportService {
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
             Path payloadPath = null;
             try {
-                Path pythonPath = ProjectPaths.resolve(properties.getAi().getPythonPath());
+                String configuredPython = properties.getAi().getPythonPath();
+                String pythonCommand = configuredPython.contains("/") || configuredPython.contains("\\")
+                        ? ProjectPaths.resolve(configuredPython).toString() : configuredPython;
                 Path scriptPath = ProjectPaths.resolve(properties.getAi().getScriptPath());
                 Path outputDir = ProjectPaths.resolve(properties.getAi().getOutputDir());
                 java.nio.file.Files.createDirectories(outputDir);
                 payloadPath = java.nio.file.Files.createTempFile(outputDir, "report-input-", ".json");
                 java.nio.file.Files.writeString(payloadPath, jsonPayload, StandardCharsets.UTF_8);
                 List<String> command = List.of(
-                        pythonPath.toString(),
+                        pythonCommand,
                         scriptPath.toString(),
                         payloadPath.toAbsolutePath().toString()
                 );
 
                 ProcessBuilder processBuilder = new ProcessBuilder(command);
+                processBuilder.environment().put("PYTHONUTF8", "1");
+                processBuilder.environment().put("PYTHONIOENCODING", "utf-8");
                 processBuilder.directory(ProjectPaths.projectRoot().toFile());
                 if (geminiApiKey != null && !geminiApiKey.isBlank()) {
                     processBuilder.environment().put("GEMINI_API_KEY", geminiApiKey);

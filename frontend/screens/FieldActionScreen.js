@@ -1,8 +1,10 @@
+import ProtectedImage from '../components/ProtectedImage';
+import { apiFetch as fetch } from '../utils/auth';
 import { showAlert } from '../components/CustomAlert';
 import React, { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { File } from 'expo-file-system';
-import { fetch as expoFetch } from 'expo/fetch';
+import { apiFetch as expoFetch } from '../utils/auth';
 
 import {
   View,
@@ -13,8 +15,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Image,
-} from 'react-native';
+  } from 'react-native';
 
 import { emptyPhotos, restorePhotos, photoManifest, isLocalPhoto } from '../utils/reportPhotos';
 import { draftKey, readDraft, writeDraft, clearDraft, preservePhoto, beginPhotoPick, pendingPhotoPick, endPhotoPick } from '../utils/reportDraft';
@@ -381,6 +382,7 @@ export default function FieldActionScreen({
   actionType,
   onBack,
   onSave,
+  onPositionChanged,
   workspaceKey,
   registerNavigationGuard,
 }) {
@@ -424,6 +426,8 @@ export default function FieldActionScreen({
     );
   const [locationAddress, setLocationAddress] = useState(location?.roadAddress || location?.detailAddress || '');
   const [editingLocation, setEditingLocation] = useState(false);
+  const [positionSaving, setPositionSaving] = useState(false);
+  const positionSavingRef = useRef(false);
 
   const [photos, setPhotos] =
     useState(createEmptyPhotos());
@@ -518,7 +522,7 @@ export default function FieldActionScreen({
   };
 
   const leaveGuard = async () => {
-    if (savingRef.current) {
+    if (savingRef.current || positionSavingRef.current) {
       showAlert('저장 중', '보고서 저장이 끝난 뒤 이동해 주세요.');
       return false;
     }
@@ -620,6 +624,7 @@ export default function FieldActionScreen({
         data.type ===
         'LOCATION_SELECTED'
       ) {
+        if (positionSavingRef.current) return;
         lastMapCoordinateRef.current = `${Number(data.latitude).toFixed(6)}:${Number(data.longitude).toFixed(6)}`;
         if (editingLocation) setMarkedMapUri(null);
         setLatitude(
@@ -967,8 +972,44 @@ export default function FieldActionScreen({
   /*
    * 보고서 저장
    */
+  const toggleLocation = async () => {
+    if (savingRef.current || positionSavingRef.current || loadingReport || loadError) return;
+    if (!editingLocation) { setEditingLocation(true); return; }
+    if (!isValidCoordinate(latitude, longitude)) { showAlert('위치를 확인해 주세요.'); return; }
+    positionSavingRef.current = true; setPositionSaving(true);
+    mapRef.current?.injectJavaScript('window.setSelectionMode?.(false); true;');
+    try {
+      const form = new FormData();
+      form.append('latitude', String(latitude)); form.append('longitude', String(longitude));
+      form.append('locationAddress', locationAddress || '');
+      if (progressId) { form.append('progressId', String(progressId)); form.append('expectedRevision', revision || ''); }
+      try {
+        mapRef.current?.injectJavaScript('if (window.map) window.map.relayout(); true;');
+        await new Promise(resolve => setTimeout(resolve, 400));
+        const uri = await captureRef(mapWrapperRef, { format: 'jpg', quality: 0.8 });
+        form.append('mapImage', new File(uri));
+      } catch (captureError) { console.log('Position map capture failed:', captureError?.message); }
+      const response = await expoFetch(`${API_BASE_URL}/api/task-progress/task/${taskId}/location`, {
+        method: 'PATCH', body: form,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || '위치를 저장하지 못했습니다.');
+      const patch = { latitude, longitude, locationAddress, markedMapUri: null,
+        revision: result.revision ?? revision };
+      setRevision(patch.revision); setMarkedMapUri(null);
+      currentFormRef.current = { ...currentFormRef.current, ...patch };
+      if (initialFormRef.current) initialFormRef.current = editSnapshot({ ...JSON.parse(initialFormRef.current), ...patch });
+      await writeDraft(key, currentFormRef.current);
+      setLocationMoving(false); setEditingLocation(false);
+      onPositionChanged?.(result);
+    } catch (error) {
+      showAlert(error.message || '위치를 저장하지 못했습니다.');
+      mapRef.current?.injectJavaScript('window.setSelectionMode?.(true); true;');
+    } finally { positionSavingRef.current = false; setPositionSaving(false); }
+  };
+
   const handleSave = async () => {
-    if (savingRef.current || loadingReport || loadError) return;
+    if (savingRef.current || positionSavingRef.current || loadingReport || loadError) return;
     try {
       if (!taskId) {
         showAlert(
@@ -1236,7 +1277,7 @@ export default function FieldActionScreen({
           </Text>
 
           {markedMapUri ? (
-            <Image source={{ uri: markedMapUri }} style={styles.mapPreviewImage} />
+            <ProtectedImage source={{ uri: markedMapUri }} style={styles.mapPreviewImage} />
           ) : null}
 
           <View style={styles.locationActionRow}>
@@ -1245,12 +1286,10 @@ export default function FieldActionScreen({
                 styles.photoSmallButton,
                 editingLocation && styles.locationSettingActive,
               ]}
-              onPress={() => {
-                setLocationMoving(false);
-                setEditingLocation((value) => !value);
-              }}
+              disabled={saving || positionSaving || loadingReport || !!loadError}
+              onPress={toggleLocation}
             >
-              <Ionicons name="location-outline" size={16} color="#FFFFFF" /><Text style={styles.photoSmallButtonText}>위치 바꾸기</Text>
+              <Ionicons name="location-outline" size={16} color="#FFFFFF" /><Text style={styles.photoSmallButtonText}>{positionSaving ? '위치 저장 중…' : editingLocation ? '위치 확정' : '위치 바꾸기'}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1308,7 +1347,7 @@ export default function FieldActionScreen({
 
                 {item.uri ? (
                   <>
-                    <Image
+                    <ProtectedImage
                       source={{
                         uri:
                           item.uri,
@@ -1431,7 +1470,7 @@ export default function FieldActionScreen({
                     )
                   }
 
-                  placeholder={`${item.label} 사진 메모`}
+                  placeholder="메모를 입력하세요"
 
                   inputStyle={
                     styles.photoMemo
@@ -1459,7 +1498,7 @@ export default function FieldActionScreen({
               setFieldMemo
             }
 
-            placeholder="예: 담당자 확인 필요, 추가 점검 예정, 민원인 요청사항 등"
+            placeholder="메모를 입력하세요"
 
             inputStyle={
               styles.memo
@@ -1553,7 +1592,7 @@ const styles =
       flex: 1,
       backgroundColor:
         '#F4F8FF',
-      transform: [{ translateY: -15 }],
+      marginTop: -15,
     },
 
     body: {

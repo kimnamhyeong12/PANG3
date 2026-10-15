@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { withAndroidManifest } = require('@expo/config-plugins');
+const { withAndroidManifest, withAndroidStyles } = require('@expo/config-plugins');
 const config = require('./app.json').expo;
 
 // EAS can supply this as a build environment variable. Local prebuilds may use .env.
@@ -26,4 +26,21 @@ function withKakaoNavigationKey(expoConfig) {
   });
 }
 
-module.exports = { ...config, plugins: [...config.plugins, withKakaoNavigationKey] };
+function withAppWindowColors(expoConfig) {
+  return withAndroidStyles(expoConfig, (mod) => {
+    const theme = mod.modResults.resources.style?.find((style) => style.$?.name === 'AppTheme');
+    if (!theme) return mod;
+    const values = {
+      'android:windowBackground': '#F4F8FF',
+      'android:enforceNavigationBarContrast': 'false',
+      'android:windowLightNavigationBar': 'true',
+    };
+    theme.item = (theme.item || []).filter((item) => !(item.$?.name in values));
+    for (const [name, value] of Object.entries(values)) {
+      theme.item.push({ $: { name }, _: value });
+    }
+    return mod;
+  });
+}
+
+module.exports = { ...config, plugins: [...config.plugins, withKakaoNavigationKey, withAppWindowColors] };

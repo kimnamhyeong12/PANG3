@@ -6,6 +6,7 @@ import com.fieldwork.entity.User;
 import com.fieldwork.entity.WorkGroup;
 import com.fieldwork.repository.GroupMemberRepository;
 import com.fieldwork.repository.TaskRepository;
+import com.fieldwork.repository.LocationAssignmentRepository;
 import com.fieldwork.repository.TaskTransferRequestRepository;
 import com.fieldwork.repository.UserRepository;
 import com.fieldwork.repository.WorkGroupRepository;
@@ -29,10 +30,12 @@ public class TaskTransferService {
     private final WorkGroupRepository groups;
     private final GroupMemberRepository members;
     private final TaskService taskService;
+    private final LocationAssignmentRepository assignments;
 
     public TaskTransferService(TaskTransferRequestRepository requests, TaskRepository tasks,
             UserRepository users, WorkGroupRepository groups, GroupMemberRepository members,
-            TaskService taskService) {
+            TaskService taskService, LocationAssignmentRepository assignments) {
+        this.assignments = assignments;
         this.requests = requests;
         this.tasks = tasks;
         this.users = users;
@@ -142,7 +145,15 @@ public class TaskTransferService {
                 }
                 selected.add(task);
             }
-            for (Task task : selected) task.setCurrentAssignee(request.getRecipient());
+            for (Task task : selected) {
+                task.setCurrentAssignee(request.getRecipient());
+                task.setScheduledDate(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")));
+                assignments.findByGroupAndTask(request.getGroup(), task).ifPresent(assignment -> {
+                    assignment.setAssignee(request.getRecipient());
+                    assignment.setAssignedBy(request.getSender());
+                    assignments.save(assignment);
+                });
+            }
             tasks.saveAll(selected);
             Set<Long> acceptedIds = new HashSet<>(request.getTaskIds());
             requests.findByGroupAndSenderAndStatus(request.getGroup(), request.getSender(), "PENDING")

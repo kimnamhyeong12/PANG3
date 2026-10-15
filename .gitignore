@@ -37,6 +37,9 @@ backend/src/main/resources/application-local-backup.yml
 .DS_Store
 ai/__pycache__/
 
+# Local verification photos; never publish user or test uploads.
+backend/ai/uploads/
+
 # goal, plan
 GOAL.md
 PLAN.md

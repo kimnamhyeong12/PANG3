@@ -17,10 +17,15 @@ class RouteGuidanceService : Service() {
     private const val ID = 54031
     private const val PREFS = "pang3-route-lifecycle"
     private const val REMOVED = "task-removed"
+    private const val ENDED = "session-ended"
     private var running = false
 
     fun wasTaskRemoved(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(REMOVED, false)
-    fun beginSession(context: Context) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(REMOVED, false).commit() }
+    fun wasSessionEnded(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(ENDED, false)
+    fun endSession(context: Context) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(ENDED, true).commit() }
+    fun beginSession(context: Context) {
+      context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(REMOVED, false).putBoolean(ENDED, false).commit()
+    }
     fun show(context: Context, title: String, body: String) {
       if (wasTaskRemoved(context)) return
       val manager = context.getSystemService(NotificationManager::class.java)

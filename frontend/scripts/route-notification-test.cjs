@@ -6,6 +6,7 @@ const source = babel.transformSync(fs.readFileSync(path.join(__dirname, '../serv
   configFile: false, babelrc: false, plugins: ['@babel/plugin-transform-modules-commonjs'],
 }).code;
 const calls = [];
+const preferences = new Map();
 let permissionReader = async () => ({ granted: true });
 const notifications = {
   setNotificationHandler() {},
@@ -20,10 +21,15 @@ const native = {
   showNativeRouteNotification: (title, body) => { if (!nativeAvailable) return false; calls.push(['native-show', title, body]); return true; },
   stopNativeRouteNotification: () => calls.push(['native-stop']),
 };
-const dependencies = { 'expo-notifications': notifications, 'expo-constants': {}, 'react-native': { Platform: { OS: 'android' } }, '../modules/kakao-navigation': native };
+const dependencies = {
+  '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async key => preferences.get(key) ?? null, setItem: async (key, value) => preferences.set(key, value) } }, 'expo-notifications': notifications, 'expo-constants': {}, 'react-native': { Platform: { OS: 'android' } }, '../modules/kakao-navigation': native };
+dependencies['../utils/auth'] = { apiFetch: () => { throw new Error('This notification lifecycle test must not call the backend'); } };
 const api = {};
 new Function('require', 'exports', source)(name => { assert.ok(name in dependencies); return dependencies[name]; }, api);
 (async () => {
+  preferences.set('pang3.task-alerts.1', 'off');
+  assert.equal(await api.getTaskNotificationPreference(1), false);
+  assert.equal((await api.syncPushTokenForUser(1)).reason, 'disabled', 'OFF survives token synchronization');
   const route = { from: '현재 위치', to: '방문지', duration: '10분', distance: '2km', remainingCount: 2 };
   assert.equal(await api.showRouteNotification(route), true);
   assert.equal(calls[0][0], 'native-show');

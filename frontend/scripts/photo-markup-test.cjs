@@ -61,6 +61,11 @@ function editor() {
     return { uri: next, width: result.width, height: result.height };
   };
   const dependencies = {
+    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 24, bottom: 48, left: 0, right: 0 }) },
+    '@expo/vector-icons': { Ionicons: 'Ionicons' },
+    './ui': { ScreenHeader: 'ScreenHeader' },
+    '../constants/design': { colors: { primary: 'blue', text: 'black', textSoft: 'grey', textFaint: 'grey' } },
+    '../utils/auth': { localImageForEditing: async uri => uri },
     react, 'react/jsx-runtime': { jsx, jsxs: jsx }, 'react-native': native,
     'react-native-svg': { __esModule: true, default: 'Svg', Polyline: 'Polyline' },
     './CustomAlert': { showAlert: (...args) => alerts.push(args) },
@@ -98,15 +103,17 @@ function editor() {
     return tree;
   }
   function button(text) {
-    flush(); const n = all(tree).find(n => n.type === 'TouchableOpacity' && label(n) === text);
+    flush(); const n = all(tree).find(n => n.type === 'TouchableOpacity' && (n.props.accessibilityLabel || label(n)) === text);
     assert.ok(n, `Missing button ${text}`); return n;
   }
   async function press(text) { const n = button(text); assert.ok(!n.props.disabled, text); await n.props.onPress(); flush(); }
   const photo = () => { flush(); return all(tree).find(n => n.type === NativeImage).props.source.uri; };
-  function selectCrop() {
+  function selectCrop(corner = "topLeft", release = true) {
     const size = all(flush()).find(n => n.type === NativeImage).props.style;
-    responders[0].onPanResponderGrant({ nativeEvent: { locationX: 0, locationY: 0 } });
-    responders[0].onPanResponderMove(null, { dx: size.width / 4, dy: size.height / 4 }); flush();
+    responders[0].onPanResponderGrant({ nativeEvent: { locationX: corner === 'bottomRight' ? size.width : 0, locationY: corner === 'bottomRight' ? size.height : 0 } });
+    const direction = corner === 'bottomRight' ? -1 : 1;
+    responders[0].onPanResponderMove(null, { dx: direction * size.width / 4, dy: direction * size.height / 4 }); flush();
+    if (release) return Promise.resolve(responders[0].onPanResponderRelease()).then(() => flush());
   }
   function draw() {
     responders[1].onPanResponderGrant({ nativeEvent: { locationX: 10, locationY: 10 } }); flush();
@@ -138,49 +145,49 @@ function editor() {
   completePhoto('file:///edited.jpg'); assert.equal(photos[0].path, null);
 
   const e = editor();
-  await e.press('자르기'); e.selectCrop(); await e.press('✎ 펜');
-  const cropped = e.photo();
-  assert.notEqual(cropped, 'original', 'switching to pen must apply the selected crop');
+  assert.equal(e.button('자르기').props.accessibilityState.selected, true, 'crop is the default mode');
+  await e.selectCrop();
+  const first = e.photo();
   assert.deepEqual(e.calls[0].actions, [{ crop: { originX: 300, originY: 225, width: 900, height: 675 } }]);
-  e.draw(); await e.press('저장');
-  assert.equal(e.calls.find(c => c.capture).source, cropped, 'pen must draw on the cropped image');
-  assert.equal(e.images.get(e.saved[0]).marks, 1);
-  await e.press('원본 복원');
-  assert.equal(e.photo(), 'original'); assert.equal(e.saved.length, 1, 'restore must not save or close the editor');
-  assert.ok(e.button('↶ 되돌리기').props.disabled, 'restore clears the pen overlay');
+  await e.selectCrop('bottomRight');
+  const second = e.photo();
+  assert.notEqual(first, second);
+  await e.press('이전'); assert.equal(e.photo(), first, 'undo second crop only');
+  await e.press('이전'); assert.equal(e.photo(), 'original', 'undo first crop');
+  await e.press('이후'); assert.equal(e.photo(), first);
+  await e.press('이후'); assert.equal(e.photo(), second);
+  await e.press('펜'); e.draw();
+  await e.press('이전');
+  await e.press('회전');
+  const rotated = e.photo();
+  assert.equal(e.images.get(rotated).width, e.images.get(second).height);
+  assert.ok(e.button('이후').props.disabled, 'a new edit discards redo history');
+  await e.press('이전'); assert.equal(e.photo(), second);
+  await e.press('이후'); assert.equal(e.photo(), rotated);
+  await e.press('펜'); e.draw(); await e.press('자르기'); await e.selectCrop();
+  assert.equal(e.images.get(e.photo()).marks, 1, 'cropping preserves ink');
+  await e.press('이전'); assert.equal(e.photo(), rotated, 'undo crop restores the unflattened image and ink');
+  await e.press('펜'); e.draw(); await e.press('저장');
+  assert.equal(e.images.get(e.saved[0]).marks, 2, 'undo preserves previous ink and new ink stacks');
+  await e.press('원본 복원'); assert.equal(e.photo(), 'original');
+  assert.equal(e.saved.length, 1, 'restore does not save or close');
 
-  const explicit = editor();
-  await explicit.press('자르기'); explicit.selectCrop(); await explicit.press('자르기 적용');
-  const applied = explicit.photo();
-  await explicit.press('↻ 회전');
-  assert.equal(explicit.calls[1].uri, applied); assert.deepEqual(explicit.calls[1].actions, [{ rotate: 90 }]);
-  assert.deepEqual([explicit.images.get(explicit.photo()).width, explicit.images.get(explicit.photo()).height], [675, 900]);
-  await explicit.press('저장'); assert.equal(explicit.saved[0], explicit.photo(), 'saving must not crop the image a second time');
+  const unchanged = editor(); await unchanged.press('저장');
+  assert.equal(unchanged.saved[0], 'original', 'saving unchanged server image preserves identity');
+  assert.equal(unchanged.calls.length, 0, 'full default crop is not another crop');
 
-  const directSave = editor();
-  await directSave.press('자르기'); directSave.selectCrop(); await directSave.press('저장');
-  assert.deepEqual([directSave.images.get(directSave.saved[0]).width, directSave.images.get(directSave.saved[0]).height], [900, 675]);
-  const pendingRotate = editor();
-  await pendingRotate.press('자르기'); pendingRotate.selectCrop(); await pendingRotate.press('↻ 회전');
-  assert.deepEqual(pendingRotate.calls[0].actions, [{ crop: { originX: 300, originY: 225, width: 900, height: 675 } }, { rotate: 90 }]);
-
-  const inkFirst = editor();
-  await inkFirst.press('✎ 펜'); inkFirst.draw(); await inkFirst.press('자르기'); inkFirst.selectCrop();
-  await inkFirst.press('자르기 적용');
-  assert.equal(inkFirst.images.get(inkFirst.photo()).marks, 1, 'cropping must preserve existing ink');
-  await inkFirst.press('✎ 펜'); inkFirst.draw(); await inkFirst.press('저장');
-  assert.equal(inkFirst.images.get(inkFirst.saved[0]).marks, 2, 'new ink must stack on the already cropped base');
-
-  const failed = editor();
-  await failed.press('자르기'); failed.selectCrop(); failed.fail(); await failed.press('✎ 펜');
+  const failed = editor(); failed.fail(); await failed.selectCrop();
   assert.equal(failed.photo(), 'original'); assert.equal(failed.alerts.length, 1);
-  await failed.press('자르기 적용'); assert.notEqual(failed.photo(), 'original', 'failed crop can be retried');
+  assert.ok(failed.button('이전').props.disabled, 'failed edits do not enter history');
+  await failed.selectCrop(); assert.notEqual(failed.photo(), 'original', 'crop can retry');
 
   const stale = editor(); let resolve;
-  await stale.press('자르기'); stale.selectCrop(); stale.defer(new Promise(r => { resolve = r; }));
-  const editing = stale.button('✎ 펜').props.onPress(); stale.flush();
-  assert.ok(stale.button('처리 중').props.disabled, 'parallel edits are disabled');
+  stale.defer(new Promise(r => { resolve = r; }));
+  const editing = stale.selectCrop(); stale.flush();
+  assert.ok(stale.button('저장').props.disabled, 'parallel edits disabled');
   stale.change({ uri: 'next-photo' }); resolve(); await editing; stale.flush();
-  assert.equal(stale.photo(), 'next-photo', 'old async crop must not overwrite a newly opened photo');
-  console.log('Photo editor checks passed: crop→pen, apply/rotate/save, ink preservation, original restore, failure retry and stale operations');
+  assert.equal(stale.photo(), 'next-photo', 'old crop does not overwrite newly opened image');
+  assert.ok(stale.button('이전').props.disabled, 'new session clears history');
+  console.log('Photo editor checks passed: immediate crops, undo/redo across crop/pen/rotation, ink preservation, restore, failure and stale sessions');
+
 })().catch(error => { console.error(error); process.exitCode = 1; });

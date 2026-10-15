@@ -1,9 +1,11 @@
+import { session } from '../utils/auth';
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { showAlert } from '../components/CustomAlert';
 import { PrimaryButton } from '../components/ui';
 import { colors, radius } from '../constants/design';
+import AccountRecovery from '../components/AccountRecovery';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
@@ -12,26 +14,24 @@ export default function LoginScreen({ onLogin, onRegister }) {
   const [pw, setPw] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [forgot, setForgot] = useState(false);
 
   const login = async () => {
     if (!id.trim() || !pw || loading) return;
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ loginId: id.trim(), password: pw }),
-      });
-      if (!res.ok) throw new Error('로그인 실패');
-      onLogin(await res.json());
+      const loginUser = await session.login(id.trim(), pw);
+      if (loginUser) onLogin(loginUser);
     } catch (error) {
       console.log(error);
-      showAlert('로그인 실패', '아이디 또는 비밀번호를 확인해주세요.');
+      showAlert('로그인 실패', error.message || '로그인 연결을 확인해주세요.');
     } finally { setLoading(false); }
   };
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {forgot ? <View><AccountRecovery mode="forgot" /><TouchableOpacity onPress={() => setForgot(false)}><Text style={{ color: colors.primary }}>로그인으로 돌아가기</Text></TouchableOpacity></View> : <>
         <View style={styles.brandRow}>
           <View style={styles.logo}><Ionicons name="navigate" size={24} color="#FFFFFF" /></View>
           <View>
@@ -60,12 +60,14 @@ export default function LoginScreen({ onLogin, onRegister }) {
           </View>
 
           <PrimaryButton title={loading ? '로그인 중...' : '로그인'} onPress={login} disabled={!id.trim() || !pw || loading} style={styles.loginButton} />
+          <TouchableOpacity onPress={() => setForgot(true)}><Text style={{ color: colors.primary, textAlign: 'center', padding: 12 }}>비밀번호 찾기</Text></TouchableOpacity>
 
           <TouchableOpacity style={styles.registerButton} onPress={onRegister} activeOpacity={0.7}>
             <Text style={styles.registerMuted}>처음 사용하시나요?</Text>
             <Text style={styles.registerText}>회원가입</Text>
           </TouchableOpacity>
         </View>
+        </>}
       </ScrollView>
     </KeyboardAvoidingView>
   );

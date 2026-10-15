@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../utils/auth';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -1901,7 +1902,7 @@ const styles =
       flex: 1,
       backgroundColor:
         colors.background,
-      transform: [{ translateY: -15 }],
+      marginTop: -15,
     },
 
     settingsButton: {

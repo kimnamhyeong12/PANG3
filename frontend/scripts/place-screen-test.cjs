@@ -24,11 +24,12 @@ function load(file) {
     if (name === 'react-native-safe-area-context') return { SafeAreaView: ({ edges, children }) => { searchSafeAreaEdges = edges; return React.createElement(Surface, null, children); } };
     if (name === '@expo/vector-icons') return { Ionicons: Surface };
     if (name.includes('async-storage')) return { getItem: async () => null, setItem: async () => {} };
-    if (name.includes('kakao-navigation')) return { KakaoNavigationView: Surface, isKakaoNavigationAvailable: () => false };
+    if (name.includes('kakao-navigation')) return { KakaoNavigationView: Surface, isKakaoNavigationAvailable: () => false, endRouteSession: noOp, wasRouteTaskRemoved: () => false };
     if (name.includes('notificationService')) return { stopRouteNotification: noOp, updateRouteNotification: noOp };
     if (name.includes('busanDistricts')) return { BUSAN_DISTRICT_CODES: {} };
     if (name.includes('BulkUploadModal')) return { __esModule: true, default: Surface };
     if (name.includes('CustomAlert')) return { showAlert: noOp };
+    if (name === '../utils/auth') return { apiFetch: noOp, localImageForEditing: async uri => uri, protectedImageSource: async uri => ({ uri }) };
     if (name.includes('KakaoMapWebView') || name.includes('VoiceTextInput') || name.includes('WorkplaceField')) return { __esModule: true, default: Surface };
     if (name.startsWith('.')) return load(path.resolve(path.dirname(file), name + '.js'));
     throw new Error('Unexpected dependency ' + name);
@@ -106,7 +107,7 @@ checkboxes[0].onPress();
 assert.equal(selectionChanges, 0, 'pre-work selection is guarded even if its handler is invoked');
 assert.ok(reportHtml.includes('작업 전 · 선택 불가'));
 const isCreateReportButton = control => React.Children.toArray(control.children)
-  .some(child => child.props?.children === '선택한 방문지로 보고서 만들기');
+  .some(child => /^\d+건 보고서 만들기$/.test(child.props?.children || ''));
 controls.find(isCreateReportButton).onPress();
 assert.deepEqual(selectedRows.map(row => row.id), [2, 3], 'cached pre-work IDs must not reach report creation');
 controls = [];
