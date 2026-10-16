@@ -16,8 +16,8 @@ export { REGIONS, DISTRICTS_BY_REGION } from '../utils/workRegion';
 export default function SettingsScreen({ user, onBack, onUpdatedUser, onLogout, onDeleteAccount }) {
   const [gate, setGate] = useState(false), [password, setPassword] = useState(''), [credential, setCredential] = useState('');
   const [busy, setBusy] = useState(false), [detail, setDetail] = useState(null), [deleteOpen, setDeleteOpen] = useState(false);
-  const [deletePassword, setDeletePassword] = useState(''), [enabled, setEnabled] = useState(false), [notificationBusy, setNotificationBusy] = useState(true);
-  useEffect(() => { let active = true; Promise.all([getTaskNotificationPreference(user.userId), checkNotificationPermission()]).then(([preferred, granted]) => { if (active) setEnabled(preferred && granted); }).finally(() => { if (active) setNotificationBusy(false); }); return () => { active = false; }; }, [user.userId]);
+  const [deletePassword, setDeletePassword] = useState(''), [enabled, setEnabled] = useState(null), [notificationBusy, setNotificationBusy] = useState(true);
+  useEffect(() => { let active = true; setEnabled(null); setNotificationBusy(true); Promise.all([getTaskNotificationPreference(user.userId), checkNotificationPermission()]).then(([preferred, granted]) => { if (active) setEnabled(preferred && granted); }).catch(() => { if (active) setEnabled(false); }).finally(() => { if (active) setNotificationBusy(false); }); return () => { active = false; }; }, [user.userId]);
   useScreenBackHandler(() => { if (!credential) return false; setCredential(''); return true; }, !!credential);
   const verify = async () => {
     if (busy || !password) return; setBusy(true);
@@ -48,7 +48,7 @@ export default function SettingsScreen({ user, onBack, onUpdatedUser, onLogout, 
   return <View style={styles.container}><ScreenHeader root title="설정" onBack={onBack} /><ScrollView contentContainerStyle={[styles.body, styles.rootBody]}>
     <View style={styles.profile}><View style={styles.avatar}><Text style={styles.avatarText}>{String(user.name || user.loginId).slice(0, 1)}</Text></View><View style={{ flex: 1 }}><Text style={styles.name}>{user.name || user.loginId}</Text><Text style={styles.id}>@{user.loginId}</Text></View><TouchableOpacity style={styles.manage} onPress={() => setGate(true)}><Text style={styles.manageText}>관리</Text></TouchableOpacity></View>
     <Text style={styles.sectionLabel}>알림</Text>
-    <View style={styles.card}><View style={styles.row}><Ionicons name="notifications-outline" size={21} color={colors.primary} /><Text style={styles.rowText}>업무 알림</Text><Switch value={enabled} disabled={notificationBusy} onValueChange={toggleNotifications} trackColor={{ true: colors.primary, false: '#CBD5E1' }} /></View></View>
+    <View style={styles.card}><View style={styles.row}><Ionicons name="notifications-outline" size={21} color={colors.primary} /><Text style={styles.rowText}>업무 알림</Text>{enabled === null ? <View style={{ width: 52, height: 32 }} accessibilityLabel="알림 설정 불러오는 중" /> : <Switch value={enabled} disabled={notificationBusy} onValueChange={toggleNotifications} thumbColor={colors.primary} trackColor={{ true: '#B9D9FF', false: '#DFE8F4' }} />}</View></View>
     <Text style={styles.sectionLabel}>서비스 안내</Text>
     <View style={styles.card}>{row('megaphone-outline', '공지사항', () => setDetail('notice'))}{row('help-circle-outline', '고객센터 / 운영정책', () => setDetail('support'))}{row('information-circle-outline', '앱 관리', () => setDetail('version'))}</View>
     <View style={styles.card}>{row('log-out-outline', '로그아웃', () => showAlert('로그아웃', '현재 계정에서 로그아웃할까요?', [{ text: '취소' }, { text: '로그아웃', onPress: onLogout }]))}{row('person-remove-outline', '계정 탈퇴', () => setDeleteOpen(true), true)}</View>

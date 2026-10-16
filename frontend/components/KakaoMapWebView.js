@@ -2163,6 +2163,10 @@ export default function KakaoMapWebView({
         null;
     }
 
+    // During guidance, expanding a visit list must not refit the entire route.
+    // GPS following and the explicit recenter button own the driving viewport.
+    if (isGuiding && !previewRouteSegment) return;
+
     const targetPath = previewRouteSegment?.path || (
       isGuiding
         ? routeSegments[

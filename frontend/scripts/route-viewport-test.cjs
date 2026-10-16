@@ -36,6 +36,25 @@ assert.deepEqual(boundsCall.slice(1), [391, 40, 96, 40]);
 assert.equal(boundsCall[0].points.length, 2);
 console.log('Route viewport checks passed: measured margins reach Kakao setBounds');
 
+let viewportEffect;
+babel.transformSync(source, { configFile: false, babelrc: false, parserOpts: { plugins: ['jsx'] },
+  plugins: [() => ({ visitor: { CallExpression(node) {
+    if (node.node.callee.name === 'useEffect' && generate(node.node.arguments[0]).code.includes('const targetPath =')) viewportEffect = node.node.arguments[0];
+  } } })] });
+let fitCount = 0;
+const viewport = { mapRef: { current: { fitToCoordinates: () => fitCount++ } },
+  segmentFocusTimerRef: { current: null }, segmentFocusKeyRef: { current: null },
+  isGuiding: true, previewRouteSegment: null, routeSegments: [], currentSegmentIndex: 0, roadPath: [],
+  routeViewportPadding: { top: 400, bottom: 180 }, clearTimeout };
+vm.createContext(viewport);
+vm.runInContext(`(${generate(viewportEffect).code})()`, viewport);
+viewport.routeViewportPadding.top = 600;
+vm.runInContext(`(${generate(viewportEffect).code})()`, viewport);
+assert.equal(fitCount, 0, 'opening and closing visits during guidance must not zoom out to the full route');
+viewport.previewRouteSegment = { destinationKey: 'next', path: [{ lat: 35, lng: 129 }, { lat: 35.1, lng: 129.1 }] };
+vm.runInContext(`(${generate(viewportEffect).code})()`, viewport);
+assert.equal(fitCount, 1, 'browsing a different destination must still fit its preview');
+
 // Group overview must fit its administrative district, even when a visit is far away.
 const groupSource = fs.readFileSync(path.join(__dirname, '../screens/WorkStatusScreen.js'), 'utf8');
 let buildGroupMap;

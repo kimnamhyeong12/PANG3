@@ -71,9 +71,11 @@ function createScreen({ nativeNavigation = false, taskRemoved = false } = {}) {
       if (name.startsWith('.')) return load(path.resolve(path.dirname(file), name.endsWith('.js') ? name : `${name}.js`));
       throw Error('Unexpected import: ' + name);
     };
-    const context = { module, exports: module.exports, require: requireMock, console, URLSearchParams, AbortController, setTimeout, clearTimeout,
+    const context = { module, exports: module.exports, require: requireMock, console, URLSearchParams, AbortController, setTimeout, clearTimeout, setInterval, clearInterval,
       process: { env: { EXPO_PUBLIC_API_BASE_URL: 'https://backend.test', EXPO_PUBLIC_KAKAO_REST_API_KEY: 'test' } },
       fetch: (url, options = {}) => {
+        if (url.includes('/geo/coord2address.json')) return Promise.resolve({ ok: true,
+          json: async () => ({ documents: [{ road_address: { address_name: '부산 사하구 현재 위치' } }] }) });
         if (url.endsWith('/api/routes/order')) {
           orderRequests.push(JSON.parse(options.body));
           return Promise.resolve({ ok: false }); // Exercise offline distance recommendations independently of guidance.
@@ -272,6 +274,13 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   assert.equal(car.find('Navigation').props.destination.destinationKey, '1');
   assert.equal(car.find('Navigation').props.destination.previewId, previewId);
   assert.equal(car.find('MapCanvas').props.isGuiding, false, 'WebView must not run a second guidance engine');
+  const guideTop = car.find('Navigation').props.style[1].top;
+  car.nodes().find(node => node.props.pointerEvents === 'box-none' && node.props.onLayout)
+    .props.onLayout({ nativeEvent: { layout: { y: 30, height: 330 } } });
+  car.render();
+  assert.equal(car.find('Navigation').props.style[1].top, guideTop, 'expanded visits overlay the SDK rather than shrinking its viewport');
+  car.find('TouchableOpacity', '현재 위치와 목적지 번갈아 보기').props.onPress(); await car.settle();
+  assert(car.text(car.find('TouchableOpacity', '현재 위치와 목적지 번갈아 보기')).includes('부산 사하구 현재 위치'));
   car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: 'old', distance: 10, duration: 5 } }); car.render();
   car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: '1', distance: 500, duration: 300 } }); car.render();
   await car.find('MapCanvas').props.onRerouteRequest({ lat: 35, lng: 129.001 });

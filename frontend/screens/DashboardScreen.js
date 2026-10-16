@@ -1055,11 +1055,10 @@ export default function DashboardScreen({
             />
           ) : (
             <>
-              <View style={styles.overviewHeading}><Text style={styles.overviewTitle}>전체 업무 현황</Text><Text style={styles.overviewCaption}>개인 공간과 참여 그룹을 합친 현황</Text></View>
+              <View style={styles.overviewHeading}><Text style={styles.overviewTitle}>전체 업무 현황</Text></View>
               <View style={styles.overviewHero}>
-                <View style={styles.overviewHeroRow}><View style={{ flex: 1 }}><Text style={styles.overviewHeroLabel}>전체 업무</Text><Text style={styles.overviewCaption}>진행 중인 모든 업무</Text></View><Text style={styles.overviewTotal}>{analytics.totals.count}건</Text></View>
+                <View style={styles.overviewHeroRow}><View style={{ flex: 1 }}><Text style={styles.overviewHeroLabel}>전체 업무</Text><Text style={styles.overviewCaption}>완료율 {analytics.completionRate}%</Text></View><Text style={styles.overviewTotal}>{analytics.totals.count}건</Text></View>
                 <View style={styles.overviewTrack}><View style={[styles.overviewProgress, { width: `${Math.max(0, Math.min(100, Number(analytics.completionRate) || 0))}%` }]} /></View>
-                <Text style={styles.overviewCaption}>완료율 {analytics.completionRate}%</Text>
               </View>
               <View style={styles.overviewCounts}>{[['작업 전', analytics.totals.pending, colors.pendingInk], ['작업 중', analytics.totals.working, colors.warningInk], ['작업 후', analytics.totals.complete, colors.successInk]].map(([label, value, tone]) => <View key={label} style={{ flex: 1 }}><Text style={styles.overviewCaption}>{label}</Text><Text style={[styles.overviewCount, { color: tone }]}>{value}건</Text></View>)}</View>
 

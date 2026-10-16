@@ -373,8 +373,6 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
             </ScrollView>}
           </View>}
 
-        </View>
-
           <View style={styles.legend} pointerEvents="none">
             {Object.entries(STATUS).map(([key, value]) => <View key={key} style={styles.legendRow}><View style={[styles.legendDot, { backgroundColor: value.color }]} /><Text style={styles.legendText}>{value.label}</Text></View>)}
             <View style={styles.legendDivider} />
@@ -387,6 +385,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
               작업 전 {selectedMember.pending}곳 · 작업 중 {selectedMember.working}곳 · 작업 후 {selectedMember.complete}곳
             </Text>
           </View>}
+        </View>
 
         {!!boundaryError && <Text style={styles.boundaryWarning}>경계 표시 오류: {boundaryError}</Text>}
 
@@ -429,22 +428,22 @@ const styles = StyleSheet.create({
   mapMemberPicker: { position: 'absolute', top: 10, right: 10, width: 185, zIndex: 8, alignItems: 'flex-end' },
   mapMemberToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 185, backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: 14, paddingHorizontal: 11, paddingVertical: 8, elevation: 4 },
   mapMemberToggleText: { flexShrink: 1, fontSize: 11, fontWeight: '800', color: '#15231D' },
-  mapMemberList: { width: 185, maxHeight: 190, marginTop: 5, backgroundColor: '#FFFFFF', borderRadius: 12, elevation: 5 },
+  mapMemberList: { width: 185, maxHeight: 150, marginTop: 5, backgroundColor: '#FFFFFF', borderRadius: 12, elevation: 5 },
   mapMemberRow: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 11, borderBottomWidth: 1, borderBottomColor: '#EEF3F0' },
   mapMemberRowSelected: { backgroundColor: '#F0F7FC' },
   mapMemberName: { flex: 1, fontSize: 11, fontWeight: '800', color: '#15231D' },
-  mapMemberDetail: { backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: 12, padding: 10 },
+  mapMemberDetail: { position: 'absolute', left: 10, right: 152, bottom: 10, backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: 12, padding: 10 },
   mapMemberDetailTitle: { fontSize: 12, fontWeight: '900', color: '#15231D' },
   mapMemberDetailText: { fontSize: 10, color: '#475569', marginTop: 3 },
   map: { flex: 1, backgroundColor: '#EAF0F5' },
   mapState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
   mapStateText: { fontSize: 11, color: '#637269' },
   errorText: { fontSize: 11, color: '#D14343', fontWeight: '700', textAlign: 'center', padding: 20 },
-  legend: {     borderRadius: 12,   shadowColor: '#000',  shadowRadius: 8, position: 'relative', right: 0, bottom: 0, flexDirection: 'row', flexWrap: 'wrap', backgroundColor: colors.surface, padding: 0, gap: 12, shadowOpacity: 0, elevation: 0, marginTop: 12, },
+  legend: { position: 'absolute', right: 10, bottom: 10, width: 128, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.96)', padding: 12, gap: 9 },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   legendDot: { width: 9, height: 9, borderRadius: 5 },
   legendArea: { width: 11, height: 9, borderRadius: 2 },
-  legendDivider: {  backgroundColor: '#E2E8F0', marginVertical: 1, width: 0, height: 0, },
+  legendDivider: { backgroundColor: colors.line, height: 1, marginVertical: 1 },
   legendText: {  color: '#334155', fontWeight: '800', fontSize: 11, },
   boundaryWarning: { fontSize: 10, lineHeight: 15, color: '#B45309', backgroundColor: '#FFF8E6', borderRadius: 10, padding: 10 },
   memberCard: { maxHeight: 190, minHeight: 106, backgroundColor: '#FFFFFF', borderRadius: 18, padding: 14, borderWidth: 1, borderColor: '#DCE5E0' },
