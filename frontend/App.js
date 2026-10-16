@@ -48,6 +48,8 @@ import {
   NOTIFICATION_TYPES,
   addNotificationReceivedListener,
   addNotificationResponseListener,
+  getLastNotificationResponse,
+  clearLastNotificationResponse,
   checkNotificationPermission,
   stopRouteNotification,
   syncPushTokenForUser,
@@ -109,6 +111,7 @@ function AppContent() {
   const selectedDongDayRef = useRef(getLocalDateKey());
   const selectedDongVersionRef = useRef(0);
   const [transferTargetMember, setTransferTargetMember] = useState(null);
+  const handledNotificationRef = useRef(null);
 
   useEffect(() => {
     let active = true;
@@ -728,7 +731,6 @@ function AppContent() {
  * Expo Push Token을 백엔드에 등록한다.
  */
   useEffect(() => {
-    console.log('[Notification DEBUG] user =', user);
 
     if (!user?.userId) {
       console.log('[Notification DEBUG] userId 없음');
@@ -761,14 +763,18 @@ function AppContent() {
 
       console.log(
         '[Notification DEBUG] 토큰 등록 결과 =',
-        result
+        { success: result.success, reason: result.reason }
       );
     };
 
     syncToken();
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') syncToken();
+    });
 
     return () => {
       cancelled = true;
+      appStateSubscription.remove();
     };
   }, [user?.userId]);
   /*
@@ -785,6 +791,8 @@ function AppContent() {
       NOTIFICATION_TYPES.TASK_ASSIGNED,
       NOTIFICATION_TYPES.ASSIGNEE_CHANGED,
       NOTIFICATION_TYPES.PRIORITY_CHANGED,
+      NOTIFICATION_TYPES.TASK_TRANSFER_REQUESTED,
+      NOTIFICATION_TYPES.TASK_TRANSFER_RESPONDED,
     ]);
 
     const receivedSubscription =
@@ -797,12 +805,36 @@ function AppContent() {
         }
       });
 
-    const responseSubscription =
-      addNotificationResponseListener((response) => {
+    const handleResponse = async (response) => {
+        if (!workspaceReady || !response) return;
+        const notificationId = response.notification?.request?.identifier;
+        if (notificationId && handledNotificationRef.current === notificationId) return;
         const type =
           response?.notification?.request?.content?.data?.type;
 
         if (refreshTypes.has(type)) {
+          if (notificationId) handledNotificationRef.current = notificationId;
+          clearLastNotificationResponse().catch(() => {});
+          const data = response.notification.request.content.data;
+          if ([NOTIFICATION_TYPES.TASK_TRANSFER_REQUESTED, NOTIFICATION_TYPES.TASK_TRANSFER_RESPONDED].includes(type)) {
+            try {
+              // Fetch membership before switching: the notification may belong to another group.
+              const groups = await groupApi(`/api/groups/user/${user.userId}`);
+              const target = groups.find((group) => String(group.groupId) === String(data.groupId));
+              if (!target) return;
+              await navigateSafely(() => {
+                selectActiveGroup(target);
+                historyRef.current = [];
+                setGroupWorkspaceTab('transfer');
+                screenRef.current = 'groupWorkspace';
+                setScreen('groupWorkspace');
+              });
+            } catch (error) {
+              console.log('[Notification] 이관 화면 열기 실패:', error.message);
+              showAlert('알림', '업무 이관 화면을 열지 못했습니다. 그룹의 업무 이관 탭에서 확인해주세요.');
+            }
+            return;
+          }
           refreshCurrentWorkspace();
 
           // 알림을 눌렀을 때 현재 업무공간 홈으로 이동한다.
@@ -813,7 +845,9 @@ function AppContent() {
             setScreen('groupHome');
           });
         }
-      });
+      };
+    const responseSubscription = addNotificationResponseListener(handleResponse);
+    getLastNotificationResponse().then(handleResponse).catch(() => {});
 
     return () => {
       receivedSubscription?.remove?.();
@@ -821,6 +855,8 @@ function AppContent() {
     };
   }, [
     user?.userId,
+    workspaceReady,
+    selectActiveGroup,
     refreshCurrentWorkspace,
   ]);
 
