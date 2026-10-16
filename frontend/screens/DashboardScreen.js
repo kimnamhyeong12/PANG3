@@ -1055,72 +1055,13 @@ export default function DashboardScreen({
             />
           ) : (
             <>
-              <View
-                style={
-                  styles.kpiGrid
-                }
-              >
-                <Kpi
-                  label="전체"
-                  value={
-                    analytics
-                      .totals
-                      .count
-                  }
-                  tone={
-                    colors.primary
-                  }
-                />
-
-                <Kpi
-                  label="작업 전"
-                  value={
-                    analytics
-                      .totals
-                      .pending
-                  }
-                  tone={
-                    colors.pending
-                  }
-                />
-
-                <Kpi
-                  label="작업 중"
-                  value={
-                    analytics
-                      .totals
-                      .working
-                  }
-                  tone={
-                    colors.warning
-                  }
-                />
-
-                <Kpi
-                  label="완료"
-                  value={
-                    analytics
-                      .totals
-                      .complete
-                  }
-                  tone={
-                    colors.success
-                  }
-                />
-
-                <Kpi
-                  label="완료율"
-                  value={
-                    analytics
-                      .completionRate
-                  }
-                  suffix="%"
-                  tone={
-                    colors.teal
-                  }
-                  wide
-                />
+              <View style={styles.overviewHeading}><Text style={styles.overviewTitle}>전체 업무 현황</Text><Text style={styles.overviewCaption}>개인 공간과 참여 그룹을 합친 현황</Text></View>
+              <View style={styles.overviewHero}>
+                <View style={styles.overviewHeroRow}><View style={{ flex: 1 }}><Text style={styles.overviewHeroLabel}>전체 업무</Text><Text style={styles.overviewCaption}>진행 중인 모든 업무</Text></View><Text style={styles.overviewTotal}>{analytics.totals.count}건</Text></View>
+                <View style={styles.overviewTrack}><View style={[styles.overviewProgress, { width: `${Math.max(0, Math.min(100, Number(analytics.completionRate) || 0))}%` }]} /></View>
+                <Text style={styles.overviewCaption}>완료율 {analytics.completionRate}%</Text>
               </View>
+              <View style={styles.overviewCounts}>{[['작업 전', analytics.totals.pending, colors.pendingInk], ['작업 중', analytics.totals.working, colors.warningInk], ['완료', analytics.totals.complete, colors.successInk]].map(([label, value, tone]) => <View key={label} style={{ flex: 1 }}><Text style={styles.overviewCaption}>{label}</Text><Text style={[styles.overviewCount, { color: tone }]}>{value}건</Text></View>)}</View>
 
               {/* 월간 완료 히트맵 */}
               <View
@@ -1129,7 +1070,7 @@ export default function DashboardScreen({
                 }
               >
                 <SectionHeader
-                  title="월간 업무 완료 히트맵"
+                  title="월간 업무 완료"
                 />
 
                 <MonthlyHeatmap
@@ -1899,6 +1840,10 @@ function MessageCard({
 
 const styles =
   StyleSheet.create({
+    overviewHeading: { gap: 4 }, overviewTitle: { color: colors.text, fontSize: 16, fontWeight: '800' }, overviewCaption: { color: colors.textSoft, fontSize: 12, lineHeight: 18 },
+    overviewHero: { padding: 18, borderRadius: 16, backgroundColor: colors.primarySoft, gap: 12 }, overviewHeroRow: { flexDirection: 'row', alignItems: 'center' }, overviewHeroLabel: { color: colors.text, fontSize: 16, fontWeight: '800' }, overviewTotal: { color: colors.primary, fontSize: 28, fontWeight: '800' },
+    overviewTrack: { height: 6, borderRadius: 3, backgroundColor: colors.line, overflow: 'hidden' }, overviewProgress: { height: '100%', backgroundColor: colors.primary, borderRadius: 3 }, overviewCounts: { flexDirection: 'row', gap: 12, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: colors.line }, overviewCount: { fontSize: 26, fontWeight: '800', marginTop: 6 },
+
     container: {
       flex: 1,
       backgroundColor:
@@ -1938,8 +1883,7 @@ const styles =
         spacing.page,
       paddingBottom: 36,
       gap:
-        spacing.section,
-    },
+        spacing.section, paddingHorizontal: 20, },
 
     kpiGrid: {
       flexDirection: 'row',
@@ -1994,17 +1938,14 @@ const styles =
     },
 
     card: {
-      backgroundColor:
-        colors.surface,
+
       borderRadius:
         radius.large,
-      borderWidth: 1,
+
       borderColor:
         colors.line,
-      padding:
-        spacing.card,
-      ...shadow,
-    },
+
+      ...shadow, padding: 0, borderWidth: 0, shadowOpacity: 0, elevation: 0, backgroundColor: colors.surface, marginBottom: 20, },
 
     sectionHeader: {
       marginBottom: 14,
@@ -2268,22 +2209,19 @@ const styles =
     // 월~일 7열
     calendarCellSlot: {
       width: '14.285%',
-      aspectRatio: 0.86,
-      padding: 2,
-    },
+
+      padding: 2, aspectRatio: 1.15, },
 
     calendarCell: {
       flex: 1,
-      borderRadius:
-        radius.small,
-      borderWidth: 1,
+
+
       borderColor:
         colors.line,
       alignItems: 'center',
       justifyContent:
         'center',
-      paddingHorizontal: 1,
-    },
+      paddingHorizontal: 1, borderWidth: 0, borderRadius: 10, },
 
     calendarCellActive: {
       borderColor:

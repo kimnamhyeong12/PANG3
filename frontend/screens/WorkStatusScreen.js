@@ -39,9 +39,9 @@ const normalizeStatus = (value) => {
 };
 
 const STATUS = {
-  pending: { label: '작업 전', color: '#E53935' },
-  working: { label: '작업 중', color: '#F5B400' },
-  complete: { label: '완료', color: '#16A05D' },
+  pending: { label: '작업 전', color: colors.pending },
+  working: { label: '작업 중', color: colors.warning },
+  complete: { label: '완료', color: colors.success },
 };
 
 const safeJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
@@ -63,7 +63,7 @@ const memberColors=${safeJson(memberColors || {})};
 const selectedMemberId=${safeJson(selectedMemberId ? String(selectedMemberId) : '')};
 const focusedAreaBounds=${safeJson(focusedAreaBounds || null)};
 const districtView=${safeJson(districtView || null)};
-const statusColors={pending:'#E53935',working:'#F5B400',complete:'#16A05D'};
+const statusColors=${safeJson({ pending: colors.pending, working: colors.warning, complete: colors.success })};
 function statusOf(v){v=String(v||'pending').toLowerCase();if(['complete','completed','done'].includes(v))return'complete';if(['working','progress','in_progress'].includes(v))return'working';return'pending'}
 function shortName(v){const p=String(v||'').trim().split(/\\s+/);return(p[p.length-1]||'').replace(/제(?=\\d+동$)/,'')}
 function esc(v){return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -86,7 +86,7 @@ kakao.maps.load(function(){
  }
  (boundaries.features||[]).forEach((f,index)=>{const g=f.geometry||{},rings=[];if(g.type==='Polygon'&&g.coordinates&&g.coordinates[0])rings.push(g.coordinates[0]);else if(g.type==='MultiPolygon')(g.coordinates||[]).forEach(p=>p[0]&&rings.push(p[0]));if(!rings.length)return;const areaBounds=new kakao.maps.LatLngBounds(),properties=f.properties||{},areaKey=String(properties.adm_cd||properties.adm_nm||index);rings.forEach(r=>r.forEach(p=>{const ll=new kakao.maps.LatLng(Number(p[1]),Number(p[0]));areaBounds.extend(ll);regionBounds.extend(ll);hasRegionBounds=true;}));rings.forEach(r=>addRing(f,r,areaBounds,areaKey));});
  let openedCallout=null,openedMarkerKey=null;
- assignments.forEach((i,index)=>{const lat=Number(i.lat!=null?i.lat:i.latitude),lng=Number(i.lng!=null?i.lng:i.longitude);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;const s=statusOf(i.status||i.taskStatus),ownerId=String(i.assigneeUserId||'unknown'),ownerColor=memberColors[ownerId]||'${UNASSIGNED_COLOR}',markerKey=String(i.taskId||i.assignmentId||i.id||index),dimmed=selectedMemberId&&selectedMemberId!==ownerId,position=new kakao.maps.LatLng(lat,lng);bounds.extend(position);hasBounds=true;const content=document.createElement('div');content.className='pin';content.style.opacity=dimmed?'.22':'1';content.innerHTML='<div class="pin-body" style="background:'+statusColors[s]+';border-color:'+ownerColor+'"></div>';const markerOverlay=new kakao.maps.CustomOverlay({map,position,content,yAnchor:1,zIndex:5});content.onclick=(event)=>{event.stopPropagation();if(openedMarkerKey===markerKey){if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;return;}if(openedCallout)openedCallout.setMap(null);const box=document.createElement('div');box.className='place-callout';const title=document.createElement('div');title.className='place-title';title.textContent=i.detailAddress||i.roadAddress||('방문지 '+i.taskId);const address=document.createElement('div');address.className='place-address';address.textContent=i.roadAddress||i.detailAddress||'주소 정보 없음';const assignee=document.createElement('div');assignee.className='place-assignee';assignee.style.color=ownerColor;assignee.textContent='담당자: '+(i.assigneeName||i.assigneeLoginId||'미배정');const status=document.createElement('span');status.className='place-status';status.style.background=statusColors[s];status.textContent=s==='complete'?'완료':s==='working'?'작업 중':'작업 전';box.appendChild(title);box.appendChild(address);box.appendChild(assignee);box.appendChild(status);openedCallout=new kakao.maps.CustomOverlay({map,position,content:box,yAnchor:1.65,zIndex:10});openedMarkerKey=markerKey;};});
+ assignments.forEach((i,index)=>{const lat=Number(i.lat!=null?i.lat:i.latitude),lng=Number(i.lng!=null?i.lng:i.longitude);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;const s=statusOf(i.status||i.taskStatus),ownerId=String(i.assigneeUserId||'unknown'),ownerColor=memberColors[ownerId]||'${UNASSIGNED_COLOR}',markerKey=String(i.taskId||i.assignmentId||i.id||index),dimmed=selectedMemberId&&selectedMemberId!==ownerId,position=new kakao.maps.LatLng(lat,lng);bounds.extend(position);hasBounds=true;const content=document.createElement('div');content.className='pin';content.style.opacity=dimmed?'.22':'1';content.innerHTML='<div class="pin-body" style="background:#E34D59;border-color:'+ownerColor+'"></div>';const markerOverlay=new kakao.maps.CustomOverlay({map,position,content,yAnchor:1,zIndex:5});content.onclick=(event)=>{event.stopPropagation();if(openedMarkerKey===markerKey){if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;return;}if(openedCallout)openedCallout.setMap(null);const box=document.createElement('div');box.className='place-callout';const title=document.createElement('div');title.className='place-title';title.textContent=i.detailAddress||i.roadAddress||('방문지 '+i.taskId);const address=document.createElement('div');address.className='place-address';address.textContent=i.roadAddress||i.detailAddress||'주소 정보 없음';const assignee=document.createElement('div');assignee.className='place-assignee';assignee.style.color=ownerColor;assignee.textContent='담당자: '+(i.assigneeName||i.assigneeLoginId||'미배정');const status=document.createElement('span');status.className='place-status';status.style.background=statusColors[s];status.textContent=s==='complete'?'완료':s==='working'?'작업 중':'작업 전';box.appendChild(title);box.appendChild(address);box.appendChild(assignee);box.appendChild(status);openedCallout=new kakao.maps.CustomOverlay({map,position,content:box,yAnchor:1.65,zIndex:10});openedMarkerKey=markerKey;};});
  kakao.maps.event.addListener(map,'click',()=>{if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;});
  // 사용자가 행정동을 직접 눌렀을 때만 해당 동으로 확대한다.
  // 그 외 최초 진입/재진입은 SGIS 시군구 전체 경계를 최우선으로 사용한다.
@@ -301,9 +301,9 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
       >
         <View style={styles.summaryCard}>
           <Summary value={visibleAssignments.length} label="전체" />
-          <View style={styles.summaryDivider} /><Summary value={counts.pending} label="작업 전" color="#FFB6B6" />
-          <View style={styles.summaryDivider} /><Summary value={counts.working} label="작업 중" color="#FFE08A" />
-          <View style={styles.summaryDivider} /><Summary value={counts.complete} label="완료" color="#8DE0AD" />
+          <View style={styles.summaryDivider} /><Summary value={counts.pending} label="작업 전" color={colors.pendingInk} />
+          <View style={styles.summaryDivider} /><Summary value={counts.working} label="작업 중" color={colors.warningInk} />
+          <View style={styles.summaryDivider} /><Summary value={counts.complete} label="완료" color={colors.successInk} />
         </View>
 
         <View
@@ -349,7 +349,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
           <View style={styles.legend} pointerEvents="none">
             {Object.entries(STATUS).map(([key, value]) => <View key={key} style={styles.legendRow}><View style={[styles.legendDot, { backgroundColor: value.color }]} /><Text style={styles.legendText}>{value.label}</Text></View>)}
             <View style={styles.legendDivider} />
-            <View style={styles.legendRow}><View style={[styles.legendArea, { backgroundColor: MIXED_AREA_COLOR }]} /><Text style={styles.legendText}>공동 담당 구역</Text></View>
+            <View style={styles.legendRow}><View style={[styles.legendArea, { backgroundColor: MIXED_AREA_COLOR }]} /><Text style={styles.legendText}>공통 업무</Text></View>
           </View>
           {!personalWorkspace && <View style={styles.mapMemberPicker}>
             <TouchableOpacity style={styles.mapMemberToggle} onPress={() => setMemberPickerOpen((open) => !open)} accessibilityRole="button" accessibilityLabel="팀원 현황 선택">
@@ -392,7 +392,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
   );
 }
 
-function Summary({ value, label, color = '#FFFFFF' }) {
+function Summary({ value, label, color = colors.text }) {
   return <View style={styles.summaryItem}><Text style={[styles.summaryValue, { color }]}>{value}</Text><Text style={styles.summaryLabel}>{label}</Text></View>;
 }
 
@@ -413,13 +413,13 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: '900', color: '#15231D' },
   desc: { fontSize: 10, color: '#637269', marginTop: 2 },
   screenScroll: { flex: 1 },
-  body: { padding: 14, gap: 12, paddingBottom: 32 },
-  summaryCard: { backgroundColor: '#1551A6', borderRadius: 18, paddingVertical: 16, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' },
+  body: { padding: 14, gap: 12, paddingBottom: 32, paddingHorizontal: 20, },
+  summaryCard: {    paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, paddingVertical: 12, borderRadius: 0, borderBottomWidth: 1, borderBottomColor: colors.line, },
   summaryItem: { flex: 1, alignItems: 'center' },
   summaryValue: { fontSize: 22, fontWeight: '900' },
-  summaryLabel: { color: '#BFD0DE', fontSize: 9, fontWeight: '800', marginTop: 4 },
-  summaryDivider: { width: 1, height: 36, backgroundColor: '#2F725E' },
-  mapCard: { height: 430, overflow: 'hidden', borderRadius: 20, borderWidth: 1, borderColor: '#DCE5E0', backgroundColor: '#EAF0F5' },
+  summaryLabel: {   fontWeight: '800', marginTop: 4, color: colors.textSoft, fontSize: 12, },
+  summaryDivider: { width: 1, height: 36, backgroundColor: 'transparent', },
+  mapCard: {  overflow: 'hidden',   borderColor: '#DCE5E0', backgroundColor: '#EAF0F5', height: 300, borderWidth: 0, borderRadius: 16, },
   mapMemberPicker: { position: 'absolute', top: 10, right: 10, width: 185, zIndex: 8, alignItems: 'flex-end' },
   mapMemberToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 185, backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: 14, paddingHorizontal: 11, paddingVertical: 8, elevation: 4 },
   mapMemberToggleText: { flexShrink: 1, fontSize: 11, fontWeight: '800', color: '#15231D' },
@@ -434,12 +434,12 @@ const styles = StyleSheet.create({
   mapState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
   mapStateText: { fontSize: 11, color: '#637269' },
   errorText: { fontSize: 11, color: '#D14343', fontWeight: '700', textAlign: 'center', padding: 20 },
-  legend: { position: 'absolute', right: 10, bottom: 10, backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 12, padding: 10, gap: 7, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 },
+  legend: {     borderRadius: 12,   shadowColor: '#000',  shadowRadius: 8, position: 'relative', right: 0, bottom: 0, flexDirection: 'row', flexWrap: 'wrap', backgroundColor: colors.surface, padding: 0, gap: 12, shadowOpacity: 0, elevation: 0, marginTop: 12, },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   legendDot: { width: 9, height: 9, borderRadius: 5 },
   legendArea: { width: 11, height: 9, borderRadius: 2 },
-  legendDivider: { height: 1, backgroundColor: '#E2E8F0', marginVertical: 1 },
-  legendText: { fontSize: 9, color: '#334155', fontWeight: '800' },
+  legendDivider: {  backgroundColor: '#E2E8F0', marginVertical: 1, width: 0, height: 0, },
+  legendText: {  color: '#334155', fontWeight: '800', fontSize: 11, },
   boundaryWarning: { fontSize: 10, lineHeight: 15, color: '#B45309', backgroundColor: '#FFF8E6', borderRadius: 10, padding: 10 },
   memberCard: { maxHeight: 190, minHeight: 106, backgroundColor: '#FFFFFF', borderRadius: 18, padding: 14, borderWidth: 1, borderColor: '#DCE5E0' },
   memberHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },

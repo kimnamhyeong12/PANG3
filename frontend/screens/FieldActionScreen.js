@@ -429,6 +429,7 @@ export default function FieldActionScreen({
   const [positionSaving, setPositionSaving] = useState(false);
   const positionSavingRef = useRef(false);
 
+  const [photoStage, setPhotoStage] = useState('before');
   const [photos, setPhotos] =
     useState(createEmptyPhotos());
 
@@ -1210,9 +1211,7 @@ export default function FieldActionScreen({
       <ScreenHeader title="보고서 양식 작성" onBack={requestBack} />
       {loadingReport ? <ActivityIndicator style={{ padding: 16 }} /> : null}
       {loadError ? <Text style={{ color: '#DC2626', padding: 16 }}>{loadError}</Text> : null}
-      {!loadingReport && !loadError && <View style={{ paddingHorizontal: 20, paddingVertical: 8, gap: 6 }}>
-        <PrimaryButton title={saving ? '저장 중...' : '보고서 저장'} onPress={handleSave} disabled={saving} />
-      </View>}
+
 
       <ScrollView
         pointerEvents={loadingReport || loadError || saving ? 'none' : 'auto'}
@@ -1224,9 +1223,10 @@ export default function FieldActionScreen({
           !mapInteracting
         }
       >
+        <View style={{ gap: 4 }}><Text style={{ color: '#10285B', fontSize: 16, fontWeight: '800' }}>{location?.detailAddress || location?.roadAddress || '방문지'}</Text></View>
         {/* 1. 작업 위치 */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>작업 위치</Text>
+          <Text style={styles.cardTitle}>위치도</Text>
 
           <View
             ref={mapWrapperRef}
@@ -1268,13 +1268,7 @@ export default function FieldActionScreen({
             />
           </View>
 
-          <Text style={styles.locationMoveStatus}>
-            {locationMoving
-              ? '옮기는 중...'
-              : editingLocation
-                ? '위치 이동 가능 · 지도를 움직여 조정하세요'
-                : '마커 고정됨'}
-          </Text>
+
 
           {markedMapUri ? (
             <ProtectedImage source={{ uri: markedMapUri }} style={styles.mapPreviewImage} />
@@ -1320,11 +1314,12 @@ export default function FieldActionScreen({
             현장 사진
           </Text>
 
+          <View style={styles.photoTabs}>{photos.map(item => <TouchableOpacity key={item.type} accessibilityRole="tab" accessibilityState={{ selected: photoStage === item.type }} onPress={() => setPhotoStage(item.type)} style={[styles.photoTab, photoStage === item.type && styles.photoTabActive]}><Text style={[styles.photoTabText, photoStage === item.type && styles.photoTabTextActive]}>{item.label}</Text></TouchableOpacity>)}</View>
           {photos.map(
             (
               item,
               index
-            ) => (
+            ) => item.type === photoStage ? (
               <View
                 key={item.type}
 
@@ -1337,14 +1332,6 @@ export default function FieldActionScreen({
                     styles.photoSlotDivider,
                 ]}
               >
-                <Text
-                  style={
-                    styles.photoStageTitle
-                  }
-                >
-                  {item.label}
-                </Text>
-
                 {item.uri ? (
                   <>
                     <ProtectedImage
@@ -1477,7 +1464,7 @@ export default function FieldActionScreen({
                   }
                 />
               </View>
-            )
+            ) : null
           )}
         </View>
 
@@ -1558,6 +1545,10 @@ export default function FieldActionScreen({
 
       </ScrollView>
 
+      {!loadingReport && !loadError && <View style={styles.saveBar}>
+        <PrimaryButton title={saving ? '저장 중...' : '보고서 저장'} onPress={handleSave} disabled={saving} />
+      </View>}
+
       <PhotoMarkupEditor
         visible={
           photoEditor.visible
@@ -1588,42 +1579,38 @@ export default function FieldActionScreen({
 
 const styles =
   StyleSheet.create({
+    saveBar: { padding: 12, backgroundColor: '#FFFFFF' },
+    photoTabs: { flexDirection: 'row', gap: 6, marginBottom: 16 },
+    photoTab: { flex: 1, minHeight: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4F8FF' },
+    photoTabActive: { backgroundColor: '#2477F3' },
+    photoTabText: { color: '#607195', fontSize: 12, fontWeight: '800' },
+    photoTabTextActive: { color: '#FFFFFF' },
     container: {
       flex: 1,
-      backgroundColor:
-        '#F4F8FF',
-      marginTop: 0,
-    },
 
-    body: {
-      padding: 14,
-      gap: 10,
-      paddingBottom: 58,
-    },
+      marginTop: 0, backgroundColor: '#FFFFFF', },
+
+    body: {padding: 20, gap: 20, paddingBottom: 24, },
 
     card: {
       backgroundColor:
         'white',
 
-      borderRadius: 16,
 
-      padding: 14,
 
-      borderWidth: 1,
+
+
+
 
       borderColor:
-        '#DCE7F5',
-    },
+        '#DCE7F5', padding: 0, borderWidth: 0, borderRadius: 0, },
 
     cardTitle: {
-      fontSize: 12.5,
+
 
       fontWeight: '900',
 
-      color: '#10285B',
-
-      marginBottom: 8,
-    },
+      color: '#10285B', fontSize: 16, marginBottom: 12, },
 
     typeText: {
       color: '#2477F3',
@@ -1634,13 +1621,13 @@ const styles =
     },
 
     mapWrapper: {
-      height: 220,
+
 
       borderRadius: 14,
 
       overflow: 'hidden',
 
-      borderWidth: 1,
+
 
       borderColor:
         '#DCE7F5',
@@ -1648,8 +1635,7 @@ const styles =
       backgroundColor:
         '#E8F2FF',
 
-      marginBottom: 8,
-    },
+      marginBottom: 8, height: 160, borderWidth: 0, },
 
     map: {
       flex: 1,
@@ -1705,23 +1691,19 @@ const styles =
     },
 
     photoSlotDivider: {
-      borderBottomWidth: 1,
+
 
       borderBottomColor:
-        '#EEF3F9',
-
-      marginBottom: 14,
-    },
+        '#EEF3F9', borderBottomWidth: 0, marginBottom: 0, },
 
     photoStageTitle: {
-      fontSize: 14,
+
 
       fontWeight: '900',
 
       color: '#10285B',
 
-      marginBottom: 8,
-    },
+      marginBottom: 8, fontSize: 14, },
 
     emptyPhotoSlot: {
       height: 126,
@@ -1848,12 +1830,11 @@ const styles =
       backgroundColor:
         '#2477F3',
 
-      borderRadius: 10,
+
 
       paddingVertical: 9,
 
-      alignItems: 'center',
-    },
+      alignItems: 'center', minHeight: 44, borderRadius: 12, },
 
     deleteButton: {
       backgroundColor:

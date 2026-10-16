@@ -25,7 +25,7 @@ export default function AccountRecovery({ mode = 'email' }) {
     } catch (error) { setMessage(error.message || '연결을 확인해 주세요.'); }
     finally { setBusy(false); }
   };
-  const input = { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 12, color: colors.text };
+  const input = { borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surfaceMuted, minHeight: 48, borderRadius: 10, padding: 12, color: colors.text };
   return <View style={{ gap: 12, padding: 16 }}>
     <Text style={{ color: colors.text, fontWeight: '700', fontSize: 17 }}>{forgot ? '비밀번호 찾기' : '복구 이메일 등록·변경'}</Text>
     <Text style={{ color: colors.textSoft }}>{forgot ? '아이디와 인증한 이메일을 입력해 주세요.' : '메일의 인증 링크를 열면 복구 이메일이 등록됩니다.'}</Text>

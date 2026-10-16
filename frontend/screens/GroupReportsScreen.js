@@ -69,9 +69,9 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
   };
   const filterField = (key, label, values, selected, setSelected) => (
     <View style={[styles.filterColumn, openFilter === key && styles.filterColumnOpen]}>
-      <Text style={styles.label}>{label}</Text>
+
       <TouchableOpacity style={styles.filterButton} onPress={() => setOpenFilter(openFilter === key ? null : key)} accessibilityRole="button" accessibilityLabel={`${label} 선택`} accessibilityState={{ expanded: openFilter === key }}>
-        <Text style={styles.filterValue} numberOfLines={1}>{key === 'member' ? workerLabel(selected) : selected || '전체'}</Text>
+        <Text style={styles.filterValue} numberOfLines={1}>{label} · {key === 'member' ? workerLabel(selected) : selected || '전체'}</Text>
         <Ionicons name={openFilter === key ? 'chevron-up' : 'chevron-down'} size={17} color={colors.textSoft} />
       </TouchableOpacity>
       {openFilter === key && <View style={styles.filterOptions}>
@@ -87,11 +87,9 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
   return <View style={[styles.container, embedded && { marginTop: 0 }]}>
     {!embedded && <ScreenHeader title={selected ? selected.name : personalArchive ? '보고서 보관함' : '그룹 보고서 전체보기'} onBack={selected ? () => setSelectedPlace(null) : onBack} />}
     <ScrollView contentContainerStyle={styles.body} removeClippedSubviews={false} keyboardShouldPersistTaps="handled">
-      <View style={styles.filtersRow}>{!personalArchive && filterField('member', '작업자', members, member, setMember)}{filterField('dong', '행정동', dongs, dong, setDong)}</View>
-
-      <Text style={styles.label}>방문지 검색</Text>
-      <TextInput style={styles.dateInput} value={search} onChangeText={setSearch} placeholder="방문지명 또는 주소" />
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}><Text style={styles.label}>보고서 작성 기간</Text>{personalArchive && <TouchableOpacity style={{ minHeight: 36, justifyContent: 'center' }} onPress={() => { setStartDate(''); setEndDate(''); setSelectedPlace(null); }}><Text style={{ color: colors.primary, fontSize: 12 }}>전체 기간</Text></TouchableOpacity>}</View>
+      <View style={styles.filterPanel}>
+        <View style={styles.searchField}><Ionicons name="search" size={18} color={colors.primary} /><TextInput style={styles.searchInput} value={search} onChangeText={setSearch} placeholder="방문지 검색" placeholderTextColor={colors.textSoft} /></View>
+        <View style={styles.filtersRow}>{!personalArchive && filterField('member', '작업자', members, member, setMember)}{filterField('dong', '행정동', dongs, dong, setDong)}</View>
       <View style={styles.dateRow}>
         {['start', 'end'].map((side, index) => <React.Fragment key={side}>
           {index > 0 && <Text style={styles.dateDash}>~</Text>}
@@ -100,6 +98,8 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
             <Ionicons name="calendar-outline" size={18} color={colors.primary} />
           </TouchableOpacity>
         </React.Fragment>)}
+      </View>
+        {personalArchive && <TouchableOpacity style={styles.allDates} onPress={() => { setStartDate(''); setEndDate(''); setSelectedPlace(null); }}><Text style={{ color: colors.primary, fontSize: 12 }}>전체 기간</Text></TouchableOpacity>}
       </View>
       {embedded && selected && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><TouchableOpacity style={{ minHeight: 44, justifyContent: 'center' }} onPress={() => setSelectedPlace(null)}><Ionicons name="arrow-back" size={22} color={colors.primary} /></TouchableOpacity><Text style={[styles.title, { flex: 1 }]}>{selected.name}</Text></View>}
       {loading ? <ActivityIndicator color={colors.primary} /> : error ? <Text style={styles.empty}>{error}</Text> : selected ?
@@ -132,21 +132,25 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
 }
 
 const styles = StyleSheet.create({
+  filterPanel: { padding: 14, borderRadius: 16, backgroundColor: colors.surfaceMuted, gap: 10, zIndex: 20 },
+  searchField: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.surface, paddingHorizontal: 12, borderRadius: 12 },
+  searchInput: { flex: 1, paddingVertical: 10, fontSize: 13, color: colors.text },
+  allDates: { alignSelf: 'flex-end', minHeight: 36, justifyContent: 'center' },
   filtersRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', zIndex: 20 },
   filterColumn: { flex: 1, minWidth: 0, gap: 7 },
   filterColumnOpen: { zIndex: 30 },
-  filterButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 10, backgroundColor: colors.surface },
+  filterButton: {  flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12,  borderColor: colors.line, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 0, justifyContent: 'center', minHeight: 40, },
   filterValue: { flex: 1, color: colors.text, fontSize: 12 },
   filterOptions: { position: 'absolute', top: '100%', marginTop: 6, left: 0, right: 0, zIndex: 40, elevation: 8, borderWidth: 1, borderColor: colors.line, borderRadius: 10, backgroundColor: colors.surface, overflow: 'hidden' },
   filterOption: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingHorizontal: 12, gap: 6 },
-  container: { flex: 1, backgroundColor: colors.background, marginTop: 0 }, body: { padding: 14, paddingBottom: 24, gap: 7 },
+  container: { flex: 1, backgroundColor: colors.background, marginTop: 0 }, body: {  paddingBottom: 24, padding: 20, gap: 0, },
   dongGroup: { gap: 8 }, dongGroupTitle: { color: colors.text, fontSize: 13, fontWeight: '800', marginTop: 4 },
   label: { color: colors.text, fontSize: 13, fontWeight: '800' },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   dateInput: { flex: 1, minWidth: 0, borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 10, backgroundColor: colors.surface, fontSize: 11 },
   dateButton: { flex: 1, minWidth: 0, minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4, paddingHorizontal: 9, borderWidth: 1, borderColor: colors.line, borderRadius: 10, backgroundColor: colors.surface },
   dateText: { fontSize: 11, color: colors.text },
-  dateDash: { color: colors.textSoft }, card: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 11, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
+  dateDash: { color: colors.textSoft }, card: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10,  backgroundColor: colors.surface,  borderColor: colors.line, paddingHorizontal: 0, paddingVertical: 14, borderWidth: 0, borderRadius: 0, borderBottomWidth: 1, borderBottomColor: colors.line, minHeight: 64, },
   cardBody: { flex: 1 }, title: { color: colors.text, fontWeight: '800', fontSize: 13 }, meta: { color: colors.textSoft, fontSize: 10, marginTop: 3 },
   empty: { color: colors.textSoft, textAlign: 'center', padding: 28 },
 });

@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 360,
-    borderRadius: 24,
+
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 24,
     paddingTop: 26,
@@ -217,10 +217,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 12,
-  },
+
+    shadowRadius: 24, borderRadius: 16, shadowOpacity: 0, elevation: 0, },
   iconBadge: {
     width: 50,
     height: 50,

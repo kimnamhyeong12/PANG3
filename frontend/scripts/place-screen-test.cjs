@@ -52,7 +52,7 @@ assert.equal(searchContainerStyle.position, 'absolute');
 for (const edge of ['top', 'bottom', 'left', 'right']) assert.equal(searchContainerStyle[edge], 0, `Search must cover the map at ${edge}`);
 const highlight = HighlightedPlace({ text: '동아대학교 부민캠퍼스', query: '동아대' });
 const match = highlight.props.children.find(child => child.key === 'match0');
-assert.equal(match.props.style.color, '#168DE2'); assert.equal(match.props.children, '동아대');
+assert.equal(match.props.style.color, '#2477F3'); assert.equal(match.props.children, '동아대');
 const Sheet = load(path.join(base, 'components/SearchResultSheet.js')).default;
 let sheetGestures; let sheetPosition; let sheetScroll;
 rn.PanResponder.create = config => { sheetGestures = config; return { panHandlers: {} }; };

@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
   inactive: { opacity: 0.5 }, icon: { width: 34, height: 34, borderRadius: 11, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
   text: { flex: 1 }, small: { color: colors.textSoft, fontSize: 8.5 }, value: { color: colors.text, fontSize: 13, fontWeight: '900', marginTop: 1 },
   backdrop: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(16,40,91,0.38)' },
-  sheet: { maxHeight: '70%', backgroundColor: colors.surface, borderRadius: 18, padding: 18 }, title: { color: colors.text, fontSize: 17, fontWeight: '900', marginBottom: 8 },
+  sheet: { maxHeight: '70%', backgroundColor: colors.surface,  padding: 18, borderRadius: 16, shadowOpacity: 0, elevation: 0, }, title: { color: colors.text, fontSize: 17, fontWeight: '900', marginBottom: 8 },
   option: { minHeight: 45, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: colors.line, paddingVertical: 10 },
   optionText: { color: colors.textSoft, fontSize: 12 }, selected: { color: colors.primary, fontWeight: '900' },
 });

@@ -97,9 +97,9 @@ function Field({ label, required, icon, helper, error, right, ...props }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background }, body: { padding: 16, paddingBottom: 30 },
-  card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 20, padding: 18, ...shadow },
-  field: { marginBottom: 12 }, label: { color: colors.text, fontSize: 12, fontWeight: '900', marginBottom: 6 }, required: { color: colors.danger }, inputRow: { height: 48, borderWidth: 1, borderColor: colors.line, borderRadius: 13, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: '#FFFFFF' }, inputError: { borderColor: colors.danger }, input: { flex: 1, color: colors.text, fontSize: 12.5 }, helper: { color: colors.textSoft, fontSize: 9.5, marginTop: 5 }, errorText: { color: colors.danger, fontSize: 9.5, marginTop: 5 },
+  container: { flex: 1, backgroundColor: colors.background }, body: { padding: 16, paddingBottom: 30, paddingHorizontal: 20, },
+  card: {   borderColor: colors.line,  padding: 18, ...shadow, borderWidth: 0, shadowOpacity: 0, elevation: 0, borderRadius: 16, backgroundColor: colors.surface, },
+  field: { marginBottom: 12 }, label: { color: colors.text, fontSize: 12, fontWeight: '900', marginBottom: 6 }, required: { color: colors.danger }, inputRow: { height: 48, borderWidth: 1, borderColor: colors.line, borderRadius: 13, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: '#FFFFFF' }, inputError: { borderColor: colors.danger }, input: { flex: 1, minHeight: 48, backgroundColor: colors.surfaceMuted, borderColor: colors.line, borderRadius: 12, fontSize: 14, color: colors.text, }, helper: { color: colors.textSoft, fontSize: 9.5, marginTop: 5 }, errorText: { color: colors.danger, fontSize: 9.5, marginTop: 5 },
   idCheck: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 8 }, idCheckText: { color: colors.primary, fontSize: 11, fontWeight: '800' },
   submit: { marginTop: 17 }, loginLink: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingTop: 15 }, loginMuted: { color: colors.textSoft, fontSize: 11 }, loginText: { color: colors.primary, fontSize: 11, fontWeight: '900' },
 });

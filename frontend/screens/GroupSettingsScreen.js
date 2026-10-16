@@ -565,8 +565,7 @@ const styles = StyleSheet.create({
   body: {
     padding: 14,
     gap: 10,
-    paddingBottom: 27,
-  },
+    paddingBottom: 27, paddingHorizontal: 20, },
 
   leaveButton: {
     alignSelf: 'center',
@@ -611,12 +610,11 @@ const styles = StyleSheet.create({
 
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 18,
-    borderWidth: 1,
+
+
     borderColor: '#E4ECF7',
     padding: 14,
-    ...shadow,
-  },
+    ...shadow, borderWidth: 0, shadowOpacity: 0, elevation: 0, borderRadius: 16, },
 
   infoRow: {
     minHeight: 40,

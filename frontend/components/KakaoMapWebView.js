@@ -1,3 +1,4 @@
+import { workStatus } from '../constants/design';
 import { apiFetch as fetch } from '../utils/auth';
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
@@ -25,7 +26,7 @@ const KAKAO_JAVASCRIPT_KEY =
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL;
 
-  
+
 /*
  * 목적지 접근 판정 거리
  * 100m 이내에 들어오면
@@ -40,17 +41,7 @@ const ARRIVAL_DISTANCE_METERS = 100;
  */
 const MY_LOCATION_LEVEL = 5;
 
-const getMarkerColorByStatus = (status) => {
-  if (status === "complete") {
-    return "#1F9D55";
-  }
-
-  if (status === "working") {
-    return "#FACC15";
-  }
-
-  return "#E74C3C";
-};
+const getMarkerColorByStatus = (status) => workStatus(status).color;
 
 /*
  * WebView 안에서 실행되는 카카오맵 HTML.
@@ -1267,6 +1258,17 @@ const buildKakaoMapHtml = (
       return;
     }
 
+    if (commandData.type === "SELECTION_COORDINATE") {
+      var lat = Number(commandData.latitude), lng = Number(commandData.longitude);
+      if (!selectionSessionActive || !map || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
+      selectedCenter = new window.kakao.maps.LatLng(lat, lng);
+      selectionMode = true;
+      map.setCenter(selectedCenter);
+      ensureSelectionOverlay();
+      post({ type: "CENTER_CHANGE", latitude: lat, longitude: lng });
+      return;
+    }
+
     if (commandData.type === "SELECTION_MODE") {
       var nextSelectionMode = Boolean(commandData.enabled);
 
@@ -1375,7 +1377,7 @@ const buildKakaoMapHtml = (
         new window.kakao.maps.LatLng(
           ${Number(initialLatitude)},
           ${Number(initialLongitude)}
-        ); 
+        );
 
       map =
         new window.kakao.maps.Map(
@@ -1546,6 +1548,7 @@ export default function KakaoMapWebView({
   mapSelectMode,
   selectionSessionActive = false,
   selectionPosition = null,
+  selectionCoordinateRequest = null,
 
   onDirectPlaceSelect,
   onCenterChange,
@@ -1757,6 +1760,11 @@ export default function KakaoMapWebView({
       longitude: selectionPosition?.lng,
     });
   }, [mapSelectMode]);
+
+  useEffect(() => {
+    if (!selectionCoordinateRequest) return;
+    sendMapCommand({ type: "SELECTION_COORDINATE", latitude: selectionCoordinateRequest.lat, longitude: selectionCoordinateRequest.lng });
+  }, [selectionCoordinateRequest?.token]);
 
   useEffect(() => {
     if (!selectionPosition) return;
@@ -2429,7 +2437,7 @@ export default function KakaoMapWebView({
                   pos.longitude
                 ),
                 baseUrl:"https://localhost/",
-              
+
             };
         }
 
@@ -3135,10 +3143,7 @@ export default function KakaoMapWebView({
             highlighted: String(location.id ?? `${location.lat},${location.lng},${location.detailAddress}`) === highlightedLocationKey,
 
             color:
-              location.markerColor || getMarkerColorByStatus(
-                location.status ||
-                  "pending"
-              ),
+              location.markerColor || "#E34D59",
 
             /*
              * current 스타일은 더 이상 사용하지 않는다.
@@ -3617,7 +3622,7 @@ export default function KakaoMapWebView({
             event.nativeEvent
           );
         }}
-        
+
       />
 
       {currentPos && (

@@ -98,14 +98,14 @@ function Stat({ label, value }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  body: { padding: 14, paddingBottom: 36, gap: 14 },
-  embeddedBody: { gap: 10 },
+  body: { padding: 14, paddingBottom: 36, gap: 14, paddingHorizontal: 20, },
+  embeddedBody: { gap: 10, paddingHorizontal: 20, },
   heading: { color: colors.text, fontSize: 18, fontWeight: '900' },
   summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  statCard: { width: '48%', flexGrow: 1, padding: 16, borderRadius: 16, backgroundColor: colors.surface, ...shadow },
+  statCard: { width: '48%', flexGrow: 1, padding: 16, borderRadius: 16,  ...shadow, backgroundColor: colors.surfaceMuted, shadowOpacity: 0, elevation: 0, },
   statLabel: { color: colors.textSoft, fontSize: 12, fontWeight: '700' },
   statValue: { color: colors.primary, fontSize: 22, fontWeight: '900', marginTop: 8 },
-  card: { padding: 16, borderRadius: 18, backgroundColor: colors.surface, ...shadow },
+  card: { padding: 16,  backgroundColor: colors.surface, ...shadow, borderWidth: 0, shadowOpacity: 0, elevation: 0, borderRadius: 16, },
   cardTitle: { color: colors.text, fontSize: 15, fontWeight: '900', marginBottom: 8 },
   empty: { color: colors.textSoft, fontSize: 12, paddingVertical: 16 },
   memberRow: { minHeight: 45, borderTopWidth: 1, borderTopColor: colors.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },

@@ -93,10 +93,8 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
   };
   return <View style={styles.container}><ScreenHeader title="보고서 다운로드" onBack={onBack} />
     <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-      <View style={styles.icon}><Ionicons name={files.length > 0 && files.every(file => file.uri) ? 'checkmark' : 'document-text-outline'} size={32} color="#FFFFFF" /></View>
-      <Text style={styles.title}>{preparing ? 'HWPX 파일을 준비하고 있습니다' : files.length > 0 && files.every(file => file.uri) ? '보고서 파일이 준비되었습니다' : '보고서 다운로드'}</Text>
-
-      <Text style={styles.description}>보고서는 작성일로부터 1년간 보관됩니다.{Platform.OS === 'android' ? '\n다운로드한 파일은 휴대폰 Download 폴더에 저장됩니다.' : ''}</Text>
+      <View style={styles.readyCard}><Ionicons name="document-text-outline" size={30} color={colors.primary} /><Text style={styles.title}>{loading ? '보고서를 불러오고 있어요' : preparing ? '보고서를 준비하고 있어요' : files.some(file => file.loadError) ? '파일을 확인해 주세요' : '보고서가 준비됐어요'}</Text><Text style={styles.description}>선택한 방문지의 파일을 각각 다운로드하세요.</Text></View>
+      <Text style={styles.listHeading}>다운로드할 파일</Text>
       {loading && <Text style={styles.description}>보고서를 불러오고 있습니다.</Text>}
       {!loading && files.some(file => file.loadError) && <SecondaryButton title="다시 불러오기" onPress={() => setReload(value => value + 1)} />}
       {!!error && <Text style={styles.error}>{error}</Text>}
@@ -108,17 +106,20 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
           {!!file.error && <Text style={styles.error}>{file.error}</Text>}
           {file.saved && <Text style={styles.fileState}>Download 폴더에 저장했습니다.</Text>}
         </View>
-        <SecondaryButton title={file.saved ? '다시 다운로드' : '다운로드'} disabled={preparing || !canOpen || !file.progressId || !canDownloadReport(file)} onPress={() => getFile(file.progressId)} style={styles.fileButton} />
+        <PrimaryButton title={file.saved ? '다시 다운로드' : '다운로드'} disabled={preparing || !canOpen || !file.progressId || !canDownloadReport(file)} onPress={() => getFile(file.progressId)} style={styles.fileButton} />
       </View>)}
       {ids.length > 1 && <PrimaryButton title={preparing ? '다운로드 중…' : `${ids.length}개 모두 다운로드`} icon="download-outline" disabled={preparing || !canOpen} onPress={prepareAll} />}
+      <Text style={styles.description}>보고서는 작성일로부터 1년간 보관돼요.{Platform.OS === 'android' ? '\n파일은 휴대폰 Download 폴더에 저장돼요.' : ''}</Text>
       <SecondaryButton title="이전 화면으로" onPress={onBack} />
     </ScrollView>
   </View>;
 }
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, marginTop: 0 }, body: { flexGrow: 1, padding: 24, paddingBottom: 36, gap: 16 },
+  readyCard: { padding: 18, gap: 10, borderRadius: 16, backgroundColor: colors.primarySoft },
+  listHeading: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  container: { flex: 1, backgroundColor: colors.background, marginTop: 0 }, body: { flexGrow: 1,  paddingBottom: 36, gap: 16, padding: 20, },
   icon: { alignSelf: 'center', width: 70, height: 70, borderRadius: radius.large, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
-  title: { color: colors.text, fontSize: 19, fontWeight: '800', textAlign: 'center' }, description: { color: colors.textSoft, fontSize: 13, lineHeight: 20, textAlign: 'center' },
-  error: { color: colors.danger, fontSize: 12, lineHeight: 18 }, fileRow: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 14 },
-  fileInfo: { flex: 1 }, fileName: { color: colors.text, fontWeight: '700', fontSize: 13 }, fileState: { color: colors.textSoft, fontSize: 11, marginTop: 5 }, fileButton: { paddingHorizontal: 12, minHeight: 42 },
+  title: { color: colors.text,  fontWeight: '800', textAlign: 'left', fontSize: 22, }, description: { color: colors.textSoft,  lineHeight: 20, textAlign: 'left', fontSize: 12, },
+  error: { color: colors.danger, fontSize: 12, lineHeight: 18 }, fileRow: {     backgroundColor: colors.surface,  borderColor: colors.line, flexDirection: 'column', alignItems: 'stretch', borderWidth: 0, borderBottomWidth: 1, borderBottomColor: colors.line, borderRadius: 0, padding: 0, paddingBottom: 16, gap: 14, },
+  fileInfo: {flex: 0, }, fileName: { color: colors.text, fontWeight: '700', fontSize: 13 }, fileState: { color: colors.textSoft, fontSize: 11, marginTop: 5 }, fileButton: { paddingHorizontal: 12, minHeight: 42 },
 });

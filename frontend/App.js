@@ -1432,6 +1432,7 @@ function AppContent() {
         </View>
 
         {user &&
+          !(screen === 'mapDirect' && isGuiding) && !(screen === 'teamLocations' && teamIsGuiding) &&
           !(['mapDirect', 'teamLocations', 'publicDataAssignment'].includes(screen) && mapSearchVisible) &&
           !['login', 'register'].includes(screen) && (
             <BottomNavigation
@@ -1595,21 +1596,20 @@ const styles = StyleSheet.create({
   },
 
   bottomNav: {
-    height: 66,
+
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background,
+
     borderTopWidth: 1,
     borderTopColor: colors.line,
-    elevation: 12,
+
     shadowColor: '#1D4F91',
-    shadowOpacity: 0.1,
+
     shadowRadius: 12,
     shadowOffset: {
       width: 0,
       height: -4,
-    },
-  },
+    }, backgroundColor: colors.surface, elevation: 0, shadowOpacity: 0, height: 67, },
 
   bottomNavItem: {
     flex: 1,
@@ -1620,10 +1620,9 @@ const styles = StyleSheet.create({
   },
 
   bottomNavLabel: {
-    color: colors.textFaint,
-    fontSize: 11,
-    fontWeight: '700',
-  },
+
+
+    fontWeight: '700', fontSize: 11, color: colors.textSoft, },
 
   bottomNavLabelActive: {
     color: colors.primary,

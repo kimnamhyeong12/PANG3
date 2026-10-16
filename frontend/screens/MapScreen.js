@@ -1,3 +1,5 @@
+import { colors, workStatus } from '../constants/design';
+import { coordinateInput } from '../utils/coordinateInput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScreenBackHandler, consumeScreenBack } from '../utils/screenBack';
 import { apiFetch as fetch } from '../utils/auth';
@@ -85,11 +87,7 @@ const formatShortDate = (value) => {
   return `${parts[1]}.${parts[2]}`;
 };
 
-const getStatusColor = (status) => {
-  if (status === 'complete') return '#1F9D55';
-  if (status === 'working') return '#FACC15';
-  return '#E74C3C';
-};
+const getStatusColor = (status) => workStatus(status).color;
 
 const isCompleted = (item) => ['complete', 'completed', 'done'].includes(
   String(item?.status ?? item?.taskStatus ?? item?.task_status ?? '').toLowerCase()
@@ -160,6 +158,7 @@ function NormalMapScreen({
   const screenInsets = useSafeAreaInsets();
   const [topOverlayBottom, setTopOverlayBottom] = useState(0);
   const [bottomOverlayHeight, setBottomOverlayHeight] = useState(0);
+  const [pendingOverlayHeight, setPendingOverlayHeight] = useState(0);
   const [focusRequest, setFocusRequest] = useState({ coordinates: [], token: 0 });
   const [workplaceOpen, setWorkplaceOpen] = useState(false);
   const [workplaceCandidate, setWorkplaceCandidate] = useState(null);
@@ -188,6 +187,22 @@ function NormalMapScreen({
 
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [mapSelectMode, setMapSelectMode] = useState(false);
+  const [coordinateText, setCoordinateText] = useState({ lat: '', lng: '' });
+  const coordinateFocused = useRef(false);
+  const [coordinateRequest, setCoordinateRequest] = useState(null);
+  const [guideMenuOpen, setGuideMenuOpen] = useState(false);
+  useEffect(() => { if (!isActive || !isGuiding) setGuideMenuOpen(false); }, [isActive, isGuiding]);
+  const updateSelectionCenter = (point) => {
+    setDirectCenter(point);
+    if (!coordinateFocused.current) setCoordinateText({ lat: point.lat.toFixed(6), lng: point.lng.toFixed(6) });
+  };
+  const editCoordinate = (key, text) => {
+    const next = { ...coordinateText, [key]: text };
+    setCoordinateText(next);
+    const point = coordinateInput(next.lat, next.lng);
+    if (point) { setDirectCenter(point); setCoordinateRequest({ ...point, token: Date.now() }); }
+  };
+
   const [locationSettingMode, setLocationSettingMode] = useState(false);
   const [directCenter, setDirectCenter] = useState(null);
   const [centerAddress, setCenterAddress] = useState('');
@@ -1227,15 +1242,15 @@ function NormalMapScreen({
     } else setRecordNextOffer(null);
   }, [isActive, recordReturn?.token, scopeKey]);
 
-  const handleStartGuidance = async (explicitTarget = null) => {
-    const target = explicitTarget?.isReturnLocation ? explicitTarget : cardTarget;
+  const handleStartGuidance = async (explicitTarget = null, requestedMode = null) => {
+    const target = hasVisitCoordinates(explicitTarget) ? explicitTarget : cardTarget;
     if (!target || isCompleted(target) || segmentChanging || preview?.loading) return;
     if (!hasVisitCoordinates(currentLocation)) {
       showAlert('현재 위치 확인 중', '현재 위치를 확인한 뒤 다시 시도해 주세요.');
       return;
     }
     const targetKey = locationKey(target);
-    const mode = preview?.mode || activeSegment?.mode || transportMode;
+    const mode = requestedMode || preview?.mode || activeSegment?.mode || transportMode;
     if (mode === 'car' && !isKakaoNavigationAvailable()) {
       showAlert('차량 안내 사용 불가', '카카오 차량 안내가 포함된 Android 앱에서 이용해 주세요. 도보 안내는 현재 지도에서 사용할 수 있습니다.');
       return;
@@ -1378,7 +1393,7 @@ function NormalMapScreen({
         previewRouteSegment={preview?.segment || null}
         routeViewportPadding={{ top: topOverlayBottom ? topOverlayBottom + 56 : 300,
           bottom: !resultsMode && !mapSelectMode && !publicFacilityMode && !searchedPlace && !coordSheetOpen && !pendingOpen && !dongOpen
-            ? bottomOverlayHeight + 52 : 40, left: 40, right: 40 }}
+            ? (cardTarget ? bottomOverlayHeight : 0) + pendingOverlayHeight + 52 : 40, left: 40, right: 40 }}
         highlightedLocationKey={resultsMode ? selectedSearchPinId : cardTarget ? locationKey(cardTarget) : null}
         focusCoordinates={publicFacilityMode ? publicViewCoordinates : focusRequest.coordinates}
         focusToken={focusRequest.token}
@@ -1391,10 +1406,11 @@ function NormalMapScreen({
         isGuiding={isGuiding && !kakaoDestination}
         searchedPlace={searchedPlace}
         clearSearchMarkerSignal={clearSearchMarkerSignal}
-        mapSelectMode={mapSelectMode && locationSettingMode}
+        mapSelectMode={mapSelectMode}
         selectionSessionActive={mapSelectMode}
         selectionPosition={directCenter}
-        onCenterChange={setDirectCenter}
+        onCenterChange={updateSelectionCenter}
+        selectionCoordinateRequest={coordinateRequest}
         onCurrentLocationChange={setCurrentLocation}
         onMarkerClick={handleVisitPress}
         onLocationsChange={(next) => {
@@ -1407,7 +1423,8 @@ function NormalMapScreen({
       />
       {kakaoDestination && (
         <KakaoNavigationView
-          style={StyleSheet.absoluteFillObject}
+          style={[StyleSheet.absoluteFillObject, preview && { opacity: 0 }]}
+          pointerEvents={preview ? 'none' : 'auto'}
           destination={kakaoDestination}
           onRouteChanged={(event) => {
             const data = event.nativeEvent;
@@ -1446,41 +1463,18 @@ function NormalMapScreen({
         />
       )}
 
-      {mapSelectMode && <View style={{ position: 'absolute', left: 16, right: 16, bottom: 16, zIndex: 46, backgroundColor: '#FFFFFF', padding: 14, borderRadius: 14, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, elevation: 6 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-          <View style={{ flex: 1, paddingRight: 4 }}>
-            <Text style={{ color: '#172033', fontWeight: '800' }}>
-              {centerAddress || (locationSettingMode ? '현재 위치를 확인하는 중...' : '위치 설정을 눌러 위치를 선택하세요')}
-            </Text>
-            <Text style={{ color: '#697386', marginTop: 4 }}>
-              {directCenter ? `${directCenter.lat.toFixed(6)}, ${directCenter.lng.toFixed(6)}` : '선택된 위치 없음'}
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={{
-              width: 92,
-              height: 36,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 9,
-              backgroundColor: locationSettingMode ? '#2477F3' : '#E8F2FF',
-              borderWidth: 1,
-              borderColor: locationSettingMode ? '#2477F3' : '#BFD6F6',
-            }}
-            onPress={() => {
-              setLocationSettingMode((value) => !value);
-            }}
-          >
-            <Text style={{ color: locationSettingMode ? '#FFFFFF' : '#2477F3', fontWeight: '900', fontSize: 12 }}>
-              {locationSettingMode ? '이동 중...' : '위치 설정'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
+      {mapSelectMode && <View style={styles.selectionCard}>
+        <Text style={styles.selectionAddress}>{centerAddress || '주소 확인 중…'}</Text>
+        <View style={styles.coordinateRow}>{[['lat', '위도'], ['lng', '경도']].map(([key, label]) => <View key={key} style={{ flex: 1 }}>
+          <Text style={styles.coordinateLabel}>{label}</Text>
+          <TextInput style={styles.coordinateInput} value={coordinateText[key]} onChangeText={text => editCoordinate(key, text)}
+            keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'numeric'} selectTextOnFocus
+            onFocus={() => { coordinateFocused.current = true; }} onBlur={() => { coordinateFocused.current = false; }}
+            accessibilityLabel={`${label} 직접 입력`} />
+        </View>)}</View>
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
           <TouchableOpacity
-            style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#F3B9C0', backgroundColor: '#FDE9EB' }}
+            style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface }}
             onPress={() => {
               setLocationSettingMode(false);
               setMapSelectMode(false);
@@ -1490,7 +1484,7 @@ function NormalMapScreen({
               setClearSearchMarkerSignal((prev) => prev + 1);
             }}
           >
-            <Text style={{ color: '#B94D59', fontWeight: '800' }}>취소</Text>
+            <Text style={{ color: colors.primary, fontWeight: '800' }}>취소</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1506,7 +1500,7 @@ function NormalMapScreen({
               setTask('');
             }}
           >
-            <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>위치 선택</Text>
+            <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>이 위치 선택</Text>
           </TouchableOpacity>
         </View>
       </View>}
@@ -1515,9 +1509,9 @@ function NormalMapScreen({
         <Pressable style={[StyleSheet.absoluteFill, { zIndex: 19 }]}
           accessibilityLabel="방문지 추가 메뉴 닫기" onPress={() => setAddMenuOpen(false)} />
       )}
-      <View style={[styles.topOverlay, { top: screenInsets.top + 6 }]} pointerEvents="box-none"
+      <View style={[styles.topOverlay, { top: screenInsets.top + (kakaoDestination && !preview ? 102 : 6) }]} pointerEvents="box-none"
         onLayout={event => { const { y, height } = event.nativeEvent.layout; setTopOverlayBottom(y + height); }}>
-        <View style={styles.searchControlRow}>
+        {(!isGuiding || preview) && <View style={styles.searchControlRow}>
           {!root && <TouchableOpacity style={[styles.smallTopButton, { minWidth: 44, minHeight: 44 }]} accessibilityLabel="뒤로가기" onPress={() => { if (!consumeScreenBack()) onBack?.(); }}><Ionicons name="arrow-back" size={22} color="#2477F3" /></TouchableOpacity>}
           {publicFacilityMode && <TouchableOpacity
             style={styles.smallTopButton}
@@ -1544,7 +1538,7 @@ function NormalMapScreen({
             accessibilityLabel="공공시설물 조회 닫기" onPress={() => { resetAddModes(); setDongOpen(false); }}>
             <Ionicons name="close" size={20} color="#2477F3" />
           </TouchableOpacity>}
-        </View>
+        </View>}
         {addMenuOpen && (
           <View style={styles.addMenuBox}>
             <TouchableOpacity style={styles.addMenuItem} onPress={() => { setAddMenuOpen(false); returnDisplayMarker ? previewVisit(returnDisplayMarker) : setWorkplaceOpen(true); }}><Ionicons name="home-outline" size={18} color="#2477F3" /><View style={{ flex: 1 }}><Text style={styles.addMenuTitle}>근무지 복귀</Text><Text style={styles.addMenuDesc}>{user?.workplaceAddress || '근무지를 등록하고 복귀 경로 확인'}</Text></View></TouchableOpacity>
@@ -1574,6 +1568,8 @@ function NormalMapScreen({
                 setCenterAddress('');
                 setLocationSettingMode(true);
 
+                setCoordinateText({ lat: '', lng: '' });
+                setCoordinateRequest(null);
                 setMapSelectMode(true);
 
               }}
@@ -1581,7 +1577,7 @@ function NormalMapScreen({
               <Ionicons name="map-outline" size={18} color="#2477F3" />
               <View>
                 <Text style={styles.addMenuTitle}>지도에서 직접 선택</Text>
-                <Text style={styles.addMenuDesc}>지도를 눌러 위치 선택</Text>
+                <Text style={styles.addMenuDesc}>지도를 눌러 이 위치 선택</Text>
               </View>
             </TouchableOpacity>
             <TouchableOpacity
@@ -1681,7 +1677,7 @@ function NormalMapScreen({
               showsHorizontalScrollIndicator={false}
               renderItem={({ item, index }) => (
                 <TouchableOpacity
-                  style={styles.routeChip}
+                  style={[styles.routeChip, { backgroundColor: workStatus(item.status).background }]}
                   onPress={() => handleVisitPress(item)}
                 >
                   <View
@@ -1794,69 +1790,38 @@ function NormalMapScreen({
           </View>
         )}
 
-        {!resultsMode && !publicFacilityMode && !mapSelectMode && !searchedPlace && !coordSheetOpen && cardTarget && (
-          <View style={styles.destinationCard}>
-            <View style={styles.destinationHead}>
-              <View style={{ flex: 1, minWidth: 0 }}>
-            {(preview?.mode || activeSegment?.mode || transportMode) === 'car' && !isGuiding && (
-              <TouchableOpacity accessibilityLabel="주변 도로 도착 허용" disabled={preview?.loading || segmentChanging}
-                onPress={() => { const next = !multiArrival; setMultiArrival(next); previewVisit(cardTarget, 'car', next); }}>
-                <Text style={styles.destinationMeta}>도착 위치: {multiArrival ? '주변 도로 허용' : '기본'} · 눌러서 비교</Text>
-              </TouchableOpacity>
-            )}
-              <TouchableOpacity style={styles.destinationInfo}
-                accessibilityLabel={cardTarget.isReturnLocation ? '복귀 목적지' : '보고서 작성'}
-                accessibilityRole={cardTarget.isReturnLocation ? 'text' : 'button'}
-                disabled={cardTarget.isReturnLocation}
-                onPress={() => onLocationClick?.(cardTarget, 'report')}>
-                <Text style={styles.destinationName} numberOfLines={1}>{cardTarget.detailAddress || cardTarget.roadAddress || '방문지'}</Text>
-                <Text style={styles.destinationMeta} numberOfLines={2}>
-                  {!preview && isGuiding ? '안내 중 · ' : ''}
-                  {preview?.loading ? '경로를 불러오는 중…' : preview?.error ||
-                    [formatDistance(cardDistance), formatDuration(cardDuration)].filter(Boolean).join(' · ')}
-                </Text>
-              </TouchableOpacity>
-              </View>
-            <View style={styles.destinationActions}>
-              {['car', 'walk'].map((mode) => (
-                <TouchableOpacity key={mode} accessibilityLabel={mode === 'car' ? '차량 경로' : '도보 경로'}
-                  disabled={preview?.loading || segmentChanging}
-                  onPress={() => handleTransportPress(mode)}
-                  style={[styles.destinationMode, (preview?.mode || activeSegment?.mode || transportMode) === mode && styles.destinationModeActive]}>
-                  <Ionicons name={mode === 'car' ? 'car' : 'walk'} size={19}
-                    color="#FFFFFF" />
-                </TouchableOpacity>
-              ))}
-              {preview || !isGuiding ? (
-                <TouchableOpacity style={[styles.startButton, (!cardSegment || isCompleted(cardTarget) || segmentChanging) && { opacity: 0.4 }]}
-                  accessibilityLabel={isGuiding ? '이곳으로 안내 변경' : '안내 시작'}
-                  disabled={!cardSegment || isCompleted(cardTarget) || segmentChanging}
-                  onPress={handleStartGuidance}>
-                  <Ionicons name="play-circle" size={25} color="#FFFFFF" />
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={styles.stopButton} accessibilityLabel="안내 종료" onPress={handleStopGuidance}>
-                  <Ionicons name="stop-circle" size={25} color="#FFFFFF" />
-                </TouchableOpacity>
-              )}
-            </View>
-              {preview && <TouchableOpacity style={styles.destinationClose}
-                accessibilityLabel={isGuiding ? '현재 안내로 돌아가기' : '경로 미리보기 닫기'}
-                onPress={() => { previewRequestRef.current += 1; setPreview(null); }}>
-                <Ionicons name="close" size={20} color="#FFFFFF" />
-              </TouchableOpacity>}
-            </View>
-            {preview?.error && <TouchableOpacity onPress={() => previewVisit(cardTarget, preview.mode)}>
-              <Text style={styles.retryText}>경로 다시 불러오기</Text>
-            </TouchableOpacity>}
-          </View>
-        )}
       </View>
+      {mapSelectMode && <View style={[styles.selectionHint, { top: screenInsets.top + 124 }]} pointerEvents="none"><Text style={styles.selectionHintText}>지도를 움직여 위치를 선택하세요</Text></View>}
+      {!resultsMode && !publicFacilityMode && !mapSelectMode && !searchedPlace && !coordSheetOpen && cardTarget && (
+        <View style={styles.destinationCard} onLayout={event => setBottomOverlayHeight(event.nativeEvent.layout.height)}>
+          <View style={styles.destinationTitleRow}>
+            <TouchableOpacity style={{ flex: 1, minHeight: 36, justifyContent: 'center' }} disabled={cardTarget.isReturnLocation} onPress={() => onLocationClick?.(cardTarget, 'report')}>
+              <Text style={styles.destinationName} numberOfLines={1}>{cardTarget.detailAddress || cardTarget.roadAddress || '방문지'}</Text>
+            </TouchableOpacity>
+            {isGuiding && !preview ? <TouchableOpacity style={styles.routeMenuButton} onPress={() => setGuideMenuOpen(true)} accessibilityLabel="안내 메뉴"><Ionicons name="menu" size={25} color={colors.text} /></TouchableOpacity>
+              : <TouchableOpacity style={styles.routeMenuButton} accessibilityLabel="경로 미리보기 닫기" onPress={() => { previewRequestRef.current += 1; setPreview(null); }}><Ionicons name="close" size={20} color={colors.textSoft} /></TouchableOpacity>}
+          </View>
+          <View style={styles.destinationModesRow}>
+            {(!isGuiding || preview) && ['car', 'walk'].map(mode => <TouchableOpacity key={mode} disabled={segmentChanging || preview?.loading} style={[styles.transportPill, (preview?.mode || activeSegment?.mode || transportMode) === mode && styles.transportPillActive]} onPress={() => handleTransportPress(mode)} accessibilityLabel={mode === 'car' ? '차량 경로' : '도보 경로'}><Text style={[(preview?.mode || activeSegment?.mode || transportMode) === mode ? styles.transportTextActive : styles.transportText]}>{mode === 'car' ? '차량' : '도보'}</Text></TouchableOpacity>)}
+            <Text style={styles.distanceText}>{preview?.loading ? '경로 확인 중…' : preview?.error || [formatDistance(cardDistance), formatDuration(cardDuration)].filter(Boolean).join(' · ')}</Text>
+          </View>
+          {!preview && isGuiding && Number.isFinite(Number(cardDuration)) && <Text style={styles.arrivalText}>{new Date(Date.now() + Number(cardDuration) * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 도착 예정</Text>}
+          {(preview?.mode || transportMode) === 'car' && !isGuiding && <TouchableOpacity style={{ minHeight: 32, justifyContent: 'center' }} accessibilityLabel="주변 도로 도착 허용" disabled={preview?.loading || segmentChanging} onPress={() => { const next = !multiArrival; setMultiArrival(next); previewVisit(cardTarget, 'car', next); }}><Text style={{ color: colors.textSoft, fontSize: 11 }}>도착 위치 · {multiArrival ? '주변 도로 허용' : '기본'}</Text></TouchableOpacity>}
+          {(preview || !isGuiding) && <TouchableOpacity style={[styles.routeStart, (!cardSegment || isCompleted(cardTarget) || segmentChanging) && { opacity: 0.4 }]} disabled={!cardSegment || isCompleted(cardTarget) || segmentChanging} onPress={() => handleStartGuidance()}><Text style={styles.routeStartText}>{isGuiding ? '이곳으로 안내 변경' : '안내 시작'}</Text></TouchableOpacity>}
+          {!!preview?.error && <TouchableOpacity onPress={() => previewVisit(cardTarget, preview.mode)} style={{ minHeight: 36, justifyContent: 'center' }}><Text style={{ color: colors.primary }}>경로 다시 불러오기</Text></TouchableOpacity>}
+        </View>
+      )}
+      <Modal visible={guideMenuOpen && isActive} transparent animationType="fade" onRequestClose={() => setGuideMenuOpen(false)}>
+        <Pressable style={styles.guideMenuBackdrop} onPress={() => setGuideMenuOpen(false)}><View style={styles.guideMenu}>
+          {['car', 'walk'].map(mode => <TouchableOpacity key={mode} style={styles.guideMenuItem} onPress={() => { setGuideMenuOpen(false); if (mode !== transportMode) handleStartGuidance(activeTarget, mode); }}><Ionicons name={mode === 'car' ? 'car-outline' : 'walk-outline'} size={22} color={colors.text} /><Text style={styles.guideMenuText}>{mode === 'car' ? '차량' : '도보'}</Text>{transportMode === mode && <Ionicons name="checkmark" size={20} color={colors.primary} />}</TouchableOpacity>)}
+          <TouchableOpacity style={styles.guideMenuItem} onPress={() => { setGuideMenuOpen(false); handleStopGuidance(); }}><Ionicons name="stop-circle-outline" size={22} color={colors.danger} /><Text style={[styles.guideMenuText, { color: colors.danger }]}>안내 종료</Text></TouchableOpacity>
+        </View></Pressable>
+      </Modal>
 
-      {!resultsMode && !mapSelectMode && !publicFacilityMode && !searchedPlace && !coordSheetOpen && !pendingOpen && !dongOpen && (
+      {!isGuiding && !resultsMode && !mapSelectMode && !publicFacilityMode && !searchedPlace && !coordSheetOpen && !pendingOpen && !dongOpen && (
         <TouchableOpacity
-          style={styles.publicFacilityCollapsed}
-          onLayout={event => setBottomOverlayHeight(event.nativeEvent.layout.height)}
+          style={[styles.publicFacilityCollapsed, cardTarget && { bottom: bottomOverlayHeight + 28 }]}
+          onLayout={event => setPendingOverlayHeight(event.nativeEvent.layout.height)}
           activeOpacity={0.88}
           onPress={() => setPendingOpen(true)}
           accessibilityRole="button"
@@ -2150,10 +2115,21 @@ export default function MapScreen(props) {
 }
 
 const styles = StyleSheet.create({
-  destinationCard: { marginTop: 5, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 12, backgroundColor: '#2477F3', elevation: 3 },
+  selectionCard: { position: 'absolute', left: 12, right: 12, bottom: 12, zIndex: 46, backgroundColor: colors.surface, padding: 18, borderRadius: 22 },
+  selectionAddress: { color: colors.text, fontSize: 14, fontWeight: '800', marginBottom: 10 },
+  coordinateRow: { flexDirection: 'row', gap: 10 }, coordinateLabel: { color: colors.textSoft, fontSize: 12, marginBottom: 4 },
+  coordinateInput: { minHeight: 44, borderRadius: 10, backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 12, color: colors.text, fontSize: 14 },
+  selectionHint: { position: 'absolute', left: 20, right: 20, borderRadius: 10, backgroundColor: colors.text, padding: 9, zIndex: 21, alignItems: 'center' }, selectionHintText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  destinationTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, routeMenuButton: { width: 44, height: 36, alignItems: 'center', justifyContent: 'center' },
+  destinationModesRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 4 }, transportPill: { minHeight: 36, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted, borderRadius: 18 }, transportPillActive: { backgroundColor: colors.primary }, transportText: { color: colors.textSoft, fontSize: 12, fontWeight: '700' }, transportTextActive: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  distanceText: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '700' }, arrivalText: { color: colors.textSoft, fontSize: 12, marginTop: 2 },
+  routeStart: { minHeight: 46, backgroundColor: colors.primary, borderRadius: 14, marginTop: 8, justifyContent: 'center', alignItems: 'center' }, routeStartText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  guideMenuBackdrop: { flex: 1, justifyContent: 'flex-end', padding: 20, backgroundColor: 'rgba(16,40,91,0.25)' }, guideMenu: { borderRadius: 18, backgroundColor: colors.surface, padding: 10 }, guideMenuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, paddingHorizontal: 12 }, guideMenuText: { color: colors.text, fontSize: 15, flex: 1 },
+
+  destinationCard: { marginTop: 5, paddingHorizontal: 8, paddingVertical: 6, position: 'absolute', left: 12, right: 12, bottom: 12, zIndex: 25, backgroundColor: colors.surface, borderRadius: 20, padding: 16, elevation: 2, },
   destinationHead: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   destinationInfo: { minWidth: 0, minHeight: 44, justifyContent: 'center', paddingHorizontal: 3 },
-  destinationName: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' },
+  destinationName: {   fontWeight: '900', color: colors.text, fontSize: 14, },
   destinationMeta: { color: '#E3EEFF', fontSize: 10, marginTop: 3 },
   destinationClose: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },
   destinationActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -2183,10 +2159,9 @@ const styles = StyleSheet.create({
   topOverlay: {
     position: 'absolute',
     top: 35,
-    left: 10,
-    right: 10,
-    zIndex: 20,
-  },
+
+
+    zIndex: 20, left: 20, right: 20, },
   teamModeBadge: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -2213,19 +2188,17 @@ const styles = StyleSheet.create({
 
   searchBox: {
     flex: 1,
-    height: 46,
-    borderRadius: 11,
+
+
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 11,
     shadowColor: '#000',
-    shadowOpacity: 0.12,
+
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 5,
-  },
+    shadowOffset: { width: 0, }, borderRadius: 16, height: 52, elevation: 1, shadowOpacity: 0.06, },
 
   searchInput: {
     flex: 1,
@@ -2266,19 +2239,17 @@ const styles = StyleSheet.create({
 
 
   chipRowWrap: {
-    marginTop: 5,
+
     minHeight: 48,
-    borderRadius: 12,
+
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
+
     shadowRadius: 9,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
-  },
+    shadowOffset: { width: 0, height: 4 }, marginTop: 10, borderRadius: 14, elevation: 1, shadowOpacity: 0.04, },
   visitChipList: { flex: 1, minWidth: 0 },
 
   routeChip: {
@@ -2286,14 +2257,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     marginRight: 8,
-    maxWidth: 178,
+
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
+
     borderColor: '#E6EDF3',
     paddingHorizontal: 8,
     paddingVertical: 7,
-    borderRadius: 12,
-  },
+    borderRadius: 12, maxWidth: 270, borderWidth: 0, },
 
   no: {
     width: 22,
@@ -2310,11 +2280,9 @@ const styles = StyleSheet.create({
   },
 
   chipText: {
-    fontSize: 10,
+
     color: '#10285B',
-    fontWeight: '900',
-    maxWidth: 130,
-  },
+    fontWeight: '900', maxWidth: 215, fontSize: 11, },
 
   emptyChip: {
     flex: 1,

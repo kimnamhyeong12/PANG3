@@ -3,6 +3,7 @@ package expo.modules.kakaonavigation
 import android.content.Context
 import android.graphics.Color
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -101,6 +102,14 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
         trafficTheme(false), trafficTheme(true), trafficTheme(false), trafficTheme(true)
       )
       view.initWithGuidance(guidance, trip, priority, avoidOptions)
+      // The app owns destination switching and the compact car/walk/stop menu.
+      // Keep Kakao's turn/lane/safety guidance but do not expose two competing menus.
+      view.bottomComponent.visibility = View.GONE
+      view.bottomMenuComponent.visibility = View.GONE
+      view.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+        if (view.bottomComponent.visibility != View.GONE) view.bottomComponent.visibility = View.GONE
+        if (view.bottomMenuComponent.visibility != View.GONE) view.bottomMenuComponent.visibility = View.GONE
+      }
     }
     guidance.startWithTrip(trip, priority, avoidOptions)
   }

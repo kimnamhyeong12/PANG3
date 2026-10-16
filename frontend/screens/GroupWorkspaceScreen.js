@@ -470,23 +470,21 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background, marginTop: 0 },
   tabs: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
+
     borderColor: colors.line,
-    backgroundColor: colors.surface,
-  },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 14 },
-  activeTab: { borderBottomWidth: 3, borderColor: colors.primary },
-  tabText: { color: colors.textSoft, fontWeight: '800', fontSize: 14 },
-  activeText: { color: colors.primary },
-  body: { padding: 14, gap: 12, paddingBottom: 36 },
+    backgroundColor: colors.surface, gap: 6, paddingHorizontal: 20, borderBottomWidth: 0, paddingBottom: 12, },
+  tab: {  alignItems: 'center', paddingVertical: 14, flex: 1, minHeight: 44, borderBottomWidth: 0, borderRadius: 12, backgroundColor: colors.surfaceMuted, },
+  activeTab: {  borderColor: colors.primary, backgroundColor: colors.primary, borderBottomWidth: 0, },
+  tabText: { color: colors.textSoft, fontWeight: '800', fontSize: 13, },
+  activeText: {color: '#FFFFFF', },
+  body: {  gap: 12, paddingBottom: 36, padding: 20, },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 18,
-    borderWidth: 1,
+
     borderColor: '#E4ECF7',
-    padding: 14,
-    ...shadow,
-  },
+
+    ...shadow, borderWidth: 0, shadowOpacity: 0, elevation: 0, padding: 16, },
   infoRow: {
     minHeight: 42,
     flexDirection: 'row',

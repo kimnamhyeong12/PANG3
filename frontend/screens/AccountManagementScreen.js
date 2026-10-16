@@ -63,8 +63,8 @@ export default function AccountManagementScreen({ user, credential, onBack, onUp
   </KeyboardAvoidingView>;
 }
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, marginTop: 0 }, body: { padding: 16, paddingBottom: 30 },
-  card: { backgroundColor: colors.surface, borderRadius: 18, borderWidth: 1, borderColor: colors.line, padding: 18, gap: 12 }, field: { gap: 6 },
-  label: { color: colors.text, fontSize: 12, fontWeight: '800' }, id: { color: colors.textSoft, marginBottom: 5 }, input: { height: 48, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.line, color: colors.text, backgroundColor: '#FFFFFF' },
+  container: { flex: 1, backgroundColor: colors.background, marginTop: 0 }, body: { padding: 16, paddingBottom: 30, paddingHorizontal: 20, },
+  card: { backgroundColor: colors.surface,   borderColor: colors.line, padding: 18, gap: 12, borderWidth: 0, shadowOpacity: 0, elevation: 0, borderRadius: 16, }, field: { gap: 6 },
+  label: { color: colors.text, fontSize: 12, fontWeight: '800' }, id: { color: colors.textSoft, marginBottom: 5 }, input: { height: 48, paddingHorizontal: 12,  borderWidth: 1, minHeight: 48, backgroundColor: colors.surfaceMuted, borderColor: colors.line, borderRadius: 12, fontSize: 14, color: colors.text, },
   emailButton: { minHeight: 40, alignSelf: 'flex-end', justifyContent: 'center' }, emailText: { color: colors.primary, fontWeight: '800' },
 });

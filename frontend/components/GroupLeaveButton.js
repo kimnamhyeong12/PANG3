@@ -41,6 +41,6 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.4)' },
   dialog: { padding: 22, gap: 14, borderRadius: 18, backgroundColor: colors.surface },
   title: { fontSize: 18, fontWeight: '800', color: colors.text }, description: { color: colors.textSoft, lineHeight: 21 },
-  input: { height: 46, borderWidth: 1, borderColor: colors.line, borderRadius: 10, paddingHorizontal: 12, color: colors.text },
+  input: { height: 46, borderWidth: 1, borderColor: colors.line, borderRadius: 10, paddingHorizontal: 12, minHeight: 44, color: colors.text, },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }, action: { padding: 12 },
 });

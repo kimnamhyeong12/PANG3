@@ -1189,33 +1189,24 @@ const styles = StyleSheet.create({
 
   modeTabs: {
     flexDirection: 'row',
-    marginHorizontal: 14,
+
     marginTop: 12,
-    padding: 4,
-    borderRadius: 12,
-    backgroundColor: '#E8EEF4',
-  },
+
+    borderRadius: 12, marginHorizontal: 20, gap: 6, padding: 0, backgroundColor: colors.surface, },
 
   modeTab: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderRadius: 9,
-  },
 
-  modeTabActive: {
-    backgroundColor: '#2477F3',
-  },
+    alignItems: 'center',
+    paddingVertical: 10, flex: 1, minHeight: 44, borderRadius: 12, backgroundColor: colors.surfaceMuted, },
+
+  modeTabActive: {backgroundColor: colors.primary, },
 
   modeTabText: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: '#637269',
-  },
 
-  modeTabTextActive: {
-    color: '#FFFFFF',
-  },
+    fontWeight: '900',
+    color: '#637269', fontSize: 13, },
+
+  modeTabTextActive: {color: '#FFFFFF', },
 
   loadingBox: {
     flex: 1,
@@ -1232,8 +1223,7 @@ const styles = StyleSheet.create({
   body: {
     padding: 16,
     gap: 10,
-    paddingBottom: 30,
-  },
+    paddingBottom: 30, paddingHorizontal: 20, },
 
   emptyBox: {
     padding: 30,
@@ -1256,14 +1246,13 @@ const styles = StyleSheet.create({
    */
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+
     padding: 13,
-    borderWidth: 1,
+
     borderColor: '#DCE5E0',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
+    gap: 10, borderWidth: 0, borderBottomWidth: 1, borderBottomColor: colors.line, borderRadius: 0, paddingHorizontal: 0, shadowOpacity: 0, elevation: 0, },
 
   numberBox: {
     width: 32,

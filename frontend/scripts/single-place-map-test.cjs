@@ -370,5 +370,41 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   assert.equal(returning.props.isGuiding, true, 'guidance starts only after confirmation');
   returning.find('TouchableOpacity', '안내 종료').props.onPress(); await returning.settle();
   assert.equal(returning.find('MapCanvas').props.locations.some(item => item.isReturnLocation), false, 'ending return hides the marker again');
+  // Direct selection accepts both map drags and valid numeric input without a lock/apply step.
+  const direct = createScreen(); direct.render();
+  direct.find('TouchableOpacity', '방문지 추가 방법').props.onPress(); direct.render();
+  direct.find('TouchableOpacity', '지도에서 직접 선택').props.onPress(); direct.render();
+  assert.equal(direct.find('MapCanvas').props.mapSelectMode, true);
+  direct.find('MapCanvas').props.onCenterChange({ lat: 35.1, lng: 129.1 }); direct.render();
+  const latitude = direct.find('TextInput', '위도 직접 입력');
+  latitude.props.onFocus(); latitude.props.onChangeText('35.2'); direct.render();
+  assert.equal(direct.find('MapCanvas').props.selectionCoordinateRequest.lat, 35.2);
+  assert.equal(direct.find('MapCanvas').props.selectionCoordinateRequest.lng, 129.1);
+  const token = direct.find('MapCanvas').props.selectionCoordinateRequest.token;
+  direct.find('TextInput', '위도 직접 입력').props.onChangeText('-'); direct.render();
+  assert.equal(direct.find('MapCanvas').props.selectionCoordinateRequest.token, token, 'incomplete input must not move the map');
+  direct.find('TextInput', '위도 직접 입력').props.onBlur();
+  direct.find('MapCanvas').props.onCenterChange({ lat: 36, lng: 128 }); direct.render();
+  assert.equal(direct.find('TextInput', '위도 직접 입력').props.value, '36.000000');
+
+  // The compact guidance menu switches mode only after the new route succeeds.
+  const menu = createScreen({ nativeNavigation: true });
+  menu.props.locations = [visit(1, 129.01)]; menu.render();
+  menu.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 }); menu.render();
+  menu.find('MapCanvas').props.onMarkerClick(menu.props.locations[0]); menu.render();
+  menu.response((await menu.settle(), menu.requests.shift()), route(menu.props.locations[0])); await menu.settle();
+  await menu.find('TouchableOpacity', '안내 시작').props.onPress(); await menu.settle();
+  menu.find('TouchableOpacity', '안내 메뉴').props.onPress(); menu.render();
+  menu.find('TouchableOpacity', '도보').props.onPress(); await menu.settle();
+  assert.equal(menu.props.routeSegments[0].mode, 'car', 'old guidance survives while the replacement route loads');
+  menu.requests.shift().reject(new Error('offline')); await menu.settle();
+  assert.equal(menu.props.routeSegments[0].mode, 'car', 'failed mode switch preserves the active route');
+  assert.equal(menu.props.isGuiding, true);
+  menu.find('TouchableOpacity', '안내 메뉴').props.onPress(); menu.render();
+  menu.find('TouchableOpacity', '도보').props.onPress(); await menu.settle();
+  menu.response(menu.requests.shift(), route(menu.props.locations[0])); await menu.settle();
+  assert.equal(menu.props.routeSegments[0].mode, 'walk');
+  assert.equal(menu.find('Navigation'), undefined, 'walking releases the vehicle SDK overlay');
+
   console.log('Single-place map checks passed: SDK ownership, recommendation, progress, arrival and walking guidance');
 })().catch(error => { console.error(error); process.exitCode = 1; });

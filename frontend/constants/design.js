@@ -1,16 +1,22 @@
 export const colors = {
-  background: '#F4F8FF', surface: '#FFFFFF', surfaceMuted: '#F1F6FD',
+  background: '#FFFFFF', surface: '#FFFFFF', surfaceMuted: '#F4F8FF',
   text: '#10285B', textSoft: '#607195', textFaint: '#93A1BA',
   primary: '#2477F3', primaryDark: '#1551A6', primarySoft: '#E8F2FF',
   teal: '#12A9A5', tealDark: '#078A88', tealSoft: '#E3F8F6',
-  line: '#DCE7F5', pending: '#F05A67', pendingSoft: '#FFE9EC',
-  warning: '#F5B400', warningSoft: '#FFF4D1', success: '#0CA678',
-  successSoft: '#E2F7EF', danger: '#E34D59', dangerSoft: '#FFE9EC',
+  line: '#DCE7F5', pending: '#C87973', pendingSoft: '#F8EEEC', pendingInk: '#99514D',
+  warning: '#BE9446', warningSoft: '#F8F2E7', warningInk: '#866320', success: '#4F9588',
+  successSoft: '#ECF5F2', successInk: '#326F64', danger: '#E34D59', dangerSoft: '#FFE9EC',
   blue: '#2477F3', blueSoft: '#E8F2FF',
 };
-export const spacing = { page: 18, section: 22, card: 16 };
+export const spacing = { page: 20, section: 20, card: 16 };
 export const radius = { small: 10, medium: 16, large: 22, pill: 999 };
 export const shadow = {
-  shadowColor: '#2466B5', shadowOpacity: 0.10, shadowRadius: 16,
-  shadowOffset: { width: 0, height: 7 }, elevation: 4,
+  shadowColor: '#10285B', shadowOpacity: 0.06, shadowRadius: 8,
+  shadowOffset: { width: 0, height: 3 }, elevation: 1,
+};
+
+export const workStatus = (status) => {
+  if (['complete', 'completed', 'done'].includes(status)) return { label: '작업 후', color: colors.success, background: colors.successSoft, ink: colors.successInk };
+  if (['working', 'progress', 'in_progress'].includes(status)) return { label: '작업 중', color: colors.warning, background: colors.warningSoft, ink: colors.warningInk };
+  return { label: '작업 전', color: colors.pending, background: colors.pendingSoft, ink: colors.pendingInk };
 };

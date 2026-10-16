@@ -16,7 +16,7 @@ export default function PersonalWorkspaceScreen({ user, group, assignments, tab,
 }
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background, marginTop: 0 },
-  tabs: { flexDirection: 'row', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: colors.line, backgroundColor: colors.surface },
-  tab: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' }, activeTab: { borderBottomColor: colors.primary },
-  label: { color: colors.textSoft, fontWeight: '800', fontSize: 13 }, activeLabel: { color: colors.primary },
+  tabs: { flexDirection: 'row',   borderBottomColor: colors.line, backgroundColor: colors.surface, gap: 6, paddingHorizontal: 20, borderBottomWidth: 0, paddingBottom: 12, },
+  tab: {   alignItems: 'center', justifyContent: 'center',  borderBottomColor: 'transparent', flex: 1, minHeight: 44, borderBottomWidth: 0, borderRadius: 12, backgroundColor: colors.surfaceMuted, }, activeTab: { borderBottomColor: colors.primary, backgroundColor: colors.primary, borderBottomWidth: 0, },
+  label: { color: colors.textSoft, fontWeight: '800', fontSize: 13, }, activeLabel: {color: '#FFFFFF', },
 });
