@@ -10,7 +10,6 @@
       "web"
     ],
     "android": {
-      "googleServicesFile": "./google-services.json",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -48,6 +47,7 @@
           "android": {
             "minSdkVersion": 26,
             "usesCleartextTraffic": true,
+            "googleServicesFile": "./google-services.json",
             "extraMavenRepos": [
               "https://devrepo.kakaomobility.com/repository/kakao-mobility-android-knsdk-public/",
               "https://devrepo.kakaomobility.com/repository/kakao-mobility-android-knsdk-release/",

@@ -25,8 +25,6 @@ export async function setTaskNotificationPreference(userOrId, enabled) {
 }
 
 export const NOTIFICATION_TYPES = {
-  TASK_TRANSFER_REQUESTED: 'TASK_TRANSFER_REQUESTED',
-  TASK_TRANSFER_RESPONDED: 'TASK_TRANSFER_RESPONDED',
   TASK_ASSIGNED: 'TASK_ASSIGNED',
   ASSIGNEE_CHANGED: 'ASSIGNEE_CHANGED',
   PRIORITY_CHANGED: 'PRIORITY_CHANGED',
@@ -341,14 +339,6 @@ export function addNotificationResponseListener(listener) {
       listener?.(response);
     }
   );
-}
-
-export function getLastNotificationResponse() {
-  return Notifications.getLastNotificationResponseAsync();
-}
-
-export function clearLastNotificationResponse() {
-  return Notifications.clearLastNotificationResponseAsync();
 }
 
 // -------------------------------------------------------
