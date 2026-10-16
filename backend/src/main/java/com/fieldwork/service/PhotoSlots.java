@@ -26,9 +26,12 @@ public final class PhotoSlots {
             String type = Objects.toString(slot.get("type"), "");
             if (!TYPES.contains(type) || !seen.add(type)) throw new IllegalArgumentException("사진 단계가 올바르지 않습니다.");
             String action = Objects.toString(slot.get("action"), "");
-            if ("delete".equals(action)) continue;
             Map<String, Object> photo;
-            if ("upload".equals(action)) {
+            if ("delete".equals(action)) {
+                // An empty image slot may still contain a stage-specific memo.
+                if (Objects.toString(slot.get("comment"), "").isBlank()) continue;
+                photo = new HashMap<>();
+            } else if ("upload".equals(action)) {
                 int index = Integer.parseInt(Objects.toString(slot.get("uploadIndex"), "-1"));
                 if (index < 0 || index >= uploads.size() || !used.add(index)) throw new IllegalArgumentException("사진 파일이 일치하지 않습니다.");
                 photo = new HashMap<>(uploads.get(index));

@@ -206,7 +206,7 @@ export default function GroupSettingsScreen({
       >
         {mode === 'all' && <View style={styles.card}>
           <CardTitle
-            icon="people"
+            icon="information-circle-outline"
             title="기본 정보"
           />
 
@@ -523,7 +523,7 @@ function SettingRow({
     <View
       style={[
         styles.settingRow,
-        !last && styles.divider,
+        last && styles.divider,
       ]}
     >
       <Ionicons

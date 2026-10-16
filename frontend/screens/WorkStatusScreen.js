@@ -41,7 +41,7 @@ const normalizeStatus = (value) => {
 const STATUS = {
   pending: { label: '작업 전', color: colors.pending },
   working: { label: '작업 중', color: colors.warning },
-  complete: { label: '완료', color: colors.success },
+  complete: { label: '작업 후', color: colors.success },
 };
 
 const safeJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
@@ -86,12 +86,12 @@ kakao.maps.load(function(){
  }
  (boundaries.features||[]).forEach((f,index)=>{const g=f.geometry||{},rings=[];if(g.type==='Polygon'&&g.coordinates&&g.coordinates[0])rings.push(g.coordinates[0]);else if(g.type==='MultiPolygon')(g.coordinates||[]).forEach(p=>p[0]&&rings.push(p[0]));if(!rings.length)return;const areaBounds=new kakao.maps.LatLngBounds(),properties=f.properties||{},areaKey=String(properties.adm_cd||properties.adm_nm||index);rings.forEach(r=>r.forEach(p=>{const ll=new kakao.maps.LatLng(Number(p[1]),Number(p[0]));areaBounds.extend(ll);regionBounds.extend(ll);hasRegionBounds=true;}));rings.forEach(r=>addRing(f,r,areaBounds,areaKey));});
  let openedCallout=null,openedMarkerKey=null;
- assignments.forEach((i,index)=>{const lat=Number(i.lat!=null?i.lat:i.latitude),lng=Number(i.lng!=null?i.lng:i.longitude);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;const s=statusOf(i.status||i.taskStatus),ownerId=String(i.assigneeUserId||'unknown'),ownerColor=memberColors[ownerId]||'${UNASSIGNED_COLOR}',markerKey=String(i.taskId||i.assignmentId||i.id||index),dimmed=selectedMemberId&&selectedMemberId!==ownerId,position=new kakao.maps.LatLng(lat,lng);bounds.extend(position);hasBounds=true;const content=document.createElement('div');content.className='pin';content.style.opacity=dimmed?'.22':'1';content.innerHTML='<div class="pin-body" style="background:#E34D59;border-color:'+ownerColor+'"></div>';const markerOverlay=new kakao.maps.CustomOverlay({map,position,content,yAnchor:1,zIndex:5});content.onclick=(event)=>{event.stopPropagation();if(openedMarkerKey===markerKey){if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;return;}if(openedCallout)openedCallout.setMap(null);const box=document.createElement('div');box.className='place-callout';const title=document.createElement('div');title.className='place-title';title.textContent=i.detailAddress||i.roadAddress||('방문지 '+i.taskId);const address=document.createElement('div');address.className='place-address';address.textContent=i.roadAddress||i.detailAddress||'주소 정보 없음';const assignee=document.createElement('div');assignee.className='place-assignee';assignee.style.color=ownerColor;assignee.textContent='담당자: '+(i.assigneeName||i.assigneeLoginId||'미배정');const status=document.createElement('span');status.className='place-status';status.style.background=statusColors[s];status.textContent=s==='complete'?'완료':s==='working'?'작업 중':'작업 전';box.appendChild(title);box.appendChild(address);box.appendChild(assignee);box.appendChild(status);openedCallout=new kakao.maps.CustomOverlay({map,position,content:box,yAnchor:1.65,zIndex:10});openedMarkerKey=markerKey;};});
+ assignments.forEach((i,index)=>{const lat=Number(i.lat!=null?i.lat:i.latitude),lng=Number(i.lng!=null?i.lng:i.longitude);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;const s=statusOf(i.status||i.taskStatus),ownerId=String(i.assigneeUserId||'unknown'),ownerColor=memberColors[ownerId]||'${UNASSIGNED_COLOR}',markerKey=String(i.taskId||i.assignmentId||i.id||index),dimmed=selectedMemberId&&selectedMemberId!==ownerId,position=new kakao.maps.LatLng(lat,lng);bounds.extend(position);hasBounds=true;const content=document.createElement('div');content.className='pin';content.style.opacity=dimmed?'.22':'1';content.innerHTML='<div class="pin-body" style="background:'+(s==='complete'?statusColors.complete:'#E34D59')+';border-color:'+ownerColor+'"></div>';const markerOverlay=new kakao.maps.CustomOverlay({map,position,content,yAnchor:1,zIndex:5});content.onclick=(event)=>{event.stopPropagation();if(openedMarkerKey===markerKey){if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;return;}if(openedCallout)openedCallout.setMap(null);const box=document.createElement('div');box.className='place-callout';const title=document.createElement('div');title.className='place-title';title.textContent=i.detailAddress||i.roadAddress||('방문지 '+i.taskId);const address=document.createElement('div');address.className='place-address';address.textContent=i.roadAddress||i.detailAddress||'주소 정보 없음';const assignee=document.createElement('div');assignee.className='place-assignee';assignee.style.color=ownerColor;assignee.textContent='담당자: '+(i.assigneeName||i.assigneeLoginId||'미배정');const status=document.createElement('span');status.className='place-status';status.style.background=statusColors[s];status.textContent=s==='complete'?'작업 후':s==='working'?'작업 중':'작업 전';box.appendChild(title);box.appendChild(address);box.appendChild(assignee);box.appendChild(status);openedCallout=new kakao.maps.CustomOverlay({map,position,content:box,yAnchor:1.65,zIndex:10});openedMarkerKey=markerKey;};});
  kakao.maps.event.addListener(map,'click',()=>{if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;});
  // 사용자가 행정동을 직접 눌렀을 때만 해당 동으로 확대한다.
  // 그 외 최초 진입/재진입은 SGIS 시군구 전체 경계를 최우선으로 사용한다.
  // 방문지 좌표 bounds는 SGIS 경계를 못 불러온 경우에만 최후의 fallback이다.
- if(focusedAreaBounds&&Number.isFinite(Number(focusedAreaBounds.south))&&Number.isFinite(Number(focusedAreaBounds.west))&&Number.isFinite(Number(focusedAreaBounds.north))&&Number.isFinite(Number(focusedAreaBounds.east))){const focused=new kakao.maps.LatLngBounds(new kakao.maps.LatLng(Number(focusedAreaBounds.south),Number(focusedAreaBounds.west)),new kakao.maps.LatLng(Number(focusedAreaBounds.north),Number(focusedAreaBounds.east)));map.setBounds(focused,35,35,35,35);}else if(hasRegionBounds)map.setBounds(regionBounds,35,35,35,35);else if(districtView){map.setCenter(new kakao.maps.LatLng(districtView.lat,districtView.lng));map.setLevel(districtView.level);}else if(hasBounds)map.setBounds(bounds,35,35,35,35);
+ if(focusedAreaBounds&&Number.isFinite(Number(focusedAreaBounds.south))&&Number.isFinite(Number(focusedAreaBounds.west))&&Number.isFinite(Number(focusedAreaBounds.north))&&Number.isFinite(Number(focusedAreaBounds.east))){const focused=new kakao.maps.LatLngBounds(new kakao.maps.LatLng(Number(focusedAreaBounds.south),Number(focusedAreaBounds.west)),new kakao.maps.LatLng(Number(focusedAreaBounds.north),Number(focusedAreaBounds.east)));map.setBounds(focused,35,35,35,35);}else if(hasRegionBounds)map.setBounds(regionBounds,12,12,12,12);else if(districtView){map.setCenter(new kakao.maps.LatLng(districtView.lat,districtView.lng));map.setLevel(districtView.level);}else if(hasBounds)map.setBounds(bounds,35,35,35,35);
 });
 </script></body></html>`;
 
@@ -177,8 +177,11 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
       const results = await Promise.allSettled(codes.map((code) => groupApi(
         `/api/sgis/boundaries?admCode=${encodeURIComponent(code)}`
       )));
-      const features = results.flatMap((result) => result.status === 'fulfilled' && result.value?.type === 'FeatureCollection'
-        ? result.value.features || [] : []);
+      const features = results.flatMap((result, index) => result.status === 'fulfilled' && result.value?.type === 'FeatureCollection'
+        ? (result.value.features || []).filter(feature => {
+          const featureCode = String(feature.properties?.adm_cd || '');
+          return !featureCode || featureCode.startsWith(String(codes[index]));
+        }) : []);
       setBoundaries({ type: 'FeatureCollection', features });
       if (features.length === 0) setBoundaryError('행정동 경계를 불러오지 못했습니다.');
     } catch (error) {
@@ -303,7 +306,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
           <Summary value={visibleAssignments.length} label="전체" />
           <View style={styles.summaryDivider} /><Summary value={counts.pending} label="작업 전" color={colors.pendingInk} />
           <View style={styles.summaryDivider} /><Summary value={counts.working} label="작업 중" color={colors.warningInk} />
-          <View style={styles.summaryDivider} /><Summary value={counts.complete} label="완료" color={colors.successInk} />
+          <View style={styles.summaryDivider} /><Summary value={counts.complete} label="작업 후" color={colors.successInk} />
         </View>
 
         <View
@@ -346,11 +349,6 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
               }}
             />
           )}
-          <View style={styles.legend} pointerEvents="none">
-            {Object.entries(STATUS).map(([key, value]) => <View key={key} style={styles.legendRow}><View style={[styles.legendDot, { backgroundColor: value.color }]} /><Text style={styles.legendText}>{value.label}</Text></View>)}
-            <View style={styles.legendDivider} />
-            <View style={styles.legendRow}><View style={[styles.legendArea, { backgroundColor: MIXED_AREA_COLOR }]} /><Text style={styles.legendText}>공통 업무</Text></View>
-          </View>
           {!personalWorkspace && <View style={styles.mapMemberPicker}>
             <TouchableOpacity style={styles.mapMemberToggle} onPress={() => setMemberPickerOpen((open) => !open)} accessibilityRole="button" accessibilityLabel="팀원 현황 선택">
               <Text style={styles.mapMemberToggleText} numberOfLines={1}>팀원 현황{selectedMember ? ` · ${selectedMember.name}` : ''}</Text>
@@ -374,13 +372,21 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
               ))}
             </ScrollView>}
           </View>}
+
+        </View>
+
+          <View style={styles.legend} pointerEvents="none">
+            {Object.entries(STATUS).map(([key, value]) => <View key={key} style={styles.legendRow}><View style={[styles.legendDot, { backgroundColor: value.color }]} /><Text style={styles.legendText}>{value.label}</Text></View>)}
+            <View style={styles.legendDivider} />
+            <View style={styles.legendRow}><View style={[styles.legendArea, { backgroundColor: MIXED_AREA_COLOR }]} /><Text style={styles.legendText}>공통 업무</Text></View>
+          </View>
+
           {!personalWorkspace && selectedMember && <View style={styles.mapMemberDetail}>
             <Text style={styles.mapMemberDetailTitle}>{selectedMember.name}</Text>
             <Text style={styles.mapMemberDetailText}>
-              작업 전 {selectedMember.pending}곳 · 작업 중 {selectedMember.working}곳 · 완료 {selectedMember.complete}곳
+              작업 전 {selectedMember.pending}곳 · 작업 중 {selectedMember.working}곳 · 작업 후 {selectedMember.complete}곳
             </Text>
           </View>}
-        </View>
 
         {!!boundaryError && <Text style={styles.boundaryWarning}>경계 표시 오류: {boundaryError}</Text>}
 
@@ -419,7 +425,7 @@ const styles = StyleSheet.create({
   summaryValue: { fontSize: 22, fontWeight: '900' },
   summaryLabel: {   fontWeight: '800', marginTop: 4, color: colors.textSoft, fontSize: 12, },
   summaryDivider: { width: 1, height: 36, backgroundColor: 'transparent', },
-  mapCard: {  overflow: 'hidden',   borderColor: '#DCE5E0', backgroundColor: '#EAF0F5', height: 300, borderWidth: 0, borderRadius: 16, },
+  mapCard: {  overflow: 'hidden',   borderColor: '#DCE5E0', backgroundColor: '#EAF0F5', height: 400, borderWidth: 0, borderRadius: 16, },
   mapMemberPicker: { position: 'absolute', top: 10, right: 10, width: 185, zIndex: 8, alignItems: 'flex-end' },
   mapMemberToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 185, backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: 14, paddingHorizontal: 11, paddingVertical: 8, elevation: 4 },
   mapMemberToggleText: { flexShrink: 1, fontSize: 11, fontWeight: '800', color: '#15231D' },
@@ -427,7 +433,7 @@ const styles = StyleSheet.create({
   mapMemberRow: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 11, borderBottomWidth: 1, borderBottomColor: '#EEF3F0' },
   mapMemberRowSelected: { backgroundColor: '#F0F7FC' },
   mapMemberName: { flex: 1, fontSize: 11, fontWeight: '800', color: '#15231D' },
-  mapMemberDetail: { position: 'absolute', left: 10, right: 105, bottom: 10, backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: 12, padding: 10 },
+  mapMemberDetail: { backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: 12, padding: 10 },
   mapMemberDetailTitle: { fontSize: 12, fontWeight: '900', color: '#15231D' },
   mapMemberDetailText: { fontSize: 10, color: '#475569', marginTop: 3 },
   map: { flex: 1, backgroundColor: '#EAF0F5' },

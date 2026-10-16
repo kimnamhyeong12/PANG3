@@ -231,19 +231,18 @@ export default function GroupWorkspaceScreen({
         <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {tab === 'settings' ? <>
           <View style={styles.card}>
-            <CardTitle icon="people" title="기본 정보" />
+            <CardTitle icon="information-circle-outline" title="기본 정보" />
             <InfoRow icon="pricetag" label="그룹명" value={groupName} />
             <InfoRow icon="location" label="활동 지역" value={regionText} last />
           </View>
 
           <View style={styles.card}>
             <CardTitle
-              icon="people"
+              icon="people-outline"
               title="팀원 관리"
               suffix={`(${members.length}명)`}
               actionLabel="팀원 추가"
               onAction={() => setInviteOpen((value) => !value)}
-              tone="teal"
             />
 
             {inviteOpen ? <View style={styles.inviteBox}>
@@ -449,7 +448,7 @@ function InfoRow({ icon, label, value, last }) {
 
 function SettingSwitchRow({ icon, title, value, onValueChange, last }) {
   return (
-    <View style={[styles.settingRow, !last && styles.divider]}>
+    <View style={[styles.settingRow, last && styles.divider]}>
       <Ionicons name={icon} size={21} color={colors.primary} />
       <Text style={styles.settingTitle}>{title}</Text>
       <View style={{ flex: 1 }} />

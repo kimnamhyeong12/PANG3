@@ -19,7 +19,7 @@ const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const STATUS_META = {
   pending: { label: '작업 전', color: colors.pending },
   working: { label: '작업 중', color: colors.warning },
-  complete: { label: '완료', color: colors.success },
+  complete: { label: '작업 후', color: colors.success },
 };
 
 // 실제 운영 분류가 확정되면 이 배열만 변경한다.
@@ -1061,7 +1061,7 @@ export default function DashboardScreen({
                 <View style={styles.overviewTrack}><View style={[styles.overviewProgress, { width: `${Math.max(0, Math.min(100, Number(analytics.completionRate) || 0))}%` }]} /></View>
                 <Text style={styles.overviewCaption}>완료율 {analytics.completionRate}%</Text>
               </View>
-              <View style={styles.overviewCounts}>{[['작업 전', analytics.totals.pending, colors.pendingInk], ['작업 중', analytics.totals.working, colors.warningInk], ['완료', analytics.totals.complete, colors.successInk]].map(([label, value, tone]) => <View key={label} style={{ flex: 1 }}><Text style={styles.overviewCaption}>{label}</Text><Text style={[styles.overviewCount, { color: tone }]}>{value}건</Text></View>)}</View>
+              <View style={styles.overviewCounts}>{[['작업 전', analytics.totals.pending, colors.pendingInk], ['작업 중', analytics.totals.working, colors.warningInk], ['작업 후', analytics.totals.complete, colors.successInk]].map(([label, value, tone]) => <View key={label} style={{ flex: 1 }}><Text style={styles.overviewCaption}>{label}</Text><Text style={[styles.overviewCount, { color: tone }]}>{value}건</Text></View>)}</View>
 
               {/* 월간 완료 히트맵 */}
               <View
@@ -1760,7 +1760,7 @@ function DistributionRow({
       >
         작업 전{' '}
         {item.pending} · 작업
-        중 {item.working} · 완료{' '}
+        중 {item.working} · 작업 후{' '}
         {item.complete}
       </Text>
     </View>

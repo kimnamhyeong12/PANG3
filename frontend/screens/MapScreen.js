@@ -1423,7 +1423,7 @@ function NormalMapScreen({
       />
       {kakaoDestination && (
         <KakaoNavigationView
-          style={[StyleSheet.absoluteFillObject, preview && { opacity: 0 }]}
+          style={[StyleSheet.absoluteFillObject, { top: topOverlayBottom || screenInsets.top + 64 }, preview && { opacity: 0 }]}
           pointerEvents={preview ? 'none' : 'auto'}
           destination={kakaoDestination}
           onRouteChanged={(event) => {
@@ -1509,7 +1509,7 @@ function NormalMapScreen({
         <Pressable style={[StyleSheet.absoluteFill, { zIndex: 19 }]}
           accessibilityLabel="방문지 추가 메뉴 닫기" onPress={() => setAddMenuOpen(false)} />
       )}
-      <View style={[styles.topOverlay, { top: screenInsets.top + (kakaoDestination && !preview ? 102 : 6) }]} pointerEvents="box-none"
+      <View style={[styles.topOverlay, { top: screenInsets.top + 6 }]} pointerEvents="box-none"
         onLayout={event => { const { y, height } = event.nativeEvent.layout; setTopOverlayBottom(y + height); }}>
         {(!isGuiding || preview) && <View style={styles.searchControlRow}>
           {!root && <TouchableOpacity style={[styles.smallTopButton, { minWidth: 44, minHeight: 44 }]} accessibilityLabel="뒤로가기" onPress={() => { if (!consumeScreenBack()) onBack?.(); }}><Ionicons name="arrow-back" size={22} color="#2477F3" /></TouchableOpacity>}
@@ -1806,7 +1806,6 @@ function NormalMapScreen({
             <Text style={styles.distanceText}>{preview?.loading ? '경로 확인 중…' : preview?.error || [formatDistance(cardDistance), formatDuration(cardDuration)].filter(Boolean).join(' · ')}</Text>
           </View>
           {!preview && isGuiding && Number.isFinite(Number(cardDuration)) && <Text style={styles.arrivalText}>{new Date(Date.now() + Number(cardDuration) * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} 도착 예정</Text>}
-          {(preview?.mode || transportMode) === 'car' && !isGuiding && <TouchableOpacity style={{ minHeight: 32, justifyContent: 'center' }} accessibilityLabel="주변 도로 도착 허용" disabled={preview?.loading || segmentChanging} onPress={() => { const next = !multiArrival; setMultiArrival(next); previewVisit(cardTarget, 'car', next); }}><Text style={{ color: colors.textSoft, fontSize: 11 }}>도착 위치 · {multiArrival ? '주변 도로 허용' : '기본'}</Text></TouchableOpacity>}
           {(preview || !isGuiding) && <TouchableOpacity style={[styles.routeStart, (!cardSegment || isCompleted(cardTarget) || segmentChanging) && { opacity: 0.4 }]} disabled={!cardSegment || isCompleted(cardTarget) || segmentChanging} onPress={() => handleStartGuidance()}><Text style={styles.routeStartText}>{isGuiding ? '이곳으로 안내 변경' : '안내 시작'}</Text></TouchableOpacity>}
           {!!preview?.error && <TouchableOpacity onPress={() => previewVisit(cardTarget, preview.mode)} style={{ minHeight: 36, justifyContent: 'center' }}><Text style={{ color: colors.primary }}>경로 다시 불러오기</Text></TouchableOpacity>}
         </View>
@@ -2124,7 +2123,7 @@ const styles = StyleSheet.create({
   destinationModesRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 4 }, transportPill: { minHeight: 36, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted, borderRadius: 18 }, transportPillActive: { backgroundColor: colors.primary }, transportText: { color: colors.textSoft, fontSize: 12, fontWeight: '700' }, transportTextActive: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   distanceText: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '700' }, arrivalText: { color: colors.textSoft, fontSize: 12, marginTop: 2 },
   routeStart: { minHeight: 46, backgroundColor: colors.primary, borderRadius: 14, marginTop: 8, justifyContent: 'center', alignItems: 'center' }, routeStartText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  guideMenuBackdrop: { flex: 1, justifyContent: 'flex-end', padding: 20, backgroundColor: 'rgba(16,40,91,0.25)' }, guideMenu: { borderRadius: 18, backgroundColor: colors.surface, padding: 10 }, guideMenuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, paddingHorizontal: 12 }, guideMenuText: { color: colors.text, fontSize: 15, flex: 1 },
+  guideMenuBackdrop: { flex: 1, justifyContent: 'flex-end', padding: 20, backgroundColor: 'rgba(16,40,91,0.25)' }, guideMenu: { flexDirection: 'row', borderRadius: 18, backgroundColor: colors.surface, padding: 10 }, guideMenuItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 88, paddingHorizontal: 4 }, guideMenuText: { color: colors.text, fontSize: 14 },
 
   destinationCard: { marginTop: 5, paddingHorizontal: 8, paddingVertical: 6, position: 'absolute', left: 12, right: 12, bottom: 12, zIndex: 25, backgroundColor: colors.surface, borderRadius: 20, padding: 16, elevation: 2, },
   destinationHead: { flexDirection: 'row', alignItems: 'center', gap: 4 },

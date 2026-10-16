@@ -139,8 +139,8 @@ function editor() {
   }
   findCompletion(fieldAst); assert.ok(completion);
   let photos = [{ uri: 'https://server/photo.jpg', path: '/uploads/photo.jpg', type: 'before' }];
-  const completePhoto = new Function('setPhotos', 'photoEditor', 'preservePhoto', 'key', 'closePhotoEditor', `return (${completion});`)(
-    update => { photos = update(photos); }, { index: 0 }, (_, uri) => uri, 'draft', () => {});
+  const completePhoto = editedUri => new Function('photos', 'setPhotos', 'photoEditor', 'preservePhoto', 'key', 'closePhotoEditor', 'setStatus', 'statusFromRecords', `return (${completion});`)(
+    photos, update => { photos = typeof update === 'function' ? update(photos) : update; }, { index: 0 }, (_, uri) => uri, 'draft', () => {}, () => {}, () => 'pending')(editedUri);
   completePhoto('https://server/photo.jpg'); assert.equal(photos[0].path, '/uploads/photo.jpg');
   completePhoto('file:///edited.jpg'); assert.equal(photos[0].path, null);
 

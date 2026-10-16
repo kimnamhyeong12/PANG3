@@ -64,9 +64,9 @@ export default function GroupDashboardScreen({ assignments = [], group, embedded
         <Stat label="전체 방문지" value={stats.total} />
         {personal && <Stat label="작업 전" value={stats.total - stats.working - stats.complete} />}
         <Stat label="작업 중" value={stats.working} />
-        <Stat label="누적 완료" value={stats.complete} />
-        <Stat label="이번 달 완료" value={stats.month} />
-        <Stat label="오늘 완료" value={stats.today} />
+        <Stat label="누적 작업 후" value={stats.complete} />
+        <Stat label="이번 달 작업 후" value={stats.month} />
+        <Stat label="오늘 작업 후" value={stats.today} />
       </View>
 
       {!personal && <View style={styles.card}>
@@ -76,7 +76,7 @@ export default function GroupDashboardScreen({ assignments = [], group, embedded
         ) : stats.members.map((member) => (
           <View key={member.id} style={styles.memberRow}>
             <Text style={styles.memberName}>{member.name}</Text>
-            <Text style={styles.memberCount}>{member.total}곳 · 작업 중 {member.working}곳 · 완료 {member.complete}곳</Text>
+            <Text style={styles.memberCount}>{member.total}곳 · 작업 중 {member.working}곳 · 작업 후 {member.complete}곳</Text>
           </View>
         ))}
       </View>}

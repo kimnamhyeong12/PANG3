@@ -1468,7 +1468,6 @@ function AppContent() {
         </View>
 
         {user &&
-          !(screen === 'mapDirect' && isGuiding) && !(screen === 'teamLocations' && teamIsGuiding) &&
           !(['mapDirect', 'teamLocations', 'publicDataAssignment'].includes(screen) && mapSearchVisible) &&
           !['login', 'register'].includes(screen) && (
             <BottomNavigation

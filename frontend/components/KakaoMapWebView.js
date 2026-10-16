@@ -3143,7 +3143,7 @@ export default function KakaoMapWebView({
             highlighted: String(location.id ?? `${location.lat},${location.lng},${location.detailAddress}`) === highlightedLocationKey,
 
             color:
-              location.markerColor || "#E34D59",
+              location.markerColor || (['complete', 'completed', 'done'].includes(location.status) ? getMarkerColorByStatus(location.status) : "#E34D59"),
 
             /*
              * current 스타일은 더 이상 사용하지 않는다.

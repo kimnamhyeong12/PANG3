@@ -17,7 +17,7 @@ import {
   ScrollView,
   } from 'react-native';
 
-import { emptyPhotos, restorePhotos, photoManifest, isLocalPhoto } from '../utils/reportPhotos';
+import { emptyPhotos, restorePhotos, photoManifest, isLocalPhoto, statusFromRecords } from '../utils/reportPhotos';
 import { draftKey, readDraft, writeDraft, clearDraft, preservePhoto, beginPhotoPick, pendingPhotoPick, endPhotoPick } from '../utils/reportDraft';
 
 import * as ImagePicker from 'expo-image-picker';
@@ -857,8 +857,7 @@ export default function FieldActionScreen({
     index,
     text
   ) => {
-    setPhotos((prev) =>
-      prev.map(
+    const nextPhotos = photos.map(
         (
           photo,
           photoIndex
@@ -869,8 +868,9 @@ export default function FieldActionScreen({
                 comment: text,
               }
             : photo
-      )
-    );
+      );
+    setPhotos(nextPhotos);
+    setStatus(previous => statusFromRecords(previous, nextPhotos));
   };
 
   const editExistingPhoto = (
@@ -953,8 +953,7 @@ export default function FieldActionScreen({
       return;
     }
 
-    setPhotos((prev) =>
-      prev.map(
+    const nextPhotos = photos.map(
         (photo, index) =>
           index ===
           photoEditor.index
@@ -964,8 +963,9 @@ export default function FieldActionScreen({
                 path: editedUri === photo.uri ? photo.path : null,
               }
             : photo
-      )
-    );
+      );
+    setPhotos(nextPhotos);
+    setStatus(previous => statusFromRecords(previous, nextPhotos));
 
     closePhotoEditor();
   };
@@ -1482,7 +1482,7 @@ export default function FieldActionScreen({
             value={fieldMemo}
 
             onChangeText={
-              setFieldMemo
+              text => { setFieldMemo(text); setStatus(previous => statusFromRecords(previous, photos, text)); }
             }
 
             placeholder="메모를 입력하세요"

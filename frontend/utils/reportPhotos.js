@@ -6,6 +6,15 @@ export const PHOTO_TYPES = [
 export const emptyPhotos = () => PHOTO_TYPES.map(({ key, label }) => ({ type: key, label, uri: null, path: null, comment: '' }));
 export const isLocalPhoto = (uri) => /^(file:|content:|blob:|data:)/.test(uri || '');
 
+// Recording a later stage advances the suggested status. Removing content or
+// editing an earlier stage never silently reopens work that is already finished.
+export function statusFromRecords(currentStatus, photos, fieldMemo = '') {
+  const hasRecord = (type) => photos.some(photo => photo.type === type && (photo.uri || String(photo.comment || '').trim()));
+  if (['complete', 'completed', 'done'].includes(currentStatus) || hasRecord('after')) return 'complete';
+  if (['working', 'progress', 'in_progress'].includes(currentStatus) || hasRecord('during') || String(fieldMemo).trim()) return 'working';
+  return 'pending';
+}
+
 export function restorePhotos(saved = [], resolveUrl = (value) => value) {
   const slots = emptyPhotos();
   saved.forEach((photo, index) => {

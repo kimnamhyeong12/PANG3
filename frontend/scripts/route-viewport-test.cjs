@@ -35,3 +35,30 @@ context.fitCoordinates(command.coordinates, command.padding);
 assert.deepEqual(boundsCall.slice(1), [391, 40, 96, 40]);
 assert.equal(boundsCall[0].points.length, 2);
 console.log('Route viewport checks passed: measured margins reach Kakao setBounds');
+
+// Group overview must fit its administrative district, even when a visit is far away.
+const groupSource = fs.readFileSync(path.join(__dirname, '../screens/WorkStatusScreen.js'), 'utf8');
+let buildGroupMap;
+babel.transformSync(groupSource, { configFile: false, babelrc: false, parserOpts: { plugins: ['jsx'] },
+  plugins: [() => ({ visitor: { VariableDeclarator(node) {
+    if (node.node.id.name === 'buildMapHtml') buildGroupMap = node.node.init;
+  } } })] });
+const groupHtml = vm.runInNewContext(`(${generate(buildGroupMap).code})`, {
+  safeJson: JSON.stringify, KAKAO_JAVASCRIPT_KEY: '', UNASSIGNED_COLOR: '#999', MIXED_AREA_COLOR: '#888',
+  colors: { pending: '#c87', warning: '#be9', success: '#4F9588' },
+})({ boundaries: { features: [{ properties: { adm_cd: '2110010', adm_nm: '하단동' },
+  geometry: { type: 'Polygon', coordinates: [[[128.9, 35], [129, 35.1], [128.9, 35]]] } }] },
+  assignments: [{ latitude: 37.5, longitude: 127, status: 'complete' }], memberColors: {} });
+const overlays = [];
+const maps = { LatLng, LatLngBounds,
+  Map: class { setBounds(...args) { boundsCall = args; } },
+  CustomOverlay: class { constructor(options) { overlays.push(options); } },
+  event: { addListener() {} }, load: fn => fn(),
+};
+vm.runInNewContext(groupHtml.split('<script>').at(-1).split('</script>')[0], {
+  kakao: { maps }, document: { getElementById: () => ({}), createElement: () => ({ style: {} }) },
+});
+assert(boundsCall[0].points.every(point => point.lat < 36), 'distant visits must not widen the district viewport');
+assert.deepEqual(Array.from(boundsCall.slice(1)), [12, 12, 12, 12]);
+assert(overlays[0].content.innerHTML.includes('#4F9588'), 'finished group markers use the work-after color');
+console.log('Group viewport checks passed: district bounds ignore distant visits and finished pins are green');

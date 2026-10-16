@@ -302,14 +302,10 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   experiment.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 }); experiment.render();
   experiment.find('MapCanvas').props.onMarkerClick(experiment.props.locations[0]); experiment.render();
   experiment.response((await experiment.settle(), experiment.requests.shift()), route(experiment.props.locations[0])); await experiment.settle();
-  experiment.find('TouchableOpacity', '주변 도로 도착 허용').props.onPress(); experiment.render();
-  const multiRequest = (await experiment.settle(), experiment.requests.shift());
-  assert.equal(multiRequest.url, 'sdk:preview');
-  assert.equal(JSON.parse(multiRequest.options.body).multiArrival, true);
-  experiment.response(multiRequest, route(experiment.props.locations[0])); await experiment.settle();
-  const multiToken = experiment.find('MapCanvas').props.previewRouteSegment.sdkPreviewId;
+  assert.equal(experiment.find('TouchableOpacity', '주변 도로 도착 허용'), undefined);
+  const previewToken = experiment.find('MapCanvas').props.previewRouteSegment.sdkPreviewId;
   await experiment.find('TouchableOpacity', '안내 시작').props.onPress(); await experiment.settle();
-  assert.equal(experiment.find('Navigation').props.destination.previewId, multiToken, 'multi-arrival guidance uses the exact compared preview');
+  assert.equal(experiment.find('Navigation').props.destination.previewId, previewToken, 'guidance uses the displayed preview');
   assert.equal(experiment.requests.length, 0);
 
   const walk = createScreen();
