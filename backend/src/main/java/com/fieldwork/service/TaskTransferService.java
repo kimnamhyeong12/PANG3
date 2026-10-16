@@ -31,10 +31,13 @@ public class TaskTransferService {
     private final GroupMemberRepository members;
     private final TaskService taskService;
     private final LocationAssignmentRepository assignments;
+    private final PushNotificationService notifications;
 
     public TaskTransferService(TaskTransferRequestRepository requests, TaskRepository tasks,
             UserRepository users, WorkGroupRepository groups, GroupMemberRepository members,
-            TaskService taskService, LocationAssignmentRepository assignments) {
+            TaskService taskService, LocationAssignmentRepository assignments,
+            PushNotificationService notifications) {
+        this.notifications = notifications;
         this.assignments = assignments;
         this.requests = requests;
         this.tasks = tasks;
@@ -105,7 +108,10 @@ public class TaskTransferService {
         request.setSender(sender);
         request.setRecipient(recipient);
         request.setTaskIds(selectedIds);
-        return toMap(requests.save(request));
+        TaskTransferRequest saved = requests.save(request);
+        notifyTransfer(saved, recipientId, "TASK_TRANSFER_REQUESTED", "업무 이관 요청",
+                sender.getName() + "님이 방문지 " + selectedIds.size() + "건의 이관을 요청했습니다. 수락 또는 거절해주세요.");
+        return toMap(saved);
     }
 
     @Transactional
@@ -135,12 +141,16 @@ public class TaskTransferService {
                 if (isComplete(task.getTaskStatus())) {
                     request.setStatus("REJECTED");
                     request.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+                    notifyTransfer(request, request.getSender().getUserId(), "TASK_TRANSFER_RESPONDED", "업무 이관 취소",
+                            "방문지가 이미 완료되어 이관 요청이 취소되었습니다.");
                     return toMap(request);
                 }
                 User owner = taskService.currentAssignee(task);
                 if (owner == null || !owner.getUserId().equals(request.getSender().getUserId())) {
                     request.setStatus("REJECTED");
                     request.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
+                    notifyTransfer(request, request.getSender().getUserId(), "TASK_TRANSFER_RESPONDED", "업무 이관 취소",
+                            "방문지 담당자가 변경되어 이관 요청이 취소되었습니다.");
                     return toMap(request);
                 }
                 selected.add(task);
@@ -167,7 +177,19 @@ public class TaskTransferService {
         }
         request.setStatus(accept ? "ACCEPTED" : "REJECTED");
         request.setRespondedAt(LocalDateTime.now(ZoneOffset.UTC));
-        return toMap(requests.save(request));
+        TaskTransferRequest saved = requests.save(request);
+        notifyTransfer(saved, request.getSender().getUserId(), "TASK_TRANSFER_RESPONDED", "업무 이관 처리 결과",
+                request.getRecipient().getName() + "님이 방문지 " + request.getTaskIds().size()
+                        + "건의 이관을 " + (accept ? "수락" : "거절") + "했습니다.");
+        return toMap(saved);
+    }
+
+    private void notifyTransfer(TaskTransferRequest request, Long userId, String type, String title, String body) {
+        notifications.sendToUserAfterCommit(userId, title, body, Map.of(
+                "type", type,
+                "groupId", request.getGroup().getGroupId(),
+                "requestId", request.getId(),
+                "status", request.getStatus()));
     }
 
     @Transactional(readOnly = true)
