@@ -22,6 +22,11 @@ public final class WorkRegion {
         }
     }
 
+    public static void validateOptional(String sido, String selected) {
+        if ((sido == null || sido.isBlank()) && (selected == null || selected.isBlank())) return;
+        validate(sido, selected);
+    }
+
     public static void validate(String sido, String selected) {
         if (sido == null || sido.isBlank()) throw new IllegalArgumentException("시·도를 선택해주세요.");
         if (selected == null || selected.isBlank()) throw new IllegalArgumentException("시·군·구를 선택해주세요.");

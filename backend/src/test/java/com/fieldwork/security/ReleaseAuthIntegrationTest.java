@@ -311,18 +311,21 @@ class ReleaseAuthIntegrationTest {
         assertEquals("천안시 동남구", users.findByLoginId(id).orElseThrow().getWorkSigungu());
     }
 
-    @Test void registrationRequiresAllMandatoryFieldsButAllowsNoWorkplace() throws Exception {
+    @Test void registrationRequiresCredentialsAndNameButAllowsNoRegionOrWorkplace() throws Exception {
         String id = "new" + UUID.randomUUID().toString().replace("-", "");
-        Map<String, String> required = Map.of("loginId", id, "password", "test-password", "name", "test user",
-                "workSido", "부산광역시", "workSigungu", "사하구");
+        Map<String, String> required = Map.of("loginId", id, "password", "test-password", "name", "test user");
         for (String field : required.keySet()) {
             Map<String, String> missing = new HashMap<>(required);
             missing.remove(field);
             mvc.perform(postJson("/api/auth/register", missing)).andExpect(status().isBadRequest());
             assertTrue(users.findByLoginId(id).isEmpty());
+            missing.put(field, "        ");
+            mvc.perform(postJson("/api/auth/register", missing)).andExpect(status().isBadRequest());
         }
         mvc.perform(postJson("/api/auth/register", required)).andExpect(status().isOk());
         User registered = users.findByLoginId(id).orElseThrow();
+        assertNull(registered.getWorkSido());
+        assertNull(registered.getWorkSigungu());
         assertNull(registered.getWorkplaceAddress());
         assertNull(registered.getWorkplaceLat());
         assertNull(registered.getWorkplaceLng());

@@ -32,6 +32,7 @@ import SearchResultSheet from '../components/SearchResultSheet';
 import WorkplaceField from '../components/WorkplaceField';
 import SafetyGuideBadge from '../components/SafetyGuideBadge';
 import ManeuverGuideCard from '../components/ManeuverGuideCard';
+import MapWorkspaceSwitcher from '../components/MapWorkspaceSwitcher';
 import { KakaoNavigationView, beginRouteSession, endRouteSession, wasRouteTaskRemoved, isKakaoNavigationAvailable, previewSdkRoute, isSdkPreviewAvailable, discardSdkPreview } from '../modules/kakao-navigation';
 import {
   stopRouteNotification,
@@ -39,7 +40,7 @@ import {
 } from '../services/notificationService';
 import { isRegisteredPlace, placeLocation, searchViewportPlaces } from '../utils/placeSearch';
 import { locationKey } from '../utils/routeSession';
-import { remainingRouteProgress } from '../utils/routeProgress';
+import { remainingRouteProgress, routeCompletion, routeTrafficRail } from '../utils/routeProgress';
 import { hasVisitCoordinates, numberVisitOrder, promoteVisit, recommendVisitOrder, visitSetKey } from '../utils/visitOrder';
 import { BUSAN_DISTRICT_CODES } from '../constants/busanDistricts';
 // 엑셀,csv 데이터 업로드
@@ -133,6 +134,7 @@ function NormalMapScreen({
   previewMarkers = EMPTY_MARKERS,
   previewOnlyRegistrations = false,
   activeGroup,
+  onSelectGroup,
   locationScope = 'personal',
   groupAssignments = [],
   roadPath,
@@ -415,6 +417,8 @@ function NormalMapScreen({
   }, [isGuiding, activeSegment, currentLocation, nativeProgress]);
   const cardDistance = !preview && guidanceProgress ? guidanceProgress.distance : cardSegment?.totalDistance;
   const cardDuration = !preview && guidanceProgress ? guidanceProgress.duration : cardSegment?.totalDuration;
+  const routeCompletionRatio = routeCompletion(activeSegment?.totalDistance, guidanceProgress?.distance);
+  const trafficRail = useMemo(() => routeTrafficRail(activeSegment?.trafficSections), [activeSegment?.trafficSections]);
   const routeVisibleKey = preview?.segment ? preview.targetKey : (!preview && isGuiding ? activeSegment?.destinationKey : null);
   const publicDisplayItems = useMemo(() => {
     const categoryInfo = PUBLIC_FACILITY_CATEGORIES.find((entry) => entry.key === publicCategory);
@@ -1532,6 +1536,20 @@ function NormalMapScreen({
         </View>
       </>}
 
+      {isGuiding && !preview && routeCompletionRatio != null && <View pointerEvents="none" style={[styles.routeProgressRail, { bottom: bottomOverlayHeight + 228 }]}
+        accessible accessibilityRole="progressbar" accessibilityLabel="목적지까지 이동 진행률"
+        accessibilityValue={{ min: 0, max: 100, now: Math.round(routeCompletionRatio * 100) }}>
+        <View style={[styles.routeProgressTrack, { height: Math.max(72, Math.min(320, mapHeight * 0.36, mapHeight - bottomOverlayHeight - 228 - screenInsets.top - 20)) }]}>
+          <View style={styles.routeTrafficClip}>
+            {trafficRail.map((section, index) => <View key={index} style={{ position: 'absolute', left: 0, right: 0,
+              bottom: `${section.start * 100}%`, height: `${section.fraction * 100}%`, backgroundColor: section.color }} />)}
+          </View>
+          <View style={[styles.routeProgressPosition, { bottom: `${routeCompletionRatio * 100}%` }]}>
+            <Ionicons name="navigate" size={14} color={colors.primary} style={{ transform: [{ rotate: '-45deg' }] }} />
+          </View>
+        </View>
+      </View>}
+
       {isGuiding && kakaoDestination && !preview && nativeSafety?.destinationKey === activeSegment?.destinationKey && <View
         pointerEvents="none" style={{ position: 'absolute', left: 12, top: mapHeight * 0.5 - 100, zIndex: 15 }}>
         <SafetyGuideBadge notice={nativeSafety} />
@@ -1875,6 +1893,7 @@ function NormalMapScreen({
           </View>
         )}
 
+        <View style={styles.workspaceSwitcherRow}><MapWorkspaceSwitcher userId={user?.userId} activeGroup={activeGroup} onSelect={onSelectGroup} /></View>
       </View>}
       {mapSelectMode && <View style={[styles.selectionHint, { top: screenInsets.top + 124 }]} pointerEvents="none"><Text style={styles.selectionHintText}>지도를 움직여 위치를 선택하세요</Text></View>}
       {!resultsMode && !publicFacilityMode && !mapSelectMode && !searchedPlace && !coordSheetOpen && cardTarget && (
@@ -2228,6 +2247,11 @@ export default function MapScreen(props) {
 }
 
 const styles = StyleSheet.create({
+  workspaceSwitcherRow: { alignItems: 'flex-end', marginTop: 5 },
+  routeProgressRail: { position: 'absolute', right: 8, width: 28, alignItems: 'center', zIndex: 15 },
+  routeProgressTrack: { width: 10, borderRadius: 6, backgroundColor: '#FFFFFF', elevation: 1 },
+  routeTrafficClip: { position: 'absolute', left: 2, right: 2, top: 2, bottom: 2, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.primary },
+  routeProgressPosition: { position: 'absolute', left: -9, marginBottom: -14, width: 28, height: 28, borderRadius: 14, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.primary },
   guideNearbyControls: { position: 'absolute', right: 20, zIndex: 18, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, overflow: 'hidden', elevation: 3 },
   guideNearbyButton: { width: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.line },
   guideNearbySelected: { backgroundColor: colors.primarySoft, borderColor: colors.primary },

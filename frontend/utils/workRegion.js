@@ -10,6 +10,9 @@ export function isWorkRegionComplete(value) {
     && Boolean(DISTRICTS_BY_REGION[value.sido]?.includes(value.sigungu))
     && (!childDistricts(value).length || childDistricts(value).includes(value.gu));
 }
+export function isOptionalWorkRegionValid(value) {
+  return (!value.sido && !value.sigungu && !value.gu) || isWorkRegionComplete(value);
+}
 export function selectWorkRegion(value, level, selected) {
   if (level === 'sido') return { sido: selected, sigungu: '', gu: '' };
   if (level === 'sigungu') return { ...value, sigungu: selected, gu: '' };

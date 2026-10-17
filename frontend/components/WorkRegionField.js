@@ -12,7 +12,9 @@ export default function WorkRegionField({ value, onChange, disabled = false, req
     ? DISTRICTS_BY_REGION[value.sido] || [] : children;
   const levels = children.length ? ['sido', 'sigungu', 'gu'] : ['sido', 'sigungu'];
   return <View style={styles.root}>
-    <Text style={styles.label}>근무지역{required ? <Text style={styles.required}> *</Text> : null}</Text>
+    <View style={styles.heading}><Text style={styles.label}>근무지역{required ? <Text style={styles.required}> *</Text> : ' (선택)'}</Text>
+      {!required && !!value.sido && <TouchableOpacity disabled={disabled} onPress={() => onChange({ sido: '', sigungu: '', gu: '' })} accessibilityLabel="근무지역 선택 해제"><Text style={styles.clear}>선택 해제</Text></TouchableOpacity>}
+    </View>
     {levels.map(level => {
       const inactive = disabled || (level !== 'sido' && !value.sido);
       return <TouchableOpacity key={level} disabled={inactive} style={[styles.field, inactive && styles.inactive]}
@@ -39,10 +41,10 @@ export default function WorkRegionField({ value, onChange, disabled = false, req
   </View>;
 }
 const styles = StyleSheet.create({
-  root: { gap: 9 }, label: { color: colors.text, fontSize: 12, fontWeight: '900' }, required: { color: colors.danger },
+  root: { gap: 9, marginBottom: 8 }, heading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, clear: { fontSize: 12, color: colors.textSoft, paddingVertical: 6 }, label: { color: colors.text, fontSize: 14, fontWeight: '700' }, required: { color: colors.danger },
   field: { minHeight: 54, borderRadius: 13, borderWidth: 1, borderColor: colors.line, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 11 },
-  inactive: { opacity: 0.5 }, icon: { width: 34, height: 34, borderRadius: 11, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
-  text: { flex: 1 }, small: { color: colors.textSoft, fontSize: 8.5 }, value: { color: colors.text, fontSize: 13, fontWeight: '900', marginTop: 1 },
+  inactive: { opacity: 0.5 }, icon: { width: 26, height: 34, alignItems: 'center', justifyContent: 'center' },
+  text: { flex: 1 }, small: { color: colors.textSoft, fontSize: 11 }, value: { color: colors.text, fontSize: 14, fontWeight: '600', marginTop: 2 },
   backdrop: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(16,40,91,0.38)' },
   sheet: { maxHeight: '70%', backgroundColor: colors.surface,  padding: 18, borderRadius: 16, shadowOpacity: 0, elevation: 0, }, title: { color: colors.text, fontSize: 17, fontWeight: '900', marginBottom: 8 },
   option: { minHeight: 45, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: colors.line, paddingVertical: 10 },

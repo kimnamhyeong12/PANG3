@@ -155,7 +155,7 @@ public class GroupService {
             personalGroup = workGroupRepository.save(personalGroup);
         }
 
-        String personalSido = user.getWorkSido() == null || user.getWorkSido().isBlank() ? "부산광역시" : user.getWorkSido().trim();
+        String personalSido = user.getWorkSido() == null || user.getWorkSido().isBlank() ? null : user.getWorkSido().trim();
         String personalDistrict = user.getWorkSigungu() == null ? "" : user.getWorkSigungu().trim();
         if (!java.util.Objects.equals(personalSido, personalGroup.getRegionSido())
                 || !java.util.Objects.equals(personalDistrict, personalGroup.getRegionSigungu())) {

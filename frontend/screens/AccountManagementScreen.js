@@ -7,7 +7,7 @@ import { apiFetch } from '../utils/auth';
 import { API_BASE_URL } from '../utils/api';
 import { colors } from '../constants/design';
 import WorkRegionField from '../components/WorkRegionField';
-import { parseWorkRegion, serializeWorkRegion, isWorkRegionComplete } from '../utils/workRegion';
+import { parseWorkRegion, serializeWorkRegion, isOptionalWorkRegionValid } from '../utils/workRegion';
 
 export default function AccountManagementScreen({ user, credential, onBack, onUpdatedUser, onLogout }) {
   const [name, setName] = useState(user.name || '');
@@ -20,7 +20,7 @@ export default function AccountManagementScreen({ user, credential, onBack, onUp
   const [email, setEmail] = useState(user.email || '');
   const [busy, setBusy] = useState(false);
   const save = async () => {
-    if (busy || !name.trim() || !isWorkRegionComplete(region)) return;
+    if (busy || !name.trim() || !isOptionalWorkRegionValid(region)) return;
     if (password !== confirm) return showAlert('비밀번호 확인', '새 비밀번호가 서로 일치하지 않습니다.');
     setBusy(true);
     try {
@@ -52,11 +52,11 @@ export default function AccountManagementScreen({ user, credential, onBack, onUp
         {field('이름', name, setName, { maxLength: 50, placeholder: '이름' })}
         {field('새 비밀번호', password, setPassword, { secureTextEntry: true, placeholder: '변경할 때만 입력하세요', autoCapitalize: 'none' })}
         {field('새 비밀번호 확인', confirm, setConfirm, { secureTextEntry: true, placeholder: '새 비밀번호를 다시 입력하세요', autoCapitalize: 'none' })}
-        <WorkRegionField value={region} onChange={setRegion} disabled={busy} required />
+        <WorkRegionField value={region} onChange={setRegion} disabled={busy} />
         <WorkplaceField value={workplace} onChange={setWorkplace} userId={user.userId} disabled={busy} />
         {field('이메일', email, setEmail, { keyboardType: 'email-address', autoCapitalize: 'none', placeholder: '이메일 주소' })}
         <TouchableOpacity disabled={busy || !email.trim() || email.trim() === user.email} onPress={changeEmail} style={styles.emailButton}><Text style={styles.emailText}>인증 메일 받기</Text></TouchableOpacity>
-        <PrimaryButton title={busy ? '처리 중…' : '변경사항 저장'} onPress={save} disabled={busy || !name.trim() || !isWorkRegionComplete(region) || password !== confirm} />
+        <PrimaryButton title={busy ? '처리 중…' : '변경사항 저장'} onPress={save} disabled={busy || !name.trim() || !isOptionalWorkRegionValid(region) || password !== confirm} />
       </View>
     </ScrollView>
 

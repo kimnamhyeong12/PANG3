@@ -19,6 +19,11 @@ export async function saveReportToDownloads(uri, filename) {
   return nativeModule.saveReportToDownloads(uri, filename);
 }
 
+export async function openReportDownloadsFolder() {
+  if (!nativeModule?.openReportDownloadsFolder) return false;
+  return nativeModule.openReportDownloadsFolder();
+}
+
 export async function previewSdkRoute(request) {
   if (!nativeModule?.previewRoute) throw new Error('SDK 경로 미리보기가 포함된 Android 앱으로 업데이트해 주세요.');
   return nativeModule.previewRoute(request);

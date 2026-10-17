@@ -3,7 +3,25 @@ const fs = require('node:fs');
 const path = require('node:path');
 (async () => {
   const source = fs.readFileSync(path.join(__dirname, '../utils/routeProgress.js'), 'utf8');
-  const { remainingRouteProgress } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+  const { remainingRouteProgress, routeCompletion, routeTrafficRail } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+  assert.equal(routeCompletion(1000,1000),0);
+  assert.equal(routeCompletion(1000,500),0.5);
+  assert.equal(routeCompletion(1000,0),1);
+  assert.equal(routeCompletion(1000,1200),0);
+  assert.equal(routeCompletion(0,0),null);
+  assert.equal(routeCompletion(1000,null),null);
+  assert.equal(routeCompletion(1000,-1),null);
+  const rail = routeTrafficRail([
+    { trafficState: 4, path: [{lat:35,lng:129},{lat:35.01,lng:129}] },
+    { trafficState: 1, path: [{lat:35.01,lng:129},{lat:35.04,lng:129}] },
+  ]);
+  assert.ok(Math.abs(rail[0].fraction - 0.25) < 0.00001, 'rail section sizes follow road distance');
+  assert.equal(rail[0].start,0);
+  assert.equal(rail[0].color,'#16A34A');
+  assert.ok(Math.abs(rail[1].start - 0.25) < 0.00001);
+  assert.equal(rail[1].color,'#DC2626');
+  assert.deepEqual(routeTrafficRail(null),[]);
+  assert.deepEqual(routeTrafficRail([{path:[{lat:null,lng:null}]}]),[]);
   const route = { path: [{ lat: 35, lng: 129 }, { lat: 35, lng: 129.01 }], totalDistance: 1000, totalDuration: 600 };
   assert.equal(remainingRouteProgress(route, { lat: 35, lng: 129 }).distance, 1000);
   const half = remainingRouteProgress(route, { latitude: 35, longitude: 129.005 });

@@ -11,6 +11,8 @@ const exportsObject = {};
 new Function('exports', 'require', source)(exportsObject, name => require(path.resolve(root, 'utils', name)));
 const { emptyWorkRegion, selectWorkRegion, childDistricts, serializeWorkRegion, parseWorkRegion, isWorkRegionComplete } = exportsObject;
 const data = require('../constants/koreaRegions.json');
+assert.equal(exportsObject.isOptionalWorkRegionValid(emptyWorkRegion()), true, 'an optional region may be omitted');
+assert.equal(exportsObject.isOptionalWorkRegionValid({sido:'부산광역시',sigungu:'',gu:''}), false, 'a selected region must be complete');
 assert.deepEqual(data, JSON.parse(fs.readFileSync(path.join(root, '../backend/src/main/resources/korea-regions.json'), 'utf8')), 'app/server must use the same hierarchy');
 let value = emptyWorkRegion();
 assert.equal(isWorkRegionComplete(value), false);

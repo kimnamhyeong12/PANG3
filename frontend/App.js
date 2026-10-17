@@ -1160,6 +1160,7 @@ function AppContent() {
             selectedDong={selectedDong}
             onSelectedDongChange={updateSelectedDong}
             activeGroup={activeGroup}
+            onSelectGroup={selectActiveGroup}
             publicDataMode
             locations={routeLocations}
             setLocations={setRouteLocations}
@@ -1199,6 +1200,7 @@ function AppContent() {
             locations={teamLocations}
             setLocations={setTeamLocations}
             activeGroup={activeGroup}
+            onSelectGroup={selectActiveGroup}
             locationScope="team"
             groupAssignments={groupAssignments}
             onBack={() => {
@@ -1311,6 +1313,7 @@ function AppContent() {
               previewMarkers={[]}
               previewOnlyRegistrations={false}
               activeGroup={activeGroup}
+              onSelectGroup={selectActiveGroup}
               locationScope="personal"
               groupAssignments={activeGroup?.groupId ? groupAssignments : []}
               onBack={() =>

@@ -1,7 +1,7 @@
 import { apiFetch, downloadProtectedFile } from '../utils/auth';
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { saveReportToDownloads } from '../modules/kakao-navigation';
+import { saveReportToDownloads, openReportDownloadsFolder } from '../modules/kakao-navigation';
 import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import { PrimaryButton, ScreenHeader, SecondaryButton } from '../components/ui';
@@ -18,6 +18,7 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
   const [preparing, setPreparing] = useState(false);
   const [activeId, setActiveId] = useState(null);
   const [error, setError] = useState('');
+  const [folderNotice, setFolderNotice] = useState('');
   const mounted = useRef(true);
   const busy = useRef(false);
   const filesRef = useRef(files);
@@ -60,6 +61,14 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
     if (!await Sharing.isAvailableAsync()) throw new Error('이 기기에서 파일 공유를 사용할 수 없습니다.');
     await Sharing.shareAsync(file.uri, { mimeType: 'application/zip', dialogTitle: `${file.name} 보고서 받기` });
   };
+  const openSavedFolder = async () => {
+    try {
+      const opened = await openReportDownloadsFolder();
+      if (mounted.current) setFolderNotice(opened ? '' : '내 파일에서 Download/외근도우미/다운로드 폴더를 열어 주세요.');
+    } catch (_) {
+      if (mounted.current) setFolderNotice('파일은 저장됐습니다. 내 파일에서 Download/외근도우미/다운로드 폴더를 열어 주세요.');
+    }
+  };
   const getFile = async id => {
     if (busy.current || !canOpen) return;
     busy.current = true; setPreparing(true); setError('');
@@ -68,6 +77,7 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
       if (Platform.OS === 'android') {
         await saveReportToDownloads(file.uri, file.filename);
         update(id, { saved: true });
+        await openSavedFolder();
       } else await share(file);
     }
     catch (failure) { update(id, { error: failure.message || '파일을 받지 못했습니다.' }); }
@@ -78,17 +88,19 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
     if (ids.length === 1) return getFile(ids[0]);
     busy.current = true; setPreparing(true); setError('');
     let failures = 0;
+    let savedCount = 0;
     try {
       for (const id of ids) {
         if (!mounted.current) break;
         try {
           const file = await prepare(id);
-          if (Platform.OS === 'android') { await saveReportToDownloads(file.uri, file.filename); update(id, { saved: true }); }
+          if (Platform.OS === 'android') { await saveReportToDownloads(file.uri, file.filename); update(id, { saved: true }); savedCount++; }
           else await share(file);
         }
         catch (failure) { failures++; update(id, { error: failure.message || '파일을 만들지 못했습니다.' }); }
       }
       if (mounted.current && failures) setError(`${failures}개 파일을 준비하지 못했습니다. 해당 파일을 다시 받아 주세요.`);
+      if (mounted.current && savedCount) await openSavedFolder();
     } finally { busy.current = false; if (mounted.current) { setPreparing(false); setActiveId(null); } }
   };
   return <View style={styles.container}><ScreenHeader title="보고서 다운로드" onBack={onBack} />
@@ -98,18 +110,20 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
       {loading && <Text style={styles.description}>보고서를 불러오고 있습니다.</Text>}
       {!loading && files.some(file => file.loadError) && <SecondaryButton title="다시 불러오기" onPress={() => setReload(value => value + 1)} />}
       {!!error && <Text style={styles.error}>{error}</Text>}
+      {!!folderNotice && <Text style={styles.description}>{folderNotice}</Text>}
       {files.map(file => <View key={file.progressId || `task-${file.taskId}`} style={styles.fileRow}>
         <View style={styles.fileInfo}>
           <Text style={styles.fileName}>{file.name}</Text>
           <Text style={styles.fileState}>{file.progressId ? `${file.progressStatus === 'complete' ? '작업 후' : file.progressStatus === 'working' ? '작업 중' : '작업 전'} · ${String(file.createdAt || '').slice(0, 10)}` : ''}</Text>
           {activeId === file.progressId && <Text style={styles.fileState}>파일 준비 중…</Text>}
           {!!file.error && <Text style={styles.error}>{file.error}</Text>}
-          {file.saved && <Text style={styles.fileState}>Download 폴더에 저장했습니다.</Text>}
+          {file.saved && <Text style={styles.fileState}>Download/외근도우미/다운로드에 저장했습니다.</Text>}
         </View>
         <PrimaryButton title={file.saved ? '다시 다운로드' : '다운로드'} disabled={preparing || !canOpen || !file.progressId || !canDownloadReport(file)} onPress={() => getFile(file.progressId)} style={styles.fileButton} />
       </View>)}
       {ids.length > 1 && <PrimaryButton title={preparing ? '다운로드 중…' : `${ids.length}개 모두 다운로드`} icon="download-outline" disabled={preparing || !canOpen} onPress={prepareAll} />}
-      <Text style={styles.description}>보고서는 작성일로부터 1년간 보관돼요.{Platform.OS === 'android' ? '\n파일은 휴대폰 Download 폴더에 저장돼요.' : ''}</Text>
+      {Platform.OS === 'android' && files.some(file => file.saved) && <SecondaryButton title="저장 폴더 열기" onPress={openSavedFolder} disabled={preparing} />}
+      <Text style={styles.description}>보고서는 작성일로부터 1년간 보관돼요.{Platform.OS === 'android' ? '\n파일은 Download/외근도우미/다운로드에 저장돼요.' : ''}</Text>
       <SecondaryButton title="이전 화면으로" onPress={onBack} />
     </ScrollView>
   </View>;

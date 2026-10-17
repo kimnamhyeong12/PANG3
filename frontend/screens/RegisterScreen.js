@@ -4,10 +4,10 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput
 import { Ionicons } from '@expo/vector-icons';
 import { showAlert } from '../components/CustomAlert';
 import { PrimaryButton, ScreenHeader } from '../components/ui';
-import { colors, shadow } from '../constants/design';
+import { colors } from '../constants/design';
 import WorkplaceField from '../components/WorkplaceField';
 import WorkRegionField from '../components/WorkRegionField';
-import { emptyWorkRegion, isWorkRegionComplete, serializeWorkRegion } from '../utils/workRegion';
+import { emptyWorkRegion, isOptionalWorkRegionValid, serializeWorkRegion } from '../utils/workRegion';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 export default function RegisterScreen({ onBack }) {
@@ -29,7 +29,8 @@ export default function RegisterScreen({ onBack }) {
   const [email, setEmail] = useState('');
 
   const passwordMatches = Boolean(pw) && pw === pwConfirm;
-  const canSubmit = Boolean(name.trim() && checkedId === loginId.trim() && loginId.trim() && pw.trim() && pw.length >= 8 && pwConfirm && passwordMatches && isWorkRegionComplete(region) && !checkingId && !loading);
+  const regionValid = isOptionalWorkRegionValid(region);
+  const canSubmit = Boolean(name.trim() && checkedId === loginId.trim() && loginId.trim() && pw.trim() && pw.length >= 8 && pwConfirm && passwordMatches && regionValid && !checkingId && !loading);
 
   const checkId = async () => {
     const value = loginId.trim();
@@ -74,14 +75,15 @@ export default function RegisterScreen({ onBack }) {
 
         <Field label="아이디" required icon="person" value={loginId} onChangeText={value => { currentId.current = value; setLoginId(value); setCheckedId(''); setIdMessage(''); }} placeholder="아이디를 입력해주세요" autoCapitalize="none" error={idMessage && checkedId !== loginId.trim() ? idMessage : ''} helper={idMessage || '영문·숫자 등 3~50자로 입력해주세요.'} right={<TouchableOpacity onPress={checkId} disabled={checkingId || !loginId.trim()} style={styles.idCheck}><Text style={styles.idCheckText}>{checkingId ? '확인 중' : '중복 확인'}</Text></TouchableOpacity>} />
         <Field label="이름" required icon="person-outline" value={name} onChangeText={setName} placeholder="이름을 입력해주세요" maxLength={50} />
-        <Field label="비밀번호" required icon="lock-closed" value={pw} onChangeText={setPw} placeholder="비밀번호를 입력해주세요" secureTextEntry={!showPw} helper="영문, 숫자, 특수문자를 조합해 입력해주세요." right={<TouchableOpacity onPress={() => setShowPw((value) => !value)}><Ionicons name={showPw ? 'eye-outline' : 'eye-off-outline'} size={19} color={colors.textFaint} /></TouchableOpacity>} />
+        <Field label="비밀번호" required icon="lock-closed" value={pw} onChangeText={setPw} placeholder="비밀번호를 입력해주세요" secureTextEntry={!showPw} helper="8자 이상 입력해주세요." right={<TouchableOpacity onPress={() => setShowPw((value) => !value)}><Ionicons name={showPw ? 'eye-outline' : 'eye-off-outline'} size={19} color={colors.textFaint} /></TouchableOpacity>} />
         <Field label="비밀번호 확인" required icon="lock-closed" value={pwConfirm} onChangeText={setPwConfirm} placeholder="비밀번호를 다시 입력해주세요" secureTextEntry={!showPwConfirm} error={Boolean(pwConfirm) && !passwordMatches ? '비밀번호가 일치하지 않습니다.' : ''} right={<TouchableOpacity onPress={() => setShowPwConfirm((value) => !value)}><Ionicons name={showPwConfirm ? 'eye-outline' : 'eye-off-outline'} size={19} color={colors.textFaint} /></TouchableOpacity>} />
 
-        <WorkRegionField value={region} onChange={setRegion} disabled={loading} required />
+        <WorkRegionField value={region} onChange={setRegion} disabled={loading} />
+        {!regionValid && <Text style={styles.errorText}>근무지역을 끝까지 선택하거나 선택 해제해 주세요.</Text>}
 
         <WorkplaceField value={workplace} onChange={setWorkplace} disabled={loading} />
 
-        <Field label="이메일" icon="mail-outline" value={email} onChangeText={setEmail} placeholder="이메일 주소" keyboardType="email-address" autoCapitalize="none" />
+        <Field label="이메일 (선택)" icon="mail-outline" value={email} onChangeText={setEmail} placeholder="이메일 주소" keyboardType="email-address" autoCapitalize="none" />
 
         <PrimaryButton title={loading ? '가입 중...' : '회원가입'} icon="arrow-forward" onPress={register} disabled={!canSubmit} style={styles.submit} />
         <TouchableOpacity style={styles.loginLink} onPress={onBack}><Text style={styles.loginMuted}>이미 계정이 있나요?</Text><Text style={styles.loginText}>로그인</Text></TouchableOpacity>
@@ -97,9 +99,9 @@ function Field({ label, required, icon, helper, error, right, ...props }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background }, body: { padding: 16, paddingBottom: 30, paddingHorizontal: 20, },
-  card: {   borderColor: colors.line,  padding: 18, ...shadow, borderWidth: 0, shadowOpacity: 0, elevation: 0, borderRadius: 16, backgroundColor: colors.surface, },
-  field: { marginBottom: 12 }, label: { color: colors.text, fontSize: 12, fontWeight: '900', marginBottom: 6 }, required: { color: colors.danger }, inputRow: { height: 48, borderWidth: 1, borderColor: colors.line, borderRadius: 13, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: '#FFFFFF' }, inputError: { borderColor: colors.danger }, input: { flex: 1, minHeight: 48, backgroundColor: colors.surfaceMuted, borderColor: colors.line, borderRadius: 12, fontSize: 14, color: colors.text, }, helper: { color: colors.textSoft, fontSize: 9.5, marginTop: 5 }, errorText: { color: colors.danger, fontSize: 9.5, marginTop: 5 },
-  idCheck: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 8 }, idCheckText: { color: colors.primary, fontSize: 11, fontWeight: '800' },
+  container: { flex: 1, backgroundColor: colors.background }, body: { paddingTop: 12, paddingBottom: 30, paddingHorizontal: 20 },
+  card: { backgroundColor: colors.surface },
+  field: { marginBottom: 20 }, label: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 8 }, required: { color: colors.danger }, inputRow: { minHeight: 50, borderWidth: 1, borderColor: colors.line, borderRadius: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.surface }, inputError: { borderColor: colors.danger }, input: { flex: 1, minWidth: 0, height: 48, paddingVertical: 0, paddingHorizontal: 0, backgroundColor: 'transparent', fontSize: 14, color: colors.text }, helper: { color: colors.textSoft, fontSize: 12, lineHeight: 18, marginTop: 6 }, errorText: { color: colors.danger, fontSize: 12, lineHeight: 18, marginTop: 6 },
+  idCheck: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.primarySoft }, idCheckText: { color: colors.primary, fontSize: 12, fontWeight: '700' },
   submit: { marginTop: 17 }, loginLink: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingTop: 15 }, loginMuted: { color: colors.textSoft, fontSize: 11 }, loginText: { color: colors.primary, fontSize: 11, fontWeight: '900' },
 });

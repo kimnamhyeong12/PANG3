@@ -47,7 +47,7 @@ public class AuthController {
         if (loginId == null || !loginId.trim().matches("[A-Za-z0-9_.-]{3,50}")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "아이디는 영문, 숫자 또는 특수문자(_, ., -)를 사용해 3~50자로 입력해 주세요.");
         }
-        if (password == null || password.length() < 8) {
+        if (password == null || password.isBlank() || password.length() < 8) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "비밀번호는 8자 이상 입력해 주세요.");
         }
         if (password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72) {

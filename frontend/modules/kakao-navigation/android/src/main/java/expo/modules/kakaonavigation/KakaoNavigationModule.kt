@@ -11,6 +11,9 @@ class KakaoNavigationModule : Module() {
     AsyncFunction("saveReportToDownloads") { uri: String, filename: String ->
       ReportDownloads.save(requireNotNull(appContext.reactContext), uri, filename)
     }
+    AsyncFunction("openReportDownloadsFolder") {
+      ReportDownloads.openFolder(requireNotNull(appContext.reactContext))
+    }.runOnQueue(expo.modules.kotlin.functions.Queues.MAIN)
 
     AsyncFunction("previewRoute") { request: Map<String, Any?>, promise: Promise ->
       KakaoRouteEngine.preview(requireNotNull(appContext.reactContext), request,
