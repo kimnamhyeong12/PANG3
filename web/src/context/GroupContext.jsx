@@ -26,7 +26,8 @@ export function GroupProvider({ children }) {
   }, []);
 
   // GET /api/groups/user/{userId} → [{ groupId, groupName, personal, memberCount, regionSido, regionSigungu, ... }]
-  // 관리자용 웹이라 1인 개인 그룹(personal: true)은 제외하고 팀 그룹만 다룬다.
+  // 팀 그룹과 1인 개인 업무공간(personal: true)을 모두 다룬다.
+  // 개인 업무공간은 항상 목록 맨 끝에 오도록 백엔드에서 정렬해서 내려준다.
   // 최초 로드만 전체 화면 로딩/에러로 막고, 이후 reload(지역 변경 후 등)는 화면을 유지한 채 백그라운드로 갱신한다.
   const reload = useCallback(async () => {
     if (!user) return;
@@ -35,7 +36,7 @@ export function GroupProvider({ children }) {
     setError(null);
     try {
       const list = await api.get(`/api/groups/user/${user.userId}`);
-      setGroups((list ?? []).filter((g) => !g.personal));
+      setGroups(list ?? []);
       loadedOnceRef.current = true;
     } catch (e) {
       if (initial) setError(errorMessage(e, '그룹 정보를 불러오지 못했습니다.'));

@@ -1578,3 +1578,8 @@
     grid-template-columns: minmax(0, 1fr) 340px;
   }
 }
+
+
+.group-card-personal {
+  border-style: dashed;
+}

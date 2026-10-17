@@ -3,6 +3,7 @@ import { useGroup } from '../context/GroupContext.jsx';
 import NoTeamNotice from '../components/NoTeamNotice.jsx';
 import GroupLoadError from '../components/GroupLoadError.jsx';
 import { LoadingScreen } from '../components/Loading.jsx';
+import { groupDisplayName, groupMetaText } from '../utils/groupDisplay.js';
 
 export default function GroupSelectPage() {
   const { groups, groupId, setGroupId, loading, loaded, error } = useGroup();
@@ -24,7 +25,7 @@ export default function GroupSelectPage() {
             <button
               key={g.groupId}
               type="button"
-              className="card group-card"
+              className={`card group-card${g.personal ? ' group-card-personal' : ''}`}
               onClick={() => {
                 setGroupId(g.groupId);
                 navigate('/dashboard', { replace: true });
@@ -32,12 +33,9 @@ export default function GroupSelectPage() {
             >
               <div>
                 <div className="group-card-name">
-                  {g.groupName}
+                  {groupDisplayName(g)}
                 </div>
-                <div className="group-card-meta">
-                  {[g.regionSido, g.regionSigungu].filter(Boolean).join(' ') || '지역 미설정'} · 멤버{' '}
-                  {g.memberCount}명
-                </div>
+                <div className="group-card-meta">{groupMetaText(g)}</div>
               </div>
             </button>
           ))}

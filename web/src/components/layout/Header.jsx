@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useGroup } from '../../context/GroupContext.jsx';
 import { IconBell, IconChevronDown, IconLogo } from '../Icons.jsx';
+import { groupDisplayName } from '../../utils/groupDisplay.js';
 
 function GroupSwitcher() {
   const { groups, groupId, currentGroup, setGroupId } = useGroup();
@@ -26,7 +27,7 @@ function GroupSwitcher() {
         disabled={!switchable}
         onClick={() => setOpen((v) => !v)}
       >
-        {currentGroup?.groupName ?? '그룹 없음'}
+        {currentGroup ? groupDisplayName(currentGroup) : '그룹 없음'}
         {switchable && <IconChevronDown size={16} />}
       </button>
       {open && (
@@ -41,7 +42,7 @@ function GroupSwitcher() {
                   setOpen(false);
                 }}
               >
-                <span>{g.groupName}</span>
+                <span>{groupDisplayName(g)}</span>
               </button>
             </li>
           ))}

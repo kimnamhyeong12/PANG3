@@ -1,3 +1,4 @@
+import { groupDisplayName } from '../utils/groupDisplay.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -153,8 +154,11 @@ export default function DashboardPage() {
   return (
     <>
       <h1 className="page-title">대시보드</h1>
-      <p className="page-desc">
-        {formatToday()} · {currentGroup?.groupName} 팀의 업무 현황입니다.
+            <p className="page-desc">
+        {formatToday()} ·{' '}
+        {currentGroup?.personal
+          ? '내 개인 업무 현황입니다.'
+          : `${currentGroup ? groupDisplayName(currentGroup) : ''} 팀의 업무 현황입니다.`}
       </p>
 
       <div className="stat-grid">
