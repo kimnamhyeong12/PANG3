@@ -35,6 +35,7 @@ class ReleaseAuthIntegrationTest {
         GroupController.class, GroupReportController.class, LocationController.class, TaskController.class,
         NotificationController.class, TaskProgressController.class, AuthService.class, AuthSessionService.class,
         AccountEmailService.class, GroupService.class, TaskService.class, TaskProgressService.class, TaskTransferService.class,
+        SupportInquiryController.class, SupportInquiryService.class,
         FileStorageService.class, FieldworkProperties.class})
     static class TestConfig {
         @Bean PushNotificationService push() { return mock(PushNotificationService.class); }
@@ -78,6 +79,16 @@ class ReleaseAuthIntegrationTest {
     Task task(WorkGroup group, User owner) {
         Task task=new Task(); task.setGroup(group); task.setCreatedBy(owner); task.setCurrentAssignee(owner); task.setTaskStatus("working");
         return tasks.saveAndFlush(task);
+    }
+
+    @Test void supportInquiryRequiresLoginAndPropagatesMailFailures() throws Exception {
+        var body=Map.of("replyEmail","reply@example.test","subject","Help","message","Question");
+        mvc.perform(postJson("/api/support/inquiries",body)).andExpect(status().isUnauthorized());
+        User account=user(); JsonNode auth=login(account);
+        doThrow(new org.springframework.mail.MailSendException("smtp unavailable")).when(mail).send(any(SimpleMailMessage.class));
+        mvc.perform(postJson("/api/support/inquiries",body).header("Authorization",bearer(auth)))
+            .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.message").isNotEmpty());
+        verify(mail).send(any(SimpleMailMessage.class));
     }
 
     @Test void acceptedTransferUpdatesPersonalMapAndCurrentReportOwner() throws Exception {
