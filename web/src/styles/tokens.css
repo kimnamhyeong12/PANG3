@@ -1,21 +1,26 @@
 :root {
-  --navy: #1B3A5C;
-  --navy-dark: #142C47;
-  --navy-soft: #EAF1F8;
-  --bg: #F5F7FA;
+  /* 메인 업무 보고 모바일 목업(새 UX/UI 제안)에 맞춘 밝고 부드러운 블루 톤 */
+  --navy: #2F6FED;
+  --navy-dark: #1E54C8;
+  --navy-soft: #E8EFFE;
+  --bg: #F1F4FC;
   --surface: #FFFFFF;
-  --border: #E2E6EC;
-  --text: #1A1F29;
-  --text-soft: #5B6472;
-  --text-faint: #8A93A3;
-  --green: #1E8E5A;
-  --green-soft: #E6F4ED;
+  --border: #E3E8F5;
+  --text: #1A2233;
+  --text-soft: #5B6478;
+  --text-faint: #8A93AC;
+  --green: #1E9A6C;
+  --green-soft: #E4F6EE;
   --amber: #B9790A;
   --amber-soft: #FBF0DD;
-  --red: #C0392B;
-  --red-soft: #FBEAE8;
+  --red: #D14343;
+  --red-soft: #FCEAEA;
   --gray-badge: #6B7280;
   --gray-badge-soft: #EEF0F3;
+  --shadow-sm: 0 2px 8px rgba(30, 84, 200, 0.08);
+  --shadow-md: 0 8px 24px rgba(30, 84, 200, 0.12);
+  --radius-sm: 10px;
+  --radius-md: 16px;
 }
 
 *,
