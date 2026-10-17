@@ -5,12 +5,59 @@ import org.junit.Test
 import org.junit.Assert.*
 import android.util.Log
 import expo.modules.kakaonavigation.KakaoRouteEngine
+import expo.modules.kakaonavigation.NearbyPlaceQuery
+import com.kakaomobility.knsdk.KNSDK
+import com.kakaomobility.knsdk.common.util.FloatPoint
+import com.kakaomobility.knsdk.common.util.MBR
+import com.kakaomobility.knsdk.common.util.IntPoint
 import org.json.JSONObject
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /** Read-only SDK route queries. Run through the host app to use its registered app key. */
 class NavigationProbeTest {
+  @Test
+  fun testNearbyFacilitySearch() {
+    val instrumentation = InstrumentationRegistry.getInstrumentation()
+    val ready = CountDownLatch(1)
+    var initializationError: String? = null
+    var previewId: String? = null
+    KakaoRouteEngine.preview(instrumentation.targetContext,
+      mapOf("name" to "nearby-probe", "startLat" to 35.0640682, "startLng" to 128.9837168,
+        "lat" to 35.0636823232284, "lng" to 128.985493965177, "routePriority" to "TIME"),
+      { previewId = it["sdkPreviewId"] as String; ready.countDown() },
+      { initializationError = it; ready.countDown() })
+    assertTrue("SDK initialization timed out", ready.await(60, TimeUnit.SECONDS))
+    assertNull(initializationError, initializationError)
+    val origin = KNSDK.convertWGS84ToKATEC(128.9837168, 35.0640682)
+    val center = FloatPoint(origin.x.toFloat(), origin.y.toFloat())
+    try {
+      for (category in listOf("gas", "parking", "parking-local")) {
+        val done = CountDownLatch(1)
+        var sdkError: String? = null
+        var count = 0
+        var outsideRadius = false
+        instrumentation.runOnMainSync {
+          val visibleBounds = if (category == "parking-local") MBR(
+            IntPoint(center.x.toInt() - 1000, center.y.toInt() - 1000),
+            IntPoint(center.x.toInt() + 1000, center.y.toInt() + 1000)) else null
+          NearbyPlaceQuery.search(if (category == "parking-local") "parking" else category, center, visibleBounds) { error, places ->
+            sdkError = error?.let { "SDK error code=${it.code}" }
+            count = places.size
+            if (category.startsWith("parking")) places.forEach { Log.i("PANG3NearbyProbe", "query=$category parking=${it.name} address=${it.rnaddr.orEmpty().ifBlank { it.addr.orEmpty() }}") }
+            outsideRadius = places.any { kotlin.math.hypot(it.x - center.x, it.y - center.y) > 5000f }
+            Log.i("PANG3NearbyProbe", "category=$category count=$count error=$sdkError")
+            done.countDown()
+          }
+        }
+        assertTrue("$category lookup timed out", done.await(30, TimeUnit.SECONDS))
+        assertNull("$category: $sdkError", sdkError)
+        assertTrue("Expected real $category places near Dadae-dong", count > 0)
+        assertFalse("Results must stay within 5 km", outsideRadius)
+      }
+    } finally { previewId?.let { KakaoRouteEngine.discard(it) } }
+  }
+
   @Test
   fun testTrafficSectionBoundaries() {
     val points = listOf(4, 4, 1, 5, 0, 0).mapIndexed { index, state ->

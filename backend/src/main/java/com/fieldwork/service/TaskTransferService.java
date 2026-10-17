@@ -194,16 +194,28 @@ public class TaskTransferService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> list(Long groupId, Long userId) {
-        WorkGroup group = group(groupId);
-        User user = member(group, userId);
-        Map<Long, TaskTransferRequest> result = new LinkedHashMap<>();
-        requests.findByGroupAndRecipientOrderByRequestedAtDesc(group, user)
-                .forEach(request -> result.put(request.getId(), request));
-        requests.findByGroupAndSenderOrderByRequestedAtDesc(group, user)
-                .forEach(request -> result.put(request.getId(), request));
-        return result.values().stream()
-                .sorted(Comparator.comparing(TaskTransferRequest::getRequestedAt).reversed())
-                .map(this::toMap).toList();
+        return history(groupId, userId, 0, "all", null).getContent().stream().map(this::toMap).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> page(Long groupId, Long userId, int page, String direction, Long recipientId) {
+        var slice = history(groupId, userId, page, direction, recipientId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("items", slice.getContent().stream().map(this::toMap).toList());
+        result.put("page", page);
+        result.put("hasMore", page == 0 && slice.hasNext());
+        if ("outgoing".equals(direction)) result.put("pendingTaskIds", requests.findPendingTaskIds(groupId, userId));
+        return result;
+    }
+
+    private org.springframework.data.domain.Slice<TaskTransferRequest> history(
+            Long groupId, Long userId, int page, String direction, Long recipientId) {
+        if (page < 0 || page > 1 || !Set.of("all", "incoming", "outgoing").contains(direction)) {
+            throw new IllegalArgumentException("이관 내역은 최대 40건까지 조회할 수 있습니다.");
+        }
+        member(group(groupId), userId);
+        return requests.findHistory(groupId, userId, LocalDateTime.now(ZoneOffset.UTC).minusDays(30),
+                direction, recipientId, org.springframework.data.domain.PageRequest.of(page, 20));
     }
 
     private WorkGroup group(Long groupId) {

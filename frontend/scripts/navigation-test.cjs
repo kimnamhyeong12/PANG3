@@ -19,6 +19,29 @@ const ts = require('typescript');
   // Run the actual App navigation callbacks with native actions recorded.
   const app = fs.readFileSync(path.join(__dirname, '../App.js'), 'utf8');
   const ast = ts.createSourceFile('App.js', app, ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX);
+  // Evaluate the real render guard: hidden tabs must be unmounted, including on team maps.
+  let tabsGuard;
+  function findTabs(node) {
+    if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(ast) === 'BottomNavigation') {
+      let parent = node.parent;
+      while (parent && !ts.isJsxExpression(parent)) parent = parent.parent;
+      if (parent && ts.isBinaryExpression(parent.expression)) tabsGuard = parent.expression.left.getText(ast);
+    }
+    ts.forEachChild(node, findTabs);
+  }
+  findTabs(ast);
+  assert.ok(tabsGuard);
+  const tabsVisible = new Function('screen', 'isGuiding', 'teamIsGuiding', 'mapSearchVisible', 'user', `return !!(${tabsGuard});`);
+  for (const map of ['mapDirect', 'publicDataAssignment']) {
+    assert.equal(tabsVisible(map, true, false, false, {}), false);
+    assert.equal(tabsVisible(map, false, true, false, {}), true);
+  }
+  assert.equal(tabsVisible('teamLocations', false, true, false, {}), false);
+  assert.equal(tabsVisible('teamLocations', true, false, false, {}), true);
+  for (const page of ['reportList', 'groupHome', 'settings']) {
+    assert.equal(tabsVisible(page, true, true, false, {}), true, 'other screens retain their tabs');
+  }
+  assert.equal(tabsVisible('mapDirect', false, false, true, {}), false);
   const callbacks = {};
   function walk(node) {
     if (ts.isVariableDeclaration(node) && ['go', 'goBack'].includes(node.name.getText(ast))) callbacks[node.name.getText(ast)] = node.initializer.getText(ast);

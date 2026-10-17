@@ -29,10 +29,25 @@ class KakaoNavigationModule : Module() {
     Function("stopRouteNotification") { RouteGuidanceService.stop(requireNotNull(appContext.reactContext)) }
 
     View(KakaoNavigationView::class) {
-      Events("onError", "onEnded", "onProgress", "onArrived", "onRouteChanged")
+      Events("onError", "onEnded", "onProgress", "onArrived", "onRouteChanged", "onSafetyUpdate", "onManeuverUpdate", "onNearbyError")
 
       Prop("destination") { view: KakaoNavigationView, destination: Map<String, Any?> ->
         view.start(destination)
+      }
+      Prop("nearbyCategory") { view: KakaoNavigationView, category: String? ->
+        view.setNearbyCategory(category)
+      }
+
+      Prop("mapActive") { view: KakaoNavigationView, active: Boolean ->
+        view.setMapActive(active)
+      }
+
+      Prop("map3D") { view: KakaoNavigationView, enabled: Boolean ->
+        view.setMap3D(enabled)
+      }
+
+      Prop("recenterRequest") { view: KakaoNavigationView, request: Int ->
+        view.recenter(request)
       }
 
       OnViewDestroys { view: KakaoNavigationView ->

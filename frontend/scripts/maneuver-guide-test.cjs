@@ -1,0 +1,22 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+(async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../utils/maneuverGuide.js'), 'utf8');
+  const { maneuverStep, maneuverGuide, maneuverDistance } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+  const primary = { code: 'RightTurn', distance: 120, road: ' 다송로 ' };
+  assert.equal(maneuverStep(primary).label, '우회전');
+  assert.equal(maneuverStep({ ...primary, code: 'LeftTurn' }).label, '좌회전');
+  assert.equal(maneuverStep({ ...primary, code: 'UTurn' }).label, '유턴');
+  assert.equal(maneuverStep({ ...primary, code: 'Goal', distance: 0 }).label, '목적지 도착');
+  assert.equal(maneuverStep({ ...primary, code: 'FutureUnknownCode' }).label, '경로 따라 이동');
+  for (const distance of [-1, NaN, Infinity, null, '100']) assert.equal(maneuverStep({ ...primary, distance }), null);
+  const event = { destinationKey: '1', visible: true, primary, secondary: { code: 'LeftTurn', distance: 100 } };
+  assert.equal(maneuverGuide(event, '2'), null);
+  assert.equal(maneuverGuide({ ...event, visible: false }, '1'), null);
+  assert.equal(maneuverGuide(event, '1').primary.road, '다송로');
+  assert.equal(maneuverGuide(event, '1').secondary.distance, 100);
+  assert.equal(maneuverGuide({ ...event, secondary: {} }, '1').secondary, null);
+  assert.equal(maneuverDistance(120), '120m'); assert.equal(maneuverDistance(1200), '1.2km');
+  console.log('Compact maneuver checks passed: turn codes, distances, next turn, destination isolation and route clearing');
+})().catch(error => { console.error(error); process.exitCode = 1; });

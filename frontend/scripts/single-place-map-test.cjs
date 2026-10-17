@@ -10,6 +10,7 @@ function createScreen({ nativeNavigation = false, taskRemoved = false } = {}) {
   let slots = [], cursor = 0, effects = [], dirty = true, tree;
   const calls = [], alerts = [], requests = [], orderRequests = [], storage = new Map(), sdkPreviews = new Set();
   let sdkSequence = 0;
+  const tabTimers = new Set(), tabEvents = [];
   const same = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
   const react = {
     useState(initial) {
@@ -36,7 +37,7 @@ function createScreen({ nativeNavigation = false, taskRemoved = false } = {}) {
   const jsx = (type, props) => ({ type, props: props || {} });
   const emptySubscription = () => ({ remove() {} });
   class AnimatedValue { setValue() {} }
-  const native = { Platform: { OS: nativeNavigation ? 'android' : 'test' }, StyleSheet: { create: s => s, absoluteFill: {}, absoluteFillObject: {} },
+  const native = { Platform: { OS: nativeNavigation ? 'android' : 'test' }, StyleSheet: { create: s => s, absoluteFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 } },
     Animated: { Value: AnimatedValue, View: 'AnimatedView', timing: () => ({ start(cb) { cb?.({ finished: true }); } }), spring: () => ({ start() {} }) },
     PanResponder: { create: handlers => ({ panHandlers: handlers }) },
     Keyboard: { addListener: emptySubscription }, BackHandler: { addEventListener: emptySubscription } };
@@ -54,12 +55,14 @@ function createScreen({ nativeNavigation = false, taskRemoved = false } = {}) {
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'Fragment' };
       if (name === 'react-native') return native;
       if (name === 'react-native-safe-area-context') return { SafeAreaView: 'SafeAreaView', useSafeAreaInsets: () => ({ top: 24, bottom: 24, left: 0, right: 0 }) };
-      if (name === '@expo/vector-icons') return { Ionicons: 'Icon' };
+      if (name === '@expo/vector-icons') return { Ionicons: 'Icon', MaterialCommunityIcons: 'Icon' };
       if (name === '@react-native-async-storage/async-storage') return { getItem: async key => storage.get(key) || null,
         setItem: async (key, value) => storage.set(key, value), removeItem: async key => storage.delete(key) };
       if (name.includes('CustomAlert')) return { showAlert: (...args) => alerts.push(args) };
       if (name === '../utils/auth') return { apiFetch: (...args) => context.fetch(...args) };
       if (name.includes('KakaoMapWebView')) return { __esModule: true, default: 'MapCanvas' };
+      if (name.includes('SafetyGuideBadge')) return { __esModule: true, default: 'SafetyBadge' };
+      if (name.includes('ManeuverGuideCard')) return { __esModule: true, default: 'ManeuverCard' };
       if (name.includes('kakao-navigation')) return { KakaoNavigationView: 'Navigation', isKakaoNavigationAvailable: () => nativeNavigation,
         beginRouteSession() { taskRemoved = false; calls.push(['begin-route']); },
         endRouteSession() { calls.push(['end-route']); }, wasRouteTaskRemoved: () => taskRemoved,
@@ -71,7 +74,9 @@ function createScreen({ nativeNavigation = false, taskRemoved = false } = {}) {
       if (name.startsWith('.')) return load(path.resolve(path.dirname(file), name.endsWith('.js') ? name : `${name}.js`));
       throw Error('Unexpected import: ' + name);
     };
-    const context = { module, exports: module.exports, require: requireMock, console, URLSearchParams, AbortController, setTimeout, clearTimeout, setInterval, clearInterval,
+    const context = { module, exports: module.exports, require: requireMock, console, URLSearchParams, AbortController,
+      setTimeout: (fn, ms) => { if (ms !== 5000) return setTimeout(fn, ms); const timer = { fn }; tabTimers.add(timer); return timer; },
+      clearTimeout: timer => { if (!tabTimers.delete(timer)) clearTimeout(timer); }, setInterval, clearInterval,
       process: { env: { EXPO_PUBLIC_API_BASE_URL: 'https://backend.test', EXPO_PUBLIC_KAKAO_REST_API_KEY: 'test' } },
       fetch: (url, options = {}) => {
         if (url.includes('/geo/coord2address.json')) return Promise.resolve({ ok: true,
@@ -89,6 +94,7 @@ function createScreen({ nativeNavigation = false, taskRemoved = false } = {}) {
   const props = { user: { userId: 1, workSido: '부산광역시', workSigungu: '사하구' },
     activeGroup: { groupId: 1, personalWorkspace: true }, locationScope: 'personal', locations: [], pendingWork: [],
     roadPath: [], routeSegments: [], currentSegmentIndex: 0, optimized: false, isGuiding: false,
+    onGuidanceTabsChange: visible => tabEvents.push(visible),
     onLocationClick: (...args) => calls.push(args), onDataChanged: async () => {}, setPanelOpen() {}, onAddWork: async () => true };
   for (const [setter, key] of Object.entries({ setLocations: 'locations', setRoadPath: 'roadPath', setRouteSegments: 'routeSegments',
     setCurrentSegmentIndex: 'currentSegmentIndex', setOptimized: 'optimized', setIsGuiding: 'isGuiding', setTotalDuration: 'totalDuration' })) {
@@ -125,7 +131,8 @@ function createScreen({ nativeNavigation = false, taskRemoved = false } = {}) {
       sdkPreviews.add(segment.sdkPreviewId); request.resolve(segment);
     } else request.resolve({ ok: true, text: async () => JSON.stringify(data), json: async () => data });
   }
-  return { props, render, settle, find, nodes, text, requests, orderRequests, response, calls, alerts,
+  return { props, render, settle, find, nodes, text, requests, orderRequests, response, calls, alerts, tabEvents,
+    expireTabTimers: () => { for (const timer of [...tabTimers]) { tabTimers.delete(timer); timer.fn(); } },
     markTaskRemoved: () => { taskRemoved = true; }, expireSdkPreviews: () => sdkPreviews.clear() };
 }
 
@@ -273,18 +280,88 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   assert.equal(car.requests.length, 0, 'guidance starts the exact preview trip without recomputing');
   assert.equal(car.find('Navigation').props.destination.destinationKey, '1');
   assert.equal(car.find('Navigation').props.destination.previewId, previewId);
+  assert.equal(car.find('Navigation').props.style[0].position, 'absolute', 'navigation must overlay the map rather than collapse below it');
+  assert.equal(car.find('Navigation').props.style[0].bottom, 0);
   assert.equal(car.find('MapCanvas').props.isGuiding, false, 'WebView must not run a second guidance engine');
-  const guideTop = car.find('Navigation').props.style[1].top;
-  car.nodes().find(node => node.props.pointerEvents === 'box-none' && node.props.onLayout)
-    .props.onLayout({ nativeEvent: { layout: { y: 30, height: 330 } } });
-  car.render();
-  assert.equal(car.find('Navigation').props.style[1].top, guideTop, 'expanded visits overlay the SDK rather than shrinking its viewport');
+  car.find('TouchableOpacity', '주변 주유소').props.onPress(); car.render();
+  assert.equal(car.find('Navigation').props.nearbyCategory, 'gas');
+  car.find('TouchableOpacity', '주변 주차장').props.onPress(); car.render();
+  assert.equal(car.find('Navigation').props.nearbyCategory, 'parking');
+  car.find('TouchableOpacity', '주변 주차장').props.onPress(); car.render();
+  assert.equal(car.find('Navigation').props.nearbyCategory, null, 'tapping the selected nearby category clears its pins');
+  assert.equal(car.requests.length, 0, 'browsing nearby gas/parking must not replace the active route');
+  const modePreview = car.find('Navigation').props.destination.previewId;
+  assert.equal(car.find('Navigation').props.map3D, true, 'guidance starts in 3D');
+  assert.equal(car.text(car.find('TouchableOpacity', '2D 지도로 전환')), '2D', 'mode label shows the view selected by pressing the button');
+  car.find('TouchableOpacity', '2D 지도로 전환').props.onPress(); car.render();
+  assert.equal(car.find('Navigation').props.map3D, false);
+  assert.equal(car.text(car.find('TouchableOpacity', '3D 지도로 전환')), '3D');
+  assert.equal(car.find('Navigation').props.destination.previewId, modePreview, 'camera toggle preserves the active route');
+  car.find('TouchableOpacity', '3D 지도로 전환').props.onPress(); car.render();
+  assert.equal(car.find('Navigation').props.map3D, true);
+  assert.equal(car.requests.length, 0, 'camera mode does not request a new route');
+  assert.equal(car.find('Navigation').props.recenterRequest, 0);
+  car.find('TouchableOpacity', '내 위치로 돌아가기').props.onPress(); car.render();
+  assert.equal(car.find('Navigation').props.recenterRequest, 1);
+  car.find('TouchableOpacity', '내 위치로 돌아가기').props.onPress(); car.render();
+  assert.equal(car.find('Navigation').props.recenterRequest, 2, 'each recenter press reaches the native guide');
+  assert.equal(car.find('Navigation').props.destination.previewId, modePreview, 'recentering preserves guidance');
+  const maneuver = { destinationKey: '1', visible: true, primary: { code: 'RightTurn', distance: 120, road: '다송로' },
+    secondary: { code: 'LeftTurn', distance: 100 } };
+  car.find('Navigation').props.onManeuverUpdate({ nativeEvent: { ...maneuver, destinationKey: 'old' } }); car.render();
+  assert.equal(car.find('ManeuverCard').props.guide, null);
+  car.find('Navigation').props.onManeuverUpdate({ nativeEvent: maneuver }); car.render();
+  assert.equal(car.find('ManeuverCard').props.guide.primary.label, '우회전');
+  assert.equal(car.find('ManeuverCard').props.guide.secondary.distance, 100);
+  car.find('Navigation').props.onManeuverUpdate({ nativeEvent: { ...maneuver, primary: { ...maneuver.primary, distance: 80 } } }); car.render();
+  assert.equal(car.find('ManeuverCard').props.guide.primary.distance, 80);
+  car.find('Navigation').props.onManeuverUpdate({ nativeEvent: { destinationKey: '1', visible: false } }); car.render();
+  assert.equal(car.find('ManeuverCard').props.guide, null, 'route replacement clears stale turn instructions');
+  const retainedDestination = car.find('Navigation').props.destination;
+  car.props.isActive = false; car.render();
+  assert.equal(car.find('Navigation').props.mapActive, false, 'leaving the map pauses its native surface');
+  assert.equal(car.props.isGuiding, true, 'tab changes preserve guidance');
+  car.props.isActive = true; car.render();
+  assert.equal(car.find('Navigation').props.mapActive, true, 'returning resumes the native surface');
+  assert.deepEqual(car.find('Navigation').props.destination, retainedDestination, 'tab changes retain the same guidance destination');
+  assert.equal(car.find('Navigation').props.style[1].top, 0, 'SDK fills the complete screen without a WebView strip above it');
+  assert.equal(car.nodes().some(node => node.props.pointerEvents === 'box-none' && node.props.onLayout), false, 'visit selection is hidden during guidance');
+  assert.equal(car.nodes().some(node => node.props.onPanResponderRelease && node.props.onLayout), false,
+    'guidance footer cannot reveal app tabs with a swipe');
   car.find('TouchableOpacity', '현재 위치와 목적지 번갈아 보기').props.onPress(); await car.settle();
   assert(car.text(car.find('TouchableOpacity', '현재 위치와 목적지 번갈아 보기')).includes('부산 사하구 현재 위치'));
   car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: 'old', distance: 10, duration: 5 } }); car.render();
   car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: '1', distance: 500, duration: 300 } }); car.render();
+  assert.equal(String(car.find('Text', '현재 속도').props.children), '—', 'missing GPS speed must not look like a measured zero');
+  car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: '1', distance: 480, duration: 290, speed: 42, speedValid: true } }); car.render();
+  assert.equal(String(car.find('Text', '현재 속도').props.children), '42', 'bare map uses the SDK speed data in our own speed display');
+  car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: 'old', distance: 10, duration: 5, speed: 100, speedValid: true } }); car.render();
+  assert.equal(String(car.find('Text', '현재 속도').props.children), '42', 'old-session speed must not replace current-session speed');
+  car.find('Navigation').props.onProgress({ nativeEvent: { destinationKey: '1', distance: 480, duration: 290, speed: 42, speedValid: false } }); car.render();
+  assert.equal(String(car.find('Text', '현재 속도').props.children), '—', 'untrusted GPS speed must not be displayed as reliable');
+  const safetyEvent = { destinationKey: '1', visible: true, kind: 'camera', label: '과속 단속', distance: 800, speedLimit: 50 };
+  car.find('Navigation').props.onSafetyUpdate({ nativeEvent: { ...safetyEvent, destinationKey: 'old' } }); car.render();
+  assert.equal(car.find('SafetyBadge'), undefined, 'safety events from another destination must be ignored');
+  car.find('Navigation').props.onSafetyUpdate({ nativeEvent: safetyEvent }); car.render();
+  assert.equal(car.find('SafetyBadge').props.notice.speedLimit, 50);
+  car.find('Navigation').props.onSafetyUpdate({ nativeEvent: { ...safetyEvent, distance: 300 } }); car.render();
+  assert.equal(car.find('SafetyBadge').props.notice.distance, 300, 'camera distance updates while approaching');
+  car.find('Navigation').props.onSafetyUpdate({ nativeEvent: { destinationKey: '1', visible: false } }); car.render();
+  assert.equal(car.find('SafetyBadge'), undefined, 'passing the camera clears the badge');
   await car.find('MapCanvas').props.onRerouteRequest({ lat: 35, lng: 129.001 });
   assert.equal(car.requests.length, 0, 'SDK handles vehicle rerouting without a second REST request');
+  const routeBeforeRefresh = car.find('Navigation').props.destination.previewId;
+  const failedRefresh = car.find('TouchableOpacity', '교통정보 반영해 경로 새로고침').props.onPress(); car.render();
+  const failedRefreshRequest = (await car.settle(), car.requests.shift());
+  assert.equal(failedRefreshRequest.url, 'sdk:preview', 'refresh asks the SDK for current traffic');
+  failedRefreshRequest.reject(new Error('offline')); await failedRefresh; await car.settle();
+  assert.equal(car.find('Navigation').props.destination.previewId, routeBeforeRefresh, 'failed refresh preserves guidance');
+  const refresh = car.find('TouchableOpacity', '교통정보 반영해 경로 새로고침').props.onPress(); car.render();
+  const refreshRequest = (await car.settle(), car.requests.shift());
+  assert.equal(JSON.parse(refreshRequest.options.body).routePriority, 'TIME');
+  car.response(refreshRequest, route(car.props.locations[0])); await refresh; await car.settle();
+  assert.notEqual(car.find('Navigation').props.destination.previewId, routeBeforeRefresh, 'successful refresh starts the fresh trip');
+  assert.equal(car.props.isGuiding, true);
   car.expireSdkPreviews();
   car.props.routeResumeToken = 1; car.render();
   assert.equal(car.find('Navigation'), undefined, 'old recommendation-only sessions are recalculated before SDK resumes');
@@ -399,6 +476,13 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   menu.find('MapCanvas').props.onMarkerClick(menu.props.locations[0]); menu.render();
   menu.response((await menu.settle(), menu.requests.shift()), route(menu.props.locations[0])); await menu.settle();
   await menu.find('TouchableOpacity', '안내 시작').props.onPress(); await menu.settle();
+  menu.props.renderGuidanceNavigation = closeMenu => ({ type: 'GuideNavigation', props: { onReport: closeMenu } });
+  menu.render();
+  menu.find('TouchableOpacity', '안내 메뉴').props.onPress(); menu.render();
+  assert.equal(menu.find('Modal').props.visible, true);
+  menu.find('GuideNavigation').props.onReport(); menu.render();
+  assert.equal(menu.find('Modal').props.visible, false, 'choosing an app tab dismisses the guidance menu');
+  assert.equal(menu.props.isGuiding, true, 'opening another app tab does not stop guidance');
   menu.find('TouchableOpacity', '안내 메뉴').props.onPress(); menu.render();
   menu.find('TouchableOpacity', '도보').props.onPress(); await menu.settle();
   assert.equal(menu.props.routeSegments[0].mode, 'car', 'old guidance survives while the replacement route loads');

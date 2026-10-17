@@ -13,6 +13,6 @@ gradle.beforeProject { app ->
         // Match the SDK's JUnit runtime constraint.
         app.dependencies.add('androidTestImplementation', 'androidx.test:runner:1.4.0')
         app.dependencies.add('androidTestImplementation', 'junit:junit:4.12')
-        app.dependencies.add('androidTestImplementation', 'com.kakaomobility.knsdk:knsdk_ui:1.12.8-hotfix02')
+        app.dependencies.add('androidTestImplementation', 'com.kakaomobility.knsdk:knsdk:1.12.8-hotfix02')
     }
 }

@@ -981,6 +981,16 @@ function AppContent() {
     go('groupHome');
   };
 
+  const renderGuidanceNavigation = closeMenu => (
+    <BottomNavigation
+      screen={screen}
+      onMap={() => { closeMenu(); openWorkspaceMap(); }}
+      onReport={() => { closeMenu(); go('reportList'); }}
+      onGroup={() => { closeMenu(); openGroupWorkspace(); }}
+      onSettings={() => { closeMenu(); go('settings'); }}
+    />
+  );
+
   if (authLoading || authError) return <SafeAreaProvider><SafeAreaView style={styles.safe}>
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 28, gap: 20 }}>
       <Text>{authLoading ? '로그인을 확인하고 있습니다…' : authError}</Text>
@@ -1145,6 +1155,7 @@ function AppContent() {
             root={false}
             user={user}
             onUpdatedUser={setUser}
+            renderGuidanceNavigation={renderGuidanceNavigation}
             onSearchVisibilityChange={setMapSearchVisible}
             selectedDong={selectedDong}
             onSelectedDongChange={updateSelectedDong}
@@ -1181,6 +1192,7 @@ function AppContent() {
             root={false}
             user={user}
             onUpdatedUser={setUser}
+            renderGuidanceNavigation={renderGuidanceNavigation}
             onSearchVisibilityChange={setMapSearchVisible}
             selectedDong={selectedDong}
             onSelectedDongChange={updateSelectedDong}
@@ -1343,6 +1355,7 @@ function AppContent() {
               pendingWork={pendingWork}
               onAddWork={addWorkToMap}
               onUpdatedUser={setUser}
+              renderGuidanceNavigation={renderGuidanceNavigation}
               onSearchVisibilityChange={setMapSearchVisible}
             />
           </View>
@@ -1469,6 +1482,7 @@ function AppContent() {
 
         {user &&
           !(['mapDirect', 'teamLocations', 'publicDataAssignment'].includes(screen) && mapSearchVisible) &&
+          !((['mapDirect', 'publicDataAssignment'].includes(screen) && isGuiding) || (screen === 'teamLocations' && teamIsGuiding)) &&
           !['login', 'register'].includes(screen) && (
             <BottomNavigation
               screen={screen}

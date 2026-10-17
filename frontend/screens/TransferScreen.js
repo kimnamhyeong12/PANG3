@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ScreenHeader } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
 import { groupApi } from '../utils/groupApi';
+import { transferHistoryPage, mergeTransferHistory, compareTransferHistory } from '../utils/transferHistory';
 import { colors } from '../constants/design';
 
 const dongName = (value) => String(value || '').trim().split(/\s+/).pop() || '';
@@ -35,6 +36,10 @@ export default function TransferScreen({
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
   const [requests, setRequests] = useState([]);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
+  const [pendingRequestTaskIds, setPendingRequestTaskIds] = useState([]);
   const [recipientId, setRecipientId] = useState(initialRecipientId ? Number(initialRecipientId) : null);
   const [selectedTaskIds, setSelectedTaskIds] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +47,7 @@ export default function TransferScreen({
 
   const visibleRequests = useMemo(() => requestsOnly
     ? requests.filter((request) => Number(request.recipientUserId) === Number(user?.userId))
-        .sort((a, b) => Number(b.status === 'PENDING') - Number(a.status === 'PENDING'))
+        .sort(compareTransferHistory(user?.userId))
     : requests.filter((request) => Number(request.senderUserId) === Number(user?.userId)
         && (!recipientId || Number(request.recipientUserId) === Number(recipientId))),
   [requestsOnly, requests, user?.userId, recipientId]);
@@ -51,20 +56,29 @@ export default function TransferScreen({
     if (!group?.groupId || !user?.userId) return;
     try {
       const base = `/api/groups/${group.groupId}`;
-      const [groupTasks, groupMembers, transferRequests] = await Promise.all([
+      const [groupTasks, groupMembers, transferRequests] = await Promise.allSettled([
         groupApi(`/api/locations/group/${group.groupId}?userId=${user.userId}`),
         groupApi(`${base}/members?userId=${user.userId}`),
-        groupApi(`${base}/transfers?userId=${user.userId}`),
+        transferHistoryPage(group.groupId, user.userId, 0, requestsOnly ? 'incoming' : 'outgoing', requestsOnly ? null : recipientId),
       ]);
-      setTasks(Array.isArray(groupTasks) ? groupTasks : []);
-      setMembers(Array.isArray(groupMembers) ? groupMembers : []);
-      setRequests(Array.isArray(transferRequests) ? transferRequests : []);
-    } catch (error) {
-      showAlert('이관 정보 조회 실패', error.message);
+      if (groupTasks.status === 'fulfilled') setTasks(Array.isArray(groupTasks.value) ? groupTasks.value : []);
+      if (groupMembers.status === 'fulfilled') setMembers(Array.isArray(groupMembers.value) ? groupMembers.value : []);
+      if (transferRequests.status === 'fulfilled') {
+        setRequests(transferRequests.value.items || []);
+        setHistoryHasMore(Boolean(transferRequests.value.hasMore));
+        setPendingRequestTaskIds(transferRequests.value.pendingTaskIds || []);
+        setHistoryError(null);
+      } else {
+        setHistoryHasMore(false);
+        setHistoryError('이관 내역을 불러오지 못했습니다. 다시 시도해주세요.');
+      }
+      if (groupTasks.status === 'rejected' || groupMembers.status === 'rejected') {
+        showAlert('이관 정보 조회 실패', '팀원 또는 방문지 정보를 불러오지 못했습니다.');
+      }
     } finally {
       setLoading(false);
     }
-  }, [group?.groupId, user?.userId]);
+  }, [group?.groupId, user?.userId, requestsOnly, recipientId]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -72,9 +86,7 @@ export default function TransferScreen({
     setSelectedTaskIds([]);
   }, [initialRecipientId]);
 
-  const pendingTaskIds = useMemo(() => new Set(requests
-    .filter((request) => request.status === 'PENDING' && Number(request.senderUserId) === Number(user?.userId))
-    .flatMap((request) => request.taskIds || []).map(Number)), [requests, user?.userId]);
+  const pendingTaskIds = useMemo(() => new Set(pendingRequestTaskIds.map(Number)), [pendingRequestTaskIds]);
   const mine = useMemo(() => tasks.filter((task) =>
     Number(task.assigneeUserId) === Number(user?.userId)
       && !isComplete(task)
@@ -111,6 +123,18 @@ export default function TransferScreen({
       if (allSelected) return previous.filter((id) => !ids.includes(id));
       return Array.from(new Set([...previous, ...ids]));
     });
+  };
+
+  const loadMoreHistory = async () => {
+    if (!historyHasMore || historyLoading) return;
+    setHistoryLoading(true);
+    try {
+      const page = await transferHistoryPage(group.groupId, user.userId, 1,
+        requestsOnly ? 'incoming' : 'outgoing', requestsOnly ? null : recipientId);
+      setRequests(previous => mergeTransferHistory(previous, page.items || []));
+      setHistoryHasMore(false);
+    } catch (error) { showAlert('이관 내역 조회 실패', error.message); }
+    finally { setHistoryLoading(false); }
   };
 
   const submit = async () => {
@@ -220,7 +244,8 @@ export default function TransferScreen({
         </> : null}
 
         <Text style={styles.title}>{requestsOnly ? '받은 이관 요청' : '보낸 요청과 이력'}</Text>
-        {visibleRequests.length === 0 ? <Text style={styles.empty}>요청 내역이 없습니다.</Text> : visibleRequests.map((request) => {
+        {historyError && <Text style={styles.empty}>{historyError}</Text>}
+        {visibleRequests.length === 0 ? (!historyError && <Text style={styles.empty}>요청 내역이 없습니다.</Text>) : visibleRequests.map((request) => {
           const incoming = Number(request.recipientUserId) === Number(user.userId);
           return <View key={request.id} style={styles.request}>
             <Text style={styles.rowTitle}>{request.senderName} → {request.recipientName} · {request.taskIds?.length || 0}건</Text>
@@ -235,11 +260,16 @@ export default function TransferScreen({
             </View>}
           </View>;
         })}
+        {historyHasMore && <TouchableOpacity style={styles.historyMore} disabled={historyLoading} onPress={loadMoreHistory}>
+          <Text style={styles.historyMoreText}>{historyLoading ? '불러오는 중…' : '더보기'}</Text>
+        </TouchableOpacity>}
       </ScrollView>}
   </View>;
 }
 
 const styles = StyleSheet.create({
+  historyMore: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  historyMoreText: { color: colors.text, fontSize: 12, fontWeight: '700' },
   root: { flex: 1, backgroundColor: colors.background },
   body: { padding: 18, paddingBottom: 50, paddingHorizontal: 20, },
   title: { color: colors.text, fontSize: 17, fontWeight: '800', marginTop: 20, marginBottom: 9 },

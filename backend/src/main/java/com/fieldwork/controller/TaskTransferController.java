@@ -22,6 +22,13 @@ public class TaskTransferController {
         return service.list(groupId, CurrentUser.require(userId));
     }
 
+    @GetMapping("/page")
+    public Map<String, Object> page(@PathVariable Long groupId, @RequestParam Long userId,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "all") String direction,
+            @RequestParam(required = false) Long recipientId) {
+        return service.page(groupId, CurrentUser.require(userId), page, direction, recipientId);
+    }
+
     @PostMapping
     public Map<String, Object> create(@PathVariable Long groupId, @RequestBody Map<String, Object> body) {
         return service.create(

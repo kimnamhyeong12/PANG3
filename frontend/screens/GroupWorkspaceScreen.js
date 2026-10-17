@@ -17,6 +17,7 @@ import { CardTitle, PrimaryButton, ScreenHeader } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
 import { colors, shadow } from '../constants/design';
 import { groupApi } from '../utils/groupApi';
+import { transferHistoryPage, mergeTransferHistory, compareTransferHistory } from '../utils/transferHistory';
 import GroupLeaveButton from '../components/GroupLeaveButton';
 import { buildMemberColors, softMemberColor } from '../utils/memberColors';
 
@@ -72,6 +73,9 @@ export default function GroupWorkspaceScreen({
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [reportCount, setReportCount] = useState(null);
   const [transferRequests, setTransferRequests] = useState([]);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
   const [respondingRequestId, setRespondingRequestId] = useState(null);
   const [teamAlerts, setTeamAlerts] = useState(true);
   const [activityAlerts, setActivityAlerts] = useState(true);
@@ -125,22 +129,24 @@ export default function GroupWorkspaceScreen({
     try {
       setLoadingSettings(true);
       const base = `/api/groups/${group.groupId}`;
-      const [groupDetail, locations, reports, transfers] = await Promise.all([
+      const [groupDetail, locations, reports, transfers] = await Promise.allSettled([
         groupApi(`${base}?userId=${user.userId}`),
         groupApi(`/api/locations/group/${group.groupId}?userId=${user.userId}`),
         groupApi(`${base}/reports?userId=${user.userId}`).catch(() => []),
-        groupApi(`${base}/transfers?userId=${user.userId}`).catch(() => []),
+        transferHistoryPage(group.groupId, user.userId),
       ]);
 
-      setDetail(groupDetail || group);
-      setSharedTasks(Array.isArray(locations) ? locations : []);
-      setReportCount(Array.isArray(reports) ? reports.length : 0);
-      setTransferRequests(Array.isArray(transfers) ? transfers : []);
-    } catch (error) {
-      setDetail(group || null);
-      setSharedTasks(Array.isArray(assignments) ? assignments : []);
-      setReportCount(null);
-      setTransferRequests([]);
+      if (groupDetail.status === 'fulfilled') setDetail(groupDetail.value || group);
+      if (locations.status === 'fulfilled') setSharedTasks(Array.isArray(locations.value) ? locations.value : []);
+      if (reports.status === 'fulfilled') setReportCount(Array.isArray(reports.value) ? reports.value.length : 0);
+      if (transfers.status === 'fulfilled') {
+        setTransferRequests(transfers.value.items || []);
+        setHistoryHasMore(Boolean(transfers.value.hasMore));
+        setHistoryError(null);
+      } else {
+        setHistoryHasMore(false);
+        setHistoryError('이관 내역을 불러오지 못했습니다. 다시 시도해주세요.');
+      }
     } finally {
       setLoadingSettings(false);
     }
@@ -161,9 +167,20 @@ export default function GroupWorkspaceScreen({
   const receivedRequests = useMemo(() => transferRequests
     .filter((request) => Number(request.recipientUserId) === Number(user?.userId)
       || Number(request.senderUserId) === Number(user?.userId))
-    .sort((a, b) => Number(b.status === 'PENDING') - Number(a.status === 'PENDING')
-      || new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()),
+    .sort(compareTransferHistory(user?.userId)),
   [transferRequests, user?.userId]);
+
+  const loadMoreHistory = async () => {
+    if (!historyHasMore || historyLoading) return;
+    setHistoryLoading(true);
+    try {
+      const page = await transferHistoryPage(group.groupId, user.userId, 1);
+      setTransferRequests(previous => mergeTransferHistory(previous, page.items || []));
+      setHistoryHasMore(false);
+    } catch (error) {
+      showAlert('이관 내역 조회 실패', error.message);
+    } finally { setHistoryLoading(false); }
+  };
 
   const respondToRequest = async (request, accept) => {
     if (respondingRequestId != null) return;
@@ -368,10 +385,11 @@ export default function GroupWorkspaceScreen({
 
           {tab === 'transfer' && <View style={styles.card}>
             <CardTitle icon="mail-outline" title="이관 신청" suffix={`${receivedRequests.length}건`} />
+            {historyError && <Text style={styles.emptyText}>{historyError}</Text>}
             {loadingSettings && receivedRequests.length === 0 ? (
               <View style={styles.loadingBox}><ActivityIndicator color={colors.primary} /></View>
             ) : receivedRequests.length === 0 ? (
-              <Text style={styles.emptyText}>주고받은 이관 신청이 없습니다.</Text>
+              !historyError && <Text style={styles.emptyText}>주고받은 이관 신청이 없습니다.</Text>
             ) : receivedRequests.map((request, index) => (
               <View key={request.id} style={[styles.requestRow, index > 0 && styles.requestDivider]}>
                 <Text style={styles.requestTitle}>{Number(request.senderUserId) === Number(user?.userId) ? '보낸 요청' : '받은 요청'} · {request.senderName || '팀원'} → {request.recipientName || '팀원'} · {request.taskIds?.length || 0}건</Text>
@@ -390,6 +408,9 @@ export default function GroupWorkspaceScreen({
                 </View>}
               </View>
             ))}
+            {historyHasMore && <TouchableOpacity style={styles.historyMore} disabled={historyLoading} onPress={loadMoreHistory}>
+              <Text style={styles.historyMoreText}>{historyLoading ? '불러오는 중…' : '더보기'}</Text>
+            </TouchableOpacity>}
           </View>}
 
           {tab === 'settings' && <>
@@ -463,6 +484,8 @@ function SettingSwitchRow({ icon, title, value, onValueChange, last }) {
 }
 
 const styles = StyleSheet.create({
+  historyMore: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  historyMoreText: { color: colors.text, fontSize: 12, fontWeight: '700' },
   inviteBox: { marginTop: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
   inviteInput: { flex: 1, minWidth: 0, height: 44, borderWidth: 1, borderColor: colors.line, borderRadius: 12, paddingHorizontal: 12, color: colors.text, backgroundColor: colors.background },
   inviteButton: { width: 68, minHeight: 44, paddingVertical: 0, paddingHorizontal: 8, borderRadius: 12 },
@@ -471,12 +494,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
 
     borderColor: colors.line,
-    backgroundColor: colors.surface, gap: 6, paddingHorizontal: 20, borderBottomWidth: 0, paddingBottom: 12, },
+    backgroundColor: colors.surface, gap: 6, paddingHorizontal: 20, borderBottomWidth: 0, paddingBottom: 4, },
   tab: {  alignItems: 'center', paddingVertical: 14, flex: 1, minHeight: 44, borderBottomWidth: 0, borderRadius: 12, backgroundColor: colors.surfaceMuted, },
   activeTab: {  borderColor: colors.primary, backgroundColor: colors.primary, borderBottomWidth: 0, },
   tabText: { color: colors.textSoft, fontWeight: '800', fontSize: 13, },
   activeText: {color: '#FFFFFF', },
-  body: {  gap: 12, paddingBottom: 36, padding: 20, },
+  body: { gap: 12, padding: 20, paddingTop: 0, paddingBottom: 36 },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 18,

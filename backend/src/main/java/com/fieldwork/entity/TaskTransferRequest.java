@@ -7,7 +7,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "task_transfer_requests")
+@Table(name = "task_transfer_requests", indexes = {
+    @Index(name = "idx_transfer_recipient_history", columnList = "group_id,recipient_user_id,status,requested_at,id"),
+    @Index(name = "idx_transfer_sender_history", columnList = "group_id,sender_user_id,requested_at,id"),
+    @Index(name = "idx_transfer_expiry", columnList = "responded_at,status")
+})
 public class TaskTransferRequest {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

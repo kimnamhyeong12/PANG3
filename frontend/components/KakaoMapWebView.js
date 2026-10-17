@@ -407,7 +407,6 @@ const buildKakaoMapHtml = (
   var displayedTrafficPaths = [];
   var directionOverlays = [];
   var displayedActivePath = [];
-  var connectorLines = [];
   var entranceOverlays = [];
 
   var userLocationOverlay = null;
@@ -542,8 +541,6 @@ const buildKakaoMapHtml = (
     directionOverlays = [];
     displayedActivePath = [];
 
-    connectorLines.forEach(function (line) { line.setMap(null); });
-    connectorLines = [];
     entranceOverlays.forEach(function (overlay) { overlay.setMap(null); });
     entranceOverlays = [];
   }
@@ -1003,31 +1000,6 @@ const buildKakaoMapHtml = (
     }
 
     updateActivePath(data.activePath, data.activeTrafficPaths, data.activeMode);
-
-    (data.connectorPaths || []).forEach(function (connector) {
-      if (!Array.isArray(connector) || connector.length < 2) return;
-      var line = new window.kakao.maps.Polyline({
-        path: connector.map(toLatLng),
-        strokeWeight: 5,
-        strokeColor: "#4C88F7",
-        strokeOpacity: 0.9,
-        strokeStyle: "shortdot"
-      });
-      line.setMap(map);
-      connectorLines.push(line);
-
-      var dot = document.createElement("div");
-      dot.className = "entrance-location";
-      var entrance = new window.kakao.maps.CustomOverlay({
-        position: toLatLng(connector[0]),
-        content: dot,
-        xAnchor: 0.5,
-        yAnchor: 0.5,
-        zIndex: 90
-      });
-      entrance.setMap(map);
-      entranceOverlays.push(entrance);
-    });
 
     if (data.vehicleArrival) {
       var arrivalDot = document.createElement("div");
@@ -3176,9 +3148,7 @@ export default function KakaoMapWebView({
         roadPath: previewRouteSegment || isGuiding ? [] : roadPath,
         vehicleArrival: (previewRouteSegment || routeSegments[currentSegmentIndex])?.engine === 'kakao-sdk'
           ? (previewRouteSegment || routeSegments[currentSegmentIndex]).navigationDestination : null,
-        connectorPaths: (previewRouteSegment ? [previewRouteSegment] : isGuiding ? [routeSegments[currentSegmentIndex]] : routeSegments)
-          .map((segment) => segment?.connectorPath)
-          .filter((path) => Array.isArray(path) && path.length >= 2),
+
 
         /*
          * 안내 중이면 이미 지나간 경로를

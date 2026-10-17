@@ -297,7 +297,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
 
       <ScrollView
         style={styles.screenScroll}
-        contentContainerStyle={styles.body}
+        contentContainerStyle={[styles.body, embedded && styles.embeddedBody]}
         scrollEnabled={!mapInteracting}
         nestedScrollEnabled
         showsVerticalScrollIndicator={false}
@@ -373,11 +373,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
             </ScrollView>}
           </View>}
 
-          <View style={styles.legend} pointerEvents="none">
-            {Object.entries(STATUS).map(([key, value]) => <View key={key} style={styles.legendRow}><View style={[styles.legendDot, { backgroundColor: value.color }]} /><Text style={styles.legendText}>{value.label}</Text></View>)}
-            <View style={styles.legendDivider} />
-            <View style={styles.legendRow}><View style={[styles.legendArea, { backgroundColor: MIXED_AREA_COLOR }]} /><Text style={styles.legendText}>공통 업무</Text></View>
-          </View>
+
 
           {!personalWorkspace && selectedMember && <View style={styles.mapMemberDetail}>
             <Text style={styles.mapMemberDetailTitle}>{selectedMember.name}</Text>
@@ -386,6 +382,11 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
             </Text>
           </View>}
         </View>
+
+          <View style={styles.legend} pointerEvents="none">
+            {Object.entries(STATUS).map(([key, value]) => <View key={key} style={styles.legendRow}><View style={[styles.legendDot, { backgroundColor: value.color }]} /><Text style={styles.legendText}>{value.label}</Text></View>)}
+            <View style={styles.legendRow}><View style={[styles.legendArea, { backgroundColor: MIXED_AREA_COLOR }]} /><Text style={styles.legendText}>공통 업무</Text></View>
+          </View>
 
         {!!boundaryError && <Text style={styles.boundaryWarning}>경계 표시 오류: {boundaryError}</Text>}
 
@@ -419,6 +420,7 @@ const styles = StyleSheet.create({
   desc: { fontSize: 10, color: '#637269', marginTop: 2 },
   screenScroll: { flex: 1 },
   body: { padding: 14, gap: 12, paddingBottom: 32, paddingHorizontal: 20, },
+  embeddedBody: { paddingTop: 0 },
   summaryCard: {    paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, paddingVertical: 12, borderRadius: 0, borderBottomWidth: 1, borderBottomColor: colors.line, },
   summaryItem: { flex: 1, alignItems: 'center' },
   summaryValue: { fontSize: 22, fontWeight: '900' },
@@ -432,18 +434,17 @@ const styles = StyleSheet.create({
   mapMemberRow: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 11, borderBottomWidth: 1, borderBottomColor: '#EEF3F0' },
   mapMemberRowSelected: { backgroundColor: '#F0F7FC' },
   mapMemberName: { flex: 1, fontSize: 11, fontWeight: '800', color: '#15231D' },
-  mapMemberDetail: { position: 'absolute', left: 10, right: 152, bottom: 10, backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: 12, padding: 10 },
+  mapMemberDetail: { position: 'absolute', left: 10, right: 10, bottom: 10, backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: 12, padding: 10 },
   mapMemberDetailTitle: { fontSize: 12, fontWeight: '900', color: '#15231D' },
   mapMemberDetailText: { fontSize: 10, color: '#475569', marginTop: 3 },
   map: { flex: 1, backgroundColor: '#EAF0F5' },
   mapState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
   mapStateText: { fontSize: 11, color: '#637269' },
   errorText: { fontSize: 11, color: '#D14343', fontWeight: '700', textAlign: 'center', padding: 20 },
-  legend: { position: 'absolute', right: 10, bottom: 10, width: 128, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.96)', padding: 12, gap: 9 },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: 10, rowGap: 6, paddingHorizontal: 2, marginTop: -4 },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   legendDot: { width: 9, height: 9, borderRadius: 5 },
   legendArea: { width: 11, height: 9, borderRadius: 2 },
-  legendDivider: { backgroundColor: colors.line, height: 1, marginVertical: 1 },
   legendText: {  color: '#334155', fontWeight: '800', fontSize: 11, },
   boundaryWarning: { fontSize: 10, lineHeight: 15, color: '#B45309', backgroundColor: '#FFF8E6', borderRadius: 10, padding: 10 },
   memberCard: { maxHeight: 190, minHeight: 106, backgroundColor: '#FFFFFF', borderRadius: 18, padding: 14, borderWidth: 1, borderColor: '#DCE5E0' },

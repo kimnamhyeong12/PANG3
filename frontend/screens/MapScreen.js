@@ -1,11 +1,13 @@
 import { colors, workStatus } from '../constants/design';
 import { coordinateInput } from '../utils/coordinateInput';
+import { safetyGuideNotice } from '../utils/safetyGuide';
+import { maneuverGuide } from '../utils/maneuverGuide';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScreenBackHandler, consumeScreenBack } from '../utils/screenBack';
 import { apiFetch as fetch } from '../utils/auth';
 import { showAlert } from '../components/CustomAlert';
 // 키보드 자판 내 엔터가 안먹힘
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -28,6 +30,8 @@ import KakaoMapWebView from '../components/KakaoMapWebView';
 import PlaceSearchOverlay from '../components/PlaceSearchOverlay';
 import SearchResultSheet from '../components/SearchResultSheet';
 import WorkplaceField from '../components/WorkplaceField';
+import SafetyGuideBadge from '../components/SafetyGuideBadge';
+import ManeuverGuideCard from '../components/ManeuverGuideCard';
 import { KakaoNavigationView, beginRouteSession, endRouteSession, wasRouteTaskRemoved, isKakaoNavigationAvailable, previewSdkRoute, isSdkPreviewAvailable, discardSdkPreview } from '../modules/kakao-navigation';
 import {
   stopRouteNotification,
@@ -147,6 +151,7 @@ function NormalMapScreen({
   onAddWork,
   onUpdatedUser,
   onSearchVisibilityChange,
+  renderGuidanceNavigation,
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchInitialQuery, setSearchInitialQuery] = useState('');
@@ -177,7 +182,11 @@ function NormalMapScreen({
   const [kakaoDestination, setKakaoDestination] = useState(null);
   const [multiArrival, setMultiArrival] = useState(false);
   const [nativeProgress, setNativeProgress] = useState(null);
-
+  const [nativeSafety, setNativeSafety] = useState(null);
+  const [nativeManeuver, setNativeManeuver] = useState(null);
+  const [nearbyCategory, setNearbyCategory] = useState(null);
+  const [guideMap3D, setGuideMap3D] = useState(true);
+  const [guideRecenterRequest, setGuideRecenterRequest] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [searchedPlace, setSearchedPlace] = useState(null);
   const [placeName, setPlaceName] = useState('');
@@ -1051,23 +1060,23 @@ function NormalMapScreen({
     const minutes = Math.round(seconds / 60);
 
     if (minutes < 60) {
-      return `약 ${minutes}분`;
+      return `${minutes}분`;
     }
 
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
 
-    return `약 ${h}시간 ${m}분`;
+    return `${h}시간 ${m}분`;
   };
 
   const formatDistance = (meters) => {
     if (meters == null || !Number.isFinite(Number(meters))) return null;
 
     if (meters >= 1000) {
-      return `약 ${(meters / 1000).toFixed(1)}km`;
+      return `${(meters / 1000).toFixed(1)}km`;
     }
 
-    return `약 ${Math.round(meters)}m`;
+    return `${Math.round(meters)}m`;
   };
 
   const fetchRouteSegment = async (startLocation, endLocation, mode, allowMultiple = multiArrival) => {
@@ -1127,7 +1136,7 @@ function NormalMapScreen({
     setPreview(null);
     setSegmentChanging(false);
     setKakaoDestination(null);
-    setNativeProgress(null);
+    setNativeProgress(null); setNativeSafety(null); setNativeManeuver(null);
     setPublicFacilityMode(false);
     setSearchOpen(false); setResultsMode(false); setFocusRequest({ coordinates: [], token: 0 });
     setDongOpen(false);
@@ -1181,7 +1190,7 @@ function NormalMapScreen({
     guideRequestRef.current += 1;
     setIsGuiding(false);
     setKakaoDestination(null);
-    setNativeProgress(null);
+    setNativeProgress(null); setNativeSafety(null); setNativeManeuver(null);
     setRouteSegments([]);
     setRoadPath([]);
     setCurrentSegmentIndex(0);
@@ -1307,7 +1316,7 @@ function NormalMapScreen({
       setCurrentSegmentIndex(0);
       setTotalDuration(result.totalDuration);
       setTransportMode(mode);
-      setNativeProgress(null);
+      setNativeProgress(null); setNativeSafety(null); setNativeManeuver(null);
       resumedRouteRef.current = `${scopeKey}:${routeResumeToken}:${targetKey}`;
       setOptimized(true);
       beginRouteSession();
@@ -1357,7 +1366,7 @@ function NormalMapScreen({
       if (!isKakaoNavigationAvailable()) { clearGuidance(); return; }
       if (!isSdkPreviewAvailable(activeSegment.sdkPreviewId)) {
         setKakaoDestination(null);
-        setNativeProgress(null);
+        setNativeProgress(null); setNativeSafety(null); setNativeManeuver(null);
         const request = ++guideRequestRef.current;
         fetchRouteSegment(cleanLocation(currentLocation), cleanLocation(activeTarget), 'car', activeSegment.arrivalMode === 'MULTI').then(result => {
           if (request !== guideRequestRef.current) return;
@@ -1380,7 +1389,7 @@ function NormalMapScreen({
         });
         return;
       }
-      setNativeProgress(null);
+      setNativeProgress(null); setNativeSafety(null); setNativeManeuver(null);
       setKakaoDestination({ previewId: activeSegment.sdkPreviewId, destinationKey: activeSegment.destinationKey });
     } else handleReroute(currentLocation);
   }, [isActive, isGuiding, routeResumeToken, resumeRetryToken, scopeKey, activeTarget, activeSegment, currentLocation]);
@@ -1446,9 +1455,14 @@ function NormalMapScreen({
       />
       {kakaoDestination && (
         <KakaoNavigationView
-          style={[StyleSheet.absoluteFillObject, { top: screenInsets.top + 6 + visitStripHeight + 8 }, preview && { opacity: 0 }]}
+          style={[StyleSheet.absoluteFill, { top: 0 }, preview && { opacity: 0 }]}
           pointerEvents={preview ? 'none' : 'auto'}
           destination={kakaoDestination}
+          mapActive={isActive && !preview}
+          nearbyCategory={nearbyCategory}
+          map3D={guideMap3D}
+          recenterRequest={guideRecenterRequest}
+          onNearbyError={(event) => showAlert('주변 장소', event.nativeEvent?.message || '주변 장소를 불러오지 못했습니다.')}
           onRouteChanged={(event) => {
             const data = event.nativeEvent;
             if (data?.destinationKey !== activeSegment?.destinationKey || !Array.isArray(data.path) || !data.path.length) return;
@@ -1474,6 +1488,16 @@ function NormalMapScreen({
             if (data?.destinationKey !== activeSegment?.destinationKey || !Number.isFinite(data.distance) || !Number.isFinite(data.duration) || data.distance < 0 || data.duration < 0) return;
             setNativeProgress(data);
           }}
+          onSafetyUpdate={(event) => {
+            const data = event.nativeEvent;
+            if (data?.destinationKey !== activeSegment?.destinationKey) return;
+            setNativeSafety(safetyGuideNotice(data, activeSegment.destinationKey));
+          }}
+          onManeuverUpdate={(event) => {
+            const data = event.nativeEvent;
+            if (data?.destinationKey !== activeSegment?.destinationKey) return;
+            setNativeManeuver(maneuverGuide(data, activeSegment.destinationKey));
+          }}
           onArrived={(event) => {
             if (event.nativeEvent?.destinationKey !== activeSegment?.destinationKey) return;
             const target = activeTarget;
@@ -1485,6 +1509,44 @@ function NormalMapScreen({
           }}
         />
       )}
+
+      {isGuiding && kakaoDestination && !preview && <>
+        <View pointerEvents="none" style={{ position: 'absolute', top: screenInsets.top + 8, left: 12, width: 200, maxWidth: '70%', zIndex: 19 }}>
+          <ManeuverGuideCard guide={nativeManeuver?.destinationKey === activeSegment?.destinationKey ? nativeManeuver : null} />
+        </View>
+        <View style={[styles.guideNearbyControls, { bottom: bottomOverlayHeight + 28 }]}>
+          {[['gas', '주유소'], ['parking', '주차장']].map(([category, label]) => <TouchableOpacity
+            key={category} accessibilityRole="button" accessibilityLabel={`주변 ${label}`} accessibilityState={{ selected: nearbyCategory === category }}
+            onPress={() => setNearbyCategory(previous => previous === category ? null : category)}
+            style={[styles.guideNearbyButton, nearbyCategory === category && styles.guideNearbySelected]}>
+            {category === 'parking' ? <Text style={styles.guideParkingIcon}>P</Text> : <MaterialCommunityIcons name="gas-station-outline" size={22} color={colors.primary} />}
+          </TouchableOpacity>)}
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel={guideMap3D ? '2D 지도로 전환' : '3D 지도로 전환'}
+            onPress={() => setGuideMap3D(value => !value)} style={styles.guideNearbyButton}>
+            <Text style={styles.guideMapModeText}>{guideMap3D ? '2D' : '3D'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="내 위치로 돌아가기"
+            onPress={() => setGuideRecenterRequest(value => value + 1)} style={[styles.guideNearbyButton, { borderBottomWidth: 0 }]}>
+            <Ionicons name="locate-outline" size={23} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      </>}
+
+      {isGuiding && kakaoDestination && !preview && nativeSafety?.destinationKey === activeSegment?.destinationKey && <View
+        pointerEvents="none" style={{ position: 'absolute', left: 12, top: mapHeight * 0.5 - 100, zIndex: 15 }}>
+        <SafetyGuideBadge notice={nativeSafety} />
+      </View>}
+
+      {isGuiding && kakaoDestination && !preview && <View pointerEvents="none"
+        style={{ position: 'absolute', left: 12, top: mapHeight * 0.5, minWidth: 94, alignItems: 'center', zIndex: 15 }}>
+        <Text accessibilityLabel="현재 속도" style={{ fontSize: 48, lineHeight: 56, includeFontPadding: false, fontWeight: '900', color: colors.text,
+          textShadowColor: '#FFFFFF', textShadowRadius: 4, textShadowOffset: { width: 0, height: 0 } }}>
+          {nativeProgress?.destinationKey === activeSegment?.destinationKey && nativeProgress.speedValid === true
+            && Number.isFinite(nativeProgress.speed) ? Math.max(0, Math.round(nativeProgress.speed)) : '—'}
+        </Text>
+        <Text style={{ fontSize: 11, fontWeight: '800', color: colors.text, textShadowColor: '#FFFFFF',
+          textShadowRadius: 3, textShadowOffset: { width: 0, height: 0 } }}>km/h</Text>
+      </View>}
 
       {mapSelectMode && <View style={styles.selectionCard}>
         <Text style={styles.selectionAddress}>{centerAddress || '주소 확인 중…'}</Text>
@@ -1532,7 +1594,7 @@ function NormalMapScreen({
         <Pressable style={[StyleSheet.absoluteFill, { zIndex: 19 }]}
           accessibilityLabel="방문지 추가 메뉴 닫기" onPress={() => setAddMenuOpen(false)} />
       )}
-      <View style={[styles.topOverlay, { top: screenInsets.top + 6 }]} pointerEvents="box-none"
+      {!isGuiding && <View style={[styles.topOverlay, { top: screenInsets.top + 6 }]} pointerEvents="box-none"
         onLayout={event => { const { y, height } = event.nativeEvent.layout; setTopOverlayBottom(y + height); }}>
         {(!isGuiding || preview) && <View style={styles.searchControlRow}>
           {!root && <TouchableOpacity style={[styles.smallTopButton, { minWidth: 44, minHeight: 44 }]} accessibilityLabel="뒤로가기" onPress={() => { if (!consumeScreenBack()) onBack?.(); }}><Ionicons name="arrow-back" size={22} color="#2477F3" /></TouchableOpacity>}
@@ -1813,18 +1875,24 @@ function NormalMapScreen({
           </View>
         )}
 
-      </View>
+      </View>}
       {mapSelectMode && <View style={[styles.selectionHint, { top: screenInsets.top + 124 }]} pointerEvents="none"><Text style={styles.selectionHintText}>지도를 움직여 위치를 선택하세요</Text></View>}
       {!resultsMode && !publicFacilityMode && !mapSelectMode && !searchedPlace && !coordSheetOpen && cardTarget && (
-        <View style={styles.destinationCard} onLayout={event => setBottomOverlayHeight(event.nativeEvent.layout.height)}>
+        <View style={styles.destinationCard}
+          onLayout={event => setBottomOverlayHeight(event.nativeEvent.layout.height)}>
           {isGuiding && !preview ? <View style={styles.guidanceBar}>
+            <TouchableOpacity style={styles.guidanceRefreshButton} disabled={segmentChanging}
+              onPress={() => handleStartGuidance(activeTarget, activeSegment?.mode || transportMode)}
+              accessibilityLabel="교통정보 반영해 경로 새로고침">
+              {segmentChanging ? <ActivityIndicator color={colors.primary} /> : <Ionicons name="refresh" size={28} color={colors.text} />}
+            </TouchableOpacity>
             <View style={styles.guidanceBarInfo}>
               <TouchableOpacity style={styles.guidancePlaceRow} onPress={() => setGuideShowDestination(value => !value)} accessibilityLabel="현재 위치와 목적지 번갈아 보기">
-                <Text style={styles.guidancePlaceLabel}>{guideShowDestination ? '목적지' : '현재 위치'}</Text>
+                <Ionicons name={guideShowDestination ? 'location' : 'locate-outline'} size={18} color={colors.textSoft} />
                 <Text style={styles.guidancePlaceText} numberOfLines={1}>{guideShowDestination ? (cardTarget.detailAddress || cardTarget.roadAddress || '방문지') : (guideCurrentAddress || '위치 확인 중…')}</Text>
               </TouchableOpacity>
               <View style={styles.guidanceMetrics}>
-                <Text style={styles.guidanceArrival}>{Number.isFinite(Number(cardDuration)) ? new Date(Date.now() + Number(cardDuration) * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '시간 확인 중'}</Text>
+                <Text style={styles.guidanceArrival}>{formatDuration(cardDuration) || '시간 확인 중'}</Text>
                 <Text style={styles.guidanceDistance}>{formatDistance(cardDistance)}</Text>
               </View>
             </View>
@@ -1851,11 +1919,16 @@ function NormalMapScreen({
 
         </View>
       )}
-      <Modal visible={guideMenuOpen && isActive} transparent navigationBarTranslucent={false} statusBarTranslucent={false} animationType="fade" onRequestClose={() => setGuideMenuOpen(false)}>
-        <Pressable style={[styles.guideMenuBackdrop, { paddingBottom: Math.max(screenInsets.bottom, 16) + 20 }]} onPress={() => setGuideMenuOpen(false)}><View style={styles.guideMenu}>
-          {['car', 'walk'].map(mode => <TouchableOpacity key={mode} accessibilityRole="button" accessibilityState={{ selected: transportMode === mode }} style={[styles.guideMenuItem, transportMode === mode && styles.guideMenuItemActive]} onPress={() => { setGuideMenuOpen(false); if (mode !== transportMode) handleStartGuidance(activeTarget, mode); }}><Ionicons name={mode === 'car' ? 'car-outline' : 'walk-outline'} size={22} color={colors.text} /><Text style={styles.guideMenuText}>{mode === 'car' ? '차량' : '도보'}</Text></TouchableOpacity>)}
-          <TouchableOpacity style={styles.guideMenuItem} onPress={() => { setGuideMenuOpen(false); handleStopGuidance(); }}><Ionicons name="stop-circle-outline" size={22} color={colors.danger} /><Text style={[styles.guideMenuText, { color: colors.danger }]}>안내 종료</Text></TouchableOpacity>
-        </View></Pressable>
+      <Modal visible={guideMenuOpen && isActive && isGuiding} transparent navigationBarTranslucent={false} statusBarTranslucent={false} animationType="fade" onRequestClose={() => setGuideMenuOpen(false)}>
+        <Pressable style={[styles.guideMenuBackdrop, { paddingBottom: Math.max(screenInsets.bottom, 16) + 20 }]} onPress={() => setGuideMenuOpen(false)}>
+          <View style={styles.guideMenuSheet} onStartShouldSetResponder={() => true}>
+          <View style={styles.guideMenu}>
+          {['car', 'walk'].map(mode => <TouchableOpacity key={mode} accessibilityRole="button" accessibilityState={{ selected: transportMode === mode }} style={[styles.guideMenuItem, transportMode === mode && styles.guideMenuItemActive]} onPress={() => { setGuideMenuOpen(false); if (mode !== transportMode) handleStartGuidance(activeTarget, mode); }}><Ionicons name={mode === 'car' ? 'car-outline' : 'walk-outline'} size={20} color={colors.text} /><Text style={[styles.guideMenuText, transportMode === mode && styles.guideMenuTextActive]}>{mode === 'car' ? '차량' : '도보'}</Text></TouchableOpacity>)}
+          <TouchableOpacity style={styles.guideMenuItem} onPress={() => { setGuideMenuOpen(false); handleStopGuidance(); }}><Ionicons name="stop-circle-outline" size={20} color={colors.danger} /><Text style={[styles.guideMenuText, { color: colors.danger }]}>안내 종료</Text></TouchableOpacity>
+          </View>
+          {renderGuidanceNavigation?.(() => setGuideMenuOpen(false))}
+          </View>
+        </Pressable>
       </Modal>
 
       {!isGuiding && !resultsMode && !mapSelectMode && !publicFacilityMode && !searchedPlace && !coordSheetOpen && !pendingOpen && !dongOpen && (
@@ -2155,20 +2228,26 @@ export default function MapScreen(props) {
 }
 
 const styles = StyleSheet.create({
+  guideNearbyControls: { position: 'absolute', right: 20, zIndex: 18, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, overflow: 'hidden', elevation: 3 },
+  guideNearbyButton: { width: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.line },
+  guideNearbySelected: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
+  guideMapModeText: { color: colors.primary, fontSize: 14, fontWeight: '900' },
+  guideNearbyText: { color: colors.primary, fontSize: 10, fontWeight: '700' },
+  guideParkingIcon: { color: colors.primary, fontSize: 22, fontWeight: '900' },
   selectionCard: { position: 'absolute', left: 12, right: 12, bottom: 12, zIndex: 46, backgroundColor: colors.surface, padding: 18, borderRadius: 22 },
   selectionAddress: { color: colors.text, fontSize: 14, fontWeight: '800', marginBottom: 10 },
   coordinateRow: { flexDirection: 'row', gap: 10 }, coordinateLabel: { color: colors.textSoft, fontSize: 12, marginBottom: 4 },
   coordinateInput: { minHeight: 44, borderRadius: 10, backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 12, color: colors.text, fontSize: 14 },
   selectionHint: { position: 'absolute', left: 20, right: 20, borderRadius: 10, backgroundColor: colors.text, padding: 9, zIndex: 21, alignItems: 'center' }, selectionHintText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  guidanceRefreshButton: { position: 'absolute', left: -4, top: 0, bottom: 0, width: 44, minHeight: 64, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
   guidanceBar: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   guidanceBarInfo: { flex: 1, minWidth: 0 },
-  guidancePlaceRow: { minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  guidancePlaceLabel: { color: colors.textSoft, fontSize: 11, fontWeight: '700' },
-  guidancePlaceText: { flex: 1, color: colors.textSoft, fontSize: 13 },
-  guidanceMetrics: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 14, rowGap: 2 },
-  guidanceArrival: { color: colors.text, fontSize: 24, fontWeight: '900' },
-  guidanceDistance: { color: colors.text, fontSize: 22, fontWeight: '800' },
-  guidanceMenuButton: { width: 48, alignSelf: 'stretch', minHeight: 64, alignItems: 'center', justifyContent: 'center' },
+  guidancePlaceRow: { minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 48, gap: 8 },
+  guidancePlaceText: { flexShrink: 1, color: colors.textSoft, fontSize: 13, textAlign: 'center' },
+  guidanceMetrics: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', paddingHorizontal: 40, flexWrap: 'wrap', columnGap: 14, rowGap: 2 },
+  guidanceArrival: { color: colors.text, fontSize: 24, fontWeight: '900', textAlign: 'center' },
+  guidanceDistance: { color: colors.text, fontSize: 22, fontWeight: '800', textAlign: 'center' },
+  guidanceMenuButton: { position: 'absolute', right: -4, top: 0, bottom: 0, width: 44, minHeight: 64, alignItems: 'center', justifyContent: 'center' },
   previewMetrics: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 10 },
   durationText: { color: colors.text, fontSize: 14, fontWeight: '700' },
   previewMessage: { color: colors.textSoft, fontSize: 13 },
@@ -2176,7 +2255,8 @@ const styles = StyleSheet.create({
   destinationModesRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 4 }, transportPill: { minHeight: 36, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted, borderRadius: 18 }, transportPillActive: { backgroundColor: colors.primary }, transportText: { color: colors.textSoft, fontSize: 12, fontWeight: '700' }, transportTextActive: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   distanceText: { color: colors.text, fontSize: 22, fontWeight: '900' }, arrivalText: { color: colors.textSoft, fontSize: 12, marginTop: 2 },
   routeStart: { minHeight: 46, backgroundColor: colors.primary, borderRadius: 14, marginTop: 8, justifyContent: 'center', alignItems: 'center' }, routeStartText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  guideMenuBackdrop: { flex: 1, justifyContent: 'flex-end', padding: 20, backgroundColor: 'rgba(16,40,91,0.25)' }, guideMenu: { flexDirection: 'row', gap: 8, borderRadius: 18, backgroundColor: colors.surface, padding: 10 }, guideMenuItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 88, paddingHorizontal: 4 }, guideMenuItemActive: { backgroundColor: colors.primarySoft, borderRadius: 12 }, guideMenuText: { color: colors.text, fontSize: 14 },
+  guideMenuSheet: { backgroundColor: colors.surface, borderRadius: 18, overflow: 'hidden' },
+  guideMenuBackdrop: { flex: 1, justifyContent: 'flex-end', padding: 20, backgroundColor: 'rgba(16,40,91,0.25)' }, guideMenu: { flexDirection: 'row', gap: 8, borderRadius: 18, backgroundColor: colors.surface, padding: 10 }, guideMenuItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 60, paddingHorizontal: 4 }, guideMenuItemActive: { backgroundColor: colors.primarySoft, borderRadius: 12 }, guideMenuText: { color: colors.text, fontSize: 11, fontWeight: '700' }, guideMenuTextActive: { fontWeight: '900' },
 
   destinationCard: { marginTop: 5, paddingHorizontal: 8, paddingVertical: 6, position: 'absolute', left: 12, right: 12, bottom: 12, zIndex: 25, backgroundColor: colors.surface, borderRadius: 20, padding: 16, elevation: 2, },
   destinationHead: { flexDirection: 'row', alignItems: 'center', gap: 4 },

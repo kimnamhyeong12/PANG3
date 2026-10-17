@@ -30,7 +30,9 @@ export async function groupApi(path, options = {}) {
       (data && typeof data === 'object' && data.message) ||
       (typeof data === 'string' && data) ||
       `요청 실패 (${response.status})`;
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
 
   return data;

@@ -18,5 +18,5 @@ android {
 dependencies {
   implementation 'androidx.appcompat:appcompat:1.7.1'
   implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
-  implementation 'com.kakaomobility.knsdk:knsdk_ui:1.12.8-hotfix02'
+  implementation 'com.kakaomobility.knsdk:knsdk:1.12.8-hotfix02'
 }
