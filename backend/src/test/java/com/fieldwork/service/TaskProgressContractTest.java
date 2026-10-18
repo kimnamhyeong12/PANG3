@@ -45,7 +45,10 @@ public class TaskProgressContractTest {
                 throw new UnsupportedOperationException(method.getName());
             });
         Tasks tasks=new Tasks(task,owner); Ai ai=new Ai();
-        TaskProgressService service=new TaskProgressService(repository,tasks,new FileStorageService(new FieldworkProperties()),ai);
+        var manager = org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class);
+        org.mockito.Mockito.when(manager.getTransaction(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new org.springframework.transaction.support.SimpleTransactionStatus());
+        TaskProgressService service=new TaskProgressService(repository,tasks,new FileStorageService(new FieldworkProperties()),ai,manager);
         for (String status : Arrays.asList("pending", null, "unknown")) {
             report.setProgressStatus(status);
             try { service.prepareReport(11L, 7L); throw new AssertionError("Pre-work report must not be generated"); }

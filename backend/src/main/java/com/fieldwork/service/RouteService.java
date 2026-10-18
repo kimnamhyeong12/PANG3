@@ -37,6 +37,7 @@ public class RouteService {
         factory.setConnectTimeout(5_000);
         factory.setReadTimeout(10_000);
         restTemplate = new RestTemplate(factory);
+        restTemplate.setInterceptors(java.util.List.of(new ProviderQuotaInterceptor()));
     }
 
     public Map<String, Object> optimizeRoute(

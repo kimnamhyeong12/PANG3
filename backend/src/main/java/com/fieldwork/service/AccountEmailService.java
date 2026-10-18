@@ -23,6 +23,7 @@ public class AccountEmailService {
     private final ObjectProvider<JavaMailSender> mail;
     private final String from;
     private final String publicUrl;
+    private final com.fieldwork.security.RequestBudget mailBudget = new com.fieldwork.security.RequestBudget();
     public AccountEmailService(EmailChallengeRepository challenges, UserRepository users, AuthSessionService sessions,
             PasswordEncoder encoder, ObjectProvider<JavaMailSender> mail,
             @Value("${fieldwork.auth.mail-from:}") String from, @Value("${fieldwork.auth.public-url:}") String publicUrl) {
@@ -87,6 +88,10 @@ public class AccountEmailService {
     }
     private void sendChallenge(User user, String email, String purpose, String subject, String page) {
         JavaMailSender sender = checkMail();
+        long now = System.currentTimeMillis();
+        if (!mailBudget.allow("recipient:" + purpose + ":" + AuthSessionService.hash(email), 1, 60000, now)
+                || !mailBudget.allow("user:" + user.getUserId(), 5, 3600000, now))
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "메일 요청이 많습니다. 잠시 후 다시 시도해 주세요.");
         String token = sessions.token();
         challenges.invalidate(user.getUserId(), purpose);
         EmailChallenge challenge = new EmailChallenge();

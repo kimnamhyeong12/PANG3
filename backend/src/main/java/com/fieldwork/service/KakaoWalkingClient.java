@@ -20,6 +20,7 @@ public class KakaoWalkingClient {
         factory.setConnectTimeout(Duration.ofSeconds(10));
         factory.setReadTimeout(Duration.ofSeconds(20));
         http = new RestTemplate(factory);
+        http.setInterceptors(java.util.List.of(new ProviderQuotaInterceptor()));
     }
     KakaoWalkingClient(RestTemplate http) { this.http = http; }
 
@@ -37,6 +38,9 @@ public class KakaoWalkingClient {
         try {
             body = http.exchange(url, HttpMethod.GET, new HttpEntity<Void>(headers),
                     new ParameterizedTypeReference<Map<String, Object>>() {}).getBody();
+        } catch (org.springframework.web.server.ResponseStatusException limited) {
+            if (limited.getStatusCode().value() == 429 || limited.getStatusCode().value() == 503) throw limited;
+            throw failure("카카오 도보 경로 요청에 실패했습니다. 네트워크와 서비스 권한을 확인해주세요.");
         } catch (Exception ignored) {
             // Do not expose provider bodies, HTTP headers, URLs or original exceptions.
             throw failure("카카오 도보 경로 요청에 실패했습니다. 네트워크와 서비스 권한을 확인해주세요.");

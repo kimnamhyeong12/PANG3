@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
@@ -24,12 +25,21 @@ public class AiReportService {
 
     private final FieldworkProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ReportGenerationCoordinator coordinator;
 
     @Value("${gemini.api-key:}")
     private String geminiApiKey;
 
     public AiReportService(FieldworkProperties properties) {
         this.properties = properties;
+        this.coordinator = new ReportGenerationCoordinator(properties.getAi().getMaxConcurrent(), properties.getAi().getQueueSize());
+    }
+    @jakarta.annotation.PreDestroy public void stop() { coordinator.close(); }
+
+    public Map<String, Object> generatePayload(Map<String, Object> payload, Long userId) throws Exception {
+        String json = objectMapper.writer().with(com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
+                .writeValueAsString(payload);
+        return coordinator.generate(AuthSessionService.hash(json), userId, () -> callPythonWithRetry(json));
     }
 
     public Map<String, Object> buildPayload(Task task, TaskProgress progress) {
@@ -71,11 +81,11 @@ public class AiReportService {
         return payload;
     }
 
-    public String generateCombined(List<Map<String, Object>> reports) throws Exception {
+    public String generateCombined(List<Map<String, Object>> reports, Long userId) throws Exception {
         Map<String, Object> payload = new HashMap<>();
         payload.put("reports", reports);
         payload.put("output_dir", ProjectPaths.resolve(properties.getAi().getOutputDir()).toString());
-        Map<String, Object> result = callPythonWithRetry(objectMapper.writeValueAsString(payload));
+        Map<String, Object> result = generatePayload(payload, userId);
         if (result == null || !Boolean.TRUE.equals(result.get("ok")) || result.get("report_file") == null) {
             throw new IllegalStateException("통합 보고서를 만들지 못했습니다. 다시 시도하세요.");
         }
@@ -84,8 +94,7 @@ public class AiReportService {
 
     public Map<String, Object> generateReport(Task task, TaskProgress progress) throws Exception {
         Map<String, Object> payload = buildPayload(task, progress);
-        String jsonPayload = objectMapper.writeValueAsString(payload);
-        Map<String, Object> result = callPythonWithRetry(jsonPayload);
+        Map<String, Object> result = generatePayload(payload, progress.getPerformedByUserId());
 
         if (result == null) {
             result = new HashMap<>();
@@ -107,7 +116,8 @@ public class AiReportService {
     }
 
     private Map<String, Object> callPythonWithRetry(String jsonPayload) {
-        int maxRetries = 3;
+        // A failed request must not silently triple expensive work.
+        int maxRetries = 1;
         int retryDelayMs = 2000;
 
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
@@ -119,6 +129,8 @@ public class AiReportService {
                 Path scriptPath = ProjectPaths.resolve(properties.getAi().getScriptPath());
                 Path outputDir = ProjectPaths.resolve(properties.getAi().getOutputDir());
                 java.nio.file.Files.createDirectories(outputDir);
+                if (java.nio.file.Files.getFileStore(outputDir).getUsableSpace() < 512L * 1024 * 1024)
+                    throw new IOException("Insufficient report storage space");
                 payloadPath = java.nio.file.Files.createTempFile(outputDir, "report-input-", ".json");
                 java.nio.file.Files.writeString(payloadPath, jsonPayload, StandardCharsets.UTF_8);
                 List<String> command = List.of(
@@ -136,28 +148,26 @@ public class AiReportService {
                 }
                 processBuilder.redirectErrorStream(true);
                 Process process = processBuilder.start();
-
-                boolean finished = process.waitFor(120, TimeUnit.SECONDS);
-                if (!finished) {
-                    process.destroyForcibly();
-                    throw new RuntimeException("Python execution timeout");
-                }
-
-                if (process.exitValue() != 0) {
-                    System.out.println("[AI] 비정상 종료 코드: " + process.exitValue());
-                    continue;
-                }
-
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        System.out.println("[Python] " + line);
-                        if (line.contains("@@AI_RESULT@@")) {
-                            String rawJson = line.substring(line.indexOf("@@AI_RESULT@@") + "@@AI_RESULT@@".length()).trim();
-                            return objectMapper.readValue(rawJson, new TypeReference<Map<String, Object>>() {});
-                        }
+                var reader = java.util.concurrent.Executors.newSingleThreadExecutor(action -> {
+                    Thread thread = new Thread(action, "report-output"); thread.setDaemon(true); return thread;
+                });
+                try {
+                    // Drain while Python runs: waiting first can deadlock a full stdout pipe.
+                    var output = reader.submit(() -> {
+                        byte[] bytes = process.getInputStream().readNBytes(1048577);
+                        if (bytes.length > 1048576) { process.destroyForcibly(); throw new IOException("Report output too large"); }
+                        return new String(bytes, StandardCharsets.UTF_8);
+                    });
+                    if (!process.waitFor(120, TimeUnit.SECONDS)) throw new IOException("Python execution timeout");
+                    if (process.exitValue() != 0) throw new IOException("Python execution failed");
+                    for (String line : output.get(5, TimeUnit.SECONDS).split("\\R")) {
+                        if (line.startsWith("@@AI_RESULT@@")) return objectMapper.readValue(
+                                line.substring("@@AI_RESULT@@".length()).trim(), new TypeReference<Map<String, Object>>() {});
                     }
+                } finally {
+                    process.descendants().forEach(ProcessHandle::destroyForcibly);
+                    if (process.isAlive()) process.destroyForcibly();
+                    process.getInputStream().close(); reader.shutdownNow();
                 }
             } catch (Exception e) {
                 System.out.println("[AI] 시도 " + attempt + " 실패: " + e.getMessage());

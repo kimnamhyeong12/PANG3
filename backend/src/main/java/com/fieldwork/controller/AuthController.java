@@ -100,11 +100,20 @@ public class AuthController {
     }
     @GetMapping("/me")
     public Map<String, Object> me() { return AuthSessionService.userInfo(users.findById(CurrentUser.id()).orElseThrow()); }
+    @GetMapping("/sessions")
+    public java.util.List<Map<String, Object>> activeSessions() { return sessions.listActive(CurrentUser.id()); }
+    @DeleteMapping("/sessions/{sessionId}")
+    public Map<String, Object> revokeSession(@PathVariable Long sessionId) {
+        sessions.revokeSession(CurrentUser.id(), sessionId);
+        return Map.of("message", "로그인 세션을 해제했습니다.");
+    }
 
     private ResponseEntity<Map<String, Object>> tokenResponse(Map<String, Object> result, HttpServletRequest request) {
         var builder = ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store");
         if ("web".equals(request.getHeader("X-Auth-Client"))) {
-            builder.header(HttpHeaders.SET_COOKIE, cookie((String) result.remove("refreshToken"), refreshSeconds));
+            long remaining = Math.max(0, java.time.Duration.between(java.time.Instant.now(),
+                    java.time.Instant.parse((String) result.get("refreshExpiresAt"))).getSeconds());
+            builder.header(HttpHeaders.SET_COOKIE, cookie((String) result.remove("refreshToken"), Math.min(refreshSeconds, remaining)));
         } else if (!"native".equals(request.getHeader("X-Auth-Client"))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "로그인 클라이언트 정보가 필요합니다.");
         }

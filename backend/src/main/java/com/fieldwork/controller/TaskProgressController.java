@@ -90,8 +90,22 @@ public class TaskProgressController {
             throw new IllegalArgumentException("사용자와 선택한 보고서를 확인하세요.");
         }
         String file = taskProgressService.prepareCombined(ids, userId);
-        String key = UUID.randomUUID().toString();
-        combinedFiles.put(key, new CombinedFile(userId, file, List.copyOf(ids), java.time.Instant.now().plusSeconds(86400)));
+        String key;
+        synchronized (combinedFiles) {
+            expireCombinedDownloads();
+            key = combinedFiles.entrySet().stream()
+                    .filter(entry -> entry.getValue().userId().equals(userId) && entry.getValue().path().equals(file)
+                            && entry.getValue().progressIds().equals(ids))
+                    .map(Map.Entry::getKey).findFirst().orElse(null);
+            if (key == null) {
+                // Bound link metadata without imposing a daily/per-user generation quota.
+                if (combinedFiles.size() >= 2048) combinedFiles.entrySet().stream()
+                        .min(java.util.Comparator.comparing(entry -> entry.getValue().expiresAt()))
+                        .ifPresent(entry -> combinedFiles.remove(entry.getKey()));
+                key = UUID.randomUUID().toString();
+                combinedFiles.put(key, new CombinedFile(userId, file, List.copyOf(ids), java.time.Instant.now().plusSeconds(86400)));
+            }
+        }
         return Map.of("reportDownloadUrl", "/api/task-progress/reports/" + key + "/download?userId=" + userId,
                 "reportCount", ids.stream().distinct().count());
     }

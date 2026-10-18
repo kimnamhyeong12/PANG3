@@ -38,24 +38,40 @@ public class AuthSessionService {
         if ("DELETED".equals(session.user.getRole())) throw unauthorized();
         String refresh = token();
         session.refreshHash = hash(refresh);
+        // Absolute lifetime: refreshing never extends this deadline.
+        session.refreshExpiresAt = Instant.now().plusSeconds(refreshSeconds);
         return renew(session, refresh);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = ResponseStatusException.class)
     public Map<String, Object> refresh(String token) {
         AuthSession session = sessions.findRefreshLocked(hashChecked(token)).orElseThrow(AuthSessionService::unauthorized);
-        if (!active(session, Instant.now())) throw unauthorized();
-        // Keep the refresh secret stable so interrupted/concurrent refreshes cannot
-        // strand a device. Each refresh replaces the short-lived access token.
-        return renew(session, token);
+        Instant now = Instant.now();
+        if (!active(session, now)) throw unauthorized();
+        if (!session.refreshHash.equals(hash(token))) {
+            if (session.previousRefreshUntil == null || !session.previousRefreshUntil.isAfter(now)) {
+                session.revoked = true;
+                throw unauthorized();
+            }
+            // The replacement is encrypted using the submitted old secret, not its stored digest.
+            // This permits lost-response retries without persisting a plaintext refresh token.
+            return renew(session, retryToken(session.refreshRetryCiphertext, token));
+        }
+        if (session.previousRefreshUntil != null && session.previousRefreshUntil.isAfter(now)) return renew(session, token);
+        String replacement = token();
+        session.previousRefreshHash = session.refreshHash;
+        session.previousRefreshUntil = now.plusSeconds(60);
+        session.refreshRetryCiphertext = encryptRetry(replacement, token);
+        session.refreshHash = hash(replacement);
+        return renew(session, replacement);
     }
 
     private Map<String, Object> renew(AuthSession session, String refresh) {
         Instant now = Instant.now();
         String access = token();
         session.accessHash = hash(access);
-        session.accessExpiresAt = now.plusSeconds(accessSeconds);
-        session.refreshExpiresAt = now.plusSeconds(refreshSeconds);
+        session.accessExpiresAt = now.plusSeconds(accessSeconds).isBefore(session.refreshExpiresAt)
+                ? now.plusSeconds(accessSeconds) : session.refreshExpiresAt;
         sessions.save(session);
         Map<String, Object> result = userInfo(session.user);
         result.put("accessToken", access); result.put("refreshToken", refresh);
@@ -82,6 +98,16 @@ public class AuthSessionService {
     }
     @Transactional
     public void revokeAll(Long userId) { sessions.revokeAll(userId); }
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> listActive(Long userId) {
+        return sessions.findByUser_UserIdAndRevokedFalse(userId).stream().filter(s -> active(s, Instant.now()))
+                .map(s -> Map.<String, Object>of("sessionId", s.id, "expiresAt", s.refreshExpiresAt.toString())).toList();
+    }
+    @Transactional
+    public void revokeSession(Long userId, Long sessionId) {
+        sessions.findOwnedLocked(sessionId, userId).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "로그인 세션을 찾을 수 없습니다.")).revoked = true;
+    }
     @Scheduled(fixedDelay = 3600000)
     @Transactional
     public void cleanup() { sessions.deleteExpired(Instant.now()); }
@@ -103,6 +129,28 @@ public class AuthSessionService {
     public static String hash(String token) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8))); }
         catch (java.security.NoSuchAlgorithmException ex) { throw new IllegalStateException(ex); }
+    }
+    private String encryptRetry(String replacement, String oldToken) {
+        try {
+            byte[] nonce = new byte[12]; random.nextBytes(nonce);
+            var cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, retryKey(oldToken), new javax.crypto.spec.GCMParameterSpec(128, nonce));
+            byte[] encrypted = cipher.doFinal(replacement.getBytes(StandardCharsets.UTF_8));
+            return Base64.getEncoder().encodeToString(java.nio.ByteBuffer.allocate(nonce.length + encrypted.length).put(nonce).put(encrypted).array());
+        } catch (java.security.GeneralSecurityException ex) { throw new IllegalStateException("Session rotation failed", ex); }
+    }
+    private static String retryToken(String encoded, String oldToken) {
+        try {
+            byte[] bytes = Base64.getDecoder().decode(encoded);
+            var cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, retryKey(oldToken),
+                    new javax.crypto.spec.GCMParameterSpec(128, Arrays.copyOfRange(bytes, 0, 12)));
+            return new String(cipher.doFinal(Arrays.copyOfRange(bytes, 12, bytes.length)), StandardCharsets.UTF_8);
+        } catch (java.security.GeneralSecurityException | RuntimeException ex) { throw unauthorized(); }
+    }
+    private static javax.crypto.spec.SecretKeySpec retryKey(String oldToken) throws java.security.NoSuchAlgorithmException {
+        byte[] key = MessageDigest.getInstance("SHA-256").digest(("pang3-refresh-retry-v1:" + oldToken).getBytes(StandardCharsets.UTF_8));
+        return new javax.crypto.spec.SecretKeySpec(key, "AES");
     }
     private static String hashChecked(String token) {
         if (token == null || !token.matches("[A-Za-z0-9_-]{43}")) throw unauthorized();

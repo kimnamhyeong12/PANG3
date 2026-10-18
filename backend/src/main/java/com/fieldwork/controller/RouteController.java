@@ -18,9 +18,11 @@ import com.fieldwork.service.RouteService;
 public class RouteController {
 
     private final RouteService routeService;
+    private final com.fieldwork.service.RouteRequestGuard guard;
 
-    public RouteController(RouteService routeService) {
+    public RouteController(RouteService routeService, com.fieldwork.service.RouteRequestGuard guard) {
         this.routeService = routeService;
+        this.guard = guard;
     }
 
 
@@ -39,8 +41,9 @@ public class RouteController {
                 body.getOrDefault("transportMode", "car")
         );
 
-        return walkingKey == null ? routeService.optimizeRoute(currentLocation, locations, transportMode)
-                : routeService.optimizeRoute(currentLocation, locations, transportMode, walkingKey);
+        return guard.call("optimize", body, walkingKey, () -> walkingKey == null
+                ? routeService.optimizeRoute(currentLocation, locations, transportMode)
+                : routeService.optimizeRoute(currentLocation, locations, transportMode, walkingKey));
     }
 
     @PostMapping("/segment")
@@ -56,6 +59,6 @@ public class RouteController {
         );
 
         String priority = body.get("routePriority") == null ? null : String.valueOf(body.get("routePriority"));
-        return routeService.getSingleSegmentPath(start, end, transportMode, walkingKey, priority);
+        return guard.call("segment", body, walkingKey, () -> routeService.getSingleSegmentPath(start, end, transportMode, walkingKey, priority));
     }
 }

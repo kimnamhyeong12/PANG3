@@ -36,7 +36,7 @@ class ReleaseAuthIntegrationTest {
         NotificationController.class, TaskProgressController.class, AuthService.class, AuthSessionService.class,
         AccountEmailService.class, GroupService.class, TaskService.class, TaskProgressService.class, TaskTransferService.class,
         SupportInquiryController.class, SupportInquiryService.class,
-        FileStorageService.class, FieldworkProperties.class})
+        FileStorageService.class, FieldworkProperties.class, UploadSecurityConfig.class})
     static class TestConfig {
         @Bean PushNotificationService push() { return mock(PushNotificationService.class); }
         @Bean AiReportService ai() { return mock(AiReportService.class); }
@@ -243,6 +243,55 @@ class ReleaseAuthIntegrationTest {
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + "a".repeat(43))).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/auth/me").header("Authorization", bearer(session))).andExpect(status().isOk()).andExpect(jsonPath("$.password").doesNotExist());
         assertFalse(json.writeValueAsString(a).contains(a.getPassword()));
+    }
+    @Test void appAccountsCannotRunGlobalMaintenance() throws Exception {
+        User account = user(); JsonNode auth = login(account);
+        for (String path : List.of("/api/aeds/import", "/api/aeds/update-administrative-areas",
+                "/api/bus-stops/import", "/api/bus-stops/update-administrative-areas")) {
+            mvc.perform(post(path)).andExpect(status().isUnauthorized());
+            mvc.perform(post(path).header("Authorization", bearer(auth))).andExpect(status().isForbidden());
+        }
+    }
+    @Test void rotatedRefreshRetriesAreSafeButExpiredReplayRevokesTheSession() throws Exception {
+        User account = user(); JsonNode auth = login(account);
+        Instant deadline = sessions.findByAccessHash(AuthSessionService.hash(auth.get("accessToken").asText())).orElseThrow().refreshExpiresAt;
+        String original = auth.get("refreshToken").asText();
+        JsonNode rotated = json.readTree(mvc.perform(postJson("/api/auth/refresh", Map.of("refreshToken", original))
+                .header("X-Auth-Client", "native")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertNotEquals(original, rotated.get("refreshToken").asText());
+        JsonNode retried = json.readTree(mvc.perform(postJson("/api/auth/refresh", Map.of("refreshToken", original))
+                .header("X-Auth-Client", "native")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(rotated.get("refreshToken"), retried.get("refreshToken"));
+        AuthSession stored = sessions.findByAccessHash(AuthSessionService.hash(retried.get("accessToken").asText())).orElseThrow();
+        assertEquals(deadline, stored.refreshExpiresAt);
+        assertFalse(stored.refreshRetryCiphertext.contains(rotated.get("refreshToken").asText()));
+        stored.previousRefreshUntil = Instant.now().minusSeconds(1); sessions.saveAndFlush(stored);
+        mvc.perform(postJson("/api/auth/refresh", Map.of("refreshToken", original)).header("X-Auth-Client", "native")).andExpect(status().isUnauthorized());
+        assertTrue(sessions.findById(stored.id).orElseThrow().revoked);
+        mvc.perform(get("/api/auth/me").header("Authorization", bearer(retried))).andExpect(status().isUnauthorized());
+    }
+    @Test void sessionRevocationIsOwnerOnlyAndAccountLimitsSurviveAnIpChange() throws Exception {
+        User a = user(), b = user(); JsonNode aa = login(a), bb = login(b);
+        AuthSession stored = sessions.findByAccessHash(AuthSessionService.hash(aa.get("accessToken").asText())).orElseThrow();
+        mvc.perform(get("/api/auth/sessions").header("Authorization", bearer(aa))).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].sessionId").value(stored.id)).andExpect(jsonPath("$[0].refreshHash").doesNotExist());
+        mvc.perform(delete("/api/auth/sessions/" + stored.id).header("Authorization", bearer(bb))).andExpect(status().isNotFound());
+        for (int i = 0; i < 30; i++) {
+            ip = UUID.randomUUID().toString();
+            mvc.perform(postJson("/api/users/" + a.getUserId() + "/account/verify", Map.of("password", "bad"))
+                    .header("Authorization", bearer(aa))).andExpect(status().isBadRequest());
+        }
+        mvc.perform(postJson("/api/users/" + a.getUserId() + "/account/verify", Map.of("password", "bad"))
+                .header("Authorization", bearer(aa))).andExpect(status().isTooManyRequests());
+        mvc.perform(delete("/api/auth/sessions/" + stored.id).header("Authorization", bearer(aa))).andExpect(status().isOk());
+        mvc.perform(get("/api/auth/me").header("Authorization", bearer(aa))).andExpect(status().isUnauthorized());
+    }
+    @Test void verificationResendsAreThrottledBeforeSendingMail() throws Exception {
+        User account = user(); JsonNode auth = login(account);
+        var body = Map.of("email", account.getLoginId() + "@example.test", "password", "test-password");
+        mvc.perform(postJson("/api/auth/email/request",body).header("Authorization",bearer(auth))).andExpect(status().isOk());
+        mvc.perform(postJson("/api/auth/email/request",body).header("Authorization",bearer(auth))).andExpect(status().isTooManyRequests());
+        verify(mail,times(1)).send(any(SimpleMailMessage.class));
     }
     @Test void refreshSurvivesExpiredAccessAndLogoutRevokesBothTokens() throws Exception {
         User a=user(); JsonNode login=login(a);

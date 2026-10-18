@@ -23,6 +23,7 @@ public class VisitOrderService {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(3000); factory.setReadTimeout(5000);
         client = new RestTemplate(factory);
+        client.setInterceptors(java.util.List.of(new ProviderQuotaInterceptor()));
     }
     public Map<String, Object> recommend(Map<String, Object> start, List<Map<String, Object>> visits,
             Map<String, Object> home, String pinnedKey, String mode) {

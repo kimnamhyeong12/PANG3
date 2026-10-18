@@ -23,17 +23,21 @@ public class TaskProgressService {
     private final FileStorageService fileStorageService;
     private final AiReportService aiReportService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final org.springframework.transaction.support.TransactionTemplate transactions;
+    @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
 
     public TaskProgressService(
             TaskProgressRepository taskProgressRepository,
             TaskService taskService,
             FileStorageService fileStorageService,
-            AiReportService aiReportService
+            AiReportService aiReportService,
+            org.springframework.transaction.PlatformTransactionManager transactionManager
     ) {
         this.taskProgressRepository = taskProgressRepository;
         this.taskService = taskService;
         this.fileStorageService = fileStorageService;
         this.aiReportService = aiReportService;
+        this.transactions = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -54,6 +58,7 @@ public class TaskProgressService {
         progress.setMainComment(request.getParameter("mainComment"));
         progress.setFieldMemo(request.getParameter("fieldMemo"));
         progress.setProgressStatus(request.getParameter("progressStatus"));
+        validateText(progress);
         if (isCurrentRecord(task, progress)) syncTaskLocation(task, progress.getLatitude(), progress.getLongitude());
 
         MultipartFile mapImage = request.getFile("mapImage");
@@ -64,6 +69,7 @@ public class TaskProgressService {
         List<String> comments = parsePhotoComments(request.getParameter("photoComments"));
         List<Map<String, Object>> fieldPhotos = new ArrayList<>();
         List<MultipartFile> photoFiles = request.getFiles("fieldPhotos");
+        if (photoFiles.size() > 12) throw new IllegalArgumentException("사진은 한 번에 12장까지 등록할 수 있습니다.");
 
         for (int i = 0; i < photoFiles.size(); i++) {
             MultipartFile photo = photoFiles.get(i);
@@ -109,6 +115,7 @@ public class TaskProgressService {
         progress.setMainComment(str(body.get("mainComment")));
         progress.setFieldMemo(str(body.get("fieldMemo")));
         progress.setProgressStatus(str(body.get("progressStatus")));
+        validateText(progress);
         if (isCurrentRecord(task, progress)) syncTaskLocation(task, progress.getLatitude(), progress.getLongitude());
 
         Object mapObj = body.get("locationMapImage");
@@ -120,6 +127,7 @@ public class TaskProgressService {
         List<Map<String, Object>> normalizedPhotos = new ArrayList<>();
         Object photosObj = body.get("fieldPhotos");
         if (photosObj instanceof List<?> list) {
+            if (list.size() > 12) throw new IllegalArgumentException("사진은 한 번에 12장까지 등록할 수 있습니다.");
             for (Object item : list) {
                 if (item instanceof Map<?, ?> photoMap) {
                     Map<String, Object> normalized = new HashMap<>();
@@ -234,17 +242,40 @@ public class TaskProgressService {
         return progress.getProgressId() == null || latest == null || latest.getProgressId().equals(progress.getProgressId());
     }
 
-    @Transactional
     public Map<String, Object> prepareReport(Long progressId, Long userId) {
-        TaskProgress progress = taskProgressRepository.findLocked(progressId)
-                .orElseThrow(() -> new IllegalArgumentException("보고서를 찾을 수 없습니다."));
-        validateReader(progress.getTask(), userId);
-        validateDownloadable(progress);
-        if (progress.getReportFilePath() == null || !fileStorageService.exists(progress.getReportFilePath())) {
-            runAiIfPossible(progress.getTask(), progress);
-        }
-        if (progress.getReportFilePath() == null) throw new IllegalStateException("보고서 파일을 만들지 못했습니다. 다시 시도하세요.");
-        return toResponseMap(progress, progress.getTask());
+        Prepared snapshot = transactions.execute(status -> {
+            TaskProgress progress = getById(progressId);
+            validateReader(progress.getTask(), userId); validateDownloadable(progress);
+            return new Prepared(toResponseMap(progress, progress.getTask()), aiReportService.buildPayload(progress.getTask(), progress));
+        });
+        String existing = (String) snapshot.response.get("reportFilePath");
+        if (fileStorageService.exists(existing)) return snapshot.response;
+        Map<String, Object> result;
+        try { result = aiReportService.generatePayload(snapshot.payload, userId); }
+        catch (org.springframework.web.server.ResponseStatusException error) { throw error; }
+        catch (Exception error) { throw new IllegalStateException("보고서 파일을 만들지 못했습니다. 다시 시도해 주세요.", error); }
+        // Python runs outside a transaction. Recheck permissions and input under a short lock before publishing.
+        return transactions.execute(status -> {
+            if (entityManager != null) entityManager.clear();
+            TaskProgress progress = taskProgressRepository.findLocked(progressId).orElseThrow();
+            validateReader(progress.getTask(), userId); validateDownloadable(progress);
+            if (!snapshot.payload.equals(aiReportService.buildPayload(progress.getTask(), progress))) throw changed();
+            progress.setReportFilePath((String) result.get("report_file"));
+            progress.setAiRefinedContent((String) result.get("ai_refined_content"));
+            taskProgressRepository.save(progress);
+            return toResponseMap(progress, progress.getTask());
+        });
+    }
+    private record Prepared(Map<String, Object> response, Map<String, Object> payload) {}
+    private static void validateText(TaskProgress progress) {
+        if (progress.getFieldMemo() != null && progress.getFieldMemo().length() > 10000
+                || progress.getMainComment() != null && progress.getMainComment().length() > 10000
+                || progress.getLocationAddress() != null && progress.getLocationAddress().length() > 1000)
+            throw new IllegalArgumentException("메모·의견은 10,000자, 주소는 1,000자 이내로 입력해 주세요.");
+    }
+    private static org.springframework.web.server.ResponseStatusException changed() {
+        return new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                "생성 중 보고서 내용이 변경되었습니다. 최신 내용으로 다시 요청해 주세요.");
     }
 
     public void validateTaskReader(Long taskId, Long userId) { validateReader(taskService.getById(taskId), userId); }
@@ -269,26 +300,28 @@ public class TaskProgressService {
     }
 
     public String prepareCombined(List<Long> ids, Long userId) throws Exception {
-        if (ids == null || ids.isEmpty()) throw new IllegalArgumentException("보고서를 선택하세요.");
+        if (ids == null || ids.isEmpty() || ids.size() > 50 || ids.stream().anyMatch(id -> id == null || id <= 0))
+            throw new IllegalArgumentException("보고서는 한 번에 1~50개를 선택해 주세요.");
+        List<Long> unique = ids.stream().distinct().toList();
+        List<Map<String, Object>> reports = transactions.execute(status -> combinedPayloads(unique, userId));
+        String file = aiReportService.generateCombined(reports, userId);
+        transactions.executeWithoutResult(status -> {
+            if (entityManager != null) entityManager.clear();
+            if (!reports.equals(combinedPayloads(unique, userId))) throw changed();
+        });
+        return file;
+    }
+    private List<Map<String, Object>> combinedPayloads(List<Long> ids, Long userId) {
         List<Map<String, Object>> reports = new ArrayList<>();
-        for (Long id : ids.stream().distinct().toList()) {
+        int photoCount = 0;
+        for (Long id : ids) {
             TaskProgress progress = getById(id);
-            validateReader(progress.getTask(), userId);
-            validateDownloadable(progress);
+            validateReader(progress.getTask(), userId); validateDownloadable(progress);
+            photoCount += progress.getFieldPhotos() == null ? 0 : progress.getFieldPhotos().size();
+            if (photoCount > 150) throw new IllegalArgumentException("통합 보고서의 사진은 최대 150장입니다. 나누어 생성해 주세요.");
             reports.add(aiReportService.buildPayload(progress.getTask(), progress));
         }
-        return aiReportService.generateCombined(reports);
-    }
-
-    private void runAiIfPossible(Task task, TaskProgress progress) {
-        try {
-            aiReportService.generateReport(task, progress);
-            taskProgressRepository.save(progress);
-        } catch (Exception e) {
-            System.out.println("[TaskProgress] AI 생성 실패: " + e.getMessage());
-            progress.setAiRefinedContent("AI 보고서 생성 중 오류: " + e.getMessage());
-            taskProgressRepository.save(progress);
-        }
+        return reports;
     }
 
     private void syncTaskStatus(Task task, String progressStatus) {

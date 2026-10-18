@@ -9,8 +9,12 @@ import java.util.Optional;
 public interface AuthSessionRepository extends JpaRepository<AuthSession, Long> {
     Optional<AuthSession> findByAccessHash(String hash);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select s from AuthSession s where s.refreshHash = :hash")
+    @Query("select s from AuthSession s where s.refreshHash = :hash or s.previousRefreshHash = :hash")
     Optional<AuthSession> findRefreshLocked(@Param("hash") String hash);
+    java.util.List<AuthSession> findByUser_UserIdAndRevokedFalse(Long userId);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from AuthSession s where s.id = :id and s.user.userId = :userId")
+    Optional<AuthSession> findOwnedLocked(@Param("id") Long id, @Param("userId") Long userId);
     @Modifying
     @Query("update AuthSession s set s.revoked = true where s.user.userId = :userId")
     void revokeAll(@Param("userId") Long userId);

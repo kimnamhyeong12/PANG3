@@ -16,6 +16,11 @@ public class AuthSession {
     public String accessHash;
     @Column(nullable = false, unique = true, length = 64)
     public String refreshHash;
+    @Column(length = 64, unique = true)
+    public String previousRefreshHash;
+    public Instant previousRefreshUntil;
+    @Column(length = 256)
+    public String refreshRetryCiphertext;
     @Column(nullable = false)
     public Instant accessExpiresAt;
     @Column(nullable = false)
