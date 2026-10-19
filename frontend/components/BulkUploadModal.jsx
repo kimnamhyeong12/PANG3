@@ -5,7 +5,6 @@ import * as Sharing from 'expo-sharing';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { coordinateColumnsError, locationError, locationName, nameSettingsError, submitBulkRows, uploadContext } from '../utils/bulkUpload';
-import { apiFetch } from '../utils/auth';
 
 import {
   ActivityIndicator,
@@ -154,7 +153,7 @@ export default function BulkUploadModal({ visible, onClose, userId, groupId, onD
     setUploadResult({ totalCount: validRows.length, processedCount: 0, savedCount: 0,
       failedCount: 0, failures: [], unknownCount: 0, pendingCount: validRows.length });
     try {
-      const result = await submitBulkRows({ rows: validRows, context, fetchImpl: apiFetch, onProgress: setUploadResult });
+      const result = await submitBulkRows({ rows: validRows, context, onProgress: setUploadResult });
       setUploadResult(result);
     } catch (error) {
       setUploadResult({ totalCount: validRows.length, processedCount: 0, savedCount: 0,
