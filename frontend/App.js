@@ -1,60 +1,60 @@
-import { apiFetch as fetch, session, subscribeAuthExpired } from './utils/auth';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AppState,
   BackHandler,
   Keyboard,
-  ToastAndroid,
-  AppState,
   PanResponder,
   Platform,
   StatusBar,
   StyleSheet,
   Text,
+  ToastAndroid,
   TouchableOpacity,
   View,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { apiFetch as fetch, session, subscribeAuthExpired } from './utils/auth';
 
-import RegisterScreen from './screens/RegisterScreen';
 import AppErrorBoundary from './components/AppErrorBoundary';
-import LoginScreen from './screens/LoginScreen';
-import DashboardScreen from './screens/DashboardScreen';
-import MapScreen from './screens/MapScreen';
-import FieldActionScreen from './screens/FieldActionScreen';
-import DownloadScreen from './screens/DownloadScreen';
-import ReportListScreen from './screens/ReportListScreen';
-import GroupReportsScreen from './screens/GroupReportsScreen';
-import GroupScreen from './screens/GroupScreen';
-import GroupCreateScreen from './screens/GroupCreateScreen';
-import GroupInvitationsScreen from './screens/GroupInvitationsScreen';
-import GroupSettingsScreen from './screens/GroupSettingsScreen';
-import GroupWorkspaceScreen from './screens/GroupWorkspaceScreen';
-import AssignmentScreen from './screens/AssignmentScreen';
-import WorkStatusScreen from './screens/WorkStatusScreen';
-import PersonalWorkspaceScreen from './screens/PersonalWorkspaceScreen';
-import TransferScreen from './screens/TransferScreen';
-import SettingsScreen from './screens/SettingsScreen';
-import { ROOT_SCREENS, navigationHistory, createExitConfirmation } from './utils/navigation';
-import { consumeScreenBack } from './utils/screenBack';
-import { groupApi } from './utils/groupApi';
 import { CustomAlertHost, showAlert } from './components/CustomAlert';
 import { colors } from './constants/design';
-import { locationKey, numberVisits, restoreRouteSession } from './utils/routeSession';
-import { wasRouteSessionEnded, endRouteSession } from './modules/kakao-navigation';
-import { assignmentKey, splitWorkPlan } from './utils/workPlan';
+import { endRouteSession, wasRouteSessionEnded } from './modules/kakao-navigation';
+import AssignmentScreen from './screens/AssignmentScreen';
+import DashboardScreen from './screens/DashboardScreen';
+import DownloadScreen from './screens/DownloadScreen';
+import FieldActionScreen from './screens/FieldActionScreen';
+import GroupCreateScreen from './screens/GroupCreateScreen';
+import GroupInvitationsScreen from './screens/GroupInvitationsScreen';
+import GroupReportsScreen from './screens/GroupReportsScreen';
+import GroupScreen from './screens/GroupScreen';
+import GroupSettingsScreen from './screens/GroupSettingsScreen';
+import GroupWorkspaceScreen from './screens/GroupWorkspaceScreen';
+import LoginScreen from './screens/LoginScreen';
+import MapScreen from './screens/MapScreen';
+import PersonalWorkspaceScreen from './screens/PersonalWorkspaceScreen';
+import RegisterScreen from './screens/RegisterScreen';
+import ReportListScreen from './screens/ReportListScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import TransferScreen from './screens/TransferScreen';
+import WorkStatusScreen from './screens/WorkStatusScreen';
 import {
   NOTIFICATION_TYPES,
   addNotificationReceivedListener,
   addNotificationResponseListener,
-  getLastNotificationResponse,
-  clearLastNotificationResponse,
   checkNotificationPermission,
+  clearLastNotificationResponse,
+  getLastNotificationResponse,
   stopRouteNotification,
   syncPushTokenForUser,
   unregisterPushTokenForUser,
 } from './services/notificationService';
+import { groupApi } from './utils/groupApi';
+import { ROOT_SCREENS, createExitConfirmation, navigationHistory } from './utils/navigation';
+import { locationKey, numberVisits, restoreRouteSession } from './utils/routeSession';
+import { consumeScreenBack } from './utils/screenBack';
+import { assignmentKey, splitWorkPlan } from './utils/workPlan';
 
 const isPersonalGroup = (group) =>
   Boolean(
@@ -1152,6 +1152,7 @@ function AppContent() {
 
         {screen === 'publicDataAssignment' && activeGroup && (
           <MapScreen
+            onPhotoUploadHome={() => go('main')}
             root={false}
             user={user}
             onUpdatedUser={setUser}
@@ -1190,6 +1191,7 @@ function AppContent() {
 
         {screen === 'teamLocations' && activeGroup && (
           <MapScreen
+            onPhotoUploadHome={() => go('main')}
             root={false}
             user={user}
             onUpdatedUser={setUser}
@@ -1303,6 +1305,7 @@ function AppContent() {
             }
           >
             <MapScreen
+              onPhotoUploadHome={() => go('main')}
               user={user}
               selectedDong={selectedDong}
               onSelectedDongChange={updateSelectedDong}
@@ -1322,9 +1325,7 @@ function AppContent() {
               onLocationClick={
                 onLocationClick
               }
-              onDataChanged={() => {
-                refreshCurrentWorkspace();
-              }}
+              onDataChanged={refreshCurrentWorkspace}
               roadPath={roadPath}
               setRoadPath={setRoadPath}
               routeSegments={

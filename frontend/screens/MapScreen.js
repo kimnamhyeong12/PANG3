@@ -1,11 +1,11 @@
-import { colors, workStatus } from '../constants/design';
-import { coordinateInput } from '../utils/coordinateInput';
-import { safetyGuideNotice } from '../utils/safetyGuide';
-import { maneuverGuide } from '../utils/maneuverGuide';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useScreenBackHandler, consumeScreenBack } from '../utils/screenBack';
-import { apiFetch as fetch } from '../utils/auth';
 import { showAlert } from '../components/CustomAlert';
+import { colors, workStatus } from '../constants/design';
+import { apiFetch as fetch } from '../utils/auth';
+import { coordinateInput } from '../utils/coordinateInput';
+import { maneuverGuide } from '../utils/maneuverGuide';
+import { safetyGuideNotice } from '../utils/safetyGuide';
+import { consumeScreenBack, useScreenBackHandler } from '../utils/screenBack';
 // 키보드 자판 내 엔터가 안먹힘
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -27,24 +27,25 @@ import {
   View,
 } from 'react-native';
 import KakaoMapWebView from '../components/KakaoMapWebView';
-import PlaceSearchOverlay from '../components/PlaceSearchOverlay';
-import SearchResultSheet from '../components/SearchResultSheet';
-import WorkplaceField from '../components/WorkplaceField';
-import SafetyGuideBadge from '../components/SafetyGuideBadge';
 import ManeuverGuideCard from '../components/ManeuverGuideCard';
 import MapWorkspaceSwitcher from '../components/MapWorkspaceSwitcher';
-import { KakaoNavigationView, beginRouteSession, endRouteSession, wasRouteTaskRemoved, isKakaoNavigationAvailable, previewSdkRoute, isSdkPreviewAvailable, discardSdkPreview } from '../modules/kakao-navigation';
+import PlaceSearchOverlay from '../components/PlaceSearchOverlay';
+import SafetyGuideBadge from '../components/SafetyGuideBadge';
+import SearchResultSheet from '../components/SearchResultSheet';
+import WorkplaceField from '../components/WorkplaceField';
+import { BUSAN_DISTRICT_CODES } from '../constants/busanDistricts';
+import { KakaoNavigationView, beginRouteSession, discardSdkPreview, endRouteSession, isKakaoNavigationAvailable, isSdkPreviewAvailable, previewSdkRoute, wasRouteTaskRemoved } from '../modules/kakao-navigation';
 import {
   stopRouteNotification,
   updateRouteNotification,
 } from '../services/notificationService';
 import { isRegisteredPlace, placeLocation, searchViewportPlaces } from '../utils/placeSearch';
-import { locationKey } from '../utils/routeSession';
 import { remainingRouteProgress, routeCompletion, routeTrafficRail } from '../utils/routeProgress';
+import { locationKey } from '../utils/routeSession';
 import { hasVisitCoordinates, numberVisitOrder, promoteVisit, recommendVisitOrder, visitSetKey } from '../utils/visitOrder';
-import { BUSAN_DISTRICT_CODES } from '../constants/busanDistricts';
 // 엑셀,csv 데이터 업로드
 import BulkUploadModal from '../components/BulkUploadModal';
+import PhotoUploadScreen from './PhotoUploadScreen';
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const EMPTY_MARKERS = [];
@@ -127,6 +128,7 @@ function NormalMapScreen({
   isActive = true,
   user,
   onBack,
+  onPhotoUploadHome,
   onLocationClick,
   onDataChanged,
   locations,
@@ -271,6 +273,7 @@ function NormalMapScreen({
   const favoriteDongKey = `pang3:favorite-dongs:${user?.userId || 'guest'}:${activeGroup?.groupId || 'personal'}`;
   // 엑셀, csv 데이터 업로드
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const [photoUploadOpen, setPhotoUploadOpen] = useState(false);
   useEffect(() => {
     let active = true;
     setFavoriteDongNames([]);
@@ -314,7 +317,7 @@ function NormalMapScreen({
     }
   }, [dongOpen, dongSheetY]);
   useEffect(() => {
-    if (!isActive) { setDongOpen(false); setSearchOpen(false); }
+    if (!isActive) { setDongOpen(false); setSearchOpen(false); setPhotoUploadOpen(false); }
   }, [isActive]);
   useEffect(() => {
     if (!publicSheetOpen) publicSheetY.setValue(0);
@@ -1715,9 +1718,9 @@ function NormalMapScreen({
                 <Text style={styles.addMenuDesc}>xcel · CSV 파일 불러오기</Text>
               </View>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.addMenuItemLast} onPress={() => { setAddMenuOpen(false); showAlert('준비 중', '사진으로 등록은 후속 개발 예정입니다.'); }}>
+            <TouchableOpacity style={styles.addMenuItemLast} onPress={() => { setAddMenuOpen(false); setPhotoUploadOpen(true); }}>
               <Ionicons name="image-outline" size={18} color="#2477F3" />
-              <View><Text style={styles.addMenuTitle}>사진으로 등록</Text><Text style={styles.addMenuDesc}>후속 개발 예정</Text></View>
+              <View><Text style={styles.addMenuTitle}>사진으로 등록</Text><Text style={styles.addMenuDesc}>사진 GPS로 방문지 등록</Text></View>
             </TouchableOpacity>
           </View>
         )}
@@ -2230,6 +2233,15 @@ function NormalMapScreen({
           <TouchableOpacity disabled={workplaceBusy} onPress={() => setWorkplaceOpen(false)} style={{ padding: 14, alignItems: 'center' }}><Text>닫기</Text></TouchableOpacity>
         </View></View>
       </Modal>
+      <PhotoUploadScreen
+        visible={photoUploadOpen && isActive}
+        onHome={onPhotoUploadHome}
+        userId={user?.userId}
+        groupId={activeGroup?.groupId ?? null}
+        onDataChanged={onDataChanged}
+        apiBaseUrl={API_BASE_URL}
+        onClose={() => setPhotoUploadOpen(false)}
+      />
       <BulkUploadModal
         visible={bulkUploadOpen}
         userId={user?.userId}

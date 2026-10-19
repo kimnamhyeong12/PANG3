@@ -1,3 +1,5 @@
+import { apiFetch } from './auth';
+
 export const BULK_CHUNK_SIZE = 200;
 
 const text = (value) => String(value ?? '').trim();
@@ -61,7 +63,7 @@ function validResponse(data, chunk) {
 }
 
 // A lost response can follow committed inserts. Never retry a POST automatically.
-export async function submitBulkRows({ rows, context, fetchImpl = fetch, onProgress }) {
+export async function submitBulkRows({ rows, context, fetchImpl = apiFetch, onProgress }) {
   if (!rows.length || rows.some(locationError)) throw new Error('검증된 정상 행만 전송할 수 있습니다.');
   if (new Set(rows.map((row) => row.rowNumber)).size !== rows.length) throw new Error('원본 행 번호가 중복되었습니다.');
   const result = { totalCount: rows.length, processedCount: 0, savedCount: 0, failedCount: 0,
