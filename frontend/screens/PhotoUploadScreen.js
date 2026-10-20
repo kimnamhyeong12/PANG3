@@ -8,7 +8,8 @@ import { ActivityIndicator, Alert, Image, Linking, Modal, PermissionsAndroid, Pl
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { uploadContext } from '../utils/bulkUpload';
 import { importPhotos } from '../utils/photoImport';
-import { resolvePhotoMetadata } from '../utils/photoMetadata';
+import { mediaLibraryPhoto, resolvePhotoMetadata } from '../utils/photoMetadata';
+import PhotoLibraryPicker from '../components/PhotoLibraryPicker';
 import { requestPhotoPermissions } from '../utils/photoPermissions';
 import { useScreenBackHandler } from '../utils/screenBack';
 
@@ -21,6 +22,7 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
   const [result, setResult] = useState(null);
   const [refreshError, setRefreshError] = useState('');
   const [permissionState, setPermissionState] = useState(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const lock = useRef(false);
   const refreshVersion = useRef(0);
   useEffect(() => () => { refreshVersion.current++; }, []);
@@ -28,6 +30,7 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
   const close = () => {
     if (lock.current) return;
     refreshVersion.current++;
+    setGalleryOpen(false);
     setItems([]); setResult(null); setRefreshError(''); setPermissionState(null); onClose?.();
   };
   const home = () => {
@@ -35,7 +38,28 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
     close();
     onHome?.();
   };
-  useScreenBackHandler(() => { close(); return true; }, visible);
+  useScreenBackHandler(() => { if (galleryOpen) setGalleryOpen(false); else close(); return true; }, visible);
+  const resolveSelection = async (assets, metadataPermissionError) => {
+    const version = ++refreshVersion.current;
+    const resolved = [];
+    for (const [index, asset] of assets.slice(0, MAX_PHOTOS).entries()) {
+      resolved.push(await resolvePhotoMetadata(asset, index, {
+        platform: Platform.OS, expoGo: ANDROID_EXPO_GO,
+        permissionError: metadataPermissionError,
+        readAssetInfo: id => MediaLibrary.getAssetInfoAsync(id, { shouldDownloadFromNetwork: true }),
+      }));
+    }
+    if (version !== refreshVersion.current) return;
+    setItems(resolved);
+    setResult(null); setRefreshError('');
+  };
+  const selectGalleryPhotos = async (assets) => {
+    if (lock.current) return;
+    lock.current = true; setBusy(true); setGalleryOpen(false);
+    try { await resolveSelection(assets.map(mediaLibraryPhoto), permissionState?.metadataError); }
+    catch (error) { Alert.alert('사진 선택 실패', error?.message || '사진을 읽을 수 없습니다.'); }
+    finally { lock.current = false; setBusy(false); }
+  };
   const pick = async () => {
     if (lock.current) return;
     lock.current = true; setBusy(true);
@@ -47,23 +71,19 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
       setPermissionState(permission);
       if (!permission.pickerAllowed) return;
       const metadataPermissionError = permission.metadataError;
+      if (Platform.OS === 'android') {
+        // The system picker may omit assetId even for local photos. Query the
+        // permitted MediaStore collection instead so original identity is retained.
+        if (!metadataPermissionError) setGalleryOpen(true);
+        return;
+      }
       const picked = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: MAX_PHOTOS,
         allowsEditing: false, exif: true, quality: 1,
       });
       if (picked.canceled) return;
       if ((picked.assets?.length || 0) > MAX_PHOTOS) Alert.alert('선택 장수 안내', `한 번에 ${MAX_PHOTOS}장까지 등록할 수 있어 처음 ${MAX_PHOTOS}장만 불러옵니다.`);
-      refreshVersion.current++;
-      const resolved = [];
-      for (const [index, asset] of (picked.assets || []).slice(0, MAX_PHOTOS).entries()) {
-        resolved.push(await resolvePhotoMetadata(asset, index, {
-          platform: Platform.OS, expoGo: ANDROID_EXPO_GO,
-          permissionError: metadataPermissionError,
-          readAssetInfo: id => MediaLibrary.getAssetInfoAsync(id, { shouldDownloadFromNetwork: true }),
-        }));
-      }
-      setItems(resolved);
-      setResult(null); setRefreshError('');
+      await resolveSelection(picked.assets || [], metadataPermissionError);
     } catch (error) { Alert.alert('사진 선택 실패', error?.message || '사진을 읽을 수 없습니다.'); }
     finally { lock.current = false; setBusy(false); }
   };
@@ -121,6 +141,8 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={close}>
       <SafeAreaView style={styles.screen}>
+        {galleryOpen && visible && <PhotoLibraryPicker maxSelection={MAX_PHOTOS} limited={permissionState?.limited}
+          onCancel={() => setGalleryOpen(false)} onSelect={selectGalleryPhotos} />}
         <View style={styles.header}>
           <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>사진으로 방문지 등록</Text>
           {!!onHome && <TouchableOpacity disabled={busy} onPress={home}><Text style={[styles.link, { marginRight: 16 }]}>홈으로</Text></TouchableOpacity>}
