@@ -16,7 +16,8 @@
         "ACCESS_COARSE_LOCATION",
         "CAMERA",
         "RECORD_AUDIO",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_MEDIA_LOCATION"
       ],
       "package": "com.pang3.fieldworkhelper"
     },
@@ -57,7 +58,18 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "선택한 사진의 촬영 위치를 읽어 방문지를 등록합니다.",
+          "savePhotosPermission": false,
+          "isAccessMediaLocationEnabled": true,
+          "granularPermissions": [
+            "photo"
+          ]
+        }
+      ]
     ],
     "extra": {
       "eas": {

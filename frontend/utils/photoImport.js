@@ -72,7 +72,9 @@ export async function importPhotos({ items, context, buildForm, fetchImpl = apiF
       const response = await fetchImpl(context.url, { method: 'POST', body: upload.body, signal: controller.signal });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
-        const error = new Error(data?.message || data?.detail || `사진 등록 실패 (HTTP ${response.status})`);
+        const diagnostic = [data?.errorCode, data?.requestId && `오류번호 ${data.requestId}`].filter(Boolean).join(' · ');
+        const error = new Error((data?.message || data?.detail || `사진 등록 실패 (HTTP ${response.status})`) + (diagnostic ? ` [${diagnostic}]` : ''));
+        if (response.status >= 500 && !diagnostic) console.warn('[PhotoImport] 서버 오류 응답:', { status: response.status, contentType: response.headers?.get?.('content-type') || 'unknown', diagnosticAvailable: false });
         error.definite = [400, 401, 403, 413, 415, 422, 429].includes(response.status);
         error.stop = [401, 403, 429].includes(response.status);
         throw error;

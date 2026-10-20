@@ -1,14 +1,18 @@
+import Constants from 'expo-constants';
 import { File } from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { uploadContext } from '../utils/bulkUpload';
-import { importPhotos, photoItem } from '../utils/photoImport';
+import { importPhotos } from '../utils/photoImport';
+import { resolvePhotoMetadata } from '../utils/photoMetadata';
 import { useScreenBackHandler } from '../utils/screenBack';
 
 const MAX_PHOTOS = 20;
+const ANDROID_EXPO_GO = Platform.OS === 'android' && Constants.executionEnvironment === 'storeClient';
 
 export default function PhotoUploadScreen({ visible, onClose, onHome, userId, groupId, onDataChanged, apiBaseUrl }) {
   const [items, setItems] = useState([]);
@@ -36,6 +40,19 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) { Alert.alert('사진 접근 권한 필요', '선택할 사진에 대한 접근을 허용해 주세요.'); return; }
+      let metadataPermissionError = '';
+      if (Platform.OS === 'android' && !ANDROID_EXPO_GO) {
+        try {
+          const access = await MediaLibrary.requestPermissionsAsync(false, ['photo']);
+          if (!access.granted && access.accessPrivileges !== 'limited') {
+            metadataPermissionError = '갤러리 원본 GPS 조회를 위해 사진 접근 권한이 필요합니다.';
+          } else if (Number(Platform.Version) >= 29 && !(await PermissionsAndroid.check('android.permission.ACCESS_MEDIA_LOCATION'))) {
+            metadataPermissionError = '사진 위치 정보 접근 권한이 없습니다. 권한을 포함해 다시 빌드한 앱에서 사진 위치 접근을 허용해 주세요.';
+          }
+        } catch {
+          metadataPermissionError = '원본 사진 GPS 권한을 요청하지 못했습니다. expo-media-library와 권한을 포함한 개발용 앱을 설치해 주세요.';
+        }
+      }
       const picked = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: MAX_PHOTOS,
         allowsEditing: false, exif: true, quality: 1,
@@ -43,7 +60,15 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
       if (picked.canceled) return;
       if ((picked.assets?.length || 0) > MAX_PHOTOS) Alert.alert('선택 장수 안내', `한 번에 ${MAX_PHOTOS}장까지 등록할 수 있어 처음 ${MAX_PHOTOS}장만 불러옵니다.`);
       refreshVersion.current++;
-      setItems((picked.assets || []).slice(0, MAX_PHOTOS).map(photoItem));
+      const resolved = [];
+      for (const [index, asset] of (picked.assets || []).slice(0, MAX_PHOTOS).entries()) {
+        resolved.push(await resolvePhotoMetadata(asset, index, {
+          platform: Platform.OS, expoGo: ANDROID_EXPO_GO,
+          permissionError: metadataPermissionError,
+          readAssetInfo: id => MediaLibrary.getAssetInfoAsync(id, { shouldDownloadFromNetwork: true }),
+        }));
+      }
+      setItems(resolved);
       setResult(null); setRefreshError('');
     } catch (error) { Alert.alert('사진 선택 실패', error?.message || '사진을 읽을 수 없습니다.'); }
     finally { lock.current = false; setBusy(false); }
@@ -108,6 +133,7 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
           <TouchableOpacity style={styles.button} disabled={busy} onPress={pick}>
             <Text style={styles.buttonText}>사진 선택 · 최대 {MAX_PHOTOS}장</Text>
           </TouchableOpacity>
+          {ANDROID_EXPO_GO && <Text style={styles.error}>Android Expo Go에서는 원본 사진 GPS 조회가 제한됩니다. 위치가 표시되지 않으면 개발용 APK에서 확인해 주세요.</Text>}
           <Text style={styles.description}>현재 위치는 대신 사용하지 않습니다. EXIF GPS가 없는 사진은 등록할 수 없습니다. 카메라 위치 저장 설정이나 원본 사진을 확인해 주세요.</Text>
           {!!items.length && <Text style={styles.summary}>전체 {items.length}장 · GPS 없음/읽기 실패 {items.filter(item => item.error).length}장 · 등록 선택 {selected.length}장</Text>}
           {items.map(item => (
