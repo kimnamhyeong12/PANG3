@@ -10,6 +10,7 @@ import { uploadContext } from '../utils/bulkUpload';
 import { importPhotos } from '../utils/photoImport';
 import { resolvePhotoMetadata } from '../utils/photoMetadata';
 import { requestPhotoPermissions } from '../utils/photoPermissions';
+import OriginalPhotoPicker from '../components/OriginalPhotoPicker';
 import { useScreenBackHandler } from '../utils/screenBack';
 
 const MAX_PHOTOS = 20;
@@ -21,6 +22,7 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
   const [result, setResult] = useState(null);
   const [refreshError, setRefreshError] = useState('');
   const [permissionState, setPermissionState] = useState(null);
+  const [originalPickerVisible, setOriginalPickerVisible] = useState(false);
   const lock = useRef(false);
   const refreshVersion = useRef(0);
   useEffect(() => () => { refreshVersion.current++; }, []);
@@ -28,6 +30,7 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
   const close = () => {
     if (lock.current) return;
     refreshVersion.current++;
+    setOriginalPickerVisible(false);
     setItems([]); setResult(null); setRefreshError(''); setPermissionState(null); onClose?.();
   };
   const home = () => {
@@ -36,6 +39,24 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
     onHome?.();
   };
   useScreenBackHandler(() => { close(); return true; }, visible);
+  const readSelectedAssets = async (assets, permissionError = '') => {
+    const resolved = [];
+    for (const [index, asset] of assets.slice(0, MAX_PHOTOS).entries()) {
+      resolved.push(await resolvePhotoMetadata(asset, index, {
+        platform: Platform.OS, expoGo: ANDROID_EXPO_GO, permissionError,
+        readAssetInfo: id => MediaLibrary.getAssetInfoAsync(id, { shouldDownloadFromNetwork: true }),
+      }));
+    }
+    refreshVersion.current++;
+    setItems(resolved); setResult(null); setRefreshError('');
+  };
+  const confirmOriginalPhotos = async assets => {
+    if (lock.current) return;
+    lock.current = true; setBusy(true); setOriginalPickerVisible(false);
+    try { await readSelectedAssets(assets); }
+    catch (error) { Alert.alert('원본 사진 확인 실패', error?.message || '원본 GPS를 읽을 수 없습니다.'); }
+    finally { lock.current = false; setBusy(false); }
+  };
   const pick = async () => {
     if (lock.current) return;
     lock.current = true; setBusy(true);
@@ -47,23 +68,19 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
       setPermissionState(permission);
       if (!permission.pickerAllowed) return;
       const metadataPermissionError = permission.metadataError;
+      if (Platform.OS === 'android' && !ANDROID_EXPO_GO && !metadataPermissionError) {
+        // Read original MediaLibrary IDs directly instead of relying on a
+        // system picker's optional assetId or trying to reverse a cache URI.
+        setOriginalPickerVisible(true);
+        return;
+      }
       const picked = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: MAX_PHOTOS,
         allowsEditing: false, exif: true, quality: 1,
       });
       if (picked.canceled) return;
       if ((picked.assets?.length || 0) > MAX_PHOTOS) Alert.alert('선택 장수 안내', `한 번에 ${MAX_PHOTOS}장까지 등록할 수 있어 처음 ${MAX_PHOTOS}장만 불러옵니다.`);
-      refreshVersion.current++;
-      const resolved = [];
-      for (const [index, asset] of (picked.assets || []).slice(0, MAX_PHOTOS).entries()) {
-        resolved.push(await resolvePhotoMetadata(asset, index, {
-          platform: Platform.OS, expoGo: ANDROID_EXPO_GO,
-          permissionError: metadataPermissionError,
-          readAssetInfo: id => MediaLibrary.getAssetInfoAsync(id, { shouldDownloadFromNetwork: true }),
-        }));
-      }
-      setItems(resolved);
-      setResult(null); setRefreshError('');
+      await readSelectedAssets(picked.assets || [], metadataPermissionError);
     } catch (error) { Alert.alert('사진 선택 실패', error?.message || '사진을 읽을 수 없습니다.'); }
     finally { lock.current = false; setBusy(false); }
   };
@@ -129,7 +146,7 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text style={styles.description}>사진을 선택하고 GPS 위치와 이름을 확인하세요. 선택한 사진마다 방문지를 만들고, 사진을 작업 전 기록에 연결합니다.</Text>
           <TouchableOpacity style={styles.button} disabled={busy} onPress={pick}>
-            <Text style={styles.buttonText}>사진 선택 · 최대 {MAX_PHOTOS}장</Text>
+            <Text style={styles.buttonText}>{Platform.OS === 'android' && !ANDROID_EXPO_GO ? '원본 사진 선택' : '사진 선택'} · 최대 {MAX_PHOTOS}장</Text>
           </TouchableOpacity>
           {!!permissionState?.metadataError && <View style={styles.card}>
             <Text style={styles.error}>{permissionState.metadataError}</Text>
@@ -172,6 +189,8 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
             {!busy && !!onHome && <TouchableOpacity style={styles.button} onPress={home}><Text style={styles.buttonText}>홈으로 돌아가기</Text></TouchableOpacity>}
           </View>}
         </ScrollView>
+        <OriginalPhotoPicker visible={visible && originalPickerVisible} maximum={MAX_PHOTOS}
+          onCancel={() => setOriginalPickerVisible(false)} onConfirm={confirmOriginalPhotos} />
       </SafeAreaView>
     </Modal>
   );
