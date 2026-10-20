@@ -1,10 +1,9 @@
-import { photoCoordinates, photoItem } from './photoImport';
+import { photoCoordinates, photoItem, usablePhotoCoordinates } from './photoImport';
 
 const locationCoordinates = (location) => {
   // Do not coerce null/empty values into zero, and never substitute device GPS.
   const lat = location?.latitude, lng = location?.longitude;
-  return typeof lat === 'number' && Number.isFinite(lat) && Math.abs(lat) <= 90
-    && typeof lng === 'number' && Number.isFinite(lng) && Math.abs(lng) <= 180 ? { lat, lng } : null;
+  return usablePhotoCoordinates(lat, lng) ? { lat, lng } : null;
 };
 
 export async function resolvePhotoMetadata(asset, index, { platform, expoGo, readAssetInfo, permissionError } = {}) {
@@ -17,7 +16,7 @@ export async function resolvePhotoMetadata(asset, index, { platform, expoGo, rea
   try {
     const info = await readAssetInfo(asset.assetId);
     const coordinates = locationCoordinates(info?.location) || photoCoordinates(info?.exif);
-    if (!coordinates) return { ...item, error: '갤러리 원본에도 읽을 수 있는 GPS가 없습니다. 사진 위치 권한과 원본의 위치 정보를 확인해 주세요.' };
+    if (!coordinates) return { ...item, error: '원본 사진의 실제 GPS를 확인하지 못했습니다. 위치 정보가 가려져 0,0으로 전달됐거나 GPS를 읽을 수 없는 상태입니다. 사진 위치 권한과 원본을 확인해 주세요.' };
     return { ...item, ...coordinates, selected: true, error: '', coordinateSource: 'media-library' };
   } catch {
     return { ...item, error: '갤러리 원본 GPS를 읽지 못했습니다. 앱의 사진 접근 권한과 사진 위치 정보 접근을 확인해 주세요.' };

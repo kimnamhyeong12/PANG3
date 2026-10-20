@@ -32,12 +32,21 @@ function coordinate(raw, reference, latitude) {
   return Number.isFinite(value) && Math.abs(value) <= (latitude ? 90 : 180) ? value : NaN;
 }
 
+// In photo import, a zero pair cannot be distinguished from redacted GPS.
+// Treat it as unresolved so Android can try the original gallery metadata.
+// A single zero component (equator or prime meridian) remains valid.
+export function usablePhotoCoordinates(lat, lng) {
+  return typeof lat === 'number' && Number.isFinite(lat) && Math.abs(lat) <= 90
+    && typeof lng === 'number' && Number.isFinite(lng) && Math.abs(lng) <= 180
+    && !(lat === 0 && lng === 0);
+}
+
 export function photoCoordinates(exif) {
   if (!exif || typeof exif !== 'object') return null;
   const gps = exif['{GPS}'] || exif.GPS || {};
   const lat = coordinate(exif.GPSLatitude ?? gps.Latitude, exif.GPSLatitudeRef ?? gps.LatitudeRef, true);
   const lng = coordinate(exif.GPSLongitude ?? gps.Longitude, exif.GPSLongitudeRef ?? gps.LongitudeRef, false);
-  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+  return usablePhotoCoordinates(lat, lng) ? { lat, lng } : null;
 }
 
 export function photoItem(asset, index) {
@@ -55,7 +64,7 @@ export function photoItem(asset, index) {
 export async function importPhotos({ items, context, buildForm, fetchImpl = apiFetch, onProgress }) {
   if (!items.length) throw new Error('등록할 사진을 선택해 주세요.');
   for (const item of items) {
-    if (item.error || !Number.isFinite(item.lat) || Math.abs(item.lat) > 90 || !Number.isFinite(item.lng) || Math.abs(item.lng) > 180) throw new Error('GPS 위치가 있는 사진만 등록할 수 있습니다.');
+    if (item.error || !usablePhotoCoordinates(item.lat, item.lng)) throw new Error('GPS 위치가 있는 사진만 등록할 수 있습니다.');
     if (!String(item.name || '').trim() || item.name.trim().length > 255) throw new Error('방문지 이름은 1~255자로 입력해 주세요.');
   }
   const result = { savedCount: 0, failures: [], unknownCount: 0, pendingCount: items.length, processedCount: 0 };
