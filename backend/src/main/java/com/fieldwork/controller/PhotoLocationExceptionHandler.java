@@ -45,9 +45,7 @@ public class PhotoLocationExceptionHandler {
                 String state = sql == null ? null : sql.getSQLState();
                 if ("23502".equals(state)) {
                     code = "PHOTO_DB_REQUIRED";
-                    message = sql.getMessage() != null && sql.getMessage().contains("\"work_stage\"")
-                            ? "서버 DB에서 work_stage가 비어 저장이 거절되었습니다. pending 기본값이 포함된 TaskProgress.java의 서버 적용을 확인해 주세요."
-                            : "서버 DB의 필수 컬럼 값이 비어 저장이 거절되었습니다. DB 구조와 엔티티를 확인해 주세요.";
+                    message = "서버 DB의 필수 컬럼 값이 비어 저장이 거절되었습니다. DB 구조와 엔티티를 확인해 주세요.";
                 } else if ("42703".equals(state) || "42P01".equals(state)) {
                     code = "PHOTO_DB_SCHEMA";
                     message = "서버 DB에 필요한 테이블 또는 컬럼이 없습니다. DB 구조와 배포된 소스를 확인해 주세요.";

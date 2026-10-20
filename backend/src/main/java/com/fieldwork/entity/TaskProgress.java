@@ -22,18 +22,6 @@ public class TaskProgress {
     @JoinColumn(name = "task_id", nullable = false)
     private Task task;
 
-    @Column(name = "work_stage", nullable = false)
-    private String workStage = "pending";
-
-    // Covers both new reports and legacy records whose stage is empty.
-    @PrePersist
-    @PreUpdate
-    private void ensureWorkStage() {
-        if (workStage == null || workStage.isBlank()) {
-            workStage = "pending";
-        }
-    }
-
     private Double latitude;
     private Double longitude;
 
@@ -73,9 +61,6 @@ public class TaskProgress {
 
     public Task getTask() { return task; }
     public void setTask(Task task) { this.task = task; }
-
-    public String getWorkStage() { return workStage; }
-    public void setWorkStage(String workStage) { this.workStage = workStage; }
 
     public Double getLatitude() { return latitude; }
     public void setLatitude(Double latitude) { this.latitude = latitude; }
