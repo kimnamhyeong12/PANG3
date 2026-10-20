@@ -4,11 +4,12 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library/legacy';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Linking, Modal, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { uploadContext } from '../utils/bulkUpload';
 import { importPhotos } from '../utils/photoImport';
 import { resolvePhotoMetadata } from '../utils/photoMetadata';
+import { requestPhotoPermissions } from '../utils/photoPermissions';
 import { useScreenBackHandler } from '../utils/screenBack';
 
 const MAX_PHOTOS = 20;
@@ -19,6 +20,7 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [refreshError, setRefreshError] = useState('');
+  const [permissionState, setPermissionState] = useState(null);
   const lock = useRef(false);
   const refreshVersion = useRef(0);
   useEffect(() => () => { refreshVersion.current++; }, []);
@@ -26,7 +28,7 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
   const close = () => {
     if (lock.current) return;
     refreshVersion.current++;
-    setItems([]); setResult(null); setRefreshError(''); onClose?.();
+    setItems([]); setResult(null); setRefreshError(''); setPermissionState(null); onClose?.();
   };
   const home = () => {
     if (lock.current) return;
@@ -38,21 +40,13 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
     if (lock.current) return;
     lock.current = true; setBusy(true);
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) { Alert.alert('사진 접근 권한 필요', '선택할 사진에 대한 접근을 허용해 주세요.'); return; }
-      let metadataPermissionError = '';
-      if (Platform.OS === 'android' && !ANDROID_EXPO_GO) {
-        try {
-          const access = await MediaLibrary.requestPermissionsAsync(false, ['photo']);
-          if (!access.granted && access.accessPrivileges !== 'limited') {
-            metadataPermissionError = '갤러리 원본 GPS 조회를 위해 사진 접근 권한이 필요합니다.';
-          } else if (Number(Platform.Version) >= 29 && !(await PermissionsAndroid.check('android.permission.ACCESS_MEDIA_LOCATION'))) {
-            metadataPermissionError = '사진 위치 정보 접근 권한이 없습니다. 권한을 포함해 다시 빌드한 앱에서 사진 위치 접근을 허용해 주세요.';
-          }
-        } catch {
-          metadataPermissionError = '원본 사진 GPS 권한을 요청하지 못했습니다. expo-media-library와 권한을 포함한 개발용 앱을 설치해 주세요.';
-        }
-      }
+      const permission = await requestPhotoPermissions({
+        platform: Platform.OS, version: Platform.Version, expoGo: ANDROID_EXPO_GO,
+        picker: ImagePicker, library: MediaLibrary, android: PermissionsAndroid,
+      });
+      setPermissionState(permission);
+      if (!permission.pickerAllowed) return;
+      const metadataPermissionError = permission.metadataError;
       const picked = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: MAX_PHOTOS,
         allowsEditing: false, exif: true, quality: 1,
@@ -72,6 +66,10 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
       setResult(null); setRefreshError('');
     } catch (error) { Alert.alert('사진 선택 실패', error?.message || '사진을 읽을 수 없습니다.'); }
     finally { lock.current = false; setBusy(false); }
+  };
+  const openPhotoSettings = async () => {
+    try { await Linking.openSettings(); }
+    catch { Alert.alert('설정 열기 실패', '휴대폰 설정에서 이 앱의 사진 접근 권한을 확인해 주세요.'); }
   };
   const change = (id, values) => {
     if (lock.current || result) return;
@@ -133,9 +131,17 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
           <TouchableOpacity style={styles.button} disabled={busy} onPress={pick}>
             <Text style={styles.buttonText}>사진 선택 · 최대 {MAX_PHOTOS}장</Text>
           </TouchableOpacity>
+          {!!permissionState?.metadataError && <View style={styles.card}>
+            <Text style={styles.error}>{permissionState.metadataError}</Text>
+            {permissionState.settingsRecommended && <TouchableOpacity disabled={busy} onPress={openPhotoSettings}>
+              <Text style={styles.link}>앱 권한 설정 열기</Text>
+            </TouchableOpacity>}
+            <Text style={styles.description}>설정에서 돌아온 뒤 사진 선택을 다시 누르면 권한을 재확인합니다.</Text>
+          </View>}
+          {permissionState?.limited && <Text style={styles.description}>선택한 사진만 접근하도록 허용된 상태입니다. 원본 위치를 읽지 못하면 앱 설정에서 대상 사진을 추가하거나 전체 사진 접근을 허용한 뒤 다시 선택해 주세요.</Text>}
           {ANDROID_EXPO_GO && <Text style={styles.error}>Android Expo Go에서는 원본 사진 GPS 조회가 제한됩니다. 위치가 표시되지 않으면 개발용 APK에서 확인해 주세요.</Text>}
-          <Text style={styles.description}>현재 위치는 대신 사용하지 않습니다. EXIF GPS가 없는 사진은 등록할 수 없습니다. 카메라 위치 저장 설정이나 원본 사진을 확인해 주세요.</Text>
-          {!!items.length && <Text style={styles.summary}>전체 {items.length}장 · GPS 없음/읽기 실패 {items.filter(item => item.error).length}장 · 등록 선택 {selected.length}장</Text>}
+          <Text style={styles.description}>사진 원본의 위치를 사용합니다. 위치를 읽지 못하면 사진 접근·사진 위치 권한과 원본의 위치 정보를 확인해 주세요. 현재 기기 위치로 대신 등록하지 않습니다.</Text>
+          {!!items.length && <Text style={styles.summary}>전체 {items.length}장 · 위치 확인 실패 {items.filter(item => item.error).length}장 · 등록 선택 {selected.length}장</Text>}
           {items.map(item => (
             <View key={item.id} style={styles.card}>
               <View style={styles.row}>
