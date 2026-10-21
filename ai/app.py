@@ -277,10 +277,8 @@ def create_fieldwork_report(report_data: dict, output_filename: str, document=No
             paragraph.add_run(line, size=10, color="#27384A", font=font)
         doc.add_paragraph()
 
-    doc.add_paragraph().add_run("위치도 및 현장사진", bold=True, size=16, color="#111827", font=font)
     report_name = re.sub(r"^현장\s*보고서\s*[-–—]\s*", "", str(report_data.get("report_name") or "")).strip()
-    status_key = report_data.get("progress_status")
-    status = {"pending": "작업 전", "working": "작업 중", "complete": "작업 후"}.get(status_key, "")
+    doc.add_paragraph().add_run(f"위치도 및 현장사진({report_name or location_name})", bold=True, size=16, color="#111827", font=font)
     from datetime import datetime, timedelta, timezone
     completed_text = "작성 시각 미기록"
     # In-progress reports use their saved creation time, never the download time.
@@ -296,13 +294,10 @@ def create_fieldwork_report(report_data: dict, output_filename: str, document=No
             break
         except ValueError:
             continue
-    recorded_at = str(report_data.get("recorded_at") or "미기록")[:10]
-    metadata = doc.add_table(rows=3, cols=2, width=width, height=6600)
+    metadata = doc.add_table(rows=1, cols=2, width=width, height=2200)
     metadata.set_column_widths([11000, width - 11000])
     for row, (label, value) in enumerate([
-        ("작업 처리 일자·시간", completed_text),
-        ("보고서명", report_name or location_name),
-        ("작성일자", recorded_at + (f" · {status}" if status else "")),
+        ("작업처리시간", completed_text),
     ]):
         metadata.set_cell_shading(row, 0, "#EEF2F6")
         for column, text in enumerate([label, value]):
@@ -312,18 +307,17 @@ def create_fieldwork_report(report_data: dict, output_filename: str, document=No
     doc.add_paragraph()
 
     # Address and map share one bordered block. The map never uses a visit/photo name as an address.
+    doc.add_paragraph().add_run("■ 위치도", bold=True, size=12, color="#153B5C", font=font)
     has_map = bool(map_image and os.path.isfile(map_image))
     map_body_height = 24900 if has_map else 6400
-    location_table = doc.add_table(rows=3, cols=1, width=width,
-                                   height=heading_height + 2000 + map_body_height)
+    location_table = doc.add_table(rows=2, cols=1, width=width,
+                                   height=2000 + map_body_height)
     location_table.set_column_widths([width])
     location_table.element.set("pageBreak", "TABLE")
-    location_table.set_cell_shading(0, 0, "#EEF2F6")
-    for row, height in enumerate([heading_height, 2000, map_body_height]):
+    for row, height in enumerate([2000, map_body_height]):
         location_table.rows[row].cells[0].set_size(height=height)
-    location_table.rows[0].cells[0].paragraphs[0].add_run("위치도", bold=True, size=11, color="#153B5C", font=font)
-    location_table.rows[1].cells[0].paragraphs[0].add_run(f"작업 위치: {location_name}", size=10, color="#27384A", font=font)
-    put_image(location_table.rows[2].cells[0], map_image, 24300, "위치도 미등록")
+    location_table.rows[0].cells[0].paragraphs[0].add_run(f"작업 위치: {location_name}", size=10, color="#27384A", font=font)
+    put_image(location_table.rows[1].cells[0], map_image, 24300, "위치도 미등록")
     doc.add_paragraph()
 
     stages = [("작업 전", []), ("작업 중", []), ("작업 후", [])]
@@ -346,6 +340,7 @@ def create_fieldwork_report(report_data: dict, output_filename: str, document=No
                 opinions.append(f"{group['section']}: {caption}")
 
     # Separate one-column tables prevent the three stages from appearing side by side.
+    doc.add_paragraph().add_run("■ 조치결과", bold=True, size=12, color="#153B5C", font=font)
     for label, images in stages + extras:
         for index, item in enumerate(images or [None]):
             heading = label + (f" ({index + 1}/{len(images)})" if len(images) > 1 else "")
