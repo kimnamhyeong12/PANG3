@@ -238,15 +238,23 @@ li.pj-task-row {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  flex: 1;
+  flex: 1 1 280px;
+}
+.re-title-wrap > :last-child {
+  flex-shrink: 0;
 }
 .re-title {
   margin: 0;
   font-size: 22px;
   font-weight: 700;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .re-title-input {
   flex: 1;
+  min-width: 160px;
   max-width: 520px;
   font-size: 18px;
   font-weight: 700;
