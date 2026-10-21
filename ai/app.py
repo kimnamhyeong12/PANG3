@@ -242,7 +242,7 @@ def create_fieldwork_report(report_data: dict, output_filename: str, document=No
 
     # 2. 제목 추가
     title_p = doc.add_paragraph()
-    title_text = f"위치도 및 현장사진({location_name}, {task_category})"
+    title_text = str(report_data.get("report_name") or f"위치도 및 현장사진({location_name}, {task_category})")
     title_p.add_run(title_text, bold=True, size=15, color="#111827", font="Malgun Gothic")
     
     # 3. 작성일자 추가
@@ -250,6 +250,9 @@ def create_fieldwork_report(report_data: dict, output_filename: str, document=No
     recorded_at = str(report_data.get("recorded_at") or date.today().isoformat())[:10]
     status = {"pending": "작업 전", "working": "작업 중", "complete": "작업 후"}.get(report_data.get("progress_status"), "")
     meta_p.add_run(f"작성일자: {recorded_at}" + (f" · {status}" if status else ""), size=9, color="#6B7280", font="Malgun Gothic")
+    completed_at = str(report_data.get("completed_at") or "").replace("T", " ")[:16]
+    if completed_at:
+        doc.add_paragraph().add_run(f"조치 완료 일시: {completed_at}", size=10, color="#111827", font="Malgun Gothic")
     
     # 3-1. 작업 위치(주소) 추가 — 위도/경도 숫자는 보고서를 보는 담당자에게 필요 없어 표시하지 않는다
     heading_loc_p = doc.add_paragraph()
@@ -536,6 +539,8 @@ def run_pipeline(payload: dict, document=None, combined_path=None) -> dict:
     report_path = create_fieldwork_report(
         {
             "location_name": location_name,
+            "report_name": payload.get("report_name"),
+            "completed_at": payload.get("completed_at"),
             "task_category": task_category,
             "main_comment": main_comment,
             "field_memo": field_memo,

@@ -36,6 +36,7 @@ class ReleaseAuthIntegrationTest {
         NotificationController.class, TaskProgressController.class, AuthService.class, AuthSessionService.class,
         AccountEmailService.class, GroupService.class, TaskService.class, TaskProgressService.class, TaskTransferService.class,
         SupportInquiryController.class, SupportInquiryService.class,
+        SocialLoginController.class, SocialLoginService.class, SocialAccountService.class, SocialVerificationService.class,
         FileStorageService.class, FieldworkProperties.class, UploadSecurityConfig.class})
     static class TestConfig {
         @Bean PushNotificationService push() { return mock(PushNotificationService.class); }
@@ -55,7 +56,58 @@ class ReleaseAuthIntegrationTest {
     @Autowired TaskTransferService transfers;
     @Autowired PasswordEncoder encoder;
     @Autowired JavaMailSender mail;
+    @Autowired SocialAccountService socialAccounts;
+    @Autowired SocialVerificationService socialVerification;
+    @Autowired AuthSessionService sessionService;
     String ip;
+    @Test void socialOnlyAccountCanManageProfileAndDeleteWithoutALocalPassword() throws Exception {
+        Long id = socialAccounts.resolve("kakao", UUID.randomUUID().toString(), "소셜 작업자", null, false);
+        User account = users.findById(id).orElseThrow();
+        assertFalse(account.isPasswordLoginEnabled());
+        Map<String, Object> auth = sessionService.issue(id);
+        String authorization = "Bearer " + auth.get("accessToken");
+        String credential = socialVerification.issue(id);
+        mvc.perform(postJson("/api/users/" + id + "/account/verify", Map.of("password", credential)).header("Authorization", authorization))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.passwordLoginEnabled").value(false));
+        mvc.perform(patch("/api/users/" + id + "/account").header("Authorization", authorization).contentType("application/json")
+                .content(json.writeValueAsString(Map.of("currentPassword", credential, "name", "수정한 이름"))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("수정한 이름"));
+        mvc.perform(delete("/api/auth/account").header("Authorization", authorization).contentType("application/json")
+                .content(json.writeValueAsString(Map.of("loginId", account.getLoginId(), "password", credential))))
+                .andExpect(status().isOk());
+        assertTrue(socialAccounts.providers(id).isEmpty());
+        assertFalse(socialVerification.valid(id, credential));
+        mvc.perform(get("/api/auth/me").header("Authorization", authorization)).andExpect(status().isUnauthorized());
+    }
+    @Test void reportRenamePreservesActualCompletion() throws Exception {
+        User owner = user(), colleague = user(); Task task = task(group(owner, colleague), owner);
+        JsonNode auth = login(owner);
+        var body = new HashMap<String, Object>(); body.put("taskId", task.getTaskId()); body.put("userId", owner.getUserId());
+        body.put("progressStatus", "complete"); body.put("reportName", "첫 보고서"); body.put("fieldPhotos", List.of());
+        JsonNode first = json.readTree(mvc.perform(postJson("/api/task-progress", body).header("Authorization", bearer(auth)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.completedAt").isNotEmpty()).andReturn().getResponse().getContentAsString());
+        body.put("progressId", first.get("progressId").asLong()); body.put("expectedRevision", first.get("revision").asText()); body.put("reportName", "수정한 보고서");
+        mvc.perform(postJson("/api/task-progress", body).header("Authorization", bearer(auth)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.reportName").value("수정한 보고서"))
+                .andExpect(jsonPath("$.completedAt").value(first.get("completedAt").asText())).andExpect(jsonPath("$.taskStatus").value("complete"));
+        mvc.perform(get("/api/task-progress/task/" + task.getTaskId()).header("Authorization", bearer(auth)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.reportName").value("수정한 보고서"));
+    }
+    @Test void socialIdentityLinksOnlyExplicitlyAndCannotBeMovedToAnotherAccount() throws Exception {
+        User owner = user(), other = user(); String subject = UUID.randomUUID().toString();
+        assertEquals(owner.getUserId(), socialAccounts.resolve("google", subject, "소셜 이름", owner.getUserId(), false));
+        assertEquals(owner.getUserId(), socialAccounts.resolve("google", subject, "소셜 이름", null, false));
+        assertThrows(IllegalArgumentException.class, () -> socialAccounts.resolve("google", subject, "이름", other.getUserId(), false));
+        assertThrows(IllegalArgumentException.class, () -> socialAccounts.resolve("google", subject, "이름", other.getUserId(), true));
+        assertEquals(owner.getUserId(), socialAccounts.resolve("google", subject, "이름", owner.getUserId(), true));
+        mvc.perform(postJson("/api/auth/social/google/link", Map.of())).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/auth/social/identities")).andExpect(status().isUnauthorized());
+        JsonNode auth = login(owner);
+        mvc.perform(get("/api/auth/social/identities").header("Authorization", bearer(auth))).andExpect(status().isOk()).andExpect(jsonPath("$[0]").value("google"));
+        String credential = socialVerification.issue(owner.getUserId());
+        mvc.perform(postJson("/api/users/" + owner.getUserId() + "/account/verify", Map.of("password", credential)).header("Authorization", bearer(auth)))
+                .andExpect(status().isOk());
+    }
     @BeforeEach void setup() { ip=UUID.randomUUID().toString(); reset(mail); }
     User user() {
         User user = new User(); user.setLoginId("u" + UUID.randomUUID().toString().replace("-", ""));

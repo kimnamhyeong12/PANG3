@@ -58,6 +58,7 @@ public class TaskProgressService {
         progress.setMainComment(request.getParameter("mainComment"));
         progress.setFieldMemo(request.getParameter("fieldMemo"));
         progress.setProgressStatus(request.getParameter("progressStatus"));
+        updateReportName(progress, request.getParameter("reportName"));
         validateText(progress);
         if (isCurrentRecord(task, progress)) syncTaskLocation(task, progress.getLatitude(), progress.getLongitude());
 
@@ -115,6 +116,7 @@ public class TaskProgressService {
         progress.setMainComment(str(body.get("mainComment")));
         progress.setFieldMemo(str(body.get("fieldMemo")));
         progress.setProgressStatus(str(body.get("progressStatus")));
+        updateReportName(progress, str(body.get("reportName")));
         validateText(progress);
         if (isCurrentRecord(task, progress)) syncTaskLocation(task, progress.getLatitude(), progress.getLongitude());
 
@@ -224,6 +226,7 @@ public class TaskProgressService {
             data.put("lat", progress.getLatitude()); data.put("lng", progress.getLongitude());
             data.put("address", progress.getLocationAddress()); data.put("map", progress.getLocationMapImage());
             data.put("status", progress.getProgressStatus());
+            data.put("reportName", progress.getReportName());
             data.put("photos", progress.getFieldPhotos() == null ? List.of() : progress.getFieldPhotos().stream()
                     .map(photo -> new java.util.TreeMap<>(photo)).toList());
             return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
@@ -233,8 +236,10 @@ public class TaskProgressService {
 
     // Correcting a report never reopens a completed task or changes status from an old visit.
     private void syncReportStatus(Task task, TaskProgress progress) {
-        if ("complete".equalsIgnoreCase(task.getTaskStatus())) return;
-        if (isCurrentRecord(task, progress)) syncTaskStatus(task, progress.getProgressStatus());
+        if (!isCurrentRecord(task, progress)) return;
+        if (!"complete".equalsIgnoreCase(task.getTaskStatus())) syncTaskStatus(task, progress.getProgressStatus());
+        if ("complete".equalsIgnoreCase(progress.getProgressStatus()) && progress.getCompletedAt() == null)
+            progress.setCompletedAt(task.getCompletedAt());
     }
 
     private boolean isCurrentRecord(Task task, TaskProgress progress) {
@@ -356,6 +361,9 @@ public class TaskProgressService {
         result.put("mainComment", progress.getMainComment());
         result.put("fieldMemo", progress.getFieldMemo());
         result.put("progressStatus", progress.getProgressStatus());
+        result.put("reportName", progress.getReportName());
+        result.put("completedAt", progress.getCompletedAt() != null ? progress.getCompletedAt()
+                : "complete".equalsIgnoreCase(progress.getProgressStatus()) && isCurrentRecord(task, progress) ? task.getCompletedAt() : null);
         result.put("aiRefinedContent", progress.getAiRefinedContent());
         result.put("reportFilePath", progress.getReportFilePath());
         result.put("createdAt", progress.getCreatedAt());
@@ -370,6 +378,14 @@ public class TaskProgressService {
         }
 
         return result;
+    }
+
+    private void updateReportName(TaskProgress progress, String value) {
+        if (value == null) return;
+        String name = value.trim();
+        if (name.isEmpty() || name.length() > 120 || name.chars().anyMatch(Character::isISOControl))
+            throw new IllegalArgumentException("보고서 이름은 1~120자로 입력해 주세요.");
+        progress.setReportName(name);
     }
 
     private List<String> parsePhotoComments(String raw) {

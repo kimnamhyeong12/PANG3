@@ -20,6 +20,8 @@ public class AuthService {
     private final GroupService groupService;
     private final PushTokenRepository pushTokenRepository;
     private final GroupInvitationRepository groupInvitationRepository;
+    @org.springframework.beans.factory.annotation.Autowired private SocialVerificationService socialVerification;
+    @org.springframework.beans.factory.annotation.Autowired private com.fieldwork.repository.SocialIdentityRepository socialIdentities;
 
     public AuthService(
             UserRepository userRepository,
@@ -71,7 +73,7 @@ public class AuthService {
         User user = userRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new RuntimeException("아이디 또는 비밀번호가 틀렸습니다."));
 
-        if ("DELETED".equals(user.getRole()) || password == null
+        if ("DELETED".equals(user.getRole()) || !user.isPasswordLoginEnabled() || password == null
                 || !passwordEncoder.matches(password, user.getPassword())) {
             throw new RuntimeException("아이디 또는 비밀번호가 틀렸습니다.");
         }
@@ -99,11 +101,13 @@ public class AuthService {
         User user = userRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("아이디 또는 비밀번호가 틀렸습니다."));
         if ("DELETED".equals(user.getRole()) || password == null
-                || !passwordEncoder.matches(password, user.getPassword())) {
+                || !(socialVerification.valid(user.getUserId(), password) || user.isPasswordLoginEnabled() && passwordEncoder.matches(password, user.getPassword()))) {
             throw new IllegalArgumentException("아이디 또는 비밀번호가 틀렸습니다.");
         }
 
         groupService.leaveAllGroupsForDeletedUser(user);
+        socialIdentities.deleteByUser_UserId(user.getUserId());
+        socialVerification.revoke(user.getUserId());
         groupInvitationRepository.findByInviterAndStatus(user, "PENDING")
                 .forEach(invitation -> invitation.setStatus("REJECTED"));
         groupInvitationRepository.findByInviteeAndStatus(user, "PENDING")

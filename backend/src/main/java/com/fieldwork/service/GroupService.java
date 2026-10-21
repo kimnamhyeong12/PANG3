@@ -43,6 +43,7 @@ public class GroupService {
     private final TaskTransferRequestRepository taskTransferRequestRepository;
     private final PushNotificationService pushNotificationService;
     private final PasswordEncoder passwordEncoder;
+    @org.springframework.beans.factory.annotation.Autowired private SocialVerificationService socialVerification;
 
     public GroupService(
             WorkGroupRepository workGroupRepository,
@@ -225,7 +226,8 @@ public class GroupService {
             throw new IllegalArgumentException("개인 업무공간에서는 탈퇴할 수 없습니다.");
         }
         GroupMember member = requireMember(group, userId);
-        if (password == null || !passwordEncoder.matches(password, member.getUser().getPassword())) {
+        if (password == null || !(socialVerification != null && socialVerification.valid(userId, password)
+                || member.getUser().isPasswordLoginEnabled() && passwordEncoder.matches(password, member.getUser().getPassword()))) {
             throw new IllegalArgumentException("비밀번호가 올바르지 않습니다.");
         }
         List<GroupMember> remaining = groupMemberRepository.findByGroupOrderByJoinedAtAsc(group)

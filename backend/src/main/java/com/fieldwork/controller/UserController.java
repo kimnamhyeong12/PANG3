@@ -15,6 +15,7 @@ public class UserController {
     private final UserRepository userRepository;
     private final org.springframework.security.crypto.password.PasswordEncoder encoder;
     private final com.fieldwork.service.AuthSessionService sessions;
+    @org.springframework.beans.factory.annotation.Autowired private com.fieldwork.service.SocialVerificationService socialVerification;
 
     public UserController(UserRepository userRepository, org.springframework.security.crypto.password.PasswordEncoder encoder, com.fieldwork.service.AuthSessionService sessions) {
         this.userRepository = userRepository; this.encoder = encoder; this.sessions = sessions;
@@ -23,7 +24,8 @@ public class UserController {
     private User verifiedUser(Long userId, String password) {
         CurrentUser.require(userId);
         User user = userRepository.findById(userId).orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
-        if ("DELETED".equals(user.getRole()) || password == null || !encoder.matches(password, user.getPassword()))
+        if ("DELETED".equals(user.getRole()) || password == null ||
+                !(socialVerification != null && socialVerification.valid(userId, password) || user.isPasswordLoginEnabled() && encoder.matches(password, user.getPassword())))
             throw new IllegalArgumentException("현재 비밀번호를 확인해 주세요.");
         return user;
     }
@@ -54,7 +56,7 @@ public class UserController {
         user.setWorkSido(sido == null || sido.isBlank() ? null : sido.trim());
         user.setWorkSigungu(district == null || district.isBlank() ? null : district.trim());
         user.setWorkplaceAddress(address == null || address.isBlank() ? null : address.trim()); user.setWorkplaceLat(lat); user.setWorkplaceLng(lng);
-        if (changedPassword) { user.setPassword(encoder.encode(password)); sessions.revokeAll(userId); }
+        if (changedPassword) { user.setPassword(encoder.encode(password)); user.setPasswordLoginEnabled(true); sessions.revokeAll(userId); }
         userRepository.saveAndFlush(user);
         Map<String, Object> result = com.fieldwork.service.AuthSessionService.userInfo(user);
         result.put("requiresLogin", changedPassword);

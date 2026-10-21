@@ -16,6 +16,7 @@ import java.util.Locale;
 
 @Service
 public class AccountEmailService {
+    @org.springframework.beans.factory.annotation.Autowired private SocialVerificationService socialVerification;
     private final EmailChallengeRepository challenges;
     private final UserRepository users;
     private final AuthSessionService sessions;
@@ -41,7 +42,7 @@ public class AccountEmailService {
     @Transactional
     public void updateEmail(Long userId, String password, String email) {
         User user = users.findById(userId).orElseThrow();
-        if (password == null || !encoder.matches(password, user.getPassword())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "현재 비밀번호를 확인해 주세요.");
+        if (password == null || !(socialVerification.valid(userId, password) || user.isPasswordLoginEnabled() && encoder.matches(password, user.getPassword()))) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "다시 본인 인증해 주세요.");
         requestVerification(user, email);
     }
     @Transactional
@@ -74,6 +75,7 @@ public class AccountEmailService {
         EmailChallenge challenge = challenge(token, "RESET");
         if (!challenge.email.equals(challenge.user.getEmail())) throw invalid();
         challenge.user.setPassword(encoder.encode(password));
+        challenge.user.setPasswordLoginEnabled(true);
         challenge.used = true;
         challenges.invalidate(challenge.user.getUserId(), "RESET");
         challenges.invalidate(challenge.user.getUserId(), "VERIFY");

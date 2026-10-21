@@ -51,6 +51,9 @@ public class AiReportService {
                 "사하구 관내"
         );
         payload.put("location_name", locationName);
+        payload.put("report_name", progress.getReportName());
+        var completedAt = progress.getCompletedAt();
+        payload.put("completed_at", completedAt == null ? "" : completedAt.toString());
         payload.put("task_category", firstNonBlank(task.getTaskCategory(), "현장 점검"));
         payload.put("latitude", progress.getLatitude() != null ? progress.getLatitude() : task.getLat());
         payload.put("longitude", progress.getLongitude() != null ? progress.getLongitude() : task.getLng());

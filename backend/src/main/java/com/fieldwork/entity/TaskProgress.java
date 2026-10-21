@@ -47,6 +47,17 @@ public class TaskProgress {
     @Column(name = "progress_status")
     private String progressStatus;
 
+    @Column(name = "report_name", length = 120)
+    private String reportName;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
+    public String getReportName() { return reportName; }
+    public void setReportName(String value) { reportName = value; }
+    public LocalDateTime getCompletedAt() { return completedAt; }
+    public void setCompletedAt(LocalDateTime value) { completedAt = value; }
+
     @Column(name = "ai_refined_content", columnDefinition = "TEXT")
     private String aiRefinedContent;
 
