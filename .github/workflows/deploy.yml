@@ -66,6 +66,7 @@ jobs:
           host: ${{ steps.get-ip.outputs.ip }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 30m
           script: |
             set -eu
             cd /home/ubuntu/PANG3
@@ -84,7 +85,16 @@ jobs:
               git reset --hard origin/main
             fi
             test "$(git rev-parse HEAD)" = "${{ github.sha }}"
-            docker compose pull
+            pull_attempt=1
+            until docker compose pull; do
+              if [ "$pull_attempt" -ge 3 ]; then
+                echo "Docker image pull failed after 3 attempts"
+                exit 1
+              fi
+              echo "Docker image pull failed; retrying in 10 seconds"
+              pull_attempt=$((pull_attempt + 1))
+              sleep 10
+            done
             docker compose up -d
             docker exec sahagu-api test -s /app/data/busan-entrances.jsonl.gz
             docker image prune -f
