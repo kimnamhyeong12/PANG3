@@ -240,138 +240,125 @@ def create_fieldwork_report(report_data: dict, output_filename: str, document=No
         # 기본 여백 지정
         doc.set_page_margins(left=4819, right=4819, top=4535, bottom=4252)
 
-    # 2. 제목 추가
-    title_p = doc.add_paragraph()
-    title_text = str(report_data.get("report_name") or f"위치도 및 현장사진({location_name}, {task_category})")
-    title_p.add_run(title_text, bold=True, size=15, color="#111827", font="Malgun Gothic")
-    
-    # 3. 작성일자 추가
-    meta_p = doc.add_paragraph()
-    recorded_at = str(report_data.get("recorded_at") or date.today().isoformat())[:10]
-    status = {"pending": "작업 전", "working": "작업 중", "complete": "작업 후"}.get(report_data.get("progress_status"), "")
-    meta_p.add_run(f"작성일자: {recorded_at}" + (f" · {status}" if status else ""), size=9, color="#6B7280", font="Malgun Gothic")
-    completed_at = str(report_data.get("completed_at") or "").replace("T", " ")[:16]
-    if completed_at:
-        doc.add_paragraph().add_run(f"조치 완료 일시: {completed_at}", size=10, color="#111827", font="Malgun Gothic")
-    
-    # 3-1. 작업 위치(주소) 추가 — 위도/경도 숫자는 보고서를 보는 담당자에게 필요 없어 표시하지 않는다
-    heading_loc_p = doc.add_paragraph()
-    heading_loc_p.add_run("■ 작업 위치", bold=True, size=12, color="#153B5C", font="Malgun Gothic")
+    # One full-width bordered section per field, matching the printed report form.
+    width = 45354
+    image_width = 43200
+    heading_height = 1500
+    font = "Malgun Gothic"
 
-    loc_p = doc.add_paragraph()
-    loc_p.add_run(f"주소: {location_name}", size=10, color="#27384A", font="Malgun Gothic")
+    def section_table(label, body_height, *, split=False):
+        table = doc.add_table(rows=2, cols=1, width=width,
+                              height=heading_height + body_height)
+        table.set_column_widths([width])
+        # Keep a photo and its heading together; long text may continue on another page.
+        table.element.set("pageBreak", "CELL" if split else "TABLE")
+        table.rows[0].cells[0].set_size(height=heading_height)
+        table.rows[1].cells[0].set_size(height=body_height)
+        table.set_cell_shading(0, 0, "#EEF2F6")
+        table.rows[0].cells[0].paragraphs[0].add_run(
+            label, bold=True, size=11, color="#153B5C", font=font)
+        return table
 
-    # 공백 문단 추가
+    def put_image(cell, image_path, image_height, empty_text):
+        paragraph = cell.paragraphs[0]
+        if image_path and os.path.isfile(image_path):
+            with open(image_path, "rb") as source:
+                image_ref = doc.add_image(source.read(), "png" if str(image_path).lower().endswith(".png") else "jpg")
+            paragraph.add_picture(image_ref, width=image_width, height=image_height)
+        else:
+            paragraph.add_run(empty_text, size=10, color="#6B7280", font=font)
+
+    def text_section(label, text):
+        table = section_table(label, 2400, split=True)
+        cell = table.rows[1].cells[0]
+        lines = str(text or "미입력").splitlines() or ["미입력"]
+        for index, line in enumerate(lines):
+            paragraph = cell.paragraphs[0] if index == 0 else cell.add_paragraph()
+            paragraph.add_run(line, size=10, color="#27384A", font=font)
+        doc.add_paragraph()
+
+    doc.add_paragraph().add_run("위치도 및 현장사진", bold=True, size=16, color="#111827", font=font)
+    report_name = re.sub(r"^현장\s*보고서\s*[-–—]\s*", "", str(report_data.get("report_name") or "")).strip()
+    status_key = report_data.get("progress_status")
+    status = {"pending": "작업 전", "working": "작업 중", "complete": "작업 후"}.get(status_key, "")
+    from datetime import datetime, timedelta, timezone
+    completed_text = "작성 시각 미기록"
+    # In-progress reports use their saved creation time, never the download time.
+    for timestamp in (report_data.get("completed_at"), report_data.get("recorded_at")):
+        timestamp = str(timestamp or "").strip()
+        if not timestamp:
+            continue
+        try:
+            completed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            if completed.tzinfo is not None:
+                completed = completed.astimezone(timezone(timedelta(hours=9)))
+            completed_text = completed.strftime("%Y-%m-%d" if len(timestamp) == 10 else "%Y-%m-%d %H:%M:%S")
+            break
+        except ValueError:
+            continue
+    recorded_at = str(report_data.get("recorded_at") or "미기록")[:10]
+    metadata = doc.add_table(rows=3, cols=2, width=width, height=6600)
+    metadata.set_column_widths([11000, width - 11000])
+    for row, (label, value) in enumerate([
+        ("작업 처리 일자·시간", completed_text),
+        ("보고서명", report_name or location_name),
+        ("작성일자", recorded_at + (f" · {status}" if status else "")),
+    ]):
+        metadata.set_cell_shading(row, 0, "#EEF2F6")
+        for column, text in enumerate([label, value]):
+            metadata.rows[row].cells[column].set_size(height=2200)
+            metadata.rows[row].cells[column].paragraphs[0].add_run(
+                text, bold=column == 0, size=10, color="#27384A", font=font)
     doc.add_paragraph()
 
-    # 4. 위치도 추가
-    if map_image and os.path.exists(map_image):
-        heading_p = doc.add_paragraph()
-        heading_p.add_run("■ 위치도", bold=True, size=12, color="#153B5C", font="Malgun Gothic")
-        
-        with open(map_image, 'rb') as f:
-            img_data = f.read()
-        img_format = 'png' if map_image.lower().endswith('.png') else 'jpg'
-        
-        map_img_p = doc.add_paragraph()
-        binary_item_id_ref = doc.add_image(img_data, img_format)
-        map_img_p.add_picture(binary_item_id_ref, width=45921, height=25831)
-        
-        doc.add_paragraph()
+    # Address and map share one bordered block. The map never uses a visit/photo name as an address.
+    has_map = bool(map_image and os.path.isfile(map_image))
+    map_body_height = 24900 if has_map else 6400
+    location_table = doc.add_table(rows=3, cols=1, width=width,
+                                   height=heading_height + 2000 + map_body_height)
+    location_table.set_column_widths([width])
+    location_table.element.set("pageBreak", "TABLE")
+    location_table.set_cell_shading(0, 0, "#EEF2F6")
+    for row, height in enumerate([heading_height, 2000, map_body_height]):
+        location_table.rows[row].cells[0].set_size(height=height)
+    location_table.rows[0].cells[0].paragraphs[0].add_run("위치도", bold=True, size=11, color="#153B5C", font=font)
+    location_table.rows[1].cells[0].paragraphs[0].add_run(f"작업 위치: {location_name}", size=10, color="#27384A", font=font)
+    put_image(location_table.rows[2].cells[0], map_image, 24300, "위치도 미등록")
+    doc.add_paragraph()
 
-    # 5. 사진 그룹 추가
+    stages = [("작업 전", []), ("작업 중", []), ("작업 후", [])]
+    stage_aliases = {
+        "작업 전": 0, "현장사진 (전)": 0, "before": 0,
+        "작업 중": 1, "현장사진 (중)": 1, "during": 1,
+        "작업 후": 2, "현장사진 (후)": 2, "after": 2,
+    }
+    extras = []
+    opinions = [str(report_data.get("field_memo") or "").strip(), main_comment.strip()]
     for group in photo_groups:
-        section_title = group["section"]
-        items = group["items"]
-        
-        heading_p = doc.add_paragraph()
-        heading_p.add_run(f"■ {section_title}", bold=True, size=12, color="#153B5C", font="Malgun Gothic")
-        
-        for i in range(0, len(items), 2):
-            chunk = items[i : i + 2]
-            cols = len(chunk)
-            
-            # 테이블 너비를 전체 가용 가로폭인 45354로 고정 지정하여 찌그러짐 방지
-            table = doc.add_table(rows=3, cols=cols, width=45354)
-            
-            # 열 가중치 및 개별 폭 지정
-            if cols == 2:
-                table.set_column_widths([22677, 22677])
+        stage = stage_aliases.get(group["section"])
+        for item in group["items"]:
+            if stage is None:
+                extras.append((group["section"], [item]))
             else:
-                table.set_column_widths([45354])
-            
-            # 셀별 높이 지정 (사진 행은 크게, 텍스트 행은 작게 조정하여 찌그러짐 방지)
-            h_photo = 14324 if cols == 2 else 29720
-            h_text = 1200
-            
-            for col_idx, item in enumerate(chunk):
-                # 1행: 사진 셀 설정
-                table.set_cell_shading(0, col_idx, '#F8FAFC')
-                table.rows[0].cells[col_idx].set_size(height=h_photo)
-                cell_img_p = table.rows[0].cells[col_idx].paragraphs[0]
-                
-                img_path = item.get("sanitized_path") or item.get("path")
-                if img_path and os.path.exists(img_path):
-                    with open(img_path, 'rb') as f:
-                        cell_img_data = f.read()
-                    cell_img_format = 'png' if img_path.lower().endswith('.png') else 'jpg'
-                    cell_bin_ref = doc.add_image(cell_img_data, cell_img_format)
-                    
-                    w_units = 20835 if cols == 2 else 43228
-                    h_units = 14324 if cols == 2 else 29720
-                    cell_img_p.add_picture(cell_bin_ref, width=w_units, height=h_units)
-                else:
-                    cell_img_p.add_run("[사진 없음]", size=10, color="#6B7280", font="Malgun Gothic")
-                
-                # 2행: 캡션 셀 설정
-                table.set_cell_shading(1, col_idx, '#F3F6FA')
-                table.rows[1].cells[col_idx].set_size(height=h_text)
-                caption_text = item.get("caption") or ""
-                table.set_cell_text(1, col_idx, caption_text)
-                
-            if cols == 2:
-                table.merge_cells(2, 0, 2, 1)
-            
-            # 3행: 주요 의견 셀 설정
-            table.set_cell_shading(2, 0, '#FFFFFF')
-            table.rows[2].cells[0].set_size(height=h_text)
-            comment_label = f"주요 의견: {main_comment}" if main_comment else "주요 의견: 없음"
-            table.set_cell_text(2, 0, comment_label)
-            
+                stages[stage][1].append(item)
+            caption = str(item.get("caption") or "").strip()
+            if caption:
+                opinions.append(f"{group['section']}: {caption}")
+
+    # Separate one-column tables prevent the three stages from appearing side by side.
+    for label, images in stages + extras:
+        for index, item in enumerate(images or [None]):
+            heading = label + (f" ({index + 1}/{len(images)})" if len(images) > 1 else "")
+            image_path = (item.get("sanitized_path") or item.get("path")) if item else None
+            has_image = bool(image_path and os.path.isfile(image_path))
+            table = section_table(heading, 30300 if has_image else 6400)
+            put_image(table.rows[1].cells[0], image_path, 29700, "사진 미등록")
             doc.add_paragraph()
 
-    # 6. 주요 의견 (단독 섹션)
-    if main_comment:
-        heading_p = doc.add_paragraph()
-        heading_p.add_run("■ 주요 의견", bold=True, size=12, color="#153B5C", font="Malgun Gothic")
-        
-        mc_p = doc.add_paragraph()
-        mc_p.add_run(main_comment, bold=True, size=11, color="#111827", font="Malgun Gothic")
-        doc.add_paragraph()
-
-    # 7. AI 현장 분석 의견 추가
-    field_memo = str(report_data.get("field_memo") or "")
-    if field_memo:
-        doc.add_paragraph().add_run("■ 현장 메모", bold=True, size=12, color="#153B5C", font="Malgun Gothic")
-        for line in field_memo.splitlines():
-            doc.add_paragraph().add_run(line, size=10, color="#27384A", font="Malgun Gothic")
+    overall_comment = "\n".join(dict.fromkeys(value for value in opinions if value))
+    text_section("메모", overall_comment)
     if ai_refined:
-        heading_p = doc.add_paragraph()
-        heading_p.add_run("■ AI 현장 분석 의견", bold=True, size=12, color="#153B5C", font="Malgun Gothic")
-        
-        cleaned_ai_refined = clean_markdown_for_hwp(ai_refined)
-        for line in cleaned_ai_refined.splitlines():
-            line_str = line.strip()
-            if not line_str:
-                continue
-            body_p = doc.add_paragraph()
-            body_p.add_run(line_str, size=10, color="#27384A", font="Malgun Gothic")
-        
-        doc.add_paragraph()
-
-    # 8. 마침말 추가
-    closing_p = doc.add_paragraph()
-    closing_p.add_run("위와 같이 사하구 시설물 현장 점검 결과를 보고합니다.", size=10, color="#27384A", font="Malgun Gothic")
+        text_section("AI 현장 분석 의견", clean_markdown_for_hwp(ai_refined))
 
     # 9. 파일 저장 및 바이너리 매핑 오류 보정
     # Hancom Office에서 이미지가 정상적으로 표시되도록 binItem id와 binaryItemIDRef를 매칭시킴 (라이브러리 버그 보완)
@@ -485,8 +472,8 @@ def run_pipeline(payload: dict, document=None, combined_path=None) -> dict:
     for idx, raw in enumerate(payload.get("field_photos") or []):
         src = raw.get("path") or raw.get("file")
         temp = str(work_dir / f"field_{idx}.jpg")
-        # 흰 여백 없이 박스를 꽉 채우도록 cover로 (모서리가 살짝 잘릴 수 있음)
-        sanitized = sanitize_image(src, temp, canvas_size=(1600, 1100), fit_mode="cover")
+        # Preserve the entire field photo inside its report cell.
+        sanitized = sanitize_image(src, temp, canvas_size=(1600, 1100), fit_mode="contain")
         _, caption = parse_photo_comment(raw.get("comment", ""), idx + 1)
         captions.append(caption)
         sanitized_photos.append(

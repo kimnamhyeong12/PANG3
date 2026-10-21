@@ -29,6 +29,8 @@ public class AiReportService {
 
     @Value("${gemini.api-key:}")
     private String geminiApiKey;
+    @Value("${kakao.rest-api-key:}")
+    private String kakaoRestApiKey;
 
     public AiReportService(FieldworkProperties properties) {
         this.properties = properties;
@@ -38,19 +40,18 @@ public class AiReportService {
 
     public Map<String, Object> generatePayload(Map<String, Object> payload, Long userId) throws Exception {
         String json = objectMapper.writer().with(com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
-                .writeValueAsString(payload);
+                .writeValueAsString(resolveWorkAddresses(payload));
         return coordinator.generate(AuthSessionService.hash(json), userId, () -> callPythonWithRetry(json));
     }
 
     public Map<String, Object> buildPayload(Task task, TaskProgress progress) {
         Map<String, Object> payload = new HashMap<>();
 
-        String locationName = firstNonBlank(
-                task.getDetailAddress(),
-                task.getRoadAddress(),
-                "사하구 관내"
-        );
-        payload.put("location_name", locationName);
+        // detailAddress is a visit label (often a photo filename), not a postal address.
+        String address = usableAddress(progress.getLocationAddress());
+        if (address.isBlank()) address = usableAddress(task.getRoadAddress());
+        payload.put("location_address", address);
+        payload.put("location_name", address.isBlank() ? "주소 확인 불가" : address);
         payload.put("report_name", progress.getReportName());
         var completedAt = progress.getCompletedAt();
         payload.put("completed_at", completedAt == null ? "" : completedAt.toString());
@@ -82,6 +83,58 @@ public class AiReportService {
         payload.put("progress_status", progress.getProgressStatus());
 
         return payload;
+    }
+
+    // Called at generation time, outside the snapshot/commit transactions. Never mutate
+    // the original payload: it is used again to detect edits made while Python runs.
+    private Map<String, Object> resolveWorkAddresses(Map<String, Object> source) {
+        Map<String, Object> result = new HashMap<>(source);
+        if (source.get("reports") instanceof List<?> reports) {
+            List<Map<String, Object>> resolved = new ArrayList<>();
+            for (Object entry : reports) {
+                if (!(entry instanceof Map<?, ?> report)) throw new IllegalArgumentException("보고서 내용을 확인해 주세요.");
+                Map<String, Object> copy = new HashMap<>();
+                report.forEach((key, value) -> copy.put(String.valueOf(key), value));
+                resolved.add(resolveWorkAddresses(copy));
+            }
+            result.put("reports", resolved);
+            return result;
+        }
+        String address = usableAddress(source.get("location_address") instanceof String value ? value : null);
+        if (address.isBlank()) address = reverseAddress(source.get("latitude"), source.get("longitude"));
+        result.put("location_address", address);
+        result.put("location_name", address.isBlank() ? "주소 확인 불가" : address);
+        return result;
+    }
+
+    private String reverseAddress(Object latitude, Object longitude) {
+        if (kakaoRestApiKey == null || kakaoRestApiKey.isBlank() || !(latitude instanceof Number lat) || !(longitude instanceof Number lng)
+                || !Double.isFinite(lat.doubleValue()) || !Double.isFinite(lng.doubleValue())
+                || Math.abs(lat.doubleValue()) > 90 || Math.abs(lng.doubleValue()) > 180) return "";
+        try {
+            var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(java.time.Duration.ofSeconds(3));
+            factory.setReadTimeout(java.time.Duration.ofSeconds(3));
+            var http = new org.springframework.web.client.RestTemplate(factory);
+            http.setInterceptors(List.of(new ProviderQuotaInterceptor()));
+            var headers = new org.springframework.http.HttpHeaders();
+            headers.set("Authorization", "KakaoAK " + kakaoRestApiKey);
+            var response = http.exchange("https://dapi.kakao.com/v2/local/geo/coord2address.json?x=" + lng.doubleValue() + "&y=" + lat.doubleValue(),
+                    org.springframework.http.HttpMethod.GET, new org.springframework.http.HttpEntity<Void>(headers), Map.class).getBody();
+            if (response != null && response.get("documents") instanceof List<?> documents && !documents.isEmpty()
+                    && documents.get(0) instanceof Map<?, ?> document) {
+                for (String kind : List.of("road_address", "address")) {
+                    if (document.get(kind) instanceof Map<?, ?> item && item.get("address_name") instanceof String name && !name.isBlank()) return name.trim();
+                }
+            }
+        } catch (Exception ignored) { /* Never put provider errors, coordinates or API keys in logs. */ }
+        return "";
+    }
+
+    private String usableAddress(String value) {
+        if (value == null || value.isBlank() || value.equals("주소 확인 불가") || value.equals("주소 확인 중…")
+                || value.matches("(?i).*\\.(jpg|jpeg|png|heic|heif|webp)$")) return "";
+        return value.trim();
     }
 
     public String generateCombined(List<Map<String, Object>> reports, Long userId) throws Exception {
