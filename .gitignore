@@ -49,6 +49,10 @@ PORTFOLIO_MO_JUNHO.md
 # Expo verification output
 frontend/.expo-verify/
 
+# 개인 작업 기록·디자인 시안 (공유하지 않음)
+/harness/
+/design-jxji/
+
 # Local agent workflow evidence (synthetic files, command logs and review records)
 .agent-runs/
 tools/agent-workflow/__pycache__/

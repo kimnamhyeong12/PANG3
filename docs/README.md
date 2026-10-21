@@ -26,6 +26,7 @@
 ## 개발·기능 참고
 
 - [로컬 실행](development/LOCAL_RELEASE_RUN.md).
+- [프로젝트·통합 보고서 (풀 받은 뒤 할 일·DB 자동 적용)](features/PROJECT_REPORT_2026-10-22.md).
 - [근무지역 선택](features/WORK_REGION_SELECTION.md).
 - [업무 이관 Push 설정](features/TRANSFER_PUSH_SETUP.md).
 - [이관 이력 보관·페이징](features/TRANSFER_HISTORY_RETENTION.md).

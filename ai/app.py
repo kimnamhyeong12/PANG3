@@ -17,6 +17,7 @@ from google import genai
 from PIL import Image, ImageOps
 from pillow_heif import register_heif_opener
 from hwpx import HwpxDocument
+from hwpx_images import fix_hwpx_images
 
 
 register_heif_opener()
@@ -220,7 +221,7 @@ def clean_markdown_for_hwp(text: str) -> str:
     return "\n".join(cleaned)
 
 
-def create_fieldwork_report(report_data: dict, output_filename: str, document=None) -> str:
+def create_fieldwork_report(report_data: dict, output_filename: str, document=None, save: bool = True) -> str:
     location_name = str(report_data.get("location_name") or "사하구 관내")
     task_category = str(report_data.get("task_category") or "현장 점검")
     main_comment = str(report_data.get("main_comment") or "")
@@ -354,6 +355,8 @@ def create_fieldwork_report(report_data: dict, output_filename: str, document=No
     text_section("메모", overall_comment)
     if ai_refined:
         text_section("AI 현장 분석 의견", clean_markdown_for_hwp(ai_refined))
+    if not save:  # 통합 보고서(compiled_report.py)가 같은 문서에 이어 쓰고 마지막에 한 번 저장한다 (D32)
+        return output_filename
 
     # 9. 파일 저장 및 바이너리 매핑 오류 보정
     # Hancom Office에서 이미지가 정상적으로 표시되도록 binItem id와 binaryItemIDRef를 매칭시킴 (라이브러리 버그 보완)
@@ -369,6 +372,7 @@ def create_fieldwork_report(report_data: dict, output_filename: str, document=No
     out_path = Path(output_filename)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save_to_path(str(out_path))
+    fix_hwpx_images(str(out_path))  # 한글이 사진 왼쪽 위만 잘라 보이지 않도록 원본 크기 보정 (D32)
     return str(out_path.resolve())
 
 
@@ -477,14 +481,19 @@ def run_pipeline(payload: dict, document=None, combined_path=None) -> dict:
                 "sanitized_path": sanitized,
                 "comment": raw.get("comment", ""),
                 "caption": caption,
+                "type": raw.get("type"),
             }
         )
 
     groups = []
     section_index: dict[str, int] = {}
     auto_counter = 1
-    for p in sanitized_photos:
+    # 서버 PhotoSlots.typeOf 와 같은 규칙: type → "작업 전|" 접두어 → 앞 3장은 순서대로 전·중·후 (D32)
+    slot_labels = {"before": "작업 전", "during": "작업 중", "after": "작업 후"}
+    for idx, p in enumerate(sanitized_photos):
         section, caption = parse_photo_comment(p["comment"], auto_counter)
+        if section.startswith("__auto_") and (p.get("type") in slot_labels or idx < 3):
+            section = slot_labels.get(p.get("type")) or ("작업 전", "작업 중", "작업 후")[idx]
         if section.startswith("__auto_"):
             section = f"현장사진 ({auto_counter})"
             auto_counter += 1

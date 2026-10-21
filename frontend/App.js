@@ -30,6 +30,8 @@ import GroupReportsScreen from './screens/GroupReportsScreen';
 import GroupScreen from './screens/GroupScreen';
 import GroupSettingsScreen from './screens/GroupSettingsScreen';
 import GroupWorkspaceScreen from './screens/GroupWorkspaceScreen';
+import ProjectScreen from './screens/ProjectScreen';
+import CompiledReportViewScreen from './screens/CompiledReportViewScreen';
 import LoginScreen from './screens/LoginScreen';
 import MapScreen from './screens/MapScreen';
 import PersonalWorkspaceScreen from './screens/PersonalWorkspaceScreen';
@@ -99,11 +101,18 @@ function AppContent() {
     return () => { show.remove(); hide.remove(); };
   }, []);
   useEffect(() => { exitConfirmation.current.reset(); }, [screen, groupHomeTab]);
+  useEffect(() => { if (!['groupWorkspace', 'download', 'fieldAction', 'reportPreview'].includes(screen)) setGroupWorkspaceBehind(false); }, [screen]);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState('');
   const [mapRecordReturn, setMapRecordReturn] = useState(null);
   const [reportSelections, setReportSelections] = useState({});
   const [groupWorkspaceTab, setGroupWorkspaceTab] = useState('dashboard');
+  // H5: 그룹 '건별 보고서'에서 보고서를 열거나 수정하는 동안 그룹 화면을 숨겨 두고 유지 (거르기·열어 둔 폴더 유지)
+  const [groupWorkspaceBehind, setGroupWorkspaceBehind] = useState(false);
+  const [openedProject, setOpenedProject] = useState(null);
+  const [openedCompiledReport, setOpenedCompiledReport] = useState(null);
+  // 건별 보고서 미리보기 (HTML, 파일 받기 없음): { progressId, title }
+  const [previewReport, setPreviewReport] = useState(null);
   const [personalWorkspaceTab, setPersonalWorkspaceTab] = useState('dashboard');
   const [mapInitialized, setMapInitialized] = useState(false);
   const [selectedDong, setSelectedDong] = useState(null);
@@ -918,6 +927,17 @@ function AppContent() {
   };
   useEffect(() => { restoreLogin(); return subscribeAuthExpired(resetLoggedOut); }, []);
 
+  const openReportPreview = (report, { fromWorkspace = false } = {}) => {
+    setPreviewReport({ progressId: report.progressId, title: report.title || report.reportName || report.detailAddress || '보고서' });
+    if (fromWorkspace) setGroupWorkspaceBehind(true);
+    go('reportPreview');
+  };
+  // iOS 등 바로 받을 수 없는 기기: 고른 건들을 기존 다운로드 화면으로
+  const openReportDownloads = (reports, returnTo) => {
+    setDownloadInfo({ progressIds: reports.map(report => report.progressId), userId: user.userId, returnTo });
+    go('download');
+  };
+
   const handleLeaveGroup = async (leftGroupId) => {
     const refreshed = await refreshAvailableGroups();
     const groups = refreshed.length
@@ -1062,8 +1082,11 @@ function AppContent() {
             />
           )}
 
-          {screen === 'groupWorkspace' && activeGroup && !isPersonalGroup(activeGroup) && (
+          {activeGroup && !isPersonalGroup(activeGroup) && (screen === 'groupWorkspace' || (groupWorkspaceBehind && ['download', 'fieldAction', 'reportPreview'].includes(screen))) && (
+            <View style={[styles.persistentMapLayer, screen !== 'groupWorkspace' && styles.hiddenMapLayer]}
+              pointerEvents={screen === 'groupWorkspace' ? 'auto' : 'none'} accessibilityElementsHidden={screen !== 'groupWorkspace'}>
             <GroupWorkspaceScreen
+              isActive={screen === 'groupWorkspace'}
               user={user}
               group={activeGroup}
               assignments={groupAssignments}
@@ -1078,9 +1101,62 @@ function AppContent() {
                 setTransferTargetMember(member || null);
                 go('transfer');
               }}
-              onReports={() => go('groupReports')}
               onSettings={() => go('groupSettings')}
               onLeaveGroup={handleLeaveGroup}
+              // H5: 프로젝트 탭 '건별 보고서' — 그룹 보고서 화면과 같은 이동
+              onEditReport={(report) => {
+                setSelectedLocation({ id: report.taskId, status: report.taskStatus || report.progressStatus,
+                  lat: report.latitude, lng: report.longitude, detailAddress: report.detailAddress,
+                  roadAddress: report.roadAddress, reportProgressId: report.progressId });
+                setGroupWorkspaceBehind(true);
+                setActionType('report'); go('fieldAction');
+              }}
+              onOpenReport={(report) => {
+                setDownloadInfo({ progressId: report.progressId, userId: user.userId, returnTo: 'groupWorkspace' });
+                setGroupWorkspaceBehind(true);
+                go('download');
+              }}
+              onOpenReports={(reports) => { setGroupWorkspaceBehind(true); openReportDownloads(reports, 'groupWorkspace'); }}
+              onPreviewReport={(report) => openReportPreview(report, { fromWorkspace: true })}
+              onOpenProject={(project) => {
+                setOpenedProject(project);
+                go('project');
+              }}
+            />
+            </View>
+          )}
+
+          {screen === 'project' && user && openedProject && (
+            <ProjectScreen
+              key={openedProject.projectId}
+              user={user}
+              projectId={openedProject.projectId}
+              initialProject={openedProject}
+              onBack={() => goBack('groupWorkspace')}
+              onOpenReport={(report) => {
+                setOpenedCompiledReport(report);
+                go('compiledReportView');
+              }}
+            />
+          )}
+
+          {screen === 'reportPreview' && user && previewReport && (
+            <CompiledReportViewScreen
+              key={`preview-${previewReport.progressId}`}
+              user={user}
+              progressId={previewReport.progressId}
+              title={previewReport.title}
+              onBack={() => goBack('reportList')}
+            />
+          )}
+
+          {screen === 'compiledReportView' && user && openedCompiledReport && (
+            <CompiledReportViewScreen
+              key={openedCompiledReport.reportId}
+              user={user}
+              reportId={openedCompiledReport.reportId}
+              title={openedCompiledReport.title}
+              onBack={() => goBack('project')}
             />
           )}
 
@@ -1224,7 +1300,7 @@ function AppContent() {
               />
             )}
 
-          {activeGroup && user && isPersonalGroup(activeGroup) && (screen === 'workStatus' || personalWorkspaceTab === 'reports' && ['download', 'fieldAction'].includes(screen)) && (
+          {activeGroup && user && isPersonalGroup(activeGroup) && (screen === 'workStatus' || personalWorkspaceTab === 'reports' && ['download', 'fieldAction', 'reportPreview'].includes(screen)) && (
             <View style={[styles.persistentMapLayer, screen !== 'workStatus' && styles.hiddenMapLayer]} pointerEvents={screen === 'workStatus' ? 'auto' : 'none'} accessibilityElementsHidden={screen !== 'workStatus'}>
               <PersonalWorkspaceScreen key={`${user.userId}:${activeGroup.groupId}`} user={user} group={activeGroup} assignments={groupAssignments}
                 tab={personalWorkspaceTab} onTabChange={setPersonalWorkspaceTab} isActive={screen === 'workStatus'}
@@ -1234,7 +1310,9 @@ function AppContent() {
                     lat: report.latitude, lng: report.longitude, detailAddress: report.detailAddress, roadAddress: report.roadAddress, reportProgressId: report.progressId });
                   setActionType('report'); go('fieldAction');
                 }}
-                onOpenReport={report => { setDownloadInfo({ progressId: report.progressId, userId: user.userId, returnTo: 'workStatus' }); go('download'); }} />
+                onOpenReport={report => { setDownloadInfo({ progressId: report.progressId, userId: user.userId, returnTo: 'workStatus' }); go('download'); }}
+                onOpenReports={reports => openReportDownloads(reports, 'workStatus')}
+                onPreviewReport={report => openReportPreview(report)} />
             </View>
           )}
 
@@ -1402,6 +1480,7 @@ function AppContent() {
               loading={!todayLocationsLoaded}
               user={user}
               activeGroup={activeGroup}
+              onSelectGroup={selectActiveGroup}
               groupAssignments={
                 groupAssignments
               }
@@ -1413,6 +1492,7 @@ function AppContent() {
                 setActionType('report');
                 go('fieldAction');
               }}
+              onPreviewReport={(report) => openReportPreview(report)}
               onCreateReport={selectedLocations => {
                 setDownloadInfo({ locations: selectedLocations, userId: user.userId, returnTo: 'reportList' });
                 go('download');
@@ -1420,7 +1500,7 @@ function AppContent() {
             />
           )}
 
-          {activeGroup && user && (!isPersonalGroup(activeGroup) || screen === 'groupReports') && ['groupReports', 'download', 'fieldAction'].includes(screen) && (
+          {activeGroup && user && (!isPersonalGroup(activeGroup) || screen === 'groupReports') && ['groupReports', 'download', 'fieldAction', 'reportPreview'].includes(screen) && (
             <View style={[styles.persistentMapLayer, screen !== 'groupReports' && styles.hiddenMapLayer]}
               pointerEvents={screen === 'groupReports' ? 'auto' : 'none'} accessibilityElementsHidden={screen !== 'groupReports'}>
             <GroupReportsScreen
@@ -1440,6 +1520,8 @@ function AppContent() {
                 setDownloadInfo({ progressId: report.progressId, userId: user.userId, returnTo: 'groupReports' });
                 go('download');
               }}
+              onOpenReports={(reports) => openReportDownloads(reports, 'groupReports')}
+              onPreviewReport={(report) => openReportPreview(report)}
             />
             </View>
           )}
@@ -1496,6 +1578,7 @@ function BottomNavigation({
         'fieldAction',
         'report',
         'download',
+        'reportPreview',
       ].includes(screen)
         ? 'report'
         : [
@@ -1506,6 +1589,8 @@ function BottomNavigation({
           'groupWorkspace',
           'groupSettings',
           'groupReports',
+          'project',
+          'compiledReportView',
           'transfer',
           'workStatus',
           'assignment',

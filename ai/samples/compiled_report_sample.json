@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "report": {
+    "reportId": 12,
+    "title": "상반기 결과보고",
+    "status": "DRAFT",
+    "version": 1,
+    "groupBy": "adminDong",
+    "updatedAt": "2026-10-21T10:00:00"
+  },
+  "project": {
+    "projectId": 3,
+    "name": "2026 불법광고물 정비",
+    "startDate": "2026-01-01",
+    "endDate": "2026-12-31",
+    "groupId": 5,
+    "groupName": "사하구 환경위생과"
+  },
+  "summary": {
+    "totalCount": 2,
+    "period": { "from": "2026-03-02", "to": "2026-05-12" },
+    "authors": ["김남형", "박기범"],
+    "bySection": [
+      { "key": "괴정동", "label": "괴정동", "count": 1 },
+      { "key": "하단동", "label": "하단동", "count": 1 }
+    ]
+  },
+  "sections": [
+    {
+      "key": "괴정동", "label": "괴정동", "count": 1,
+      "items": [
+        {
+          "progressId": 100, "taskId": 54, "sortOrder": 0,
+          "address": "부산 사하구 괴정동 123-4",
+          "adminDong": "괴정동", "category": "불법광고물",
+          "completedAt": "2026-03-02T09:10:00",
+          "author": { "userId": 8, "name": "박기범" },
+          "lat": 35.1, "lng": 128.99,
+          "comment": "가로등 현수막 2매 제거.",
+          "commentOverridden": false,
+          "originalComment": "가로등 현수막 2매 제거.",
+          "aiRefinedContent": null,
+          "photos": [],
+          "locationMapImage": null,
+          "photo_files": [],
+          "map_file": null
+        }
+      ]
+    },
+    {
+      "key": "하단동", "label": "하단동", "count": 1,
+      "items": [
+        {
+          "progressId": 101, "taskId": 55, "sortOrder": 0,
+          "address": "부산 사하구 하단동 492-1 앞",
+          "adminDong": "하단동", "category": "불법광고물",
+          "completedAt": "2026-05-12T14:20:00",
+          "author": { "userId": 7, "name": "김남형" },
+          "lat": 35.106, "lng": 128.966,
+          "comment": "전봇대 불법 현수막 3매를 제거하고 안내문을 부착함.",
+          "commentOverridden": true,
+          "originalComment": "현수막 3개 뗌. 안내문 붙임.",
+          "aiRefinedContent": "**요약**: 현수막 3매 제거",
+          "photos": [ { "slot": "작업 전", "url": "/api/files/55/photo0.jpg", "comment": "현수막" } ],
+          "locationMapImage": null,
+          "photo_files": [ { "path": "test2.jpeg", "caption": "작업 전 현수막" } ],
+          "map_file": "test2.jpeg"
+        }
+      ]
+    }
+  ],
+  "output_path": "output/compiled_report_sample.hwpx"
+}

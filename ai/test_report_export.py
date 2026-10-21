@@ -14,6 +14,8 @@ from PIL import Image, ImageOps
 from hwpx import HwpxDocument
 
 AI_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(AI_DIR))
+from hwpx_images import fix_hwpx_images  # noqa: E402
 ENABLE_AI_ANALYSIS = False
 source = ast.parse((AI_DIR / 'app.py').read_text(encoding='utf-8'))
 names = {'resolve_path', 'sanitize_image', 'normalize_section', 'parse_photo_comment',
@@ -55,6 +57,9 @@ def main():
         binary_ids = {element.get('id') for doc in documents for element in doc.iter() if element.tag.endswith('binItem')}
         refs = {element.get('binaryItemIDRef') for doc in documents for element in doc.iter() if element.get('binaryItemIDRef')}
         assert refs and refs <= binary_ids, (refs, binary_ids)
+        # D32: 한글이 그림을 잘라 보이지 않도록 imgDim 은 실제 픽셀 × 75 (1600×1100 으로 정리된 사진)
+        dims = {(e.get('dimwidth'), e.get('dimheight')) for doc in documents for e in doc.iter() if e.tag.endswith('imgDim')}
+        assert dims == {('120000', '82500')}, dims
     one = run_pipeline({**reports[0], 'output_dir': str(output)})
     two = run_pipeline({**reports[0], 'output_dir': str(output)})
     assert one['report_file'] != two['report_file']
