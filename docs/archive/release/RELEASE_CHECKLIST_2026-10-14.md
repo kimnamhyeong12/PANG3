@@ -1,5 +1,7 @@
 # PANG3 앱 출시 체크리스트
 
+> 보관 문서: 작성 당시의 조사·변경 기록입니다. 현재 구현·검증 상태는 [문서 목차](../../README.md)에서 관련 문서를 확인하세요. 아래 작업 지시는 이 기록을 열었다는 이유로 실행하지 않습니다.
+
 기준: 2026-10-14, 현재 로컬 tmap 브랜치의 코드·설정·기존 검증 보고서.
 이번 조사는 소스와 문서 검토이며 운영 AWS, 스토어 계정, 실제 DB, 신규 실기기 테스트를 수행한 것은 아니다. 체크박스는 출시 작업의 완료 확인용이다. 이미 구현된 기능에도 운영 검증 항목이 남을 수 있다.
 
@@ -145,7 +147,7 @@
 
 - 로컬: backend/src/main/java/com/fieldwork/config/SecurityConfig.java, service/AuthService.java, controller/AuthController.java, controller/FileController.java, controller/TaskProgressController.java, entity/User.java.
 - 로컬: frontend/eas.json, app.config.js, app.json, android/app/build.gradle, modules/kakao-navigation/index.js 및 expo-module.config.json.
-- 로컬: docker-compose.yml, .github/workflows/deploy.yml, NAVIGATION_FINDINGS_2026-10-14.md, REFACTOR_CLEANUP_2026-10-14.md.
+- 로컬: docker-compose.yml, .github/workflows/deploy.yml, docs/archive/navigation/NAVIGATION_FINDINGS_2026-10-14.md, REFACTOR_CLEANUP_2026-10-14.md.
 - [Google Play 사용자 데이터 정책](https://support.google.com/googleplay/android-developer/answer/10144311?hl=ko)
 - [Google Play 계정 삭제 요구사항](https://support.google.com/googleplay/android-developer/answer/13327111?hl=ko)
 - [새 개인 Play 계정의 테스트 요구사항](https://support.google.com/googleplay/android-developer/answer/14151465?hl=ko)

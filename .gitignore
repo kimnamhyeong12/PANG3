@@ -49,4 +49,8 @@ PORTFOLIO_MO_JUNHO.md
 # Expo verification output
 frontend/.expo-verify/
 
+# Local agent workflow evidence (synthetic files, command logs and review records)
+.agent-runs/
+tools/agent-workflow/__pycache__/
+
 .env

@@ -4,7 +4,7 @@ export const colors = {
   primary: '#2477F3', primaryDark: '#1551A6', primarySoft: '#E8F2FF',
   teal: '#12A9A5', tealDark: '#078A88', tealSoft: '#E3F8F6',
   line: '#DCE7F5', pending: '#C87973', pendingSoft: '#F8EEEC', pendingInk: '#99514D',
-  warning: '#BE9446', warningSoft: '#F8F2E7', warningInk: '#866320', success: '#4F9588',
+  warning: '#F3BF32', warningSoft: '#FFF7D6', warningInk: '#795A0A', success: '#4F9588',
   successSoft: '#ECF5F2', successInk: '#326F64', danger: '#E34D59', dangerSoft: '#FFE9EC',
   blue: '#2477F3', blueSoft: '#E8F2FF',
 };

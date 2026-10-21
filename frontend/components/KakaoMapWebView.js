@@ -166,6 +166,35 @@ const buildKakaoMapHtml = (
     box-shadow: 0 0 0 3px #FFFFFF, 0 0 0 5px #2477F3;
   }
 
+  .marker-wrap.preview-selected {
+    transform: scale(1.15);
+    transform-origin: 50% 100%;
+  }
+
+  .marker-wrap.preview-selected .marker {
+    box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4px #2477F3;
+  }
+
+  .marker-title {
+    position: absolute;
+    bottom: 44px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 150px;
+    padding: 4px 6px;
+    border: 1px solid #2477F3;
+    border-radius: 7px;
+    background: #FFFFFF;
+    color: #10285B;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    box-shadow: 0 2px 5px rgba(16,40,91,0.15);
+  }
+
   .marker-wrap.search-selected {
     transform: scale(1.3);
     transform-origin: 50% 100%;
@@ -392,6 +421,7 @@ const buildKakaoMapHtml = (
   var map = null;
 
   var locationOverlays = [];
+  var markerMoveCancel = null;
   var selectedOverlay = null;
 
   var boundaryPolygons = [];
@@ -423,6 +453,30 @@ const buildKakaoMapHtml = (
   var pendingMapClickTimer = null;
   var previousMapTap = null;
   var lastDoubleTapAt = 0;
+  var previewCameraKey = null;
+  var previewCameraInteracted = false;
+
+  function cancelPreviewFocus() {
+    previewCameraInteracted = true;
+  }
+
+  function updatePreviewCamera(data) {
+    if (!data.key) {
+      cancelPreviewFocus();
+      previewCameraKey = null;
+      return;
+    }
+    var changed = previewCameraKey !== data.key;
+    if (changed) {
+      cancelPreviewFocus();
+      previewCameraKey = data.key;
+      previewCameraInteracted = false;
+    }
+    if (previewCameraInteracted) return;
+    if (data.detail) {
+      if (changed) moveToPosition(data.destination.lat, data.destination.lng, 2);
+    } else fitCoordinates(data.coordinates, data.padding);
+  }
 
   /*
    * React Native로 메시지를 보낸다.
@@ -864,6 +918,7 @@ const buildKakaoMapHtml = (
       return;
     }
 
+    if (markerMoveCancel) markerMoveCancel();
     clearMapData();
 
     /*
@@ -901,13 +956,22 @@ const buildKakaoMapHtml = (
             !!location.isReturnLocation
           );
 
+        if (location.emphasized) {
+          markerElement.className += ' preview-selected';
+          var title = document.createElement('div');
+          title.className = 'marker-title';
+          title.textContent = (location.markerLabel || location.markerNumber || '') + ' ' + (location.detailAddress || location.roadAddress || '방문지');
+          markerElement.appendChild(title);
+        } else if (data.emphasizeHighlighted) markerElement.style.opacity = '0.5';
+        var markerZIndex = location.emphasized ? 10000 : location.isSelectedSearch ? 150 : location.highlighted ? 140 : 20 + index;
+
         var overlay =
           new window.kakao.maps.CustomOverlay({
             position: position,
             content: markerElement,
             xAnchor: 0.5,
             yAnchor: 1,
-            zIndex: location.isSelectedSearch ? 150 : 20 + index
+            zIndex: markerZIndex
           });
 
         overlay.setMap(map);
@@ -916,11 +980,72 @@ const buildKakaoMapHtml = (
           overlay
         );
 
+        if (location.draggable) {
+          var down = null;
+          var holdTimer = null;
+          var holding = false;
+          var moved = false;
+          var oldDraggable = true;
+          var originPosition = null;
+          var originPoint = null;
+          markerElement.style.touchAction = 'none';
+          markerElement.style.userSelect = 'none';
+          function finishMove(cancelled) {
+            if (!down) return;
+            clearTimeout(holdTimer);
+            map.setDraggable(oldDraggable);
+            markerElement.style.filter = '';
+            overlay.setZIndex(markerZIndex);
+            var wasHolding = holding;
+            var didMove = moved;
+            down = null;
+            holding = false;
+            markerMoveCancel = null;
+            if (cancelled || (wasHolding && !didMove)) overlay.setPosition(originPosition);
+            else if (wasHolding && didMove) {
+              var dropped = overlay.getPosition();
+              post({ type: 'MARKER_DRAG_END', index: index, id: location.id, latitude: dropped.getLat(), longitude: dropped.getLng() });
+            } else if (!wasHolding && !didMove) post({ type: 'MARKER_PRESS', index: index });
+          }
+          markerElement.addEventListener('pointerdown', function (event) {
+            if (event.isPrimary === false || event.button > 0) return;
+            event.preventDefault(); event.stopPropagation();
+            window.kakao.maps.event.preventMap();
+            if (markerMoveCancel) markerMoveCancel();
+            oldDraggable = map.getDraggable();
+            map.setDraggable(false);
+            originPosition = overlay.getPosition();
+            originPoint = map.getProjection().containerPointFromCoords(originPosition);
+            down = { x: event.clientX, y: event.clientY };
+            moved = false; holding = false;
+            markerElement.setPointerCapture(event.pointerId);
+            markerMoveCancel = function () { finishMove(true); };
+            holdTimer = setTimeout(function () {
+              if (!down || moved) return;
+              holding = true;
+              overlay.setZIndex(20000);
+              markerElement.style.filter = 'drop-shadow(0 5px 5px #10285B66)';
+            }, 450);
+          });
+          markerElement.addEventListener('pointermove', function (event) {
+            if (!down) return;
+            event.preventDefault(); event.stopPropagation();
+            var dx = event.clientX - down.x, dy = event.clientY - down.y;
+            if (Math.hypot(dx, dy) > 8) moved = true;
+            if (!holding) { if (moved) clearTimeout(holdTimer); return; }
+            overlay.setPosition(map.getProjection().coordsFromContainerPoint(new window.kakao.maps.Point(originPoint.x + dx, originPoint.y + dy)));
+          });
+          markerElement.addEventListener('pointerup', function (event) { event.preventDefault(); event.stopPropagation(); finishMove(false); });
+          markerElement.addEventListener('pointercancel', function () { finishMove(true); });
+          markerElement.addEventListener('lostpointercapture', function () { finishMove(true); });
+          markerElement.addEventListener('touchstart', function (event) { event.preventDefault(); event.stopPropagation(); }, { passive: false });
+        }
+
         markerElement.addEventListener(
           "click",
           function (event) {
             event.stopPropagation();
-
+            if (location.draggable) return;
             post({
               type: "MARKER_PRESS",
               index: index
@@ -1173,6 +1298,11 @@ const buildKakaoMapHtml = (
       return;
     }
 
+    if (commandData.type === 'PREVIEW_CAMERA') {
+      updatePreviewCamera(commandData);
+      return;
+    }
+
     if (commandData.type === "BOUNDARIES") {
       setBoundaryData(commandData.data);
       return;
@@ -1287,6 +1417,7 @@ const buildKakaoMapHtml = (
     if (
       commandData.type === "MOVE"
     ) {
+      cancelPreviewFocus();
       moveToPosition(
         commandData.latitude,
         commandData.longitude,
@@ -1300,6 +1431,7 @@ const buildKakaoMapHtml = (
       commandData.type ===
       "MOVE_CURRENT"
     ) {
+      cancelPreviewFocus();
       moveToCurrentLocation(
         commandData.latitude,
         commandData.longitude,
@@ -1312,6 +1444,7 @@ const buildKakaoMapHtml = (
     if (
       commandData.type === "FIT"
     ) {
+      cancelPreviewFocus();
       fitCoordinates(
         commandData.coordinates, commandData.padding
       );
@@ -1376,6 +1509,11 @@ const buildKakaoMapHtml = (
         ${Number(initialLongitude)}
       );
 
+      var mapNode = document.getElementById('map');
+      mapNode.addEventListener('pointerdown', cancelPreviewFocus, { passive: true });
+      mapNode.addEventListener('touchstart', cancelPreviewFocus, { passive: true });
+      mapNode.addEventListener('wheel', cancelPreviewFocus, { passive: true });
+
       window.kakao.maps.event.addListener(
         map,
         "click",
@@ -1420,6 +1558,7 @@ const buildKakaoMapHtml = (
         map,
         "dragstart",
         function () {
+          cancelPreviewFocus();
           if (selectionMode && selectionSessionActive) {
             selectionDragStarted = true;
           }
@@ -1509,6 +1648,9 @@ export default function KakaoMapWebView({
   guideTarget,
   onReturnArrival,
   previewRouteSegment = null,
+  previewDestination = null,
+  previewDetailView = false,
+  emphasizeHighlighted = false,
   routeViewportPadding = null,
   highlightedLocationKey = null,
   focusCoordinates = null,
@@ -1527,6 +1669,9 @@ export default function KakaoMapWebView({
   onSelectionMoveChange,
   onCurrentLocationChange,
   onMarkerClick,
+  onMarkerDrag,
+  markerDragEnabled = true,
+  onMapPress,
   onBoundaryClick,
   onBoundaryReady,
   directMarkerPress = false,
@@ -2135,6 +2280,7 @@ export default function KakaoMapWebView({
         null;
     }
 
+    if (!previewRouteSegment || !previewDestination) sendMapCommand({ type: 'PREVIEW_CAMERA', key: null });
     // During guidance, expanding a visit list must not refit the entire route.
     // GPS following and the explicit recenter button own the driving viewport.
     if (isGuiding && !previewRouteSegment) return;
@@ -2186,6 +2332,23 @@ export default function KakaoMapWebView({
       coordinates.length <
       2
     ) {
+      return;
+    }
+
+    if (previewRouteSegment) {
+      if (!previewDestination) return;
+      const destination = {
+        lat: Number(previewDestination.lat ?? previewDestination.latitude),
+        lng: Number(previewDestination.lng ?? previewDestination.longitude),
+      };
+      if (!Number.isFinite(destination.lat) || !Number.isFinite(destination.lng)) return;
+      sendMapCommand({ type: 'PREVIEW_CAMERA',
+        key: `${previewRouteSegment.previewCameraId ?? previewRouteSegment.destinationKey}:${previewRouteSegment.mode}:${previewDetailView}`,
+        coordinates: [...coordinates, destination], destination,
+        padding: routeViewportPadding,
+        detail: previewDetailView,
+      });
+      segmentFocusKeyRef.current = null;
       return;
     }
 
@@ -2292,6 +2455,11 @@ export default function KakaoMapWebView({
     routeSegments,
     roadPath,
     previewRouteSegment,
+    previewDestination?.lat,
+    previewDestination?.lng,
+    previewDestination?.latitude,
+    previewDestination?.longitude,
+    previewDetailView,
     routeViewportPadding?.top,
     routeViewportPadding?.right,
     routeViewportPadding?.bottom,
@@ -2640,7 +2808,7 @@ export default function KakaoMapWebView({
           pos.longitude,
 
         level:
-          MY_LOCATION_LEVEL,
+          guidingRef.current && routeSegments[currentSegmentIndex]?.mode === 'walk' ? 3 : MY_LOCATION_LEVEL,
       });
     };
 
@@ -3116,10 +3284,13 @@ export default function KakaoMapWebView({
 
           return {
             ...location,
+            draggable: !!onMarkerDrag && markerDragEnabled && !mapSelectMode && !location.isSearchResult && !location.isPublicFacility && !location.isReturnLocation && location.id != null,
             highlighted: String(location.id ?? `${location.lat},${location.lng},${location.detailAddress}`) === highlightedLocationKey,
+            emphasized: emphasizeHighlighted && String(location.id ?? `${location.lat},${location.lng},${location.detailAddress}`) === highlightedLocationKey,
 
             color:
-              location.markerColor || (['complete', 'completed', 'done'].includes(location.status) ? getMarkerColorByStatus(location.status) : "#E34D59"),
+              (location.isSearchResult || location.isPublicFacility || location.isReturnLocation) && location.markerColor
+                ? location.markerColor : getMarkerColorByStatus(location.status),
 
             /*
              * current 스타일은 더 이상 사용하지 않는다.
@@ -3160,10 +3331,12 @@ export default function KakaoMapWebView({
             : activePath,
         activeTrafficPaths: previewRouteSegment ? previewRouteSegment.trafficSections || [] : activeTrafficPaths,
         activeMode: previewRouteSegment?.mode || routeSegments[currentSegmentIndex]?.mode,
+        emphasizeHighlighted,
       },
     });
   }, [
     visibleMapLocations,
+    markerDragEnabled,
     selectedPos,
     hasCurrentPosition,
     roadPath,
@@ -3176,6 +3349,7 @@ export default function KakaoMapWebView({
     selectionSessionActive,
     previewRouteSegment,
     highlightedLocationKey,
+    emphasizeHighlighted,
   ]);
 
   useEffect(() => {
@@ -3349,6 +3523,7 @@ export default function KakaoMapWebView({
           message.type ===
           "MAP_PRESS"
         ) {
+          if (!mapSelectMode) onMapPress?.();
           handleMapPress(
             Number(
               message.latitude
@@ -3381,6 +3556,13 @@ export default function KakaoMapWebView({
             }
           }
 
+          return;
+        }
+
+        if (message.type === 'MARKER_DRAG_END') {
+          const location = visibleMapLocations.find(item => String(item.id) === String(message.id));
+          const next = { lat: Number(message.latitude), lng: Number(message.longitude) };
+          if (location && Number.isFinite(next.lat) && Number.isFinite(next.lng)) onMarkerDrag?.(location, next);
           return;
         }
 

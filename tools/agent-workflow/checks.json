@@ -1,0 +1,29 @@
+{
+  "report-api-pilot": {
+    "kind": "command", "cwd": "backend", "timeout_seconds": 240,
+    "argv": ["mvn", "-o", "-B", "-q", "-Dmaven.repo.local={root}/.m2/repository", "-Djava.io.tmpdir={root}/backend/target/workflow-tmp", "-Dtest=ReportDownloadPilotTest", "-Dpang3.report.python={report_python}", "-Dpang3.pilot.output={evidence}", "test"],
+    "needs": ["report-python", "mvn"],
+    "artifacts": ["pilot-summary.json", "report-a.hwpx", "report-b.hwpx"],
+    "description": "MockMvc + isolated H2 + real Java to Python HWPX generation; not TCP/device/Postgres E2E"
+  },
+  "mobile-files": {
+    "kind": "command", "cwd": "frontend", "timeout_seconds": 60,
+    "argv": ["node", "scripts/report-files-test.cjs"], "needs": ["node"],
+    "description": "Individual report preparation logic with mocked transport"
+  },
+  "mobile-download": {
+    "kind": "command", "cwd": "frontend", "timeout_seconds": 60,
+    "argv": ["node", "scripts/report-download-test.cjs"], "needs": ["node", "frontend-babel"],
+    "description": "Mocked Android/iOS screen flow; not actual filesystem or device UI"
+  },
+  "report-export": {
+    "kind": "command", "cwd": "ai", "timeout_seconds": 90,
+    "argv": ["{report_python}", "test_report_export.py"], "needs": ["report-python"],
+    "description": "Synthetic HWPX ZIP/XML/image export regression; not visual layout QA"
+  },
+  "android-report-device": {
+    "kind": "manual", "description": "Android saves two reports and opens both in HWPX viewer",
+    "resume": "Connect a test device with the candidate app and isolated backend; capture save and viewer evidence. Do not reinstall, clear app data or switch the current app environment implicitly.",
+    "required_metadata": ["device", "os", "app_build", "artifact_sha256", "network", "steps", "expected", "actual"]
+  }
+}

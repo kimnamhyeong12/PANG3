@@ -7,6 +7,7 @@ import { groupApi } from '../utils/groupApi';
 import { colors } from '../constants/design';
 import { groupReportsByPlace } from '../utils/reportPhotos';
 import { canDownloadReport } from '../utils/reportAvailability';
+import { cleanReportName } from '../utils/reportName';
 import ReportDatePicker from '../components/ReportDatePicker';
 import { currentMonthRange, selectRangeDate } from '../utils/calendar';
 
@@ -26,7 +27,18 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
   const [openFilter, setOpenFilter] = useState(null);
   useEffect(() => { setMember(''); setDong(''); setSelectedPlace(null); setOpenFilter(null); }, [group.groupId]);
   useEffect(() => { if (!isActive) { setOpenFilter(null); setDateSide(null); } }, [isActive]);
-  useScreenBackHandler(() => { if (!selectedPlace) return false; setSelectedPlace(null); return true; }, isActive && !!selectedPlace);
+  useScreenBackHandler(() => {
+    if (dateSide) { setDateSide(null); return true; }
+    if (openFilter) { setOpenFilter(null); return true; }
+    if (selectedPlace) { setSelectedPlace(null); return true; }
+    const defaults = personalArchive ? { start: '', end: '' } : currentMonthRange();
+    if (member || dong || search || startDate !== defaults.start || endDate !== defaults.end) {
+      setMember(''); setDong(''); setSearch('');
+      setStartDate(defaults.start); setEndDate(defaults.end);
+      return true;
+    }
+    return false;
+  }, isActive);
 
   useEffect(() => {
     if (!isActive) return;
@@ -106,7 +118,9 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
         <View style={styles.dongGroup}>
           {selected.items.map((item) => <View key={item.progressId} style={styles.card}>
             <View style={styles.cardBody}>
-              <Text style={styles.title}>{String(item.createdAt || '').slice(0, 16).replace('T', ' ')}</Text>
+              <Text style={styles.title}>{cleanReportName(item.reportName) || '현장 보고서'}</Text>
+              <Text style={styles.meta}>{String(item.createdAt || '').slice(0, 16).replace('T', ' ')}</Text>
+              {!!item.completedAt && <Text style={styles.meta}>조치 완료: {String(item.completedAt).replace('T', ' ').slice(0, 16)}</Text>}
               <Text style={styles.meta}>{statusLabel(item.progressStatus)} · {item.performedByName || '작업자 확인 불가'}{item.performedByDeparted ? ' (탈퇴한 사용자)' : ''}</Text>
               <Text style={styles.meta}>담당자: {item.assigneeName || '담당자 확인 불가'}{item.assigneeDeparted ? ' (탈퇴)' : ''}</Text>
               <View style={{ flexDirection: 'row', gap: 20, marginTop: 8 }}>

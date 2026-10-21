@@ -80,4 +80,4 @@ USB를 분리하면 이 연결은 끊어진다. 재연결 후 adb reverse 두 �
 동일 Docker 오류 보고: [Docker Desktop feedback #448](https://github.com/docker/desktop-feedback/issues/448). H2 파일 DB 참고: [H2 기능 문서](https://h2database.com/html/features.html).
 # 일괄 점검 후 수정 내역
 
-2026-10-14 후속 수정, 검증 결과 및 남은 실기기 확인은 `RELEASE_FIXES_2026-10-14.md`에 정리했다. `frontend/scripts/build-release-local.ps1`로 개발 서버 없이 실행할 로컬 검증 APK를 만들고, 휴대폰 USB 연결 후 `frontend/scripts/install-local-preview.ps1`로 기존 데이터를 유지하며 업데이트할 수 있다. 로컬 백엔드 연결에는 USB가 계속 필요하다.
+2026-10-14 후속 수정, 검증 결과 및 남은 실기기 확인은 `docs/archive/release/RELEASE_FIXES_2026-10-14.md`에 정리했다. `frontend/scripts/build-release-local.ps1`로 개발 서버 없이 실행할 로컬 검증 APK를 만들고, 휴대폰 USB 연결 후 `frontend/scripts/install-local-preview.ps1`로 기존 데이터를 유지하며 업데이트할 수 있다. 로컬 백엔드 연결에는 USB가 계속 필요하다.

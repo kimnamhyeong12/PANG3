@@ -1,102 +1,37 @@
-# PANG3 - 사하구청 지도 기반 외근 도우미
+# PANG3 — 지도 기반 외근 도우미
 
-외근 업무를 효율적으로 관리하기 위한 지도 기반 시스템입니다.  
-위치 기반 기술과 데이터 분석을 활용하여 외근 경로 관리, 업무 기록, 보고서 자동화를 지원합니다.
+지도와 위치 정보를 이용해 외근 방문지·업무 이관·현장 기록·보고서 작성을 지원하는 프로젝트입니다.
 
----
+**문서는 [문서 목차](docs/README.md)에서 찾을 수 있습니다.**
 
-## 👥 팀 소개 (PANG3)
+## 프로젝트 구조
 
-- 김남형 (팀장, 보안)
-- 조영준 (클라우드)
-- 박기범 (백엔드)
-- 모준호 (데이터 분석)
+| 경로 | 역할 |
+|---|---|
+| frontend/ | Expo·React Native 모바일 앱 및 Android 지도·안내 모듈 |
+| web/ | React·Vite 웹 클라이언트 |
+| backend/ | Java 17·Spring Boot API, 인증·업무·파일·보고서 연동 |
+| ai/ | Python 기반 HWPX 보고서 생성 엔진 |
+| infra/ | 서버·스토리지·설정 관리 참고 자료 |
+| docs/ | 출시·개발·기능·보안·설계 문서와 과거 기록 |
 
-※ 역할은 추후 확정 예정
+## 실행·검증 안내
 
----
+- [로컬 앱·API 실행](docs/development/LOCAL_RELEASE_RUN.md)
+- [모바일 개발 안내](frontend/README.md)
+- [보고서 엔진](ai/README.md) · [연동 문서](ai/INTEGRATION.md)
+- [백엔드 보조 스크립트](backend/scripts/README.md)
+- [출시 전 검증 계획](docs/release/APP_RELEASE_VALIDATION_PLAN.md)
 
-## 🎯 프로젝트 목표
+환경별 설정과 검증 한계는 각 문서에서 확인합니다. 과거 실행 기록은 현재 서버 가동·운영 배포·최신 코드 검증을 의미하지 않습니다. 자격 증명과 실제 업무 데이터는 저장소에 넣지 않습니다.
 
-- 외근 업무의 비효율적인 관리 문제 해결
-- 지도 기반 위치 추적 및 경로 관리 기능 제공
-- 데이터 기반 행정 의사결정 지원
-- 안전한 개인정보 및 업무 데이터 관리
+## 출시·개발 계획
 
-## 🧩 역할 분담
+- [출시 실행 계획](docs/release/APP_RELEASE_ACTION_PLAN.md)
+- [보안 점검](docs/security/SECURITY_AUDIT_2026-10-18.md)
+- [UI·UX 최종 점검](docs/design/UI_UX_FINAL_TODO.md)
+- [AI 개발 워크플로우 설계안](docs/workflows/AI_WORKFLOW_DESIGN.md)
 
-### 1. ☁️ 클라우드 엔지니어
-- Docker 기반 개발 환경 구축
-- Aws Cloud 서버 인프라 구성
-- CI/CD 파이프라인 구축 (GitHub Actions)
-- 서버 모니터링 및 운영 관리
+## 팀
 
-### 2. 🔐 보안 엔지니어
-- VPC 기반 네트워크 보안 설계
-- JWT 기반 인증 및 권한 관리
-- SSL/TLS 통신 및 데이터 암호화
-- 로그 관리 및 보안 감사 체계 구축
-
-### 3. ⚙️ 백엔드 개발자
-- 위치 기반 데이터 처리 (GIS)
-- 이미지 메타데이터(EXIF) 분석
-- AI 기반 보고서 생성 기능 구현
-- 업무 상태 관리 및 API 개발
-
-### 4. 📊 데이터 분석가
-- 공간 데이터 시각화 (Heatmap, Choropleth)
-- 경로 최적화 알고리즘 (TSP)
-- 통계 분석 및 이상 탐지
-- 데이터 파이프라인 구축 (ETL)
-  
-
-----------------------------------------------------------------------------------------------------------------------------
-
-
-- Server OS: Ubuntu 24.04 LTS (AWS EC2)
-- Runtime: Docker / Docker Compose
-- Database: PostgreSQL 16 + PostGIS 
-- Public IP: 개발 시작하면 매일 아침마다 업데이트 예정 (탄력적 ip 사용 x)
-
-
-----------------------------------------------------------------------------------------------------------------------------
-
-
-### 개발 환경 구축 가이드
-
-보안 위해서 AWS SSM 사용(AWS 안의 금고라고 생각) 
-
-1. 사전 준비
-    (1) Docker Desktop 설치 (실행 중으로)
-    (2) 깃 설치
-    (3) VsCode or IntelliJ   
-  
-2. AWS CLI 설치 (AWS 서버와 통신할 수 있는 도구)      
-    (1) 각자 공식 링크 들어가서 설치      
-    (2) 터미널에 aws —version 쳐서 나오면 설치 완료  
-    
-    
-3. AWS 엑세스 키 등록      
-    -> 내가 보내준 엑세스 키 컴퓨터에 등록하는 과정       
-    (1) 터미널에 aws configure 치고 엔터하면 밑에 이렇게 4개 차례대로 뜰거임
-
-      ->  AWS Access Key ID: 받은 ID 붙여넣기
-          AWS Secret Access Key: 받은 Secret Key 붙여넣기
-          Default region name: ap-northeast-2 (서울 리전: 데이터 센터가 서울에 있다는 뜻)
-          Default output format: json (또는 그냥 엔터)
-
-
-4. 이제 깃허브 올려놓은 거 다 pull 하고 우리 프로젝트 최상단 폴더에서  docker-compose up -d 터미널에 작성
-
-  
-5. 되는 지 확인
-     도커 앱 실행해서 sahagu-db와 sahagu-api 컨테이너에 초록불 들어와있어야함
-      그리고 터미널에 aws ssm get-parameter --name "/sahagu/db/password" --with-decryption 
-      이 명령어 쳤을 때 docker-yml 파일의 가짜 비밀번호가 아닌 진짜 비밀번호가 뜨면 aws ssm에 접속 성공
-
- 
-*주의사항*
--> .env 파일 만들기 x (깃허브에 혹시 잘못 올라갈 수 있어서 미리 차단)
--> db 접속 안 될 경우 = 서버가 꺼져있을 확률이 높으니까 나한테 켜달라하기. 
--> 받은 엑세스 키는 절대 유출되거나 깃허브에 올라가지 않도록 주의 종이에 써두고 파일은 지우던가 아니면 자신만의 개인 보안 폴더에 넣어놓기 
-(깃허브에 유출 될 경우 돈 얼마 나갈 지 모름)
+김남형 · 조영준 · 박기범 · 모준호

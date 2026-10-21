@@ -14,6 +14,30 @@ import java.io.File
 object ReportDownloads {
   private const val REPORT_FOLDER = "외근도우미/다운로드"
 
+  private fun downloadUri(value: String): Uri {
+    val uri = Uri.parse(value)
+    require(uri.scheme == "content" && uri.authority == "media" && uri.pathSegments.size == 3
+      && uri.pathSegments[0] in listOf("external", "external_primary")
+      && uri.pathSegments[1] == "downloads" && uri.pathSegments[2].all { it.isDigit() }) { "저장된 보고서 주소를 확인해 주세요." }
+    return uri
+  }
+
+  fun exists(context: Context, value: String): Boolean = try {
+    context.contentResolver.openFileDescriptor(downloadUri(value), "r")?.use { true } ?: false
+  } catch (_: Exception) { false }
+
+  fun openFile(context: Context, value: String): Boolean {
+    val uri = downloadUri(value)
+    check(exists(context, value)) { "REPORT_FILE_MISSING: 저장한 파일이 이동되었거나 삭제되었습니다." }
+    for (mime in listOf("application/hwp+zip", "application/vnd.hancom.hwpx")) {
+      val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      try { context.startActivity(intent); return true }
+      catch (_: android.content.ActivityNotFoundException) { }
+    }
+    return false
+  }
+
   fun openFolder(context: Context): Boolean {
     val folder = DocumentsContract.buildDocumentUri("com.android.externalstorage.documents",
       "primary:${Environment.DIRECTORY_DOWNLOADS}/$REPORT_FOLDER")

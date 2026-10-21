@@ -5,10 +5,10 @@ import Svg, { Path } from 'react-native-svg';
 import { colors } from '../constants/design';
 import { maneuverDistance } from '../utils/maneuverGuide';
 
-function ManeuverArrow({ name, small = false }) {
+function ManeuverArrow({ name, rotation = 0, small = false }) {
   const left = name === 'return-up-back-outline';
   const right = name === 'return-up-forward-outline';
-  if (!left && !right) return <Ionicons name={name || 'navigate-outline'} size={small ? 22 : 38} color="#FFFFFF" />;
+  if (!left && !right) return <Ionicons name={name} size={small ? 22 : 38} color="#FFFFFF" style={{ transform: [{ rotate: `${rotation}deg` }] }} />;
   return <Svg width={small ? 22 : 38} height={small ? 28 : 44} viewBox="0 0 32 40">
     <Path d={left ? 'M24 37V16Q24 10 18 10H5M12 3L5 10L12 17' : 'M8 37V16Q8 10 14 10H27M20 3L27 10L20 17'}
       fill="none" stroke="#FFFFFF" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
@@ -17,14 +17,15 @@ function ManeuverArrow({ name, small = false }) {
 
 export default function ManeuverGuideCard({ guide }) {
   const step = guide?.primary, next = guide?.secondary;
-  return <View><View style={[styles.card, styles.cardJoined]} accessibilityLabel={step ? `${maneuverDistance(step.distance)} 앞 ${step.label}, ${step.road}` : '길안내 확인 중'}>
-    <View style={styles.icon}><ManeuverArrow name={step?.icon} /></View>
+  if (!step) return null;
+  return <View><View style={[styles.card, next && styles.cardJoined]} accessibilityLabel={`${maneuverDistance(step.distance)} 앞 ${step.label}, ${step.road}`}>
+    <View style={styles.icon}><ManeuverArrow name={step.icon} rotation={step.rotation} /></View>
     <View style={styles.main}>
-      <Text style={styles.title} numberOfLines={1}>{step ? <Text style={styles.distance}>{maneuverDistance(step.distance)}</Text> : '길안내 확인 중…'}</Text>
+      <Text style={styles.title} numberOfLines={1}><Text style={styles.distance}>{maneuverDistance(step.distance)}</Text></Text>
     </View>
     </View>
     {next && <View style={styles.next} accessibilityLabel={`그다음 ${maneuverDistance(next.distance)} 앞 ${next.label}`}>
-      <ManeuverArrow name={next.icon} small /><Text style={styles.nextDistance}>{maneuverDistance(next.distance)}</Text>
+      <ManeuverArrow name={next.icon} rotation={next.rotation} small /><Text style={styles.nextDistance}>{maneuverDistance(next.distance)}</Text>
     </View>}
   </View>;
 }

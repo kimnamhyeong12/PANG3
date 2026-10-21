@@ -6,7 +6,7 @@ const babel = require('../node_modules/@babel/core');
 
 // Run the screen's hooks and rendered event handlers with native surfaces mocked.
 // GPS, backend responses, and workspace refreshes are controlled by each scenario.
-function createScreen({ nativeNavigation = false, taskRemoved = false } = {}) {
+function createScreen({ nativeNavigation = false, nativeWalking = false, taskRemoved = false } = {}) {
   let slots = [], cursor = 0, effects = [], dirty = true, tree;
   const calls = [], alerts = [], requests = [], orderRequests = [], storage = new Map(), sdkPreviews = new Set();
   let sdkSequence = 0;
@@ -63,8 +63,9 @@ function createScreen({ nativeNavigation = false, taskRemoved = false } = {}) {
       if (name.includes('KakaoMapWebView')) return { __esModule: true, default: 'MapCanvas' };
       if (name.includes('SafetyGuideBadge')) return { __esModule: true, default: 'SafetyBadge' };
       if (name.includes('ManeuverGuideCard')) return { __esModule: true, default: 'ManeuverCard' };
+      if (name.includes('RegistrationFab')) return { __esModule: true, default: 'RegistrationFab' };
       if (name.includes('PhotoUploadScreen')) return { __esModule: true, default: 'PhotoUpload' };
-      if (name.includes('kakao-navigation')) return { KakaoNavigationView: 'Navigation', isKakaoNavigationAvailable: () => nativeNavigation,
+      if (name.includes('kakao-navigation')) return { KakaoNavigationView: 'Navigation', KakaoWalkingMapView: 'WalkingMap', isWalkingMapAvailable: () => nativeWalking, isKakaoNavigationAvailable: () => nativeNavigation,
         beginRouteSession() { taskRemoved = false; calls.push(['begin-route']); },
         endRouteSession() { calls.push(['end-route']); }, wasRouteTaskRemoved: () => taskRemoved,
         isSdkPreviewAvailable: id => sdkPreviews.has(id), discardSdkPreview: id => sdkPreviews.delete(id),
@@ -141,6 +142,17 @@ const visit = (id, lng) => ({ id, lat: 35, lng, detailAddress: `장소 ${id}`, a
 const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: true, path: [{ lat: 35, lng: 129 }, { lat: target.lat, lng: target.lng }] }], totalDistance: 1000, totalDuration: 600 });
 
 (async () => {
+  const list = createScreen();
+  list.props.locations = Array.from({ length: 30 }, (_, index) => visit(index + 1, 129 + (index + 1) / 1000));
+  list.render();
+  list.find('TouchableOpacity', '방문지 목록 펼치기').props.onPress(); list.render();
+  const visitScroll = list.find('ScrollView', '방문지 목록');
+  assert.ok(visitScroll, 'expanded visits scroll vertically');
+  assert.ok(visitScroll.props.style.maxHeight < 600, 'the visit list has a bounded viewport');
+  assert.ok(list.text(visitScroll).includes('장소 30'), 'the last visit remains inside the scrollable list');
+  list.find('TouchableOpacity', '방문지 목록 접기').props.onPress(); list.render();
+  assert.equal(list.find('ScrollView', '방문지 목록'), undefined);
+
   const app = createScreen({ nativeNavigation: true });
   app.props.locations = [visit(1, 129.01), visit(2, 129.02), visit(3, 129.03)];
   app.render();
@@ -202,8 +214,7 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   assert.equal(app.find('MapCanvas').props.previewRouteSegment.destinationKey, '1');
 
   // Facility selection remains inside the same map and asks for a dong first.
-  app.find('TouchableOpacity', '방문지 추가 방법').props.onPress(); app.render();
-  app.find('TouchableOpacity', '공공시설물').props.onPress(); app.render();
+  app.find('RegistrationFab').props.items.find(item => item.label === '공공시설물').onPress(); app.render();
   const region = (await app.settle(), app.requests.shift());
   assert(region.url.includes('/api/sgis/boundaries'));
   assert(!app.requests.some(request => request.url.includes('/api/public-data')));
@@ -443,8 +454,8 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   returning.render();
   returning.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 }); returning.render();
   assert.equal(returning.find('MapCanvas').props.locations.some(item => item.isReturnLocation), false, 'workplace marker stays hidden before choosing return');
-  returning.find('TouchableOpacity', '방문지 추가 방법').props.onPress(); returning.render();
-  returning.find('TouchableOpacity', '근무지 복귀').props.onPress(); await returning.settle();
+  returning.find('RegistrationFab').props.onToggle(); returning.render();
+  returning.find('RegistrationFab').props.items.find(item => item.label === '근무지').onPress(); await returning.settle();
   assert.equal(returning.props.isGuiding, false, 'return button previews without starting guidance');
   assert.ok(returning.find('MapCanvas').props.locations.some(item => item.isReturnLocation), 'return preview reveals workplace marker');
   const returnRequest = returning.requests.shift();
@@ -455,8 +466,7 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   assert.equal(returning.find('MapCanvas').props.locations.some(item => item.isReturnLocation), false, 'ending return hides the marker again');
   // Direct selection accepts both map drags and valid numeric input without a lock/apply step.
   const direct = createScreen(); direct.render();
-  direct.find('TouchableOpacity', '방문지 추가 방법').props.onPress(); direct.render();
-  direct.find('TouchableOpacity', '지도에서 직접 선택').props.onPress(); direct.render();
+  direct.find('RegistrationFab').props.items.find(item => item.label === '지도에서 선택').onPress(); direct.render();
   assert.equal(direct.find('MapCanvas').props.mapSelectMode, true);
   direct.find('MapCanvas').props.onCenterChange({ lat: 35.1, lng: 129.1 }); direct.render();
   const latitude = direct.find('TextInput', '위도 직접 입력');
@@ -496,5 +506,29 @@ const route = (target) => ({ segments: [{ routePriority: 'TIME', routeCompared: 
   assert.equal(menu.props.routeSegments[0].mode, 'walk');
   assert.equal(menu.find('Navigation'), undefined, 'walking releases the vehicle SDK overlay');
 
-  console.log('Single-place map checks passed: SDK ownership, recommendation, progress, arrival and walking guidance');
+  const phoneWalk = createScreen({ nativeWalking: true });
+  phoneWalk.props.locations = [visit(1, 129.01)];
+  phoneWalk.props.routeSegments = [{ ...route(phoneWalk.props.locations[0]).segments[0], mode: 'walk', destinationKey: '1' }];
+  phoneWalk.props.isGuiding = true; phoneWalk.render();
+  phoneWalk.find('MapCanvas').props.onCurrentLocationChange({ lat: 35, lng: 129 }); phoneWalk.render();
+  await phoneWalk.settle();
+  phoneWalk.response(phoneWalk.requests.shift(), route(phoneWalk.props.locations[0])); await phoneWalk.settle();
+  assert.equal(phoneWalk.find('WalkingMap').props.headingFollow, true, 'walking defaults to phone heading, independently of GPS bearing');
+  assert.equal(phoneWalk.find('WalkingMap').props.route.length, 2);
+  assert.equal(phoneWalk.find('WalkingMap').props.userLocation.lat, 35);
+  assert.equal(phoneWalk.find('WalkingMap').props.position, undefined, 'GPS coordinates must not override the native layout position prop');
+  assert.ok(phoneWalk.find('WalkingMap').props.style.some(style => style?.height > 0), 'walking native surface receives a measured height before rendering');
+  phoneWalk.find('WalkingMap').props.onReady({ nativeEvent: { headingAvailable: true } }); phoneWalk.render();
+  assert.equal(phoneWalk.find('TouchableOpacity', '북쪽 고정으로 전환'), undefined, 'phone heading needs no separate control');
+  phoneWalk.find('TouchableOpacity', '내 위치로 돌아가기').props.onPress(); phoneWalk.render();
+  assert.equal(phoneWalk.find('WalkingMap').props.recenterRequest, 1);
+  assert.equal(phoneWalk.find('WalkingMap').props.headingFollow, true);
+  phoneWalk.find('WalkingMap').props.onMapPress(); phoneWalk.render();
+  assert.equal(phoneWalk.props.isGuiding, true, 'closing the bottom card never stops guidance');
+  assert.ok(phoneWalk.find('TouchableOpacity', '안내 정보 펼치기'));
+  phoneWalk.find('TouchableOpacity', '안내 정보 펼치기').props.onPress(); phoneWalk.render();
+  phoneWalk.find('WalkingMap').props.onError({ nativeEvent: { message: 'map unavailable' } }); phoneWalk.render();
+  assert.equal(phoneWalk.find('WalkingMap'), undefined);
+  assert.equal(phoneWalk.find('MapCanvas').props.isGuiding, true, 'map initialization failure retains walking guidance on the fallback surface');
+  console.log('Single-place map checks passed: SDK ownership, recommendation, progress, arrival, native walking controls and fallback');
 })().catch(error => { console.error(error); process.exitCode = 1; });

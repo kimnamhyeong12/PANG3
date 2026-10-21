@@ -1,5 +1,5 @@
 import { showAlert } from '../components/CustomAlert';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   View,
@@ -11,11 +11,16 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { PrimaryButton, ScreenHeader } from '../components/ui';
 import { colors, workStatus } from '../constants/design';
+import { useScreenBackHandler } from '../utils/screenBack';
+import { apiFetch } from '../utils/auth';
+import { API_BASE_URL } from '../utils/api';
+import { canDownloadReport } from '../utils/reportAvailability';
+import { cleanReportName } from '../utils/reportName';
 
 const getStatusLabel = (status) => {
   if (status === 'complete') return '작업 후';
   if (status === 'working') return '작업 중';
-  return '작업 전 · 선택 불가';
+  return '작업 전';
 };
 
 const getWorkDateKey = (item) => {
@@ -35,9 +40,10 @@ const getTaskId = (loc) =>
   loc?.taskId ??
   loc?.task_id ??
   null;
+const EMPTY_LOCATIONS = [];
 
 export default function ReportListScreen({
-  locations = [],
+  locations = EMPTY_LOCATIONS,
   loading = false,
   selectedDong,
   user,
@@ -50,20 +56,53 @@ export default function ReportListScreen({
   onSelectionChange,
 }) {
   const [localSelectedIds, setLocalSelectedIds] = useState([]);
+  const [savedReports, setSavedReports] = useState({});
+  const [checkingReports, setCheckingReports] = useState(false);
+  const [reportReload, setReportReload] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setCheckingReports(true);
+    setSavedReports({});
+    const candidates = locations.filter(loc => getTaskId(loc) != null && ['working', 'complete'].includes(loc.status));
+    const results = {};
+    let cursor = 0;
+    const worker = async () => {
+      while (active && cursor < candidates.length) {
+        const loc = candidates[cursor++];
+        const id = getTaskId(loc);
+        try {
+          const response = await apiFetch(`${API_BASE_URL}/api/task-progress/task/${id}`);
+          if (!response.ok) throw new Error('보고서 확인 실패');
+          const text = await response.text();
+          const report = text.trim() ? JSON.parse(text) : null;
+          results[id] = { ...report, downloadable: !!report?.progressId && canDownloadReport(report) };
+        } catch (_) { results[id] = { downloadable: false, error: true }; }
+      }
+    };
+    Promise.all(Array.from({ length: Math.min(4, candidates.length) }, worker)).then(() => {
+      if (active) { setSavedReports(results); setCheckingReports(false); }
+    });
+    return () => { active = false; };
+  }, [locations, user?.userId, reportReload]);
   const selectedIds = selection ?? localSelectedIds;
   const setSelectedIds = (next) => {
     if (onSelectionChange) onSelectionChange(typeof next === 'function' ? next(selectedIds) : next);
     else setLocalSelectedIds(next);
   };
+  useScreenBackHandler(() => {
+    if (!selectedIds.length) return false;
+    setSelectedIds([]);
+    return true;
+  }, selectedIds.length > 0);
 
   const isReportable = (loc) =>
-    getTaskId(loc) != null && ['working', 'complete'].includes(loc.status);
+    getTaskId(loc) != null && ['working', 'complete'].includes(loc.status) && !!savedReports[getTaskId(loc)]?.downloadable;
 
   const toggleSelect = (loc) => {
     if (!isReportable(loc)) {
       showAlert(
         '선택 불가',
-        getTaskId(loc) == null ? '방문지 정보를 확인할 수 없습니다.' : '작업 전 방문지는 보고서에 포함할 수 없습니다.'
+        getTaskId(loc) == null ? '방문지 정보를 확인할 수 없습니다.' : '보고서를 저장한 뒤 다운로드 대상으로 선택해 주세요.'
       );
       return;
     }
@@ -90,12 +129,13 @@ export default function ReportListScreen({
       return;
     }
 
-    onCreateReport?.(selectedLocations);
+    onCreateReport?.(selectedLocations.map(loc => ({ ...loc, progressId: savedReports[getTaskId(loc)].progressId })));
   };
 
   return (
     <View style={styles.container}>
-      <ScreenHeader root title="보고서 작성" onBack={onBack} />
+      <ScreenHeader root={!selectedIds.length} title="보고서 작성" onBack={onBack}
+        right={Object.values(savedReports).some(report => report.error) ? <TouchableOpacity accessibilityLabel="보고서 상태 다시 확인" onPress={() => setReportReload(value => value + 1)}><Text style={{ color: colors.primary }}>다시 확인</Text></TouchableOpacity> : null} />
 
       <ScrollView
         contentContainerStyle={styles.body}
@@ -130,21 +170,23 @@ export default function ReportListScreen({
             return <View key={taskId ?? index}>
               {index > 0 && <View style={styles.separator} />}
               <View style={[styles.reportCard, { backgroundColor: tone.background, borderColor: checked ? colors.text : 'transparent' }]}>
-                <TouchableOpacity style={styles.selectCard} onPress={() => toggleSelect(loc)} disabled={!reportable}
-                  accessibilityRole="checkbox" accessibilityLabel={`${loc.detailAddress || loc.roadAddress || '방문지'} 보고서 선택`}
-                  accessibilityState={{ disabled: !reportable, checked }} activeOpacity={0.85}>
+                <TouchableOpacity style={styles.selectCard} onPress={() => onSelectLocation?.(loc)}
+                  accessibilityRole="button" accessibilityLabel={`${loc.detailAddress || loc.roadAddress || '방문지'} 보고서 양식 열기`} activeOpacity={0.85}>
                   <View style={[styles.number, { backgroundColor: tone.color }]}><Text style={styles.numberText}>{loc.markerNumber || index + 1}</Text></View>
                   <View style={styles.cardInfo}>
-                    <Text style={styles.itemTitle} numberOfLines={2}>{loc.detailAddress || loc.roadAddress || '이름 없음'}</Text>
+                      <Text style={styles.itemTitle} numberOfLines={2}>{cleanReportName(loc.reportName) || loc.detailAddress || loc.roadAddress || '이름 없음'}</Text>
                     <View style={styles.meta}>
                       {!!formatShortDate(getWorkDateKey(loc)) && <Text style={styles.date}>{formatShortDate(getWorkDateKey(loc))}</Text>}
                       <Text style={[styles.state, { color: tone.ink }]}>{getStatusLabel(loc.status)}</Text>
                     </View>
+                    {['working', 'complete'].includes(loc.status) && !reportable && <Text style={styles.date}>
+                      {checkingReports ? '저장된 보고서 확인 중…' : savedReports[taskId]?.error ? '보고서 확인 실패' : '보고서 저장 후 다운로드 가능'}
+                    </Text>}
                   </View>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.edit} onPress={() => onSelectLocation?.(loc)} accessibilityRole="button"
-                  accessibilityLabel={`${loc.detailAddress || '방문지'} 보고서 ${loc.canEdit === false ? '조회' : '수정'}`}>
-                  <Ionicons name={loc.canEdit === false ? 'eye-outline' : 'create-outline'} size={21} color={colors.text} />
+                <TouchableOpacity style={styles.edit} onPress={() => toggleSelect(loc)} disabled={!reportable} accessibilityRole="checkbox"
+                  accessibilityState={{ checked, disabled: !reportable }} accessibilityLabel={`${loc.detailAddress || '방문지'} 보고서 생성 대상 선택${reportable ? '' : ', 보고서 저장 후 선택 가능'}`}>
+                  <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={25} color={reportable ? colors.primary : colors.textFaint} />
                 </TouchableOpacity>
               </View>
             </View>;

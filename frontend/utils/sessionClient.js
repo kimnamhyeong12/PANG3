@@ -53,6 +53,15 @@ export function createSessionClient({ baseUrl, transport, storage, client = 'nat
     try { return await work; } finally { if (refreshing === work) refreshing = null; }
   }
   return {
+    async loginWithSocialResult(result) {
+      const version = ++epoch;
+      access = null;
+      try { return await accept(result, version); }
+      catch (error) {
+        await authRequest('logout', { refreshToken: result.refreshToken }).catch(() => {});
+        throw error;
+      }
+    },
     async login(loginId, password) {
       const version = ++epoch;
       access = null;

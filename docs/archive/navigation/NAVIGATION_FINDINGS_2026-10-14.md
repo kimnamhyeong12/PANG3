@@ -1,5 +1,7 @@
 # 차량 접근점과 우회 경로 분석 — 2026-10-14
 
+> 보관 문서: 작성 당시의 조사·변경 기록입니다. 현재 구현·검증 상태는 [문서 목차](../../README.md)에서 관련 문서를 확인하세요. 아래 작업 지시는 이 기록을 열었다는 이유로 실행하지 않습니다.
+
 앱 구현은 변경하지 않고 코드 이력, 연결된 Android 앱의 저장 경로, 공식 API·SDK 문서, 실제 API 요청을 비교했다. 이 조사에서는 입구점 조회 3회와 경로 조회 51회를 수행했다. 키·계정 정보는 기록하지 않았다. 기기 DB의 임시 복사본은 확인 직후 삭제했다.
 
 ## 결론
@@ -117,7 +119,7 @@ TMAP의 좌표·입구 종류·POI ID·도착 옵션은 해당 서비스의 규�
 - [구글: 좌표 도로 매칭이 접근점과 다를 수 있음](https://developers.google.com/maps/documentation/routes/specify_location)
 - [네이버: 복수 목적지 중 적은 비용의 목적지 선택](https://api.ncloud-docs.com/docs/ai-naver-mapsdirections-driving)
 
-실제 경로 비교 그림: [navigation-analysis-routes.png](backend/target/navigation-analysis-routes.png)
+실제 경로 비교 그림: [navigation-analysis-routes.png](../../../backend/target/navigation-analysis-routes.png)
 
 ## 구현 및 실기기 검증: 2026-10-14
 

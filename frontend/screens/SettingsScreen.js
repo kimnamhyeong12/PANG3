@@ -10,6 +10,7 @@ import { colors } from '../constants/design';
 import { useScreenBackHandler } from '../utils/screenBack';
 import SupportInquiryForm from '../components/SupportInquiryForm';
 import AccountManagementScreen from './AccountManagementScreen';
+import SocialAuthButtons from '../components/SocialAuthButtons';
 import { checkNotificationPermission, requestNotificationPermission, getTaskNotificationPreference, setTaskNotificationPreference } from '../services/notificationService';
 
 export { REGIONS, DISTRICTS_BY_REGION } from '../utils/workRegion';
@@ -51,13 +52,31 @@ export default function SettingsScreen({ user, onBack, onUpdatedUser, onLogout, 
   const closeGate = () => { if (!busy) { setGate(false); setPassword(''); } };
   return <View style={styles.container}><ScreenHeader root title="설정" onBack={onBack} /><ScrollView contentContainerStyle={[styles.body, styles.rootBody]}>
     <View style={styles.profile}><View style={styles.avatar}><Text style={styles.avatarText}>{String(user.name || user.loginId).slice(0, 1)}</Text></View><View style={{ flex: 1 }}><Text style={styles.name}>{user.name || user.loginId}</Text><Text style={styles.id}>@{user.loginId}</Text></View><TouchableOpacity style={styles.manage} onPress={() => setGate(true)}><Text style={styles.manageText}>관리</Text></TouchableOpacity></View>
+    <Text style={styles.sectionLabel}>간편 로그인 연결</Text>
+    <SocialAuthButtons mode="link" />
     <Text style={styles.sectionLabel}>알림</Text>
     <View style={styles.card}><View style={styles.row}><Ionicons name="notifications-outline" size={21} color={colors.primary} /><Text style={styles.rowText}>업무 알림</Text>{enabled === null ? <View style={{ width: 52, height: 32 }} accessibilityLabel="알림 설정 불러오는 중" /> : <Switch value={enabled} disabled={notificationBusy} onValueChange={toggleNotifications} thumbColor={colors.primary} trackColor={{ true: '#B9D9FF', false: '#DFE8F4' }} />}</View></View>
     <Text style={styles.sectionLabel}>서비스 안내</Text>
     <View style={styles.card}>{row('megaphone-outline', '공지사항', () => setDetail('notice'))}{row('help-circle-outline', '고객센터 / 운영정책', () => setDetail('support'))}{row('information-circle-outline', '앱 관리', () => setDetail('version'))}</View>
     <View style={styles.card}>{row('log-out-outline', '로그아웃', () => showAlert('로그아웃', '현재 계정에서 로그아웃할까요?', [{ text: '취소' }, { text: '로그아웃', onPress: onLogout }]))}{row('person-remove-outline', '계정 탈퇴', () => setDeleteOpen(true), true)}</View>
   </ScrollView>
-  <Modal visible={gate || deleteOpen} transparent animationType="fade" onRequestClose={() => { if (!busy) { closeGate(); setDeleteOpen(false); setDeletePassword(''); } }}><View style={styles.overlay}><View style={styles.sheet}><Text style={styles.sheetTitle}>{deleteOpen ? '계정 탈퇴' : '비밀번호 확인'}</Text><Text style={styles.help}>{deleteOpen ? '탈퇴하면 로그인할 수 없습니다. 그룹 보고서는 탈퇴한 사용자 기록으로 남습니다.' : '계정 관리를 위해 현재 비밀번호를 입력해 주세요.'}</Text><TextInput style={styles.input} value={deleteOpen ? deletePassword : password} onChangeText={deleteOpen ? setDeletePassword : setPassword} secureTextEntry autoFocus editable={!busy} placeholder="현재 비밀번호" /><PrimaryButton title={busy ? '확인 중…' : deleteOpen ? '계정 탈퇴' : '확인'} disabled={busy || !(deleteOpen ? deletePassword : password)} onPress={deleteOpen ? removeAccount : verify} /><TouchableOpacity style={styles.cancel} disabled={busy} onPress={() => { closeGate(); setDeleteOpen(false); setDeletePassword(''); }}><Text>취소</Text></TouchableOpacity></View></View></Modal>
+  <Modal visible={gate || deleteOpen} transparent animationType="fade" onRequestClose={() => { if (!busy) { closeGate(); setDeleteOpen(false); setDeletePassword(''); } }}>
+    <View style={styles.overlay}>
+      <TouchableOpacity style={StyleSheet.absoluteFill} accessibilityLabel="계정 확인 닫기" onPress={() => { if (!busy) { closeGate(); setDeleteOpen(false); setDeletePassword(''); } }} />
+      <View style={styles.sheet}>
+        <Text style={styles.sheetTitle}>{deleteOpen ? '계정 탈퇴' : '본인 확인'}</Text>
+        <Text style={styles.help}>{deleteOpen ? '탈퇴하면 로그인할 수 없습니다. 그룹 보고서는 탈퇴한 사용자 기록으로 남습니다.' : '비밀번호 또는 연결된 소셜 계정으로 인증해 주세요.'}</Text>
+        {user.passwordLoginEnabled !== false && <TextInput style={styles.input} value={deleteOpen ? deletePassword : password} onChangeText={deleteOpen ? setDeletePassword : setPassword} secureTextEntry editable={!busy} placeholder="현재 비밀번호" />}
+        <SocialAuthButtons mode="verify" disabled={busy} onVerified={token => {
+          if (deleteOpen) setDeletePassword(token);
+          else { setCredential(token); setPassword(''); setGate(false); }
+        }} />
+        {deletePassword.startsWith('social:') && deleteOpen && <Text style={{ color: colors.successInk }}>소셜 계정 인증 완료</Text>}
+        {(deleteOpen || user.passwordLoginEnabled !== false) && <PrimaryButton title={busy ? '확인 중…' : deleteOpen ? '계정 탈퇴' : '비밀번호로 확인'} disabled={busy || !(deleteOpen ? deletePassword : password)} onPress={deleteOpen ? removeAccount : verify} />}
+        <TouchableOpacity style={styles.cancel} disabled={busy} onPress={() => { closeGate(); setDeleteOpen(false); setDeletePassword(''); }}><Text>취소</Text></TouchableOpacity>
+      </View>
+    </View>
+  </Modal>
   <Modal visible={!!detail} statusBarTranslucent animationType="slide" onRequestClose={() => { if (!supportSending) setDetail(detail === 'inquiry' ? 'support' : null); }}><KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScreenHeader title={detail === 'notice' ? '공지사항' : detail === 'version' ? '앱 관리' : detail === 'inquiry' ? '문의하기' : '고객센터 / 운영정책'} onBack={() => { if (!supportSending) setDetail(detail === 'inquiry' ? 'support' : null); }} /><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>{detail === 'inquiry' ? <SupportInquiryForm user={user} onBusyChange={setSupportSending} onSubmitted={() => setDetail('support')} /> : detail === 'notice' ? <Text style={styles.help}>등록된 공지사항이 없습니다.</Text> : detail === 'version' ? <View style={styles.card}><Text style={styles.rowText}>버전 정보</Text><Text style={styles.help}>{Constants.expoConfig?.version || '확인할 수 없음'}</Text></View> : <><View style={styles.card}>{row('mail-outline', '문의하기', () => setDetail('inquiry'))}<Text selectable style={styles.supportEmail}>{SUPPORT_EMAIL}</Text></View><View style={styles.card}><Text style={styles.rowText}>운영정책</Text><Text style={styles.help}>운영정책 안내 준비 중</Text></View></>}</ScrollView></KeyboardAvoidingView></Modal>
   </View>;
 }

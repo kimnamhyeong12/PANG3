@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadow } from '../constants/design';
+import { useBackSwipe } from '../utils/screenBack';
 
 export function BackButton({ onPress, root = false }) {
   return <TouchableOpacity onPress={onPress} style={styles.backButton} activeOpacity={0.72} accessibilityRole="button" accessibilityLabel="뒤로가기"><Ionicons name="arrow-back" size={root ? 27 : 22} color={colors.primaryDark} /></TouchableOpacity>;
@@ -10,7 +11,8 @@ export function BackButton({ onPress, root = false }) {
 
 export function ScreenHeader({ title, subtitle, onBack, right, compact = false, root = false }) {
   const insets = useSafeAreaInsets();
-  return <View style={[styles.headerWrap, { paddingTop: insets.top + 1 }, compact && styles.headerWrapCompact]}><View style={[styles.header, root && styles.rootHeader]}>{onBack && !root ? <BackButton onPress={onBack} /> : null}<View style={styles.headerText}><Text style={[styles.headerTitle, root && styles.rootTitle]} numberOfLines={1}>{title}</Text>{subtitle ? <Text style={styles.headerSubtitle} numberOfLines={2}>{subtitle}</Text> : null}</View>{right || null}</View></View>;
+  const swipeHandlers = useBackSwipe(onBack, !!onBack && !root);
+  return <View {...swipeHandlers} style={[styles.headerWrap, { paddingTop: insets.top + 1 }, compact && styles.headerWrapCompact]}><View style={[styles.header, root && styles.rootHeader]}>{onBack && !root ? <BackButton onPress={onBack} /> : null}<View style={styles.headerText}><Text style={[styles.headerTitle, root && styles.rootTitle]} numberOfLines={1}>{title}</Text>{subtitle ? <Text style={styles.headerSubtitle} numberOfLines={2}>{subtitle}</Text> : null}</View>{right || null}</View></View>;
 }
 
 export function CardTitle({ icon, title, suffix, actionLabel, actionIcon = 'add', onAction, tone = 'blue' }) {

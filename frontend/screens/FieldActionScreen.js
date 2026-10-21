@@ -9,6 +9,7 @@ import { apiFetch as expoFetch } from '../utils/auth';
 import {
   View,
   Text,
+  TextInput,
   BackHandler,
   ActivityIndicator,
   AppState,
@@ -19,6 +20,9 @@ import {
 
 import { emptyPhotos, restorePhotos, photoManifest, isLocalPhoto, statusFromRecords } from '../utils/reportPhotos';
 import { draftKey, readDraft, writeDraft, clearDraft, preservePhoto, beginPhotoPick, pendingPhotoPick, endPhotoPick } from '../utils/reportDraft';
+import { useScreenBackHandler } from '../utils/screenBack';
+import { colors } from '../constants/design';
+import { cleanReportName } from '../utils/reportName';
 
 import * as ImagePicker from 'expo-image-picker';
 import { WebView } from 'react-native-webview';
@@ -31,6 +35,7 @@ import {
 
 import VoiceTextInput from '../components/VoiceTextInput';
 import PhotoMarkupEditor from '../components/PhotoMarkupEditor';
+import ReportLocationPicker from '../components/ReportLocationPicker';
 
 import {
   API_BASE_URL,
@@ -99,7 +104,7 @@ function isValidCoordinate(latitude, longitude) {
   );
 }
 
-function getInteractiveMapHtml(latitude, longitude) {
+function getInteractiveMapHtml(latitude, longitude, selecting = false) {
   const valid = isValidCoordinate(
     latitude,
     longitude
@@ -193,7 +198,7 @@ function getInteractiveMapHtml(latitude, longitude) {
           var map = null;
           var ready = false;
           var selectedPosition = null;
-          var selectionMode = false;
+          var selectionMode = ${selecting ? 'true' : 'false'};
           var selectionDragStarted = false;
           var selectedOverlay = null;
 
@@ -291,6 +296,19 @@ function getInteractiveMapHtml(latitude, longitude) {
             ensureSelectedOverlay();
           };
 
+          window.zoomSelection = function(step) {
+            if (!ready || !map) return;
+            map.setLevel(Math.max(1, Math.min(14, map.getLevel() + Number(step))));
+          };
+          window.moveSelectionTo = function(latitude, longitude) {
+            if (!ready || !map) return;
+            selectedPosition = new window.kakao.maps.LatLng(Number(latitude), Number(longitude));
+            map.setLevel(3);
+            map.setCenter(selectedPosition);
+            ensureSelectedOverlay();
+            postMessage({ type: 'LOCATION_SELECTED', latitude: selectedPosition.getLat(), longitude: selectedPosition.getLng() });
+          };
+
           function startMap() {
             if (
               !window.kakao ||
@@ -323,6 +341,7 @@ function getInteractiveMapHtml(latitude, longitude) {
               ready = true;
               selectedPosition = initialPosition;
               ensureSelectedOverlay();
+              postMessage({ type: 'MAP_READY', latitude: selectedPosition.getLat(), longitude: selectedPosition.getLng() });
 
               setTimeout(function() {
                 map.relayout();
@@ -333,6 +352,7 @@ function getInteractiveMapHtml(latitude, longitude) {
               window.kakao.maps.event.addListener(map, 'dragstart', function() {
                 if (selectionMode) {
                   selectionDragStarted = true;
+                  postMessage({ type: 'LOCATION_MOVING' });
                 }
               });
 
@@ -375,6 +395,14 @@ function getInteractiveMapHtml(latitude, longitude) {
     </html>
   `;
 }
+
+const normalizeComments = (form) => {
+  const comments = [form.fieldMemo, form.mainComment,
+    ...(form.photos || []).filter(photo => photo.comment?.trim()).map(photo => `${photo.label}: ${photo.comment.trim()}`)]
+    .map(value => String(value || '').trim()).filter(Boolean);
+  return { ...form, reportName: cleanReportName(form.reportName), fieldMemo: [...new Set(comments)].join('\n'), mainComment: '',
+    photos: (form.photos || []).map(photo => ({ ...photo, comment: '' })) };
+};
 
 export default function FieldActionScreen({
   user,
@@ -424,12 +452,16 @@ export default function FieldActionScreen({
         ? String(location.lng)
         : ''
     );
-  const [locationAddress, setLocationAddress] = useState(location?.roadAddress || location?.detailAddress || '');
+  const [locationAddress, setLocationAddress] = useState(location?.roadAddress || '');
   const [editingLocation, setEditingLocation] = useState(false);
   const [positionSaving, setPositionSaving] = useState(false);
   const positionSavingRef = useRef(false);
+  const locationEditSnapshotRef = useRef(null);
 
-  const [photoStage, setPhotoStage] = useState('before');
+  const defaultReportName = cleanReportName(location?.reportName) || (location?.detailAddress || location?.roadAddress || '현장 보고서').slice(0, 120);
+  const [reportName, setReportName] = useState(defaultReportName);
+  const [editingReportName, setEditingReportName] = useState(false);
+  const [completedAt, setCompletedAt] = useState(location?.completedAt || '');
   const [photos, setPhotos] =
     useState(createEmptyPhotos());
 
@@ -488,14 +520,14 @@ export default function FieldActionScreen({
   const key = draftKey(user?.userId, workspaceKey, taskId,
     location?.reportProgressId || 'latest');
   const snapshot = { status, latitude, longitude, locationAddress, photos, fieldMemo,
-    markedMapUri, progressId, revision, recordedAt, photoEditor, mainComment };
+    markedMapUri, progressId, revision, recordedAt, photoEditor, mainComment, reportName, completedAt };
   const currentFormRef = useRef(snapshot);
   currentFormRef.current = snapshot;
   const initialFormRef = useRef('');
   const editSnapshot = (form) => JSON.stringify({ status: form.status, latitude: form.latitude,
     longitude: form.longitude, locationAddress: form.locationAddress, photos: form.photos,
     fieldMemo: form.fieldMemo, markedMapUri: form.markedMapUri, progressId: form.progressId,
-    revision: form.revision, recordedAt: form.recordedAt, mainComment: form.mainComment || '' });
+    revision: form.revision, recordedAt: form.recordedAt, mainComment: form.mainComment || '', reportName: form.reportName || defaultReportName });
 
   const recoverPhotoPick = async (form) => {
     const pending = await pendingPhotoPick(key);
@@ -535,6 +567,22 @@ export default function FieldActionScreen({
   const guardRef = useRef(leaveGuard);
   guardRef.current = leaveGuard;
   useEffect(() => registerNavigationGuard?.(() => guardRef.current()), [registerNavigationGuard]);
+  const cancelLocationEdit = () => {
+    if (positionSavingRef.current) return;
+    const previous = locationEditSnapshotRef.current;
+    if (previous) {
+      setLatitude(previous.latitude); setLongitude(previous.longitude);
+      setLocationAddress(previous.locationAddress); setMarkedMapUri(previous.markedMapUri);
+    }
+    locationEditSnapshotRef.current = null;
+    setLocationMoving(false); setEditingLocation(false);
+    setMapInteracting(false);
+  };
+  useScreenBackHandler(() => {
+    if (!editingLocation) return false;
+    cancelLocationEdit();
+    return true;
+  }, editingLocation);
   const requestBack = () => onBack?.();
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => { requestBack(); return true; });
@@ -554,21 +602,23 @@ export default function FieldActionScreen({
         const data = text.trim() ? JSON.parse(text) : null;
         const local = await readDraft(key);
         if (!active) return;
-        const base = { status: location?.reportProgressId ? data?.progressStatus || 'pending' : location?.status || data?.progressStatus || 'pending',
+        const base = normalizeComments({ status: location?.reportProgressId ? data?.progressStatus || 'pending' : location?.status || data?.progressStatus || 'pending',
           latitude: String(data?.latitude ?? location?.latitude ?? location?.lat ?? ''),
           longitude: String(data?.longitude ?? location?.longitude ?? location?.lng ?? ''),
-          locationAddress: data?.locationAddress || location?.roadAddress || location?.detailAddress || '',
+          locationAddress: data?.locationAddress || location?.roadAddress || '',
           photos: restorePhotos(data?.fieldPhotos, resolveApiUrl), fieldMemo: data?.fieldMemo || '',
           mainComment: data?.mainComment || '',
+          reportName: data?.reportName || defaultReportName, completedAt: data?.completedAt || location?.completedAt || '',
           markedMapUri: null, progressId: data?.progressId || null, revision: data?.revision ?? null, recordedAt: data?.createdAt || '',
-          photoEditor: { visible: false, uri: null, index: null } };
+          photoEditor: { visible: false, uri: null, index: null } });
         initialFormRef.current = editSnapshot(base);
-        const form = await recoverPhotoPick(local || base);
+        const form = normalizeComments(await recoverPhotoPick(local || base));
         if (!active) return;
         setStatus(location?.status === 'complete' && !location?.reportProgressId ? 'complete' : form.status);
         setLatitude(form.latitude); setLongitude(form.longitude); setLocationAddress(form.locationAddress);
         setPhotos(form.photos); setFieldMemo(form.fieldMemo); setMarkedMapUri(form.markedMapUri);
         setMainComment(form.mainComment || '');
+        setReportName(form.reportName || defaultReportName); setCompletedAt(form.completedAt || '');
         setProgressId(form.progressId); setRevision(form.revision); setRecordedAt(form.recordedAt || '');
         setPhotoEditor(form.photoEditor || base.photoEditor);
         readyRef.current = true;
@@ -578,12 +628,13 @@ export default function FieldActionScreen({
           let local = await readDraft(key);
           if (!active) return;
           if (!local) throw new Error();
-          local = await recoverPhotoPick(local);
+          local = normalizeComments(await recoverPhotoPick(local));
           if (!active) return;
           setStatus(location?.status === 'complete' && !location?.reportProgressId ? 'complete' : local.status);
           setLatitude(local.latitude); setLongitude(local.longitude); setLocationAddress(local.locationAddress);
           setPhotos(local.photos); setFieldMemo(local.fieldMemo); setMarkedMapUri(local.markedMapUri);
           setMainComment(local.mainComment || '');
+          setReportName(local.reportName || defaultReportName); setCompletedAt(local.completedAt || location?.completedAt || '');
           setProgressId(local.progressId); setRevision(local.revision); setRecordedAt(local.recordedAt || '');
           setPhotoEditor(local.photoEditor || { visible: false, uri: null, index: null });
           readyRef.current = true;
@@ -686,7 +737,7 @@ export default function FieldActionScreen({
     if (!mapRef.current) return;
     mapRef.current.injectJavaScript(`
       if (window.setSelectionMode) {
-        window.setSelectionMode(${editingLocation ? 'true' : 'false'});
+        window.setSelectionMode(false);
       }
       true;
     `);
@@ -704,7 +755,7 @@ export default function FieldActionScreen({
   }, [latitude, longitude]);
 
   useEffect(() => {
-    if (!KAKAO_REST_API_KEY || !isValidCoordinate(latitude, longitude)) return undefined;
+    if (loadingReport || !KAKAO_REST_API_KEY || !isValidCoordinate(latitude, longitude)) return undefined;
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
@@ -717,7 +768,7 @@ export default function FieldActionScreen({
       }
     }, 350);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [latitude, longitude]);
+  }, [latitude, longitude, loadingReport]);
 
   const handleMapTouchStart =
     () => {
@@ -973,19 +1024,27 @@ export default function FieldActionScreen({
   /*
    * 보고서 저장
    */
-  const toggleLocation = async () => {
+  const toggleLocation = () => {
     if (savingRef.current || positionSavingRef.current || loadingReport || loadError) return;
-    if (!editingLocation) { setEditingLocation(true); return; }
-    if (!isValidCoordinate(latitude, longitude)) { showAlert('위치를 확인해 주세요.'); return; }
+    if (!editingLocation) {
+      locationEditSnapshotRef.current = { latitude, longitude, locationAddress, markedMapUri };
+      setEditingLocation(true);
+    }
+  };
+  const saveLocationPosition = async (selected) => {
+    if (savingRef.current || positionSavingRef.current) return;
+    const selectedLatitude = String(selected.latitude);
+    const selectedLongitude = String(selected.longitude);
+    const selectedAddress = selected.locationAddress || '';
+    if (!isValidCoordinate(selectedLatitude, selectedLongitude)) throw new Error('올바른 위치를 선택해 주세요.');
     positionSavingRef.current = true; setPositionSaving(true);
-    mapRef.current?.injectJavaScript('window.setSelectionMode?.(false); true;');
     try {
       const form = new FormData();
-      form.append('latitude', String(latitude)); form.append('longitude', String(longitude));
-      form.append('locationAddress', locationAddress || '');
+      form.append('latitude', selectedLatitude); form.append('longitude', selectedLongitude);
+      form.append('locationAddress', selectedAddress);
       if (progressId) { form.append('progressId', String(progressId)); form.append('expectedRevision', revision || ''); }
       try {
-        mapRef.current?.injectJavaScript('if (window.map) window.map.relayout(); true;');
+        mapRef.current?.injectJavaScript(`window.setExternalPosition?.(${Number(selectedLatitude)}, ${Number(selectedLongitude)}); true;`);
         await new Promise(resolve => setTimeout(resolve, 400));
         const uri = await captureRef(mapWrapperRef, { format: 'jpg', quality: 0.8 });
         form.append('mapImage', new File(uri));
@@ -995,17 +1054,20 @@ export default function FieldActionScreen({
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || '위치를 저장하지 못했습니다.');
-      const patch = { latitude, longitude, locationAddress, markedMapUri: null,
+      const patch = { latitude: selectedLatitude, longitude: selectedLongitude, locationAddress: selectedAddress, markedMapUri: null,
         revision: result.revision ?? revision };
+      setLatitude(selectedLatitude); setLongitude(selectedLongitude); setLocationAddress(selectedAddress);
       setRevision(patch.revision); setMarkedMapUri(null);
       currentFormRef.current = { ...currentFormRef.current, ...patch };
       if (initialFormRef.current) initialFormRef.current = editSnapshot({ ...JSON.parse(initialFormRef.current), ...patch });
-      await writeDraft(key, currentFormRef.current);
+      try { await writeDraft(key, currentFormRef.current); }
+      catch (draftError) { console.log('Position draft backup failed:', draftError?.message); }
       setLocationMoving(false); setEditingLocation(false);
+      locationEditSnapshotRef.current = null;
       onPositionChanged?.(result);
     } catch (error) {
-      showAlert(error.message || '위치를 저장하지 못했습니다.');
-      mapRef.current?.injectJavaScript('window.setSelectionMode?.(true); true;');
+      applyCoordinateToMap();
+      throw error;
     } finally { positionSavingRef.current = false; setPositionSaving(false); }
   };
 
@@ -1038,6 +1100,7 @@ export default function FieldActionScreen({
         return;
       }
 
+      if (!reportName.trim()) { showAlert('보고서 이름', '보고서 이름을 입력해 주세요.'); return; }
       savingRef.current = true;
       setSaving(true);
       await flushDraft();
@@ -1076,6 +1139,7 @@ export default function FieldActionScreen({
         String(taskId)
       );
       if (user?.userId) form.append('userId', String(user.userId));
+      form.append('reportName', reportName.trim());
       if (progressId) form.append('progressId', String(progressId));
       if (progressId && revision != null) form.append('expectedRevision', String(revision));
       form.append('photoSlots', JSON.stringify(photoManifest(photos)));
@@ -1159,6 +1223,8 @@ export default function FieldActionScreen({
       setPhotos(restorePhotos(savedReport.fieldPhotos, resolveApiUrl));
       setProgressId(savedReport.progressId);
       setRevision(savedReport.revision);
+      setReportName(cleanReportName(savedReport.reportName) || reportName.trim());
+      setCompletedAt(savedReport.completedAt || '');
       savedRef.current = true;
       try { await clearDraft(key); } catch (error) { console.warn('보고서 임시 자료 정리 실패', error); }
       onSave?.({
@@ -1223,7 +1289,15 @@ export default function FieldActionScreen({
           !mapInteracting
         }
       >
-        <View style={{ gap: 4 }}><Text style={{ color: '#10285B', fontSize: 16, fontWeight: '800' }}>{location?.detailAddress || location?.roadAddress || '방문지'}</Text></View>
+        <View style={styles.reportTitleRow}>
+          {editingReportName ? <TextInput autoFocus value={reportName} onChangeText={setReportName} maxLength={120}
+            accessibilityLabel="보고서 제목 수정" placeholder="보고서 제목" style={styles.reportTitleInput}
+            onBlur={() => { setReportName(value => value.trim() || defaultReportName); setEditingReportName(false); }}
+            onSubmitEditing={() => { setReportName(value => value.trim() || defaultReportName); setEditingReportName(false); }} returnKeyType="done" /> :
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="보고서 제목 수정" onPress={() => setEditingReportName(true)} style={styles.reportTitleButton}>
+              <Text style={styles.reportTitleText} numberOfLines={1}>{reportName || defaultReportName}</Text><Ionicons name="pencil-outline" size={18} color={colors.primary} />
+            </TouchableOpacity>}
+        </View>
         {/* 1. 작업 위치 */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>위치도</Text>
@@ -1256,7 +1330,7 @@ export default function FieldActionScreen({
                   applyCoordinateToMap();
                   mapRef.current?.injectJavaScript(`
                     if (window.setSelectionMode) {
-                      window.setSelectionMode(${editingLocation ? 'true' : 'false'});
+                      window.setSelectionMode(false);
                     }
                     true;
                   `);
@@ -1283,7 +1357,7 @@ export default function FieldActionScreen({
               disabled={saving || positionSaving || loadingReport || !!loadError}
               onPress={toggleLocation}
             >
-              <Ionicons name="location-outline" size={16} color="#FFFFFF" /><Text style={styles.photoSmallButtonText}>{positionSaving ? '위치 저장 중…' : editingLocation ? '위치 확정' : '위치 바꾸기'}</Text>
+              <Ionicons name="location-outline" size={16} color="#FFFFFF" /><Text style={styles.photoSmallButtonText}>위치 바꾸기</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1304,168 +1378,21 @@ export default function FieldActionScreen({
           ) : null}
         </View>
 
-        {/* 2. 현장 사진 */}
         <View style={styles.card}>
-          <Text
-            style={
-              styles.cardTitle
-            }
-          >
-            현장 사진
-          </Text>
-
-          <View style={styles.photoTabs}>{photos.map(item => <TouchableOpacity key={item.type} accessibilityRole="tab" accessibilityState={{ selected: photoStage === item.type }} onPress={() => setPhotoStage(item.type)} style={[styles.photoTab, photoStage === item.type && styles.photoTabActive]}><Text style={[styles.photoTabText, photoStage === item.type && styles.photoTabTextActive]}>{item.label}</Text></TouchableOpacity>)}</View>
-          {photos.map(
-            (
-              item,
-              index
-            ) => item.type === photoStage ? (
-              <View
-                key={item.type}
-
-                style={[
-                  styles.photoSlot,
-
-                  index !==
-                    photos.length -
-                      1 &&
-                    styles.photoSlotDivider,
-                ]}
-              >
-                {item.uri ? (
-                  <>
-                    <ProtectedImage
-                      source={{
-                        uri:
-                          item.uri,
-                      }}
-
-                      style={
-                        styles.photo
-                      }
-                    />
-
-                    <View
-                      style={
-                        styles.photoButtonRow
-                      }
-                    >
-                      <TouchableOpacity
-                        style={
-                          styles.photoSmallButton
-                        }
-
-                        onPress={() =>
-                          editExistingPhoto(
-                            index
-                          )
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.photoSmallButtonText
-                          }
-                        >
-                          사진 편집
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={
-                          styles.photoSmallButton
-                        }
-
-                        onPress={() =>
-                          retakePhoto(
-                            index
-                          )
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.photoSmallButtonText
-                          }
-                        >
-                          사진 변경
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.photoSmallButton,
-                          styles.deleteButton,
-                        ]}
-
-                        onPress={() =>
-                          deletePhoto(
-                            index
-                          )
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.photoSmallButtonText
-                          }
-                        >
-                          삭제
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  <TouchableOpacity
-                    style={
-                      styles.emptyPhotoSlot
-                    }
-
-                    onPress={() =>
-                      selectPhoto(
-                        index
-                      )
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.emptyPhotoPlus
-                      }
-                    >
-                      ＋
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.emptyPhotoText
-                      }
-                    >
-                      {item.label}{' '}
-                      사진 선택
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
-                <VoiceTextInput
-                  value={
-                    item.comment
-                  }
-
-                  onChangeText={(
-                    text
-                  ) =>
-                    updatePhotoComment(
-                      index,
-                      text
-                    )
-                  }
-
-                  placeholder="메모를 입력하세요"
-
-                  inputStyle={
-                    styles.photoMemo
-                  }
-                />
-              </View>
-            ) : null
-          )}
+          <Text style={styles.cardTitle}>현장 사진</Text>
+          <View style={styles.photoStageRow}>{photos.map((item, index) => <View key={item.type} style={styles.photoStageCell}>
+            <View style={styles.photoStageHeading}><Text style={styles.photoStageLabel}>{item.label}</Text>
+              {item.uri && <Ionicons name="checkmark-circle" size={14} color="#326F64" />}</View>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${item.label} 사진 ${item.uri ? '편집' : '선택'}`}
+              onPress={() => item.uri ? editExistingPhoto(index) : selectPhoto(index)} style={styles.photoStageImage}>
+              {item.uri ? <ProtectedImage source={{ uri: item.uri }} style={{ width: '100%', height: '100%' }} /> :
+                <><Ionicons name="add" size={27} color="#8293AA" /><Text style={styles.photoStageEmpty}>사진 선택</Text></>}
+            </TouchableOpacity>
+            {item.uri && <View style={styles.photoStageActions}>
+              <TouchableOpacity accessibilityLabel={`${item.label} 사진 변경`} onPress={() => retakePhoto(index)} style={styles.photoStageAction}><Ionicons name="camera-outline" size={18} color={colors.primary} /></TouchableOpacity>
+              <TouchableOpacity accessibilityLabel={`${item.label} 사진 삭제`} onPress={() => deletePhoto(index)} style={styles.photoStageAction}><Ionicons name="trash-outline" size={17} color={colors.danger} /></TouchableOpacity>
+            </View>}
+          </View>)}</View>
         </View>
 
         {/* 3. 현장 메모 */}
@@ -1475,7 +1402,7 @@ export default function FieldActionScreen({
               styles.cardTitle
             }
           >
-            현장 메모
+            메모
           </Text>
 
           <VoiceTextInput
@@ -1549,6 +1476,9 @@ export default function FieldActionScreen({
         <PrimaryButton title={saving ? '저장 중...' : '보고서 저장'} onPress={handleSave} disabled={saving} />
       </View>}
 
+      {editingLocation && <ReportLocationPicker latitude={latitude} longitude={longitude} address={locationAddress}
+        buildMapHtml={getInteractiveMapHtml} saving={positionSaving} onCancel={cancelLocationEdit} onConfirm={saveLocationPosition} />}
+
       <PhotoMarkupEditor
         visible={
           photoEditor.visible
@@ -1590,7 +1520,7 @@ const styles =
 
       marginTop: 0, backgroundColor: '#FFFFFF', },
 
-    body: {padding: 20, gap: 20, paddingBottom: 24, },
+    body: {padding: 20, paddingTop: 4, gap: 20, paddingBottom: 24, },
 
     card: {
       backgroundColor:
@@ -1684,6 +1614,18 @@ const styles =
         '#FFFFFF',
     },
 
+    reportTitleRow: { width: '100%', borderWidth: 1, borderColor: '#CCD9EB', borderRadius: 10, backgroundColor: '#F8FAFD', overflow: 'hidden' },
+    reportTitleButton: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 12 },
+    reportTitleText: { flex: 1, fontSize: 17, fontWeight: '800', color: '#10285B' },
+    reportTitleInput: { minHeight: 46, fontSize: 17, fontWeight: '800', color: '#10285B', paddingVertical: 10, paddingHorizontal: 12 },
+    photoStageRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+    photoStageCell: { flex: 1, minWidth: 0 },
+    photoStageHeading: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 7 },
+    photoStageLabel: { color: '#10285B', fontWeight: '700', fontSize: 12 },
+    photoStageImage: { width: '100%', aspectRatio: 0.9, borderRadius: 9, overflow: 'hidden', backgroundColor: '#F1F5FA', alignItems: 'center', justifyContent: 'center' },
+    photoStageEmpty: { fontSize: 10, color: '#607195', marginTop: 3 },
+    photoStageActions: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 4 },
+    photoStageAction: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
     photoSlot: {
       paddingTop: 4,
 

@@ -14,6 +14,12 @@ class KakaoNavigationModule : Module() {
     AsyncFunction("openReportDownloadsFolder") {
       ReportDownloads.openFolder(requireNotNull(appContext.reactContext))
     }.runOnQueue(expo.modules.kotlin.functions.Queues.MAIN)
+    AsyncFunction("reportDownloadExists") { uri: String ->
+      ReportDownloads.exists(requireNotNull(appContext.reactContext), uri)
+    }
+    AsyncFunction("openReportFile") { uri: String ->
+      ReportDownloads.openFile(requireNotNull(appContext.reactContext), uri)
+    }.runOnQueue(expo.modules.kotlin.functions.Queues.MAIN)
 
     AsyncFunction("previewRoute") { request: Map<String, Any?>, promise: Promise ->
       KakaoRouteEngine.preview(requireNotNull(appContext.reactContext), request,
@@ -31,8 +37,9 @@ class KakaoNavigationModule : Module() {
     }
     Function("stopRouteNotification") { RouteGuidanceService.stop(requireNotNull(appContext.reactContext)) }
 
+    Function("isWalkingMapAvailable") { true }
     View(KakaoNavigationView::class) {
-      Events("onError", "onEnded", "onProgress", "onArrived", "onRouteChanged", "onSafetyUpdate", "onManeuverUpdate", "onNearbyError")
+      Events("onError", "onEnded", "onProgress", "onArrived", "onRouteChanged", "onSafetyUpdate", "onManeuverUpdate", "onNearbyError", "onMapPress")
 
       Prop("destination") { view: KakaoNavigationView, destination: Map<String, Any?> ->
         view.start(destination)
@@ -57,5 +64,18 @@ class KakaoNavigationModule : Module() {
         view.release()
       }
     }
+
+    View(KakaoWalkingMapView::class) {
+      Name("KakaoWalkingMap")
+      Events("onError", "onReady", "onMapPress")
+      Prop("userLocation") { view: KakaoWalkingMapView, value: Map<String, Double>? -> view.setPosition(value) }
+      Prop("route") { view: KakaoWalkingMapView, value: List<Map<String, Double>> -> view.setRoute(value) }
+      Prop("mapActive") { view: KakaoWalkingMapView, value: Boolean -> view.setActive(value) }
+      Prop("headingFollow") { view: KakaoWalkingMapView, value: Boolean -> view.setHeadingFollow(value) }
+      Prop("recenterRequest") { view: KakaoWalkingMapView, value: Int -> view.recenter(value) }
+      Prop("overviewRequest") { view: KakaoWalkingMapView, value: Int -> view.overview(value) }
+      OnViewDestroys { view: KakaoWalkingMapView -> view.release() }
+    }
+
   }
 }
