@@ -14,6 +14,7 @@ const MAIN_MENU = [
   { to: '/dashboard', label: '대시보드', Icon: IconDashboard },
   { to: '/transfers', label: '업무 이관', Icon: IconTransfer },
   { to: '/map', label: '지도 조회', Icon: IconMap },
+  { to: '/projects', label: '프로젝트', Icon: IconReport },
   { to: '/reports', label: '보고서 보관함', Icon: IconReport },
   { to: '/public-data', label: '공공데이터 관리', Icon: IconDatabase },
 ];

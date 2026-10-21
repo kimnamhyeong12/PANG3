@@ -24,6 +24,7 @@ COPY ai/requirements.txt /app/ai/requirements.txt
 RUN pip install --no-cache-dir -r /app/ai/requirements.txt
 
 COPY ai/app.py /app/ai/app.py
+COPY ai/compiled_report.py /app/ai/compiled_report.py
 COPY ai/create_template.py /app/ai/create_template.py
 COPY ai/templates /app/ai/templates
 RUN mkdir -p /app/ai/uploads /app/ai/output

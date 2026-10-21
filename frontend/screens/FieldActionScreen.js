@@ -30,6 +30,7 @@ import {
 } from '../components/ui';
 
 import VoiceTextInput from '../components/VoiceTextInput';
+import ReportAddOption, { addToReportAfterSave } from '../components/ReportAddOption';
 import PhotoMarkupEditor from '../components/PhotoMarkupEditor';
 
 import {
@@ -387,6 +388,7 @@ export default function FieldActionScreen({
   registerNavigationGuard,
 }) {
   const mapRef = useRef(null);
+  const reportTargetRef = useRef(null);
   const mapWrapperRef = useRef(null);
   const lastMapCoordinateRef = useRef('');
 
@@ -1183,6 +1185,7 @@ export default function FieldActionScreen({
       showAlert(
         '보고서가 저장되었습니다.'
       );
+      addToReportAfterSave(reportTargetRef.current, user?.userId, savedReport.progressId);
     } catch (error) {
       console.log(error);
 
@@ -1541,6 +1544,7 @@ export default function FieldActionScreen({
               </Text>
             </TouchableOpacity>
           </View>
+          <ReportAddOption user={user} taskId={taskId} status={status} onChange={(target) => { reportTargetRef.current = target; }} />
         </View>
 
       </ScrollView>

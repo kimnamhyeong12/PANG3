@@ -31,6 +31,8 @@ import GroupReportsScreen from './screens/GroupReportsScreen';
 import GroupScreen from './screens/GroupScreen';
 import GroupSettingsScreen from './screens/GroupSettingsScreen';
 import GroupWorkspaceScreen from './screens/GroupWorkspaceScreen';
+import ProjectScreen from './screens/ProjectScreen';
+import CompiledReportViewScreen from './screens/CompiledReportViewScreen';
 import LoginScreen from './screens/LoginScreen';
 import MapScreen from './screens/MapScreen';
 import PersonalWorkspaceScreen from './screens/PersonalWorkspaceScreen';
@@ -105,6 +107,8 @@ function AppContent() {
   const [mapRecordReturn, setMapRecordReturn] = useState(null);
   const [reportSelections, setReportSelections] = useState({});
   const [groupWorkspaceTab, setGroupWorkspaceTab] = useState('dashboard');
+  const [openedProject, setOpenedProject] = useState(null);
+  const [openedCompiledReport, setOpenedCompiledReport] = useState(null);
   const [personalWorkspaceTab, setPersonalWorkspaceTab] = useState('dashboard');
   const [mapInitialized, setMapInitialized] = useState(false);
   const [selectedDong, setSelectedDong] = useState(null);
@@ -1110,6 +1114,34 @@ function AppContent() {
               onReports={() => go('groupReports')}
               onSettings={() => go('groupSettings')}
               onLeaveGroup={handleLeaveGroup}
+              onOpenProject={(project) => {
+                setOpenedProject(project);
+                go('project');
+              }}
+            />
+          )}
+
+          {screen === 'project' && user && openedProject && (
+            <ProjectScreen
+              key={openedProject.projectId}
+              user={user}
+              projectId={openedProject.projectId}
+              initialProject={openedProject}
+              onBack={() => goBack('groupWorkspace')}
+              onOpenReport={(report) => {
+                setOpenedCompiledReport(report);
+                go('compiledReportView');
+              }}
+            />
+          )}
+
+          {screen === 'compiledReportView' && user && openedCompiledReport && (
+            <CompiledReportViewScreen
+              key={openedCompiledReport.reportId}
+              user={user}
+              reportId={openedCompiledReport.reportId}
+              title={openedCompiledReport.title}
+              onBack={() => goBack('project')}
             />
           )}
 
@@ -1533,6 +1565,8 @@ function BottomNavigation({
           'groupWorkspace',
           'groupSettings',
           'groupReports',
+          'project',
+          'compiledReportView',
           'transfer',
           'workStatus',
           'assignment',

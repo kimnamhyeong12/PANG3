@@ -20,6 +20,7 @@ import { groupApi } from '../utils/groupApi';
 import { transferHistoryPage, mergeTransferHistory, compareTransferHistory } from '../utils/transferHistory';
 import GroupLeaveButton from '../components/GroupLeaveButton';
 import { buildMemberColors, softMemberColor } from '../utils/memberColors';
+import { GroupProjectList } from './ProjectScreen';
 
 const shortDong = (value) => {
   const text = String(value || '').trim();
@@ -67,6 +68,7 @@ export default function GroupWorkspaceScreen({
   onTransfer,
   onReports,
   onLeaveGroup,
+  onOpenProject,
 }) {
   const [detail, setDetail] = useState(group || null);
   const [sharedTasks, setSharedTasks] = useState(Array.isArray(assignments) ? assignments : []);
@@ -233,6 +235,14 @@ export default function GroupWorkspaceScreen({
         >
           <Text style={[styles.tabText, tab === 'settings' && styles.activeText]}>설정</Text>
         </TouchableOpacity>
+        {!(group?.personal || group?.personalWorkspace || group?.workspaceType === 'PERSONAL') && (
+          <TouchableOpacity
+            style={[styles.tab, tab === 'projects' && styles.activeTab]}
+            onPress={() => onTabChange?.('projects')}
+          >
+            <Text style={[styles.tabText, tab === 'projects' && styles.activeText]}>프로젝트</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {tab === 'dashboard' ? (
@@ -244,6 +254,8 @@ export default function GroupWorkspaceScreen({
           embedded
           showDashboard
         />
+      ) : tab === 'projects' ? (
+        <GroupProjectList user={user} group={group} onOpenProject={onOpenProject} />
       ) : (
         <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {tab === 'settings' ? <>
