@@ -63,6 +63,7 @@ function createScreen({ nativeNavigation = false, taskRemoved = false } = {}) {
       if (name.includes('KakaoMapWebView')) return { __esModule: true, default: 'MapCanvas' };
       if (name.includes('SafetyGuideBadge')) return { __esModule: true, default: 'SafetyBadge' };
       if (name.includes('ManeuverGuideCard')) return { __esModule: true, default: 'ManeuverCard' };
+      if (name.includes('PhotoUploadScreen')) return { __esModule: true, default: 'PhotoUpload' };
       if (name.includes('kakao-navigation')) return { KakaoNavigationView: 'Navigation', isKakaoNavigationAvailable: () => nativeNavigation,
         beginRouteSession() { taskRemoved = false; calls.push(['begin-route']); },
         endRouteSession() { calls.push(['end-route']); }, wasRouteTaskRemoved: () => taskRemoved,

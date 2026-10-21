@@ -400,7 +400,18 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
       ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
   }
   private fun fail(message: String) { onError(mapOf("message" to message)) }
-  fun release() { released = true; requestId++; stopGuidance() }
+  fun release() {
+    val windowRoot = appContext.currentActivity?.window?.decorView
+    released = true; requestId++; stopGuidance()
+    // Removing a GL SurfaceView can leave the underlying retained WebView's
+    // transparent region/damage stale. Rebuild it after the removal is committed.
+    windowRoot?.post {
+      windowRoot.parent?.requestTransparentRegion(windowRoot)
+      windowRoot.requestLayout()
+      windowRoot.invalidate()
+      Log.i("PANG3MapSurface", "Released guidance surface; refreshed window drawing region")
+    }
+  }
   private fun stopGuidance() {
     stopping = true
     mapBinding = false
