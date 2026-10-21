@@ -104,7 +104,8 @@ export function addReportItems(reportId, userId, progressIds) {
   return api.post(`${reportPath(reportId)}/items`, { userId, progressIds });
 }
 
-// patch: { overrideComment?, sortOrder? } (overrideComment null/빈 값 → 원본 문구)
+// patch: { overrideComment?, overrideTitle?, overridePhotoComments?: { [사진순번]: 설명|null }, sortOrder? }
+// (null/빈 값 → 원본으로 되돌림)
 export function updateReportItem(reportId, progressId, userId, patch) {
   return api.patch(`${reportPath(reportId)}/items/${progressId}`, { userId, ...patch });
 }
@@ -138,6 +139,24 @@ export async function downloadCompiledHwpx(reportId, userId) {
   const prepared = await api.post(`${reportPath(reportId)}/hwpx/prepare`, undefined, { userId });
   const blob = await api.download(prepared.downloadUrl);
   return { blob, fileName: prepared.fileName || `compiled_report_${reportId}.hwpx` };
+}
+
+// ---------- 보고서 보관함 건별 편집 (D23) ----------
+
+// → { progressId, reportName, autoTitle, mainComment, photos:[{index, slot, url, comment}], canEdit, revision, ... }
+export function fetchProgressReport(progressId) {
+  return api.get(`/api/progress-reports/${progressId}`);
+}
+
+// patch: { expectedRevision, reportName?, mainComment?, photoComments?: { [사진순번]: 설명 } } — 원본 기록을 고친다
+export function updateProgressReport(progressId, patch) {
+  return api.patch(`/api/progress-reports/${progressId}`, patch);
+}
+
+// 건별 HWPX: 수정하면 기존 파일이 지워지므로 prepare(없으면 생성) 후 받는다
+export async function downloadProgressHwpx(progressId, userId) {
+  await api.post(`/api/task-progress/${progressId}/report/prepare`, undefined, { userId });
+  return api.download(`/api/task-progress/${progressId}/report/download`);
 }
 
 // 인증이 필요한 /api/files 사진 → Blob

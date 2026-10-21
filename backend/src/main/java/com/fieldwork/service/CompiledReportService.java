@@ -35,6 +35,8 @@ public class CompiledReportService {
     public static final Set<String> GROUP_BY = Set.of("adminDong", "year", "author", "category");
     private static final Map<String, String> PHOTO_LABELS = Map.of("before", "작업 전", "during", "작업 중", "after", "작업 후");
     private static final int MAX_COMMENT = 5000;
+    private static final int MAX_TITLE = 200;
+    private static final int MAX_PHOTO_COMMENT = 500;
 
     private final ProjectService projectService;
     private final CompiledReportRepository reports;
@@ -156,6 +158,9 @@ public class CompiledReportService {
             copy.setProgress(progress);
             copy.setSortOrder(item.getSortOrder());
             copy.setOverrideComment(item.getOverrideComment());
+            copy.setOverrideTitle(item.getOverrideTitle());
+            copy.setOverridePhotoComments(item.getOverridePhotoComments() == null ? null
+                    : new LinkedHashMap<>(item.getOverridePhotoComments()));
             copy.setAddedByUserId(userId);
             items.save(copy);
         }
@@ -246,6 +251,16 @@ public class CompiledReportService {
             }
             item.setOverrideComment(value);
         }
+        if (body.containsKey("overrideTitle")) {
+            String value = Objects.toString(body.get("overrideTitle"), "").trim();
+            if (value.length() > MAX_TITLE) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "제목은 200자까지 입력할 수 있습니다.");
+            }
+            item.setOverrideTitle(value.isEmpty() ? null : value);
+        }
+        if (body.containsKey("overridePhotoComments")) {
+            item.setOverridePhotoComments(mergePhotoComments(item, body.get("overridePhotoComments")));
+        }
         if (body.containsKey("sortOrder")) {
             try {
                 item.setSortOrder(Integer.valueOf(Objects.toString(body.get("sortOrder"), "")));
@@ -259,7 +274,56 @@ public class CompiledReportService {
         result.put("progressId", progressId);
         result.put("sortOrder", item.getSortOrder());
         result.put("overrideComment", item.getOverrideComment());
+        result.put("overrideTitle", item.getOverrideTitle());
+        result.put("overridePhotoComments", item.getOverridePhotoComments());
         return result;
+    }
+
+    /**
+     * 요청은 {"0": "설명", "2": null}(현재 field_photos 순번). null/빈 문자열은 원본으로 되돌린다.
+     * 저장 키는 사진 path — 앱에서 사진을 더하거나 지워 순번이 바뀌어도 같은 사진에 붙는다.
+     */
+    private static Map<String, Object> mergePhotoComments(CompiledReportItem item, Object raw) {
+        if (raw == null) return null;
+        if (!(raw instanceof Map<?, ?> changes)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "사진 설명 형식이 올바르지 않습니다.");
+        }
+        List<Map<String, Object>> photos = item.getProgress().getFieldPhotos();
+        int size = photos == null ? 0 : photos.size();
+        Map<String, Object> merged = item.getOverridePhotoComments() == null
+                ? new LinkedHashMap<>() : new LinkedHashMap<>(item.getOverridePhotoComments());
+        for (Map.Entry<?, ?> entry : changes.entrySet()) {
+            int index;
+            try {
+                index = Integer.parseInt(Objects.toString(entry.getKey(), ""));
+            } catch (NumberFormatException ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "사진 순번이 올바르지 않습니다.");
+            }
+            if (index < 0 || index >= size) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "없는 사진입니다.");
+            }
+            String value = entry.getValue() == null ? "" : entry.getValue().toString().trim();
+            if (value.length() > MAX_PHOTO_COMMENT) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "사진 설명은 500자까지 입력할 수 있습니다.");
+            }
+            String key = Objects.toString(photos.get(index).get("path"), "");
+            if (key.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "없는 사진입니다.");
+            if (value.isEmpty()) merged.remove(key);
+            else merged.put(key, value);
+        }
+        return merged.isEmpty() ? null : merged;
+    }
+
+    /** 건별 HWPX(ai/app.py)와 같은 자동 제목. */
+    public static String autoTitle(Task task) {
+        String place = firstNonBlank(task.getDetailAddress(), task.getRoadAddress(), "사하구 관내");
+        String category = firstNonBlank(task.getTaskCategory(), "현장 점검");
+        return "위치도 및 현장사진(" + place + ", " + category + ")";
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) if (value != null && !value.isBlank()) return value.trim();
+        return "";
     }
 
     @Transactional
@@ -369,12 +433,17 @@ public class CompiledReportService {
         row.put("author", author);
         row.put("lat", projectService.latOf(progress));
         row.put("lng", projectService.lngOf(progress));
+        String auto = autoTitle(task);
+        String reportName = progress.getReportName() == null || progress.getReportName().isBlank() ? null : progress.getReportName();
+        row.put("title", item.getOverrideTitle() != null ? item.getOverrideTitle() : reportName != null ? reportName : auto);
+        row.put("titleOverridden", item.getOverrideTitle() != null);
+        row.put("originalTitle", reportName != null ? reportName : auto);
         boolean overridden = item.getOverrideComment() != null;
         row.put("comment", overridden ? item.getOverrideComment() : progress.getMainComment());
         row.put("commentOverridden", overridden);
         row.put("originalComment", progress.getMainComment());
         row.put("aiRefinedContent", progress.getAiRefinedContent());
-        row.put("photos", photos(task.getTaskId(), progress.getFieldPhotos()));
+        row.put("photos", photos(task.getTaskId(), progress.getFieldPhotos(), item.getOverridePhotoComments()));
         row.put("locationMapImage", fileUrl(task.getTaskId(), progress.getLocationMapImage()));
         return row;
     }
@@ -404,7 +473,7 @@ public class CompiledReportService {
         }
     }
 
-    private List<Map<String, Object>> photos(Long taskId, List<Map<String, Object>> fieldPhotos) {
+    private List<Map<String, Object>> photos(Long taskId, List<Map<String, Object>> fieldPhotos, Map<String, Object> overrides) {
         List<Map<String, Object>> result = new ArrayList<>();
         if (fieldPhotos == null) return result;
         for (int i = 0; i < fieldPhotos.size(); i++) {
@@ -416,7 +485,12 @@ public class CompiledReportService {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("slot", PHOTO_LABELS.getOrDefault(PhotoSlots.typeOf(photo, i), ""));
             item.put("url", url);
-            item.put("comment", bar >= 0 ? comment.substring(bar + 1) : comment);
+            String original = bar >= 0 ? comment.substring(bar + 1) : comment;
+            Object override = overrides == null ? null : overrides.get(Objects.toString(photo.get("path"), ""));
+            item.put("index", i);
+            item.put("comment", override != null ? override.toString() : original);
+            item.put("commentOverridden", override != null);
+            item.put("originalComment", original);
             result.add(item);
         }
         return result;

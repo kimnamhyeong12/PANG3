@@ -16,6 +16,7 @@ import SettingsPage from './pages/SettingsPage.jsx';
 import ProjectsPage from './pages/ProjectsPage.jsx';
 import ProjectsDetailPage from './pages/ProjectsDetailPage.jsx';
 import ReportEditorPage from './pages/ReportEditorPage.jsx';
+import ProjectsProgressEditPage from './pages/ProjectsProgressEditPage.jsx';
 import AccountRecoveryPage from './pages/AccountRecoveryPage.jsx';
 
 function RequireAuth() {
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/projects/:projectId" element={<ProjectsDetailPage />} />
             <Route path="/projects/:projectId/reports/:reportId" element={<ReportEditorPage />} />
+            <Route path="/reports/:progressId/edit" element={<ProjectsProgressEditPage />} />
           </Route>
         </Route>
       </Route>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useGroup } from '../context/GroupContext.jsx';
 import { downloadReport, fetchGroupReports } from '../api/reports.js';
@@ -74,6 +75,10 @@ function ReportCard({ report, downloading, onDownload }) {
         <IconDownload size={16} />
         {downloading ? '다운로드 중…' : '다운로드'}
       </button>
+      {/* D26: 건별 보고서 보기·수정 (담당자·리더만 저장 가능) */}
+      <Link className="btn-secondary report-download" to={`/reports/${report.progressId}/edit`}>
+        보기 · 수정
+      </Link>
     </article>
   );
 }

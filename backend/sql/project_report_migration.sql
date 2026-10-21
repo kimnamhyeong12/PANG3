@@ -48,4 +48,8 @@ CREATE TABLE IF NOT EXISTS compiled_report_items (
     CONSTRAINT uk_compiled_report_items_report_progress UNIQUE (report_id, progress_id)
 );
 CREATE INDEX IF NOT EXISTS idx_compiled_report_items_progress ON compiled_report_items(progress_id);
+
+-- C안(D22): 카드 제목·사진 설명을 보고서 안에서만 수정
+ALTER TABLE compiled_report_items ADD COLUMN IF NOT EXISTS override_title varchar(200);
+ALTER TABLE compiled_report_items ADD COLUMN IF NOT EXISTS override_photo_comments jsonb;
 COMMIT;

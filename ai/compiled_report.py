@@ -158,8 +158,9 @@ def build(payload: dict) -> str:
             for item in items:
                 number += 1
                 author = (item.get("author") or {}).get("name")
-                doc.add_paragraph().add_run(f"{number}. {text(item.get('address'))}", bold=True, size=11, color=INK, font=FONT)
-                meta = f"완료일 {day(item.get('completedAt'))} · 작성자 {text(author)}"
+                title = item.get("title") or item.get("address")
+                doc.add_paragraph().add_run(f"{number}. {text(title)}", bold=True, size=11, color=INK, font=FONT)
+                meta = f"{text(item.get('address'))} · 완료일 {day(item.get('completedAt'))} · 작성자 {text(author)}"
                 if item.get("category"):
                     meta += f" · {text(item.get('category'))}"
                 doc.add_paragraph().add_run(meta, size=9, color=SOFT, font=FONT)

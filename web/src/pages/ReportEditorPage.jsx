@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import {
@@ -6,7 +6,6 @@ import {
   SKIP_REASON_LABEL,
   addReportItems,
   downloadCompiledHwpx,
-  downloadProtectedFile,
   fetchCompiledReport,
   fetchCompiledReportHtml,
   fetchProject,
@@ -27,76 +26,11 @@ import ErrorBlock from '../components/ErrorBlock.jsx';
 import { LoadingBlock } from '../components/Loading.jsx';
 import Modal from '../components/Modal.jsx';
 import { ItemFilters, MineBadge, ReportStatusBadge } from './ProjectsDetailPage.jsx';
+import ReportMap, { ProtectedPhoto, authorColorMap } from './ProjectsReportMap.jsx';
 import '../styles/projects.css';
 
 const EMPTY_FILTERS = { year: '', adminDong: '', authorId: '', category: '' };
-
-// D15: 미리보기 iframe에만 카카오 키 주입 (내려받는 HTML에는 넣지 않음 → 위치 표만 보임)
-function withKakaoKey(html) {
-  const key = import.meta.env.VITE_KAKAO_MAP_KEY || '';
-  if (!key) return html;
-  const tag = `<script>window.REPORT_KAKAO_KEY=${JSON.stringify(key).replace(/</g, '\\u003c')}</script>`;
-  return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (m) => m + tag) : tag + html;
-}
-
-// /api/files/... 는 인증이 필요해 Blob으로 받아 표시
-function ProtectedPhoto({ url, alt }) {
-  const [src, setSrc] = useState(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (!url) return undefined;
-    if (!url.startsWith('/')) {
-      setSrc(url);
-      return undefined;
-    }
-    let objectUrl = null;
-    let cancelled = false;
-    setSrc(null);
-    setFailed(false);
-    downloadProtectedFile(url)
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setSrc(objectUrl);
-      })
-      .catch(() => !cancelled && setFailed(true));
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [url]);
-
-  if (failed) return <div className="re-photo re-photo-empty">사진을 불러오지 못했습니다</div>;
-  if (!src) return <div className="re-photo re-photo-empty">불러오는 중…</div>;
-  return <img className="re-photo" src={src} alt={alt} />;
-}
-
-function PreviewModal({ html, title, onClose }) {
-  const saveHtml = () => {
-    saveBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), `${safeFileName(title)}.html`);
-  };
-  return (
-    <div className="modal-backdrop" onMouseDown={onClose}>
-      <div className="modal re-preview" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">미리보기 · {title}</h2>
-          <div className="re-preview-actions">
-            <button type="button" className="btn-secondary" onClick={saveHtml}>
-              HTML 저장
-            </button>
-            <button type="button" className="icon-button" aria-label="닫기" onClick={onClose}>
-              ✕
-            </button>
-          </div>
-        </div>
-        {/* sandbox: allow-scripts만 (allow-same-origin 없음 → 앱 세션/DOM 접근 불가). 불투명 origin에서 카카오 지도가 실패하면
-            보고서의 위치 목록 표가 대신 보인다 (D15 fallback). */}
-        <iframe className="re-preview-frame" title="보고서 미리보기" sandbox="allow-scripts" srcDoc={withKakaoKey(html)} />
-      </div>
-    </div>
-  );
-}
+const SLOT_CLASS = { '작업 전': 'before', '작업 중': 'during', '작업 후': 'after' };
 
 function VersionsModal({ reportId, projectId, userId, onClose }) {
   const navigate = useNavigate();
@@ -145,64 +79,131 @@ function VersionsModal({ reportId, projectId, userId, onClose }) {
   );
 }
 
-function ItemDetail({ item, canEdit, busy, onSaveComment }) {
-  const [text, setText] = useState(item.comment ?? '');
-  useEffect(() => setText(item.comment ?? ''), [item.progressId, item.comment]);
-  const dirty = text !== (item.comment ?? '');
+// 사진 + 사진 밑 설명 (보고서에서만 수정)
+function PhotoCell({ photo, canEdit, onSave }) {
+  const [text, setText] = useState(photo.comment ?? '');
+  useEffect(() => setText(photo.comment ?? ''), [photo.comment]);
+  const commit = () => {
+    if (text === (photo.comment ?? '')) return;
+    onSave({ overridePhotoComments: { [photo.index]: text.trim() === (photo.originalComment ?? '').trim() ? null : text } });
+  };
+  return (
+    <figure className="re-photo-cell">
+      <div className="re-photo-frame">
+        <ProtectedPhoto url={photo.url} alt={photo.slot || '현장 사진'} />
+        {photo.slot && <span className={`re-slot re-slot-${SLOT_CLASS[photo.slot] ?? 'etc'}`}>{photo.slot}</span>}
+      </div>
+      {canEdit ? (
+        <textarea
+          className={`input re-caption${photo.commentOverridden ? ' is-modified' : ''}`}
+          value={text}
+          maxLength={500}
+          placeholder="사진 설명"
+          aria-label={`${photo.slot || '사진'} 설명`}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+        />
+      ) : (
+        photo.comment && <figcaption className="re-caption-text">{photo.comment}</figcaption>
+      )}
+      {canEdit && photo.commentOverridden && <div className="re-original-hint">원본: {photo.originalComment || '(없음)'}</div>}
+    </figure>
+  );
+}
+
+function ItemCard({ item, n, color, active, canEdit, busy, isFirst, isLast, userId, onSave, onMove, onRemove, cardRef }) {
+  const [title, setTitle] = useState(item.titleOverridden ? item.title : '');
+  const [body, setBody] = useState(item.comment ?? '');
+  useEffect(() => setTitle(item.titleOverridden ? item.title : ''), [item.title, item.titleOverridden]);
+  useEffect(() => setBody(item.comment ?? ''), [item.comment]);
+  const photos = item.photos ?? [];
+  const modified = item.titleOverridden || item.commentOverridden || photos.some((p) => p.commentOverridden);
+
+  const commitTitle = () => {
+    const next = title.trim();
+    if (next === (item.titleOverridden ? item.title : '')) return;
+    onSave({ overrideTitle: next && next !== item.originalTitle ? next : null });
+  };
+  const commitBody = () => {
+    if (body === (item.comment ?? '')) return;
+    onSave({ overrideComment: body.trim() === (item.originalComment ?? '').trim() ? null : body });
+  };
+  const revertAll = () => {
+    if (!window.confirm('이 항목에서 고친 제목·사진 설명·본문을 모두 원본으로 되돌릴까요?')) return;
+    const photoReset = Object.fromEntries(photos.filter((p) => p.commentOverridden).map((p) => [p.index, null]));
+    onSave({ overrideTitle: null, overrideComment: null, overridePhotoComments: photoReset });
+  };
 
   return (
-    <div className="re-detail">
-      <div className="re-detail-head">
-        <div className="pj-task-title">{item.address || '주소 정보 없음'}</div>
-        <div className="pj-muted">
-          {[item.adminDong, item.category, item.author?.name, formatDate(item.completedAt)].filter(Boolean).join(' · ')}
+    <article ref={cardRef} className={`re-card${active ? ' is-active' : ''}`}>
+      <div className="re-card-head">
+        <span className="re-no" style={{ borderColor: color }}>{n}</span>
+        <div className="re-card-main">
+          {canEdit ? (
+            <input
+              className={`input re-card-title${item.titleOverridden ? ' is-modified' : ''}`}
+              value={title}
+              maxLength={200}
+              placeholder={item.originalTitle}
+              aria-label="카드 제목"
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+            />
+          ) : (
+            <h3 className="re-card-title-text">{item.title}</h3>
+          )}
+          <div className="pj-muted re-card-meta">
+            {[item.address, formatDate(item.completedAt), item.author?.name, item.category].filter(Boolean).join(' · ')}
+            {item.author?.userId === userId && <MineBadge />}
+            {modified && <span className="re-badge">✎ 보고서에서 수정</span>}
+          </div>
         </div>
+        {canEdit && (
+          <div className="re-card-actions">
+            {modified && (
+              <button type="button" className="btn-secondary pj-btn-sm" disabled={busy} onClick={revertAll}>
+                원본으로
+              </button>
+            )}
+            <button type="button" className="icon-button" aria-label="위로" disabled={busy || isFirst} onClick={() => onMove(-1)}>
+              ▲
+            </button>
+            <button type="button" className="icon-button" aria-label="아래로" disabled={busy || isLast} onClick={() => onMove(1)}>
+              ▼
+            </button>
+            <button type="button" className="icon-button" aria-label="보고서에서 빼기" disabled={busy} onClick={onRemove}>
+              ✕
+            </button>
+          </div>
+        )}
       </div>
-      {item.photos?.length > 0 ? (
-        <div className="re-photos">
-          {item.photos.map((p, i) => (
-            <figure key={`${p.url}-${i}`} className="re-photo-box">
-              <ProtectedPhoto url={p.url} alt={p.slot || `사진 ${i + 1}`} />
-              {(p.slot || p.comment) && <figcaption>{[p.slot, p.comment].filter(Boolean).join(' · ')}</figcaption>}
-            </figure>
+      {photos.length > 0 ? (
+        <div className="re-photo-grid">
+          {photos.map((p) => (
+            <PhotoCell key={`${p.index}-${p.url}`} photo={p} canEdit={canEdit} onSave={onSave} />
           ))}
         </div>
       ) : (
         <div className="pj-muted">사진 없음</div>
       )}
-      <div className="field">
-        <label>원본 문구 (현장 기록)</label>
-        <div className="re-original">{item.originalComment || '(내용 없음)'}</div>
-      </div>
-      <div className="field">
-        <label htmlFor="re-comment">보고서에 쓸 문구</label>
-        <textarea
-          id="re-comment"
-          className="input re-textarea"
-          value={text}
-          maxLength={5000}
-          readOnly={!canEdit}
-          onChange={(e) => setText(e.target.value)}
-        />
-      </div>
-      {canEdit && (
-        <div className="button-row re-detail-actions">
-          {item.commentOverridden && (
-            <button type="button" className="btn-secondary" disabled={busy} onClick={() => onSaveComment(null)}>
-              원본 문구로 되돌리기
-            </button>
-          )}
-          <button
-            type="button"
-            className="btn-primary btn-inline"
-            disabled={busy || !dirty}
-            onClick={() => onSaveComment(text === (item.originalComment ?? '') ? null : text)}
-          >
-            문구 저장
-          </button>
-        </div>
+      <div className="re-body-label">본문</div>
+      {canEdit ? (
+        <>
+          <textarea
+            className={`input re-body${item.commentOverridden ? ' is-modified' : ''}`}
+            value={body}
+            maxLength={5000}
+            aria-label="본문"
+            onChange={(e) => setBody(e.target.value)}
+            onBlur={commitBody}
+          />
+          {item.commentOverridden && <div className="re-original-hint">원본: {item.originalComment || '(없음)'}</div>}
+        </>
+      ) : (
+        <p className="re-body-text">{item.comment || '-'}</p>
       )}
-    </div>
+    </article>
   );
 }
 
@@ -219,12 +220,12 @@ export default function ReportEditorPage() {
   const [poolError, setPoolError] = useState(null);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [mine, setMine] = useState(null); // D20: "내 작업만" (멤버 기본 ON, 리더 기본 OFF). null = 리더 여부 확인 전
-  const [selectedId, setSelectedId] = useState(null);
+  const [activeN, setActiveN] = useState(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null); // { type: 'error'|'success', text }
   const [titleDraft, setTitleDraft] = useState('');
-  const [preview, setPreview] = useState(null);
   const [showVersions, setShowVersions] = useState(false);
+  const cardRefs = useRef(new Map());
 
   const projectId = report?.project?.projectId;
   const status = report?.report?.status;
@@ -242,7 +243,7 @@ export default function ReportEditorPage() {
   useEffect(() => {
     setReport(null);
     setLoadError(null);
-    setSelectedId(null);
+    setActiveN(null);
     setMessage(null);
     setFilters(EMPTY_FILTERS);
     loadReport().catch((e) => setLoadError(errorMessage(e, '보고서를 불러오지 못했습니다.')));
@@ -273,9 +274,22 @@ export default function ReportEditorPage() {
     loadPool();
   }, [loadPool]);
 
-  const allItems = useMemo(() => (report?.sections ?? []).flatMap((s) => s.items ?? []), [report]);
+  const sections = report?.sections ?? [];
+  const allItems = useMemo(() => sections.flatMap((s) => s.items ?? []), [sections]);
   const inReport = useMemo(() => new Set(allItems.map((it) => it.progressId)), [allItems]);
-  const selected = allItems.find((it) => it.progressId === selectedId) ?? null;
+  const colors = useMemo(() => authorColorMap(allItems), [allItems]);
+  // 카드 번호 = 섹션 순서대로 1..n (보고서 HTML·위치 표와 같음)
+  const numbered = useMemo(() => {
+    let n = 0;
+    return sections.map((s) => ({ ...s, rows: (s.items ?? []).map((it) => ({ it, n: ++n })) }));
+  }, [sections]);
+  const markers = useMemo(
+    () =>
+      numbered.flatMap((s) =>
+        s.rows.map(({ it, n }) => ({ n, lat: it.lat, lng: it.lng, color: colors.get(it.author?.name ?? '-'), title: it.title }))
+      ),
+    [numbered, colors]
+  );
   const poolItems = pool?.items ?? [];
   const addable = poolItems.filter((it) => !inReport.has(it.progressId));
 
@@ -289,6 +303,11 @@ export default function ReportEditorPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const pickCard = (n) => {
+    setActiveN(n);
+    cardRefs.current.get(n)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const addItems = (ids) =>
@@ -315,7 +334,7 @@ export default function ReportEditorPage() {
     if (!window.confirm('이 항목을 보고서에서 뺄까요? (현장 기록 원본은 지워지지 않습니다)')) return;
     run(async () => {
       await removeReportItem(reportId, item.progressId, userId);
-      if (selectedId === item.progressId) setSelectedId(null);
+      setActiveN(null);
       await Promise.all([loadReport(), loadPool()]);
     }, '항목을 빼지 못했습니다.');
   };
@@ -333,6 +352,12 @@ export default function ReportEditorPage() {
       await loadReport();
     }, '순서를 바꾸지 못했습니다.');
   };
+
+  const saveItem = (item, patch) =>
+    run(async () => {
+      await updateReportItem(reportId, item.progressId, userId, patch);
+      await loadReport();
+    }, '수정한 내용을 저장하지 못했습니다.');
 
   const changeGroupBy = (groupBy) => {
     if (!canEdit || groupBy === report.report.groupBy) return;
@@ -355,23 +380,18 @@ export default function ReportEditorPage() {
     }, '제목을 저장하지 못했습니다.');
   };
 
-  const saveComment = (value) =>
+  // D15: 내려받는 HTML에는 카카오 키를 넣지 않는다 (지도 대신 위치 표가 보임)
+  const downloadHtml = () =>
     run(async () => {
-      await updateReportItem(reportId, selected.progressId, userId, { overrideComment: value });
-      await loadReport();
-      setMessage({ type: 'success', text: value == null ? '원본 문구로 되돌렸습니다.' : '문구를 저장했습니다.' });
-    }, '문구를 저장하지 못했습니다.');
-
-  const openPreview = () =>
-    run(async () => {
-      setPreview(await fetchCompiledReportHtml(reportId, userId));
-    }, '미리보기를 만들지 못했습니다.');
+      const html = await fetchCompiledReportHtml(reportId, userId);
+      saveBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), `${safeFileName(report.report.title)}.html`);
+    }, 'HTML 파일을 만들지 못했습니다.');
 
   const downloadHwpx = () =>
     run(async () => {
       const { blob, fileName } = await downloadCompiledHwpx(reportId, userId);
       saveBlob(blob, fileName);
-    }, 'HWPX 파일을 만들지 못했습니다.');
+    }, 'HWPX 파일을 만들지 못했습니다. 서버의 보고서 생성 환경(파이썬)을 확인해 주세요.');
 
   const finalize = () => {
     if (!window.confirm('보고서를 확정할까요?\n확정하면 내용이 고정되어 더 이상 수정할 수 없습니다. 고치려면 "수정하기"로 새 버전을 만들어야 합니다.')) return;
@@ -399,7 +419,31 @@ export default function ReportEditorPage() {
   if (!report) return <div className="panel"><LoadingBlock label="보고서를 불러오는 중…" /></div>;
 
   const meta = report.report;
-  const sections = report.sections ?? [];
+  const summary = report.summary ?? {};
+  const locationTable = (
+    <table className="table re-location-table">
+      <thead>
+        <tr>
+          <th>번호</th>
+          <th>위치</th>
+          <th>{GROUP_BY_OPTIONS.find((o) => o.value === meta.groupBy)?.label ?? '분류'}</th>
+          <th>완료일</th>
+        </tr>
+      </thead>
+      <tbody>
+        {numbered.flatMap((s) =>
+          s.rows.map(({ it, n }) => (
+            <tr key={it.progressId} className="re-location-row" onClick={() => pickCard(n)}>
+              <td>{n}</td>
+              <td>{it.address || '-'}</td>
+              <td>{s.label}</td>
+              <td>{formatDate(it.completedAt)}</td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  );
 
   return (
     <div className="re-page">
@@ -427,8 +471,8 @@ export default function ReportEditorPage() {
           <button type="button" className="btn-secondary" onClick={() => setShowVersions(true)}>
             이전 버전
           </button>
-          <button type="button" className="btn-secondary" disabled={busy} onClick={openPreview}>
-            미리보기
+          <button type="button" className="btn-secondary" disabled={busy} onClick={downloadHtml}>
+            HTML 내려받기
           </button>
           <button type="button" className="btn-secondary" disabled={busy} onClick={downloadHwpx}>
             <IconDownload size={16} /> HWPX 내려받기
@@ -447,15 +491,16 @@ export default function ReportEditorPage() {
       </div>
       {!isDraft && <p className="panel-notice re-notice">확정된 보고서입니다. 내용은 읽기 전용입니다.</p>}
       {isDraft && !isLeader && (
-        <p className="panel-notice re-notice">항목 담기만 할 수 있습니다. 문구·순서 수정과 확정은 그룹 리더가 합니다.</p>
+        <p className="panel-notice re-notice">항목 담기만 할 수 있습니다. 제목·사진 설명·본문 수정과 확정은 그룹 리더가 합니다.</p>
       )}
+      {canEdit && <p className="panel-notice re-notice">여기서 고친 글은 이 보고서에만 저장돼요. 현장 원본 기록은 바뀌지 않습니다. (입력칸을 벗어나면 저장)</p>}
       {message && <p className={message.type === 'error' ? 'form-error' : 'form-success'}>{message.text}</p>}
 
-      <div className="re-grid">
-        {/* 왼쪽: 완료 기록 풀 */}
-        <section className="panel re-col">
+      <div className="re-layout">
+        {/* 왼쪽: 담을 항목 */}
+        <section className="panel re-col re-pool-col">
           <div className="panel-header">
-            <h2 className="panel-title">완료 기록</h2>
+            <h2 className="panel-title">담을 항목</h2>
             {pool && <span className="panel-count">{poolItems.length}건</span>}
           </div>
           <div className="re-col-filters">
@@ -507,110 +552,80 @@ export default function ReportEditorPage() {
           </div>
         </section>
 
-        {/* 가운데: 보고서 구성 */}
-        <section className="panel re-col">
-          <div className="panel-header">
-            <h2 className="panel-title">보고서 구성</h2>
-            <span className="panel-count">{allItems.length}건</span>
-          </div>
-          <div className="re-groupby">
-            <span className="pj-muted">분류 기준</span>
-            <div className="pj-chips">
-              {GROUP_BY_OPTIONS.map((o) => (
-                <button
-                  key={o.value}
-                  type="button"
-                  className={`pj-chip${meta.groupBy === o.value ? ' active' : ''}`}
-                  disabled={!canEdit || busy}
-                  onClick={() => changeGroupBy(o.value)}
-                >
-                  {o.label}
-                </button>
-              ))}
+        {/* 오른쪽: 보고서 (지도 + 카드) */}
+        <div className="re-main">
+          <section className="panel re-summary">
+            <div className="pj-muted">
+              기간 {summary.period?.from ?? '-'} ~ {summary.period?.to ?? '-'} · 총 {summary.totalCount ?? allItems.length}건 · 작성자{' '}
+              {(summary.authors ?? []).join(', ') || '-'}
             </div>
-          </div>
-          <div className="re-col-body">
-            {sections.length === 0 ? (
-              <div className="table-empty">왼쪽 완료 기록에서 항목을 담아 주세요.</div>
-            ) : (
-              sections.map((section, si) => (
-                <div key={section.key} className={`re-section re-tone-${si % 6}`}>
-                  <div className="re-section-head">
-                    <span className="re-section-label">{section.label}</span>
-                    <span className="pj-muted">{section.count}건</span>
-                  </div>
-                  <ul className="re-items">
-                    {(section.items ?? []).map((it, i) => (
-                      <li
-                        key={it.progressId}
-                        className={`re-item${selectedId === it.progressId ? ' active' : ''}`}
-                        onClick={() => setSelectedId(it.progressId)}
-                      >
-                        {canEdit && (
-                          <span className="re-move" onClick={(e) => e.stopPropagation()}>
-                            <button type="button" aria-label="위로" disabled={busy || i === 0} onClick={() => move(section, i, -1)}>
-                              ▲
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="아래로"
-                              disabled={busy || i === section.items.length - 1}
-                              onClick={() => move(section, i, 1)}
-                            >
-                              ▼
-                            </button>
-                          </span>
-                        )}
-                        <div className="pj-task-main">
-                          <span className="pj-task-title">{it.address || '주소 정보 없음'}</span>
-                          <span className="re-item-comment">{it.comment || '(문구 없음)'}</span>
-                          <span className="pj-muted">
-                            {[it.author?.name, formatDate(it.completedAt), it.photos?.length ? `사진 ${it.photos.length}` : null]
-                              .filter(Boolean)
-                              .join(' · ')}
-                            {it.author?.userId === userId && <MineBadge />}
-                            {it.commentOverridden &&<span className="re-badge">✎ 문구 수정됨</span>}
-                          </span>
-                        </div>
-                        {canEdit && (
-                          <button
-                            type="button"
-                            className="icon-button re-remove"
-                            aria-label="보고서에서 빼기"
-                            disabled={busy}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeItem(it);
-                            }}
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
+            <div className="re-groupby">
+              <span className="pj-muted">분류 기준</span>
+              <div className="pj-chips">
+                {GROUP_BY_OPTIONS.map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    className={`pj-chip${meta.groupBy === o.value ? ' active' : ''}`}
+                    disabled={!canEdit || busy}
+                    onClick={() => changeGroupBy(o.value)}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
 
-        {/* 오른쪽: 선택 항목 */}
-        <section className="panel re-col">
-          <div className="panel-header">
-            <h2 className="panel-title">선택한 항목</h2>
-          </div>
-          <div className="re-col-body">
-            {selected ? (
-              <ItemDetail item={selected} canEdit={canEdit} busy={busy} onSaveComment={saveComment} />
-            ) : (
-              <div className="table-empty">가운데 목록에서 항목을 선택하면 사진과 문구를 볼 수 있습니다.</div>
-            )}
-          </div>
-        </section>
+          {allItems.length > 0 && (
+            <section className="panel re-mapcard">
+              <ReportMap markers={markers} activeN={activeN} onPick={pickCard} fallback={locationTable} />
+              <div className="re-legend">
+                {[...colors].map(([name, color]) => (
+                  <span key={name}>
+                    <i style={{ borderColor: color }} />
+                    {name}
+                  </span>
+                ))}
+                <span className="pj-muted">· 핀을 누르면 해당 카드로 이동해요</span>
+              </div>
+            </section>
+          )}
+
+          {numbered.length === 0 ? (
+            <section className="panel">
+              <div className="table-empty">왼쪽 &lsquo;담을 항목&rsquo;에서 완료 기록을 담아 주세요.</div>
+            </section>
+          ) : (
+            numbered.map((section, si) => (
+              <section key={section.key} className={`re-group re-tone-${si % 6}`}>
+                <h2 className="re-group-head">
+                  {section.label} <span className="pj-muted">{section.count}건</span>
+                </h2>
+                {section.rows.map(({ it, n }, i) => (
+                  <ItemCard
+                    key={it.progressId}
+                    item={it}
+                    n={n}
+                    color={colors.get(it.author?.name ?? '-')}
+                    active={activeN === n}
+                    canEdit={canEdit}
+                    busy={busy}
+                    isFirst={i === 0}
+                    isLast={i === section.rows.length - 1}
+                    userId={userId}
+                    onSave={(patch) => saveItem(it, patch)}
+                    onMove={(delta) => move(section, i, delta)}
+                    onRemove={() => removeItem(it)}
+                    cardRef={(el) => (el ? cardRefs.current.set(n, el) : cardRefs.current.delete(n))}
+                  />
+                ))}
+              </section>
+            ))
+          )}
+        </div>
       </div>
 
-      {preview != null && <PreviewModal html={preview} title={meta.title} onClose={() => setPreview(null)} />}
       {showVersions && <VersionsModal reportId={reportId} projectId={projectId} userId={userId} onClose={() => setShowVersions(false)} />}
     </div>
   );

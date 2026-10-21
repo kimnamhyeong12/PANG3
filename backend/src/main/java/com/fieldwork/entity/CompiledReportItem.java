@@ -11,10 +11,13 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /** 보고서에 담긴 task_progress 1건. 문구 수정(override)은 여기에만 저장하고 원본은 바꾸지 않는다. */
 @Entity
@@ -45,6 +48,14 @@ public class CompiledReportItem {
     @Column(name = "override_comment", columnDefinition = "TEXT")
     private String overrideComment;
 
+    @Column(name = "override_title", length = 200)
+    private String overrideTitle;
+
+    /** 원본 사진 path → 이 보고서에서만 쓰는 사진 설명. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "override_photo_comments", columnDefinition = "jsonb")
+    private Map<String, Object> overridePhotoComments;
+
     @Column(name = "added_by_user_id")
     private Long addedByUserId;
 
@@ -71,6 +82,12 @@ public class CompiledReportItem {
 
     public String getOverrideComment() { return overrideComment; }
     public void setOverrideComment(String overrideComment) { this.overrideComment = overrideComment; }
+
+    public String getOverrideTitle() { return overrideTitle; }
+    public void setOverrideTitle(String overrideTitle) { this.overrideTitle = overrideTitle; }
+
+    public Map<String, Object> getOverridePhotoComments() { return overridePhotoComments; }
+    public void setOverridePhotoComments(Map<String, Object> overridePhotoComments) { this.overridePhotoComments = overridePhotoComments; }
 
     public Long getAddedByUserId() { return addedByUserId; }
     public void setAddedByUserId(Long addedByUserId) { this.addedByUserId = addedByUserId; }

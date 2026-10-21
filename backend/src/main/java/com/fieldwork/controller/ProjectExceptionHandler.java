@@ -10,7 +10,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 
-@RestControllerAdvice(assignableTypes = {ProjectController.class, CompiledReportController.class})
+@RestControllerAdvice(assignableTypes = {ProjectController.class, CompiledReportController.class, ProgressReportEditController.class})
 public class ProjectExceptionHandler {
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, String>> status(ResponseStatusException failure) {

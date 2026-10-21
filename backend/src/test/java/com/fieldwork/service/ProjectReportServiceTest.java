@@ -335,4 +335,50 @@ class ProjectReportServiceTest {
         assertEquals("리더", versions.get(1).get("finalizedBy"));
         assertEquals(null, versions.get(0).get("finalizedAt"));
     }
+
+    @Test void cardTitleAndPhotoCaptionsAreOverriddenOnlyInReport() {
+        Task t = task(group, "하단동", LocalDateTime.of(2026, 5, 1, 10, 0)); link(t);
+        TaskProgress p = progress(t, "complete", "원본");
+        Long reportId = newReport("adminDong");
+        reports.addItems(reportId, member.getUserId(), List.of(p.getProgressId()));
+        Map<String, Object> item = list(list(reports.getJson(reportId, leader.getUserId()).get("sections")).get(0).get("items")).get(0);
+        assertEquals("위치도 및 현장사진(부산 사하구 하단동, 불법광고물)", item.get("title"));
+        assertEquals(false, item.get("titleOverridden"));
+
+        Map<String, Object> change = new HashMap<>();
+        change.put("overrideTitle", "하단동 현수막 정비");
+        change.put("overridePhotoComments", Map.of("0", "보고서용 설명"));
+        assertStatus(HttpStatus.FORBIDDEN, () -> reports.updateItem(reportId, p.getProgressId(), member.getUserId(), change));
+        reports.updateItem(reportId, p.getProgressId(), leader.getUserId(), change);
+        item = list(list(reports.getJson(reportId, leader.getUserId()).get("sections")).get(0).get("items")).get(0);
+        assertEquals("하단동 현수막 정비", item.get("title"));
+        Map<String, Object> photo = list(item.get("photos")).get(0);
+        assertEquals("보고서용 설명", photo.get("comment"));
+        assertEquals("현수막", photo.get("originalComment"));
+        assertEquals(true, photo.get("commentOverridden"));
+        assertEquals("작업 전|현수막", progressRepository.findById(p.getProgressId()).orElseThrow().getFieldPhotos().get(0).get("comment"));
+        String html = renderer.render(reports.getJson(reportId, leader.getUserId()));
+        assertTrue(html.contains("하단동 현수막 정비"));
+        assertFalse(html.contains("보고서용 설명")); // 사진 파일이 없으면 사진·설명은 HTML에서 빠진다
+        assertTrue(html.contains("id=\"item-1\""));
+
+        assertStatus(HttpStatus.BAD_REQUEST, () -> reports.updateItem(reportId, p.getProgressId(), leader.getUserId(),
+                new HashMap<>(Map.of("overridePhotoComments", Map.of("3", "없는 사진")))));
+        // 앱에서 앞에 사진이 끼어들어도 보고서용 설명은 원래 사진을 따라간다 (키 = path)
+        TaskProgress reloaded = progressRepository.findById(p.getProgressId()).orElseThrow();
+        reloaded.setFieldPhotos(List.of(Map.of("path", "/nowhere/new.jpg", "type", "before", "comment", "새 사진"),
+                Map.of("path", "/nowhere/photo0.jpg", "type", "after", "comment", "작업 후|현수막")));
+        progressRepository.saveAndFlush(reloaded);
+        List<Map<String, Object>> moved = list(list(list(reports.getJson(reportId, leader.getUserId()).get("sections")).get(0).get("items")).get(0).get("photos"));
+        assertEquals("새 사진", moved.get(0).get("comment"));
+        assertEquals("보고서용 설명", moved.get(1).get("comment"));
+        assertEquals(1, moved.get(1).get("index"));
+        Map<String, Object> revert = new HashMap<>();
+        revert.put("overrideTitle", "");
+        revert.put("overridePhotoComments", Map.of("1", ""));
+        reports.updateItem(reportId, p.getProgressId(), leader.getUserId(), revert);
+        item = list(list(reports.getJson(reportId, leader.getUserId()).get("sections")).get(0).get("items")).get(0);
+        assertEquals("현수막", list(item.get("photos")).get(1).get("comment"));
+        assertEquals(false, item.get("titleOverridden"));
+    }
 }
