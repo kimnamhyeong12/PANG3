@@ -19,10 +19,11 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         boolean post = request.getMethod().equals("POST") && Set.of("/api/auth/login", "/api/auth/register",
                 "/api/auth/email/request", "/api/auth/email/verify", "/api/auth/password/forgot",
                 "/api/auth/password/reset", "/api/auth/refresh", "/api/auth/logout").contains(path);
+        post = post || request.getMethod().equals("POST") && path.startsWith("/api/auth/social/");
         boolean availability = request.getMethod().equals("GET") && path.equals("/api/auth/login-id/availability");
         if (!post && !availability) { chain.doFilter(request, response); return; }
         long now = System.currentTimeMillis();
-        int limit = path.equals("/api/auth/refresh") || path.equals("/api/auth/logout") || availability ? 120 : 30;
+        int limit = path.equals("/api/auth/social/poll") ? 300 : path.equals("/api/auth/refresh") || path.equals("/api/auth/logout") || availability ? 120 : 30;
         if (!budget.allow("ip:" + request.getRemoteAddr() + ":" + path, limit, 300000, now)) { reject(response, 429); return; }
         if (!post) { chain.doFilter(request, response); return; }
         byte[] bytes = request.getInputStream().readNBytes(16385);

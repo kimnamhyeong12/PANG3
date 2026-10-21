@@ -150,7 +150,9 @@ public class TaskProgressController {
             return ResponseEntity.notFound().build();
         }
 
-        String filename = file.getFileName().toString();
+        String filename = progress.getReportName() == null || progress.getReportName().isBlank()
+                ? file.getFileName().toString()
+                : progress.getReportName().replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_") + ".hwpx";
         FileSystemResource resource = new FileSystemResource(file);
 
         // 파일명에 한글이 들어가면 Content-Disposition 헤더가 순수 UTF-8 바이트로

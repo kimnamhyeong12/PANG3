@@ -16,6 +16,11 @@ public class User {
 
     private String password;
 
+    @Column(name = "password_login_enabled")
+    private Boolean passwordLoginEnabled = true;
+    public boolean isPasswordLoginEnabled() { return !Boolean.FALSE.equals(passwordLoginEnabled); }
+    public void setPasswordLoginEnabled(boolean value) { passwordLoginEnabled = value; }
+
     private String name;
 
     private String role;

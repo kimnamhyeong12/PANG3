@@ -449,6 +449,8 @@ public class TaskService {
         map.put("created_at", task.getCreatedAt());
         map.put("completedAt", task.getCompletedAt());
         map.put("completed_at", task.getCompletedAt());
+        taskProgressRepository.findTopByTask_TaskIdOrderByCreatedAtDesc(task.getTaskId())
+                .filter(ReportRetentionService::available).ifPresent(report -> map.put("reportName", report.getReportName()));
         map.put("workDate", task.getWorkDate());
         map.put("work_date", task.getWorkDate());
         map.put("scheduledDate", task.getScheduledDate());
@@ -570,7 +572,7 @@ public class TaskService {
         boolean willBeComplete = isCompleteStatus(status);
 
         if (!wasComplete && willBeComplete) {
-            task.setCompletedAt(LocalDateTime.now(java.time.ZoneId.of("Asia/Seoul")));
+            task.setCompletedAt(LocalDateTime.now(java.time.ZoneId.of("Asia/Seoul")).withNano(0));
         } else if (wasComplete && !willBeComplete) {
             task.setCompletedAt(null);
         }
