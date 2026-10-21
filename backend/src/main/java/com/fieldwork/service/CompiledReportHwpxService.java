@@ -62,8 +62,12 @@ public class CompiledReportHwpxService {
         expire();
         sweepOldFiles();
         Map<String, Object> report = map(json.get("report"));
-        String fileName = safeName(Objects.toString(report.get("title"), "통합보고서")) + "_v"
-                + Objects.toString(report.get("version"), "1") + ".hwpx";
+        // 프로젝트명_보고서제목[_초안][_v2].hwpx (D30)
+        String version = Objects.toString(report.get("version"), "1");
+        String fileName = safeName(Objects.toString(map(json.get("project")).get("name"), "프로젝트")) + "_"
+                + safeName(Objects.toString(report.get("title"), "통합보고서"))
+                + ("DRAFT".equals(report.get("status")) ? "_초안" : "")
+                + ("1".equals(version) ? "" : "_v" + version) + ".hwpx";
         Path output;
         try {
             Path outputDir = outputDir();
@@ -93,6 +97,7 @@ public class CompiledReportHwpxService {
             throw unavailable(ex);
         } finally {
             if (acquired) slots.release();
+            deleteMaps(output);
             if (!done) {
                 try { Files.deleteIfExists(output); } catch (IOException ignored) {}
             }
@@ -123,6 +128,7 @@ public class CompiledReportHwpxService {
      */
     public Map<String, Object> buildPayload(Map<String, Object> json, Path output) {
         Map<String, Object> payload = objectMapper.convertValue(json, new TypeReference<LinkedHashMap<String, Object>>() {});
+        int mapCount = 0;
         for (Object rawSection : list(payload.get("sections"))) {
             for (Object rawItem : list(map(rawSection).get("items"))) {
                 Map<String, Object> item = map(rawItem);
@@ -134,15 +140,40 @@ public class CompiledReportHwpxService {
                     Map<String, Object> entry = new LinkedHashMap<>();
                     entry.put("path", file.toAbsolutePath().toString());
                     entry.put("caption", (Objects.toString(photo.get("slot"), "") + " " + Objects.toString(photo.get("comment"), "")).trim());
+                    entry.put("slot", Objects.toString(photo.get("slot"), ""));
+                    entry.put("comment", Objects.toString(photo.get("comment"), ""));
                     files.add(entry);
                 }
                 item.put("photo_files", files);
                 Path mapFile = renderer.resolveFile(Objects.toString(item.get("locationMapImage"), null));
+                // 앱에서 캡처한 위치도가 없으면 좌표로 정적 위치도를 만든다 (D29)
+                if (mapFile == null) mapFile = writeMap(renderer.singleMap(item.get("lat"), item.get("lng")), output, "item" + (++mapCount));
                 item.put("map_file", mapFile == null ? null : mapFile.toAbsolutePath().toString());
             }
         }
+        Path overview = writeMap(renderer.overviewMap(json), output, "overview");
+        payload.put("overview_map_file", overview == null ? null : overview.toAbsolutePath().toString());
         payload.put("output_path", output.toAbsolutePath().toString());
         return payload;
+    }
+
+    /** {output}-{name}.jpg 로 저장. prepare 가 끝나면 {@link #deleteMaps} 로 지운다. */
+    private static Path writeMap(StaticMapService.MapImage image, Path output, String name) {
+        if (image == null) return null;
+        try {
+            Path file = output.resolveSibling(output.getFileName() + "-" + name + ".jpg");
+            Files.write(file, image.jpeg());
+            return file;
+        } catch (IOException ex) {
+            return null;
+        }
+    }
+
+    private static void deleteMaps(Path output) {
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(output.getParent(), output.getFileName() + "-*.jpg")) {
+            for (Path file : files) Files.deleteIfExists(file);
+        } catch (IOException ignored) {
+        }
     }
 
     private Map<String, Object> runPython(String jsonPayload) throws Exception {

@@ -1,8 +1,8 @@
 """
-통합 보고서 HWPX 생성기 (프로젝트 통합 보고서용, 기존 app.py 동작과 무관).
+통합 보고서 HWPX 생성기 (프로젝트 통합 보고서용). 항목마다 4칸 사진표(작업 전·중·후·위치도)와 메모를 붙인다 (D36).
 - 입력: REPORT_SCHEMA v1 JSON 파일 경로 (sys.argv[1]) + 백엔드가 덧붙인 값
     output_path              : 만들 HWPX 절대 경로
-    sections[].items[].photo_files : [{"path": 로컬 파일, "caption": "작업 전 ..."}]
+    sections[].items[].photo_files : [{"path": 로컬 파일, "slot": "작업 전", "comment": "...", "caption": "작업 전 ..."}]
     sections[].items[].map_file    : 위치도 이미지 로컬 경로 (없으면 null)
 - 출력: 표준출력에 "@@AI_RESULT@@{json}" 한 줄 ({"ok": true, "report_file": ...})
 """
@@ -17,8 +17,9 @@ AI_DIR = Path(__file__).resolve().parent
 if str(AI_DIR) not in sys.path:
     sys.path.insert(0, str(AI_DIR))
 
-# 기존 app.py 의 이미지 전처리·문구 정리 함수를 그대로 재사용한다 (app.py 는 수정하지 않음).
-from app import RESULT_PREFIX, clean_markdown_for_hwp, sanitize_image  # noqa: E402
+# app.py 의 이미지 전처리를 그대로 재사용한다.
+from app import RESULT_PREFIX, sanitize_image  # noqa: E402
+from hwpx_images import fix_hwpx_images  # noqa: E402
 from hwpx import HwpxDocument  # noqa: E402
 
 FONT = "Malgun Gothic"
@@ -75,25 +76,88 @@ def grid_table(doc, header: list[str], rows: list[list[str]], widths: list[int])
     doc.add_paragraph()
 
 
-def picture_table(doc, pictures: list[dict]) -> None:
-    """pictures: [{"path": sanitized jpg, "caption": str}] — 2장씩 한 줄 (app.py 와 같은 크기)."""
-    for i in range(0, len(pictures), 2):
-        chunk = pictures[i:i + 2]
-        cols = len(chunk)
-        table = doc.add_table(rows=2, cols=cols, width=FULL_WIDTH)
-        table.set_column_widths([22677, 22677] if cols == 2 else [FULL_WIDTH])
-        h_photo = 14324 if cols == 2 else 29720
-        w_photo = 20835 if cols == 2 else 43228
-        for c, pic in enumerate(chunk):
+def overview_map(doc, path: str, work_dir: Path) -> None:
+    """서버가 만든 전체 위치도(번호 핀 = 항목 번호)를 본문 폭으로 넣는다."""
+    target = str(work_dir / "overview_map.jpg")
+    if not sanitize_image(path, target, canvas_size=(960, 560), fit_mode="contain"):  # 서버 위치도와 같은 크기(여백 없이)
+        return
+    heading(doc, "위치도")
+    with open(target, "rb") as f:
+        ref = doc.add_image(f.read(), "jpg")
+    # 건별 양식(app.py)과 같이 표 칸 안에 넣어야 한글에서 자리가 흐트러지지 않는다
+    table = doc.add_table(rows=1, cols=1, width=45354, height=25800)
+    table.set_column_widths([45354])
+    table.element.set("pageBreak", "TABLE")
+    table.rows[0].cells[0].set_size(height=25800)
+    table.rows[0].cells[0].paragraphs[0].add_picture(ref, width=43200, height=25200)
+    doc.add_paragraph()
+
+
+SLOTS = ("작업 전", "작업 중", "작업 후")
+PHOTO_W, PHOTO_H = 20835, 14324  # 2칸 표 한 칸 (건별 보고서 사진 비율 1600:1100)
+
+
+def photo_grid(doc, cells: list[dict]) -> None:
+    """cells: [{"path": 정리된 jpg 또는 None, "label": "작업 전"}] — 2칸씩 한 줄, 사진 아래 이름 칸."""
+    for i in range(0, len(cells), 2):
+        chunk = cells[i:i + 2]
+        table = doc.add_table(rows=2, cols=2, width=FULL_WIDTH)
+        table.set_column_widths([22677, 22677])
+        for c in range(2):
+            cell = chunk[c] if c < len(chunk) else {"path": None, "label": ""}
             table.set_cell_shading(0, c, "#F8FAFC")
-            table.rows[0].cells[c].set_size(height=h_photo)
-            with open(pic["path"], "rb") as f:
-                ref = doc.add_image(f.read(), "jpg")
-            table.rows[0].cells[c].paragraphs[0].add_picture(ref, width=w_photo, height=h_photo)
+            table.rows[0].cells[c].set_size(height=PHOTO_H)
+            if cell["path"]:
+                with open(cell["path"], "rb") as f:
+                    ref = doc.add_image(f.read(), "jpg")
+                table.rows[0].cells[c].paragraphs[0].add_picture(ref, width=PHOTO_W, height=PHOTO_H)
+            elif cell["label"]:
+                table.set_cell_text(0, c, "사진 미등록")
             table.set_cell_shading(1, c, "#F3F6FA")
             table.rows[1].cells[c].set_size(height=1200)
-            table.set_cell_text(1, c, pic.get("caption") or "")
+            table.set_cell_text(1, c, cell["label"])
         doc.add_paragraph()
+
+
+def append_item(doc, item: dict, number: int, work_dir: Path) -> None:
+    """항목 하나: 제목 → 4칸(작업 전·중·후·위치도) → 메모(본문, 작업 전·중·후 설명) (D36)."""
+    author = (item.get("author") or {}).get("name")
+    title = item.get("title") or item.get("address")
+    doc.add_paragraph().add_run(f"{number}. {text(title)}", bold=True, size=11, color=INK, font=FONT)
+    meta = f"{text(item.get('address'))} · 완료일 {day(item.get('completedAt'))} · 작성자 {text(author)}"
+    if item.get("adminDong"):
+        meta += f" · {text(item.get('adminDong'))}"
+    doc.add_paragraph().add_run(meta, size=9, color=SOFT, font=FONT)
+
+    groups, extra = {slot: [] for slot in SLOTS}, []
+    for idx, photo in enumerate(item.get("photo_files") or []):
+        target = str(work_dir / f"p{number}_{idx}.jpg")
+        if not sanitize_image(photo.get("path"), target, canvas_size=(1600, 1100), fit_mode="contain"):
+            continue
+        entry = {"path": target, "comment": str(photo.get("comment") or "").strip()}
+        (groups[photo["slot"]] if photo.get("slot") in groups else extra).append(entry)
+
+    map_path = None
+    if item.get("map_file"):
+        target = str(work_dir / f"m{number}.jpg")
+        map_path = sanitize_image(item["map_file"], target, canvas_size=(1600, 1100), fit_mode="cover") and target
+
+    # 단계마다 첫 사진이 4칸에 들어가고, 남는 사진은 아래에 2칸씩 이어 붙인다
+    cells = [{"path": groups[slot][0]["path"] if groups[slot] else None, "label": slot} for slot in SLOTS]
+    cells.append({"path": map_path, "label": "위치도"})
+    more = [(slot, entry) for slot in SLOTS for entry in groups[slot][1:]] + [("현장사진", entry) for entry in extra]
+    for k, (label, entry) in enumerate(more):
+        cells.append({"path": entry["path"], "label": f"{label} ({k + 1})" if label == "현장사진" else label})
+    photo_grid(doc, cells)
+
+    memo = [line.strip() for line in str(item.get("comment") or "").splitlines() if line.strip()]
+    for slot in SLOTS:
+        memo += [f"{slot}: {entry['comment']}" for entry in groups[slot] if entry["comment"]]
+    memo += [f"현장사진: {entry['comment']}" for entry in extra if entry["comment"]]
+    memo = list(dict.fromkeys(memo))
+    doc.add_paragraph().add_run("메모", bold=True, size=10, color=HEAD, font=FONT)
+    body_lines(doc, "\n".join(memo) if memo else "-")
+    doc.add_paragraph()
 
 
 def build(payload: dict) -> str:
@@ -133,9 +197,12 @@ def build(payload: dict) -> str:
             ("사업 기간", f"{text(project.get('startDate'), '')} ~ {text(project.get('endDate'), '')}"),
             ("기간", f"{text(period.get('from'), '')} ~ {text(period.get('to'), '')}"),
             ("총 건수", f"{text(summary.get('totalCount'), '0')}건"),
-            ("분류 기준", GROUP_BY_LABELS.get(group_by, group_by)),
+            ("목차 구분", GROUP_BY_LABELS.get(group_by, group_by)),
             ("작성자", ", ".join(str(a) for a in (summary.get("authors") or [])) or "-"),
         ])
+
+        if payload.get("overview_map_file"):
+            overview_map(doc, payload["overview_map_file"], work_dir)
 
         # 위치 목록 (번호는 섹션 순서를 따른다)
         heading(doc, "위치 목록")
@@ -157,34 +224,7 @@ def build(payload: dict) -> str:
             heading(doc, f"{text(section.get('label'))} ({len(items)}건)")
             for item in items:
                 number += 1
-                author = (item.get("author") or {}).get("name")
-                title = item.get("title") or item.get("address")
-                doc.add_paragraph().add_run(f"{number}. {text(title)}", bold=True, size=11, color=INK, font=FONT)
-                meta = f"{text(item.get('address'))} · 완료일 {day(item.get('completedAt'))} · 작성자 {text(author)}"
-                if item.get("category"):
-                    meta += f" · {text(item.get('category'))}"
-                doc.add_paragraph().add_run(meta, size=9, color=SOFT, font=FONT)
-                doc.add_paragraph().add_run("작업 내용", bold=True, size=10, color=HEAD, font=FONT)
-                body_lines(doc, text(item.get("comment")))
-                ai = item.get("aiRefinedContent")
-                if ai and str(ai).strip():
-                    doc.add_paragraph().add_run("AI 정리", bold=True, size=10, color=HEAD, font=FONT)
-                    body_lines(doc, clean_markdown_for_hwp(str(ai)))
-
-                pictures = []
-                for idx, photo in enumerate(item.get("photo_files") or []):
-                    target = str(work_dir / f"p{number}_{idx}.jpg")
-                    if sanitize_image(photo.get("path"), target, canvas_size=(1600, 1100), fit_mode="cover"):
-                        pictures.append({"path": target, "caption": photo.get("caption") or ""})
-                map_file = item.get("map_file")
-                if map_file:
-                    target = str(work_dir / f"m{number}.jpg")
-                    if sanitize_image(map_file, target, canvas_size=(1600, 1100), fit_mode="cover"):
-                        pictures.append({"path": target, "caption": "위치도"})
-                if pictures:
-                    picture_table(doc, pictures)
-                else:
-                    doc.add_paragraph()
+                append_item(doc, item, number, work_dir)
 
         doc.add_paragraph().add_run("위와 같이 보고합니다.", size=10, color=BODY, font=FONT)
 
@@ -199,6 +239,7 @@ def build(payload: dict) -> str:
 
         out.parent.mkdir(parents=True, exist_ok=True)
         doc.save_to_path(str(out))
+        fix_hwpx_images(str(out))  # D32: 그림 원본 크기 보정
         return str(out.resolve())
     finally:
         for temp in work_dir.glob("*.jpg"):

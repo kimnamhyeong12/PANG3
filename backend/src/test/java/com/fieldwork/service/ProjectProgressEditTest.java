@@ -36,7 +36,8 @@ class ProjectProgressEditTest {
     TaskService taskService = mock(TaskService.class);
     ProjectService projectService = mock(ProjectService.class);
     GroupMemberRepository members = mock(GroupMemberRepository.class);
-    ProgressReportEditService service = new ProgressReportEditService(repository, mock(TaskProgressService.class), taskService, projectService, members);
+    ProgressReportEditService service = new ProgressReportEditService(repository, mock(TaskProgressService.class), taskService, projectService, members,
+            mock(CompiledReportService.class));
     TaskProgress progress;
 
     @BeforeEach void setup() {

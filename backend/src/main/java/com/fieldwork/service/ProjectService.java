@@ -2,6 +2,7 @@ package com.fieldwork.service;
 
 import com.fieldwork.entity.CompiledReport;
 import com.fieldwork.entity.Project;
+import com.fieldwork.entity.ProjectTask;
 import com.fieldwork.entity.Task;
 import com.fieldwork.entity.TaskProgress;
 import com.fieldwork.entity.User;
@@ -10,6 +11,7 @@ import com.fieldwork.repository.CompiledReportItemRepository;
 import com.fieldwork.repository.CompiledReportRepository;
 import com.fieldwork.repository.GroupMemberRepository;
 import com.fieldwork.repository.ProjectRepository;
+import com.fieldwork.repository.ProjectTaskRepository;
 import com.fieldwork.repository.TaskRepository;
 import com.fieldwork.repository.UserRepository;
 import com.fieldwork.repository.WorkGroupRepository;
@@ -24,6 +26,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -47,9 +50,12 @@ public class ProjectService {
     private final TaskRepository tasks;
     private final CompiledReportRepository reports;
     private final CompiledReportItemRepository items;
+    private final ProjectTaskRepository links;
+    private final AdminDongService adminDongs;
 
     public ProjectService(ProjectRepository projects, WorkGroupRepository groups, GroupMemberRepository members,
-            UserRepository users, TaskRepository tasks, CompiledReportRepository reports, CompiledReportItemRepository items) {
+            UserRepository users, TaskRepository tasks, CompiledReportRepository reports, CompiledReportItemRepository items,
+            ProjectTaskRepository links, AdminDongService adminDongs) {
         this.projects = projects;
         this.groups = groups;
         this.members = members;
@@ -57,6 +63,8 @@ public class ProjectService {
         this.tasks = tasks;
         this.reports = reports;
         this.items = items;
+        this.links = links;
+        this.adminDongs = adminDongs;
     }
 
     // ---------- permissions ----------
@@ -97,6 +105,10 @@ public class ProjectService {
             map.put("completedCount", eligibleProgress(project).size());
             List<CompiledReport> drafts = reports.findByProjectAndStatusOrderByReportIdDesc(project, "DRAFT");
             map.put("draftReportCount", drafts.size());
+            // 확정 보고서 수(같은 보고서의 버전은 하나로 센다)
+            map.put("finalReportCount", reports.findByProjectAndStatusOrderByReportIdDesc(project, "FINAL").stream()
+                    .map(report -> report.getRootReportId() == null ? report.getReportId() : report.getRootReportId())
+                    .distinct().count());
             map.put("latestDraft", drafts.isEmpty() ? null : Map.of(
                     "reportId", drafts.get(0).getReportId(), "title", drafts.get(0).getTitle()));
             result.add(map);
@@ -144,18 +156,25 @@ public class ProjectService {
         result.put("draftReports", List.of());
         if (task.getGroup() == null) return result;
         requireMember(task.getGroup(), userId);
-        Project project = task.getProject();
-        if (project == null) return result;
+        List<Project> linkedProjects = links.findProjects(task);
+        if (linkedProjects.isEmpty()) return result;
         List<Map<String, Object>> drafts = new ArrayList<>();
-        for (CompiledReport report : reports.findByProjectAndStatusOrderByReportIdDesc(project, "DRAFT")) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("reportId", report.getReportId());
-            row.put("title", report.getTitle());
-            row.put("itemCount", items.countByReport(report));
-            drafts.add(row);
+        List<Map<String, Object>> projectRows = new ArrayList<>();
+        for (Project project : linkedProjects) {
+            projectRows.add(Map.of("projectId", project.getProjectId(), "projectName", project.getName()));
+            for (CompiledReport report : reports.findByProjectAndStatusOrderByReportIdDesc(project, "DRAFT")) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("reportId", report.getReportId());
+                row.put("title", report.getTitle());
+                row.put("projectName", project.getName());
+                row.put("itemCount", items.countByReport(report));
+                drafts.add(row);
+            }
         }
-        result.put("projectId", project.getProjectId());
-        result.put("projectName", project.getName());
+        // 기존 필드(projectId/projectName)는 가장 최근 프로젝트, 전체는 projects 로 준다.
+        result.put("projectId", linkedProjects.get(0).getProjectId());
+        result.put("projectName", linkedProjects.get(0).getName());
+        result.put("projects", projectRows);
         result.put("draftReports", drafts);
         return result;
     }
@@ -202,13 +221,17 @@ public class ProjectService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "같은 그룹의 업무만 연결할 수 있습니다.");
             }
         }
+        // 다른 프로젝트 연결은 그대로 둔다 (D28: 한 업무를 여러 프로젝트에 담을 수 있음).
+        Set<Long> already = new HashSet<>();
+        for (ProjectTask link : links.findLinks(project, ids)) already.add(link.getTask().getTaskId());
+        List<ProjectTask> created = new ArrayList<>();
         for (Task task : found) {
-            if (task.getProject() != null && !projectId.equals(task.getProject().getProjectId())) {
-                removeFromDrafts(task.getProject(), task);
-            }
-            task.setProject(project);
+            if (already.add(task.getTaskId())) created.add(new ProjectTask(project, task));
         }
-        tasks.saveAllAndFlush(found);
+        links.saveAllAndFlush(created);
+        // 행정동이 빈 업무는 좌표·주소로 채운다 (D34)
+        List<Task> filled = found.stream().filter(task -> adminDongs.fill(task, null)).toList();
+        if (!filled.isEmpty()) tasks.saveAllAndFlush(filled);
         return Map.of("linked", ids);
     }
 
@@ -216,14 +239,33 @@ public class ProjectService {
     public Map<String, Object> unlinkTask(Long projectId, Long taskId, Long userId) {
         Project project = loadProject(projectId);
         requireLeader(project.getGroup(), userId);
-        Task task = tasks.findById(taskId).orElse(null);
-        if (task == null || task.getProject() == null || !projectId.equals(task.getProject().getProjectId())) {
+        List<ProjectTask> found = links.findLinks(project, List.of(taskId));
+        if (found.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트에 연결된 업무가 아닙니다.");
         }
-        removeFromDrafts(project, task);
-        task.setProject(null);
-        tasks.saveAndFlush(task);
+        unlink(project, found);
         return Map.of("unlinked", taskId);
+    }
+
+    /** 여러 건 한 번에 해제. 연결되지 않은 id 는 건너뛴다. */
+    @Transactional
+    public Map<String, Object> unlinkTasks(Long projectId, Long userId, Object rawTaskIds) {
+        Project project = loadProject(projectId);
+        requireLeader(project.getGroup(), userId);
+        List<ProjectTask> found = links.findLinks(project, parseIds(rawTaskIds, "taskIds"));
+        unlink(project, found);
+        return Map.of("unlinked", found.stream().map(link -> link.getTask().getTaskId()).toList());
+    }
+
+    private void unlink(Project project, List<ProjectTask> found) {
+        for (ProjectTask link : found) removeFromDrafts(project, link.getTask());
+        links.deleteAll(found);
+        links.flush();
+    }
+
+    /** 업무가 이 프로젝트에 연결되어 있는지 (보고서 담기 검사용). */
+    public boolean isLinked(Project project, Task task) {
+        return links.existsByProjectAndTask(project, task);
     }
 
     // ---------- completed items ----------
@@ -232,11 +274,16 @@ public class ProjectService {
      * Completed records of the project. Each item carries {@code inReportIds}: the DRAFT reports of
      * this project that already contain it. {@code filters} lists option values from all eligible items.
      */
-    @Transactional(readOnly = true)
+    @Transactional // 행정동이 빈 업무를 처음 볼 때 채워 저장한다 (D34)
     public Map<String, Object> items(Long projectId, Long userId, Integer year, String adminDong, Long authorId, String category) {
         Project project = loadProject(projectId);
         requireMember(project.getGroup(), userId);
         List<TaskProgress> eligible = eligibleProgress(project);
+        List<Task> filled = new ArrayList<>();
+        for (TaskProgress progress : eligible) {
+            if (adminDongs.fill(progress.getTask(), progress)) filled.add(progress.getTask());
+        }
+        if (!filled.isEmpty()) tasks.saveAllAndFlush(filled);
 
         Map<Long, List<Long>> membership = new HashMap<>();
         for (Object[] row : items.findDraftMembership(project)) {
@@ -272,7 +319,7 @@ public class ProjectService {
             row.put("year", itemYear);
             row.put("authorId", progress.getPerformedByUserId());
             row.put("authorName", authorName(progress.getPerformedByUserId(), names));
-            row.put("comment", progress.getMainComment());
+            row.put("comment", memoOf(progress));
             row.put("photoCount", progress.getFieldPhotos() == null ? 0 : progress.getFieldPhotos().size());
             row.put("lat", latOf(progress));
             row.put("lng", lngOf(progress));
@@ -349,6 +396,15 @@ public class ProjectService {
         return cache.computeIfAbsent(userId, id -> users.findById(id)
                 .map(user -> user.getName() == null || user.getName().isBlank() ? user.getLoginId() : user.getName())
                 .orElse(UNASSIGNED));
+    }
+
+    /** 앱은 메모를 field_memo 에, 웹 편집은 main_comment 에 저장한다. 보고서 본문은 둘을 합친 값이다 (D36). */
+    public static String memoOf(TaskProgress progress) {
+        LinkedHashSet<String> parts = new LinkedHashSet<>();
+        for (String value : new String[]{progress.getFieldMemo(), progress.getMainComment()}) {
+            if (value != null && !value.isBlank()) parts.add(value.strip());
+        }
+        return parts.isEmpty() ? null : String.join("\n", parts);
     }
 
     public static String orUnassigned(String value) {

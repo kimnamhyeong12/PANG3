@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,8 @@ import { EmptyState, ScreenHeader, SecondaryButton } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
 import { colors, radius } from '../constants/design';
 import { downloadProtectedFile } from '../utils/auth';
-import { fetchCompiledReportHtml, injectKakaoKey, prepareCompiledHwpx } from '../utils/projectApi';
+import { openReportFile, saveReportToDownloads } from '../modules/kakao-navigation';
+import { fetchCompiledReportHtml, fetchProgressReportHtml, injectKakaoKey, prepareCompiledHwpx } from '../utils/projectApi';
 
 // D15: 기존 KakaoMapWebView와 같은 키·baseUrl로 보고서 지도 표시
 const KAKAO_KEY = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY || '';
@@ -25,22 +26,23 @@ export function allowReportNavigation(url) {
 const safeFileName = (value) => String(value || '보고서').replace(/[\\/:*?"<>|\s]+/g, '_').replace(/_+/g, '_').slice(0, 80);
 
 // 통합 보고서 읽기 전용 보기 (B④). 편집·확정은 PC 웹에서만.
-export default function CompiledReportViewScreen({ user, reportId, title, onBack }) {
+// progressId 를 주면 건별 보고서 미리보기 (받기는 목록에서 하므로 HWPX 버튼 없음)
+export default function CompiledReportViewScreen({ user, reportId, progressId, title, onBack }) {
   const [html, setHtml] = useState(null);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
 
   const load = useCallback(async () => {
-    if (!reportId || !user?.userId) return;
+    if ((!reportId && !progressId) || !user?.userId) return;
     try {
       setError(null);
       setHtml(null);
-      const text = await fetchCompiledReportHtml(reportId, user.userId);
+      const text = progressId ? await fetchProgressReportHtml(progressId) : await fetchCompiledReportHtml(reportId, user.userId);
       setHtml(injectKakaoKey(text, KAKAO_KEY));
     } catch (loadError) {
       setError(loadError.message || '보고서를 불러오지 못했습니다.');
     }
-  }, [reportId, user?.userId]);
+  }, [reportId, progressId, user?.userId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -51,7 +53,14 @@ export default function CompiledReportViewScreen({ user, reportId, title, onBack
       const prepared = await prepareCompiledHwpx(reportId, user.userId);
       const fileName = prepared.fileName || `${safeFileName(title)}.hwpx`;
       const uri = await downloadProtectedFile(prepared.downloadUrl, fileName);
-      if (await Sharing.isAvailableAsync()) {
+      if (Platform.OS === 'android') {
+        // 건별 보고서 다운로드(DownloadScreen)와 같이: Download/외근도우미 에 보고서 이름으로 저장 → 바로 열기
+        const savedUri = await saveReportToDownloads(uri, fileName);
+        showAlert('HWPX 저장 완료', `다운로드 폴더(외근도우미)에 저장했어요.\n${fileName}`, [
+          { text: '닫기', style: 'cancel' },
+          { text: '열기', onPress: () => openReportFile(savedUri).catch((openError) => showAlert('파일 열기', openError.message)) },
+        ]);
+      } else if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: 'application/octet-stream', dialogTitle: `${fileName} 받기` });
       } else {
         showAlert('HWPX 저장', '파일을 받았지만 이 기기에서 공유를 사용할 수 없습니다.');
@@ -74,7 +83,7 @@ export default function CompiledReportViewScreen({ user, reportId, title, onBack
 
   return (
     <View style={styles.root}>
-      <ScreenHeader title={title || '보고서'} onBack={onBack} right={headerRight} />
+      <ScreenHeader title={title || '보고서'} onBack={onBack} right={progressId ? null : headerRight} />
       <View style={styles.body}>
         {error ? (
           <View style={styles.center}>
@@ -99,7 +108,7 @@ export default function CompiledReportViewScreen({ user, reportId, title, onBack
           />
         )}
       </View>
-      <Text style={styles.footer}>편집·확정은 PC 웹에서 할 수 있어요</Text>
+      {!progressId && <Text style={styles.footer}>편집·확정은 PC 웹에서 할 수 있어요</Text>}
     </View>
   );
 }

@@ -57,6 +57,11 @@ public class ProjectController {
         return projects.linkTasks(projectId, CurrentUser.require(body.get("userId")), body.get("taskIds"));
     }
 
+    @PostMapping("/projects/{projectId}/tasks/unlink")
+    public Map<String, Object> unlinkTasks(@PathVariable Long projectId, @RequestBody Map<String, Object> body) {
+        return projects.unlinkTasks(projectId, CurrentUser.require(body.get("userId")), body.get("taskIds"));
+    }
+
     @DeleteMapping("/projects/{projectId}/tasks/{taskId}")
     public Map<String, Object> unlinkTask(@PathVariable Long projectId, @PathVariable Long taskId,
             @RequestParam(required = false) Long userId) {

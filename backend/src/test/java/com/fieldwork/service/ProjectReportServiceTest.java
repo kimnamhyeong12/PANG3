@@ -41,11 +41,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(classes = ProjectReportServiceTest.TestConfig.class, properties = {
         "spring.config.location=classpath:/auth-test.properties",
-        "spring.datasource.url=jdbc:h2:mem:projectreport;MODE=PostgreSQL;DB_CLOSE_DELAY=-1"})
+        "spring.datasource.url=jdbc:h2:mem:projectreport;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+        "fieldwork.report-map.enabled=false"})
 @Transactional
 class ProjectReportServiceTest {
     @Configuration @EnableAutoConfiguration @EntityScan("com.fieldwork.entity") @EnableJpaRepositories("com.fieldwork.repository")
-    @Import({ProjectService.class, CompiledReportService.class, ReportHtmlRenderer.class, CompiledReportHwpxService.class, FieldworkProperties.class,
+    @Import({ProjectService.class, CompiledReportService.class, ReportHtmlRenderer.class, StaticMapService.class, AdminDongService.class, CompiledReportHwpxService.class, FieldworkProperties.class,
             ProjectController.class, CompiledReportController.class, ProjectExceptionHandler.class})
     static class TestConfig {}
 
@@ -250,6 +251,9 @@ class ProjectReportServiceTest {
         assertTrue(html.contains("id=\"report-map\""));
         assertTrue(html.contains("id=\"report-markers\""));
         assertTrue(html.contains("@media print"));
+        assertTrue(html.contains("<tr data-n=\"1\""));      // 표 행 → 카드 이동
+        assertTrue(html.contains("id=\"rp-lightbox\""));     // 사진 크게 보기
+        assertFalse(html.contains("report-static-map\"><img")); // 지도 타일 끔(테스트) → 정적 위치도 없음, 표만
     }
 
     @SuppressWarnings("unchecked")
@@ -258,7 +262,7 @@ class ProjectReportServiceTest {
                 .flatMap(sec -> list(sec.get("items")).stream()).map(i -> i.get("comment")).toList();
     }
 
-    @Test void taskLeavingProjectDropsOutOfDraftsAndExpiredRecordsAreHidden() {
+    @Test void taskLeavingProjectDropsOutOfDraftsButLinkingElsewhereKeepsItAndExpiredRecordsAreHidden() {
         Task a = task(group, "하단동", LocalDateTime.of(2026, 5, 1, 10, 0));
         Task b = task(group, "괴정동", LocalDateTime.of(2026, 5, 2, 10, 0));
         Task c = task(group, "괴정동", LocalDateTime.of(2026, 5, 3, 10, 0));
@@ -274,8 +278,16 @@ class ProjectReportServiceTest {
                 LocalDateTime.now().minusYears(2), pc.getProgressId());
         em.flush(); em.clear();
 
+        // D28: 다른 프로젝트에 담아도 원래 프로젝트·초안에서 빠지지 않는다
+        assertEquals(List.of("b"), commentsOf(reports.getJson(reportId, member.getUserId())));
+        assertEquals(2, ((Number) reports.list(projectId, leader.getUserId()).get(0).get("itemCount")).intValue());
+        assertEquals(1, list(projects.items(other, member.getUserId(), null, null, null, null).get("items")).size());
+        assertEquals(2, list(projects.taskContext(b.getTaskId(), member.getUserId()).get("projects")).size());
+        // 여러 건 해제: 연결 안 된 id 는 건너뜀, 초안에서도 빠짐
+        assertEquals(List.of(b.getTaskId()), projects.unlinkTasks(projectId, leader.getUserId(), List.of(a.getTaskId(), b.getTaskId())).get("unlinked"));
         assertEquals(List.of(), commentsOf(reports.getJson(reportId, member.getUserId())));
-        assertEquals(1, ((Number) reports.list(projectId, leader.getUserId()).get(0).get("itemCount")).intValue());
+        assertEquals(1, projects.tasks(other, member.getUserId()).size());
+        assertStatus(HttpStatus.FORBIDDEN, () -> projects.unlinkTasks(other, member.getUserId(), List.of(b.getTaskId())));
         assertEquals("EXPIRED", list(reports.addItems(reportId, member.getUserId(), List.of(pc.getProgressId())).get("skipped")).get(0).get("reason"));
     }
 

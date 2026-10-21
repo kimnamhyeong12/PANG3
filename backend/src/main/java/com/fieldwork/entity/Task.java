@@ -78,10 +78,6 @@ public class Task {
     @JoinColumn(name = "group_id")
     private WorkGroup group;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "project_id")
-    private Project project;
-
     public Long getTaskId() {
         return taskId;
     }
@@ -237,13 +233,5 @@ public class Task {
 
     public void setGroup(WorkGroup group) {
         this.group = group;
-    }
-
-    public Project getProject() {
-        return project;
-    }
-
-    public void setProject(Project project) {
-        this.project = project;
     }
 }

@@ -60,7 +60,6 @@ const transpile = (file) => babel.transformSync(read(file), {
   assert.deepEqual({ ...(await api.addSavedProgressToReport(9, 7, 5)) }, { ok: false, message: '서버 오류' });
 
   // 2. 새 화면 파일이 변환되는지 (문법 확인)
-  transpile('../components/ReportAddOption.js');
   transpile('../screens/ProjectScreen.js');
   transpile('../screens/CompiledReportViewScreen.js');
 
@@ -74,20 +73,19 @@ const transpile = (file) => babel.transformSync(read(file), {
   for (const url of ['about:blank', 'https://localhost/', 'https://dapi.kakao.com/v2/maps/sdk.js', 'https://t1.daumcdn.net/x.png', 'data:text/html,x']) assert.equal(allow(url), true, url);
   for (const url of ['https://evil.example/', 'https://kakao.com.evil.example/', 'https://localhost/other', 'javascript:alert(1)']) assert.equal(allow(url), false, url);
 
-  // Phase 4: FieldActionScreen 연결은 최소, 기존 저장 경로 유지
+  // 보고서 양식에서 '보고서에도 담기'는 뺐다 (사용자 요청). 기존 저장 경로는 그대로
   const field = read('../screens/FieldActionScreen.js');
-  assert.match(field, /import ReportAddOption, \{ addToReportAfterSave \} from '\.\.\/components\/ReportAddOption';/);
-  assert.match(field, /<ReportAddOption user=\{user\} taskId=\{taskId\} status=\{status\}/);
+  assert.doesNotMatch(field, /ReportAddOption|addToReportAfterSave/);
   assert.match(field, /`\$\{API_BASE_URL\}\/api\/task-progress`,\s*\{\s*method: 'POST',\s*body: form,/);
-  const saveAt = field.indexOf("'보고서가 저장되었습니다.'");
-  const addAt = field.indexOf('addToReportAfterSave(reportTargetRef.current, user?.userId, savedReport.progressId)');
-  assert.ok(saveAt > 0 && addAt > saveAt, 'report add runs only after the save succeeded');
 
   // 3. 그룹 작업공간 "프로젝트" 탭
   const workspace = read('../screens/GroupWorkspaceScreen.js');
   assert.match(workspace, /onTabChange\?\.\('projects'\)/);
   assert.match(workspace, />프로젝트</);
-  assert.match(workspace, /tab === 'projects' \? \(\s*<GroupProjectList/);
+  assert.match(workspace, /tab === 'projects' \? \(/);
+  // H5: 프로젝트 탭 안에 '프로젝트 | 건별 보고서' 칸, 건별은 그룹 보고서 화면을 그대로 품는다
+  assert.match(workspace, /projectView === 'projects'\s*\?\s*<GroupProjectList/);
+  assert.match(workspace, /<GroupReportsScreen user=\{user\} group=\{group\} embedded/);
 
   // 4. App.js 연결: 렌더 분기 + 이동 + 하단 탭 그룹 강조
   const app = read('../App.js');

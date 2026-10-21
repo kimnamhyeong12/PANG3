@@ -11,7 +11,7 @@ function loadGroupId() {
 }
 
 export function GroupProvider({ children }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [groups, setGroups] = useState([]);
   const [groupId, setGroupIdState] = useState(loadGroupId);
   const [loading, setLoading] = useState(false);
@@ -50,13 +50,14 @@ export function GroupProvider({ children }) {
   useEffect(() => {
     if (user) {
       reload();
-    } else {
+    } else if (!authLoading) {
+      // 로그인 복원 중(새로고침 직후)에는 user 가 잠깐 null 이므로 저장된 그룹을 지우지 않는다.
       setGroups([]);
       setLoaded(false);
       loadedOnceRef.current = false;
       setGroupId(null);
     }
-  }, [user, reload, setGroupId]);
+  }, [user, authLoading, reload, setGroupId]);
 
   // 그룹 목록이 바뀌면: 1개면 자동 선택, 저장된 groupId가 목록에 없으면 해제
   useEffect(() => {

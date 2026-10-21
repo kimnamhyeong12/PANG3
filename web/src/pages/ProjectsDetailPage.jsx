@@ -11,6 +11,7 @@ import {
   fetchProjectTasks,
   linkProjectTasks,
   unlinkProjectTask,
+  unlinkProjectTasks,
   updateProject,
 } from '../api/projects.js';
 import { fetchGroupTasks } from '../api/tasks.js';
@@ -42,11 +43,28 @@ function yearOf(value) {
   return Number.isFinite(y) && y > 1900 ? y : null;
 }
 
+// 기간 필터: 상반기/하반기/분기 (연도 필터와 함께 쓴다)
+const PERIODS = [
+  { value: 'H1', label: '상반기 (1~6월)', months: [1, 6] },
+  { value: 'H2', label: '하반기 (7~12월)', months: [7, 12] },
+  { value: 'Q1', label: '1분기', months: [1, 3] },
+  { value: 'Q2', label: '2분기', months: [4, 6] },
+  { value: 'Q3', label: '3분기', months: [7, 9] },
+  { value: 'Q4', label: '4분기', months: [10, 12] },
+];
+
+function monthOf(value) {
+  if (!value) return null;
+  if (Array.isArray(value)) return value[1] ?? null;
+  const m = Number(String(value).slice(5, 7));
+  return Number.isFinite(m) && m >= 1 && m <= 12 ? m : null;
+}
+
 const sortKo = (list) => [...list].sort((a, b) => String(a).localeCompare(String(b), 'ko'));
 
 function NewReportModal({ onClose, onSubmit }) {
   const [title, setTitle] = useState('');
-  const [groupBy, setGroupBy] = useState('adminDong');
+  const groupBy = 'adminDong'; // 목차 선택은 만들 때 묻지 않는다(D33). 편집 화면에서 바꿀 수 있음
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -93,21 +111,6 @@ function NewReportModal({ onClose, onSubmit }) {
             placeholder="예: 상반기 결과보고"
             onChange={(e) => setTitle(e.target.value)}
           />
-        </div>
-        <div className="field">
-          <label>분류 기준</label>
-          <div className="pj-chips">
-            {GROUP_BY_OPTIONS.map((o) => (
-              <button
-                key={o.value}
-                type="button"
-                className={`pj-chip${groupBy === o.value ? ' active' : ''}`}
-                onClick={() => setGroupBy(o.value)}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
         </div>
         {error && <p className="form-error">{error}</p>}
       </form>
@@ -329,8 +332,9 @@ function TaskLinkPanel({ projectId, groupId, userId, onChanged }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [retry, setRetry] = useState(0);
-  const [filters, setFilters] = useState({ year: '', adminDong: '', category: '', status: '', hideLinked: true });
+  const [filters, setFilters] = useState({ year: '', period: '', adminDong: '', category: '', status: '', hideLinked: true });
   const [selected, setSelected] = useState(() => new Set());
+  const [selectedLinked, setSelectedLinked] = useState(() => new Set());
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -372,6 +376,11 @@ function TaskLinkPanel({ projectId, groupId, userId, onChanged }) {
       groupTasks.filter((t) => {
         if (filters.hideLinked && linkedIds.has(t.taskId)) return false;
         if (filters.year && String(yearOf(t.completedAt || t.workDate || t.createdAt)) !== filters.year) return false;
+        if (filters.period) {
+          const range = PERIODS.find((p) => p.value === filters.period)?.months;
+          const m = monthOf(t.completedAt || t.workDate || t.createdAt);
+          if (!range || m == null || m < range[0] || m > range[1]) return false;
+        }
         if (filters.adminDong && t.adminDong !== filters.adminDong) return false;
         if (filters.category && t.taskCategory !== filters.category) return false;
         if (filters.status && normalizeStatus(t) !== filters.status) return false;
@@ -416,7 +425,7 @@ function TaskLinkPanel({ projectId, groupId, userId, onChanged }) {
   const linkAll = () => {
     const ids = linkable.map((t) => t.taskId);
     if (ids.length === 0) return;
-    if (!window.confirm(`필터 결과 ${ids.length}건을 모두 이 프로젝트에 연결할까요?\n다른 프로젝트에 연결된 업무는 이 프로젝트로 옮겨집니다.`)) return;
+    if (!window.confirm(`필터 결과 ${ids.length}건을 모두 이 프로젝트에 연결할까요?\n다른 프로젝트에 연결된 업무도 그대로 남아요 (여러 프로젝트에 함께 담김).`)) return;
     link(ids);
   };
 
@@ -435,7 +444,34 @@ function TaskLinkPanel({ projectId, groupId, userId, onChanged }) {
     }
   };
 
+  const unlinkMany = async (taskIds, label) => {
+    if (taskIds.length === 0) return;
+    if (!window.confirm(`${label} ${taskIds.length}건의 연결을 해제할까요?\n이 프로젝트의 작성 중인 보고서에 담긴 해당 기록도 함께 빠집니다. 다른 프로젝트 연결은 그대로예요.`)) return;
+    setBusy(true);
+    setActionError(null);
+    setNotice(null);
+    try {
+      const result = await unlinkProjectTasks(projectId, userId, taskIds);
+      setSelectedLinked(new Set());
+      setNotice(`${(result?.unlinked ?? taskIds).length}건의 연결을 해제했습니다.`);
+      await refreshLinked();
+    } catch (e) {
+      setActionError(errorMessage(e, '연결을 해제하지 못했습니다.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleLinked = (taskId) =>
+    setSelectedLinked((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+
   const selectedIds = [...selected].filter((id) => !linkedIds.has(id));
+  const selectedLinkedIds = [...selectedLinked].filter((id) => linkedIds.has(id));
   const address = (t) => t.roadAddress || t.detailAddress || '주소 정보 없음';
 
   return (
@@ -457,6 +493,14 @@ function TaskLinkPanel({ projectId, groupId, userId, onChanged }) {
                 {options.years.map((y) => (
                   <option key={y} value={String(y)}>
                     {y}년
+                  </option>
+                ))}
+              </select>
+              <select className="input filter-select" value={filters.period} onChange={(e) => setFilter('period', e.target.value)}>
+                <option value="">전체 기간</option>
+                {PERIODS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
                   </option>
                 ))}
               </select>
@@ -533,12 +577,35 @@ function TaskLinkPanel({ projectId, groupId, userId, onChanged }) {
           </div>
           <div>
             <h3 className="pj-subtitle">연결된 업무</h3>
+            {linked.length > 0 && (
+              <div className="pj-link-actions">
+                <span className="pj-muted">선택 {selectedLinkedIds.length}건</span>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={busy || selectedLinkedIds.length === 0}
+                  onClick={() => unlinkMany(selectedLinkedIds, '선택한 업무')}
+                >
+                  선택 해제
+                </button>
+                <button type="button" className="btn-secondary" disabled={busy} onClick={() => unlinkMany(linked.map((t) => t.taskId), '연결된 업무 전체')}>
+                  전체 해제 ({linked.length})
+                </button>
+              </div>
+            )}
             {linked.length === 0 ? (
               <div className="table-empty">연결된 업무가 없습니다.</div>
             ) : (
               <ul className="pj-task-list">
                 {linked.map((t) => (
                   <li key={t.taskId} className="pj-task-row">
+                    <input
+                      type="checkbox"
+                      disabled={busy}
+                      checked={selectedLinked.has(t.taskId)}
+                      onChange={() => toggleLinked(t.taskId)}
+                      aria-label={`${address(t)} 선택`}
+                    />
                     <span className="pj-task-main">
                       <span className="pj-task-title">{address(t)}</span>
                       <span className="pj-muted">{[t.adminDong, t.taskCategory].filter(Boolean).join(' · ') || '-'}</span>

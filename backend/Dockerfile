@@ -14,8 +14,9 @@ RUN mvn -B clean package -DskipTests
 # This removes the fragile /app/ai/venv/bin/python host-path dependency.
 FROM python:3.11-slim-bookworm
 
+# fontconfig + fonts-dejavu-core: 보고서 위치도(StaticMapService)가 핀 번호를 그릴 때 필요 (slim 이미지엔 글꼴이 없음)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends openjdk-17-jre-headless libheif1 \
+    && apt-get install -y --no-install-recommends openjdk-17-jre-headless libheif1 fontconfig fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -25,6 +26,7 @@ RUN pip install --no-cache-dir -r /app/ai/requirements.txt
 
 COPY ai/app.py /app/ai/app.py
 COPY ai/compiled_report.py /app/ai/compiled_report.py
+COPY ai/hwpx_images.py /app/ai/hwpx_images.py
 COPY ai/create_template.py /app/ai/create_template.py
 COPY ai/templates /app/ai/templates
 RUN mkdir -p /app/ai/uploads /app/ai/output

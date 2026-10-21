@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { downloadProgressHwpx, fetchProgressReport, safeFileName, saveBlob, updateProgressReport } from '../api/projects.js';
+import { downloadProgressHwpx, fetchProgressReport, fetchProgressReportHtml, safeFileName, saveBlob, updateProgressReport } from '../api/projects.js';
 import { errorMessage } from '../api/client.js';
 import { formatDate } from '../utils/format.js';
 import { IconDownload } from '../components/Icons.jsx';
@@ -76,6 +76,20 @@ export default function ProjectsProgressEditPage() {
       setMessage({ type: 'success', text: '저장했습니다. 앱 기록과 건별 HWPX에도 반영됩니다.' });
     } catch (e) {
       setMessage({ type: 'error', text: errorMessage(e, '저장하지 못했습니다.') });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 통합 보고서처럼 HTML로 저장 (한 건). 저장한 내용 기준
+  const downloadHtml = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const name = data.reportName || data.autoTitle || `report_${progressId}`;
+      saveBlob(new Blob([await fetchProgressReportHtml(progressId)], { type: 'text/html;charset=utf-8' }), `${safeFileName(name)}.html`);
+    } catch (e) {
+      setMessage({ type: 'error', text: errorMessage(e, 'HTML 파일을 만들지 못했습니다.') });
     } finally {
       setBusy(false);
     }
@@ -199,13 +213,16 @@ export default function ProjectsProgressEditPage() {
           <button type="button" className="btn-secondary" disabled={busy} onClick={downloadHwpx}>
             <IconDownload size={16} /> HWPX 내려받기
           </button>
+          <button type="button" className="btn-secondary" disabled={busy} onClick={downloadHtml}>
+            <IconDownload size={16} /> HTML 저장
+          </button>
           {canEdit && (
             <button type="button" className="btn-primary btn-inline" disabled={busy || !dirty} onClick={save}>
               {busy ? '저장 중…' : '저장'}
             </button>
           )}
         </div>
-        {canEdit && dirty && <p className="pj-muted pe-dirty">저장하지 않은 변경이 있어요. HWPX는 저장한 내용으로 만들어져요.</p>}
+        {canEdit && dirty && <p className="pj-muted pe-dirty">저장하지 않은 변경이 있어요. HWPX·HTML은 저장한 내용으로 만들어져요.</p>}
       </section>
     </div>
   );

@@ -31,11 +31,12 @@ import java.util.regex.Pattern;
 
 /**
  * REPORT_SCHEMA v1 JSON -> 단일 HTML 문자열 (인라인 CSS, 사진은 축소 JPEG data URI).
- * 지도는 window.REPORT_KAKAO_KEY 가 주입된 경우에만 카카오 SDK 로 그리고, 위치 표는 항상 출력한다.
+ * 지도는 서버에서 만든 정적 위치도 이미지(D29, 핀 클릭 → 카드)를 넣고, window.REPORT_KAKAO_KEY 가 주입된
+ * 화면(웹 미리보기·앱)에서만 카카오 지도로 바꿔 확대할 수 있게 한다. 위치 표는 항상 출력(행 클릭 → 카드).
  */
 @Component
 public class ReportHtmlRenderer {
-    private static final int MAX_PHOTO_PX = 480;
+    private static final int MAX_PHOTO_PX = 960; // 눌러서 크게 보기(D29)에 쓸 수 있는 크기
     private static final long MAX_PIXELS = 40_000_000L;
     private static final long MAX_FILE_BYTES = 25L * 1024 * 1024;
     private static final Pattern FILE_URL = Pattern.compile("^/api/files/(\\d+)/([^/\\\\]+)$");
@@ -47,11 +48,39 @@ public class ReportHtmlRenderer {
     private static final Map<String, String> GROUP_BY_LABELS = Map.of(
             "adminDong", "행정동", "year", "연도", "author", "작성자", "category", "분류");
 
+    public static final int MAP_WIDTH = 960, MAP_HEIGHT = 560;
+
     private final Path uploadBase;
+    private final StaticMapService staticMaps;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public ReportHtmlRenderer(FieldworkProperties properties) {
+    public ReportHtmlRenderer(FieldworkProperties properties, StaticMapService staticMaps) {
         this.uploadBase = ProjectPaths.resolve(properties.getUpload().getBaseDir()).toAbsolutePath().normalize();
+        this.staticMaps = staticMaps;
+    }
+
+    /** 보고서 전체 위치도(카드 번호 = 핀 번호). HWPX 에도 쓴다. 좌표가 없거나 타일 실패면 null. */
+    public StaticMapService.MapImage overviewMap(Map<String, Object> json) {
+        List<StaticMapService.Marker> markers = new ArrayList<>();
+        Map<String, String> colors = new LinkedHashMap<>();
+        int number = 0;
+        for (Object rawSection : list(json.get("sections"))) {
+            for (Object raw : list(map(rawSection).get("items"))) {
+                Map<String, Object> item = map(raw);
+                number++;
+                String color = authorColor(colors, map(item.get("author")));
+                if (item.get("lat") instanceof Number lat && item.get("lng") instanceof Number lng) {
+                    markers.add(new StaticMapService.Marker(number, lat.doubleValue(), lng.doubleValue(), color));
+                }
+            }
+        }
+        return staticMaps.render(markers, MAP_WIDTH, MAP_HEIGHT);
+    }
+
+    /** 건별 위치도(핀 1개). */
+    public StaticMapService.MapImage singleMap(Object lat, Object lng) {
+        if (!(lat instanceof Number la) || !(lng instanceof Number lo)) return null;
+        return staticMaps.render(List.of(new StaticMapService.Marker(1, la.doubleValue(), lo.doubleValue(), AUTHOR_COLORS[0])), MAP_WIDTH, MAP_HEIGHT);
     }
 
     @SuppressWarnings("unchecked")
@@ -95,7 +124,7 @@ public class ReportHtmlRenderer {
                 Map<String, Object> item = map(raw);
                 number++;
                 String color = authorColor(authorColors, map(item.get("author")));
-                locationRows.append("<tr><td class=\"rp-num\">").append(number).append("</td><td>")
+                locationRows.append("<tr data-n=\"").append(number).append("\" title=\"눌러서 이 항목으로 이동\"><td class=\"rp-num\">").append(number).append("</td><td>")
                         .append(esc(orDash(item.get("address")))).append("</td><td>").append(esc(section.get("label")))
                         .append("</td><td>").append(esc(date(item.get("completedAt")))).append("</td></tr>");
                 if (item.get("lat") instanceof Number lat && item.get("lng") instanceof Number lng) {
@@ -109,8 +138,19 @@ public class ReportHtmlRenderer {
                 }
             }
         }
-        html.append("<section class=\"rp-sec rp-mapbox\">")
-                .append("<div id=\"report-map\" class=\"rp-map\"></div>")
+        html.append("<section class=\"rp-sec rp-mapbox\">");
+        StaticMapService.MapImage mapImage = overviewMap(json);
+        if (mapImage != null) {
+            html.append("<div class=\"rp-static\" id=\"report-static-map\"><img alt=\"위치도\" src=\"data:image/jpeg;base64,")
+                    .append(Base64.getEncoder().encodeToString(mapImage.jpeg())).append("\">");
+            for (StaticMapService.PinSpot spot : mapImage.pins()) {
+                html.append("<a class=\"rp-hot\" href=\"#item-").append(spot.n()).append("\" data-n=\"").append(spot.n())
+                        .append("\" title=\"").append(spot.n()).append("번 항목으로 이동\" style=\"left:")
+                        .append(pct(spot.x())).append("%;top:").append(pct(spot.y())).append("%\"></a>");
+            }
+            html.append("</div>");
+        }
+        html.append("<div id=\"report-map\" class=\"rp-map\"></div>")
                 .append("<script type=\"application/json\" id=\"report-markers\">").append(scriptJson(markers)).append("</script>");
         if (!authorColors.isEmpty()) {
             html.append("<div class=\"rp-legend\">");
@@ -141,8 +181,11 @@ public class ReportHtmlRenderer {
 
         html.append("<footer class=\"rp-foot\">생성 ")
                 .append(esc(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))))
-                .append(" · 보고서 #").append(esc(report.get("reportId"))).append("</footer>\n</main>\n")
-                .append("<script>").append(MAP_SCRIPT).append("</script>\n</body>\n</html>\n");
+                .append(report.get("reportId") == null ? "" : " · 보고서 #" + esc(report.get("reportId"))).append("</footer>\n</main>\n")
+                .append("<div class=\"rp-lightbox\" id=\"rp-lightbox\" hidden><button type=\"button\" class=\"rp-lb-close\" aria-label=\"닫기\">×</button>")
+                .append("<button type=\"button\" class=\"rp-lb-prev\" aria-label=\"이전 사진\">‹</button><figure><img alt=\"\"><figcaption></figcaption></figure>")
+                .append("<button type=\"button\" class=\"rp-lb-next\" aria-label=\"다음 사진\">›</button></div>\n")
+                .append("<script>").append(MAP_SCRIPT).append(PAGE_SCRIPT).append("</script>\n</body>\n</html>\n");
         return html.toString();
     }
 
@@ -172,6 +215,18 @@ public class ReportHtmlRenderer {
             photos.append("</figure>");
         }
         if (!photos.isEmpty()) html.append("<div class=\"rp-photos\">").append(photos).append("</div>");
+        // 위치도(왼쪽) + 본문(오른쪽). 좁은 화면에서는 위아래로 (D35)
+        StaticMapService.MapImage map = item.get("lat") instanceof Number lat && item.get("lng") instanceof Number lng
+                ? staticMaps.render(List.of(new StaticMapService.Marker(number, lat.doubleValue(), lng.doubleValue(), color)), 640, 400)
+                : null;
+        html.append("<div class=\"rp-detail").append(map == null ? " rp-nomap" : "").append("\">");
+        if (map != null) {
+            html.append("<figure class=\"rp-locmap\"><img src=\"data:image/jpeg;base64,")
+                    .append(Base64.getEncoder().encodeToString(map.jpeg())).append("\" alt=\"위치도 ")
+                    .append(esc(orDash(item.get("address")))).append("\"><figcaption>위치도 · ")
+                    .append(esc(orDash(item.get("address")))).append("</figcaption></figure>");
+        }
+        html.append("<div class=\"rp-detail-text\">");
         String comment = Objects.toString(item.get("comment"), "").trim();
         html.append("<div class=\"rp-label\">본문</div><p class=\"rp-text\">")
                 .append(comment.isEmpty() ? "-" : multiline(comment)).append("</p>");
@@ -179,7 +234,7 @@ public class ReportHtmlRenderer {
         if (!ai.isEmpty()) {
             html.append("<div class=\"rp-label\">AI 정리</div><p class=\"rp-text rp-ai\">").append(multiline(ai)).append("</p>");
         }
-        html.append("</article>\n");
+        html.append("</div></div></article>\n");
     }
 
     private static String authorColor(Map<String, String> colors, Map<String, Object> author) {
@@ -304,6 +359,10 @@ public class ReportHtmlRenderer {
         }
     }
 
+    private static String pct(double ratio) {
+        return String.format(java.util.Locale.ROOT, "%.2f", Math.max(0, Math.min(1, ratio)) * 100);
+    }
+
     private static String row(String label, String valueHtml) {
         return "<tr><th>" + label + "</th><td>" + valueHtml + "</td></tr>";
     }
@@ -345,6 +404,20 @@ public class ReportHtmlRenderer {
             .rp-badge.rp-final{background:#ECF5F2;color:#326F64}
             .rp-sec{background:#FFFFFF;border:1px solid #DCE7F5;border-radius:16px;padding:16px;margin-bottom:16px}
             .rp-map{display:none;width:100%;height:420px;border-radius:12px;border:1px solid #DCE7F5;overflow:hidden}
+            .rp-static{position:relative;border-radius:12px;border:1px solid #DCE7F5;overflow:hidden;line-height:0}
+            .rp-static img{display:block;width:100%;height:auto}
+            .rp-hot{position:absolute;width:34px;height:42px;margin:-42px 0 0 -17px;border-radius:50% 50% 40% 40%}
+            .rp-hot:hover,.rp-hot:focus,.rp-hot.rp-on{outline:3px solid #7A5BD6;outline-offset:-3px}
+            .rp-table tbody tr[data-n]{cursor:pointer}
+            .rp-table tbody tr[data-n]:hover td{background:#F4F8FF}
+            .rp-img img{cursor:zoom-in}
+            .rp-lightbox{position:fixed;inset:0;z-index:50;background:rgba(10,20,40,.88);display:flex;align-items:center;justify-content:center;padding:48px 56px}
+            .rp-lightbox[hidden]{display:none}
+            .rp-lightbox figure{margin:0;max-width:100%;max-height:100%;display:flex;flex-direction:column;align-items:center}
+            .rp-lightbox img{max-width:100%;max-height:calc(100vh - 140px);object-fit:contain;border-radius:8px;background:#FFFFFF}
+            .rp-lightbox figcaption{color:#FFFFFF;font-size:14px;margin-top:10px;text-align:center;max-width:720px;word-break:break-all}
+            .rp-lightbox button{position:absolute;border:0;background:rgba(255,255,255,.15);color:#FFFFFF;font-size:30px;line-height:1;width:44px;height:44px;border-radius:50%;cursor:pointer}
+            .rp-lb-close{top:12px;right:12px}.rp-lb-prev{left:8px;top:50%;margin-top:-22px}.rp-lb-next{right:8px;top:50%;margin-top:-22px}
             .rp-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:10px 2px 0;font-size:12px;color:#607195}
             .rp-legend i{display:inline-block;width:12px;height:12px;border-radius:50%;background:#4F9588;border:3px solid #94A3B8;margin-right:5px;vertical-align:-1px}
             .rp-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
@@ -371,25 +444,54 @@ public class ReportHtmlRenderer {
             .rp-slot-before{background:#E34D59}.rp-slot-during{background:#BE9446}.rp-slot-after{background:#4F9588}
             .rp-photos figcaption{font-size:13px;color:#10285B;padding:6px 2px 0;word-break:break-all}
             .rp-label{font-size:12px;font-weight:700;color:#1551A6;margin-top:12px}
+            .rp-detail{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:14px;align-items:start;margin-top:12px}
+            .rp-detail.rp-nomap{display:block;margin-top:0}
+            .rp-detail-text>.rp-label:first-child{margin-top:0}
+            .rp-nomap .rp-detail-text>.rp-label:first-child{margin-top:12px}
+            .rp-locmap{margin:0;border:1px solid #DCE7F5;border-radius:10px;overflow:hidden;background:#E8EEF5}
+            .rp-locmap img{display:block;width:100%;height:auto;cursor:zoom-in}
+            .rp-locmap figcaption{font-size:12px;color:#607195;padding:5px 8px;background:#FFFFFF;border-top:1px solid #DCE7F5;word-break:break-all}
             .rp-text{margin:2px 0 4px;word-break:break-all}
             .rp-ai{background:#F4F8FF;border-radius:8px;padding:8px 10px}
             .rp-foot{text-align:center;color:#93A1BA;font-size:12px;margin-top:8px}
+            @media (max-width:640px){.rp-detail{grid-template-columns:1fr}.rp-locmap img{height:200px;object-fit:cover}}
             @media (max-width:520px){.rp-head h1{font-size:20px}.rp-map{height:300px}.rp-photos{grid-template-columns:repeat(2,1fr)}}
             @page{size:A4;margin:14mm}
-            @media print{body{background:#FFFFFF;font-size:12px}.rp{max-width:none;padding:0}.rp-head,.rp-sec{border:none;border-radius:0;padding:0;margin-bottom:14px}.rp-head{border-top:4px solid #2477F3;padding-top:8px}.rp-map,.rp-legend{display:none !important}#report-fallback{display:block !important}.rp-group h2{break-after:avoid;page-break-after:avoid}.rp-table thead{display:table-header-group}.rp-table tr{break-inside:avoid;page-break-inside:avoid}.rp-card{border:1px solid #DCE7F5}.rp-foot{display:none}}
+            @media print{body{background:#FFFFFF;font-size:12px}.rp{max-width:none;padding:0}.rp-head,.rp-sec{border:none;border-radius:0;padding:0;margin-bottom:14px}.rp-head{border-top:4px solid #2477F3;padding-top:8px}.rp-map,.rp-lightbox{display:none !important}#report-static-map{display:block !important}#report-fallback{display:block !important}.rp-group h2{break-after:avoid;page-break-after:avoid}.rp-table thead{display:table-header-group}.rp-table tr{break-inside:avoid;page-break-inside:avoid}.rp-card{border:1px solid #DCE7F5}.rp-foot{display:none}}
+            """;
+
+    /** 표 행·정적 지도 핀 → 카드 이동, 사진 눌러 크게 보기(좌우 넘김, Esc 닫기). */
+    private static final String PAGE_SCRIPT = """
+            (function(){function go(n){var card=document.getElementById('item-'+n);if(!card)return;
+            card.scrollIntoView({behavior:'smooth',block:'start'});card.classList.add('rp-hit');
+            setTimeout(function(){card.classList.remove('rp-hit');},1600);}
+            document.querySelectorAll('.rp-table tbody tr[data-n]').forEach(function(tr){tr.addEventListener('click',function(){
+            var n=tr.getAttribute('data-n');document.querySelectorAll('.rp-hot').forEach(function(h){h.classList.toggle('rp-on',h.getAttribute('data-n')===n);});go(n);});});
+            document.querySelectorAll('.rp-hot').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault();go(a.getAttribute('data-n'));});});
+            var box=document.getElementById('rp-lightbox');if(!box)return;var img=box.querySelector('img'),cap=box.querySelector('figcaption');
+            var all=[].slice.call(document.querySelectorAll('.rp-photos img,.rp-locmap img')),at=-1;
+            function show(i){if(!all.length)return;at=(i+all.length)%all.length;var src=all[at];img.src=src.src;img.alt=src.alt;
+            var fig=src.closest('figure'),fc=fig&&fig.querySelector('figcaption');cap.textContent=(fc?fc.textContent:src.alt)||'';
+            box.hidden=false;document.body.style.overflow='hidden';}
+            function hide(){box.hidden=true;at=-1;document.body.style.overflow='';}
+            all.forEach(function(el,i){el.addEventListener('click',function(){show(i);});});
+            box.querySelector('.rp-lb-close').onclick=hide;box.querySelector('.rp-lb-prev').onclick=function(e){e.stopPropagation();show(at-1);};
+            box.querySelector('.rp-lb-next').onclick=function(e){e.stopPropagation();show(at+1);};
+            box.addEventListener('click',function(e){if(e.target===box)hide();});
+            document.addEventListener('keydown',function(e){if(box.hidden)return;if(e.key==='Escape')hide();else if(e.key==='ArrowLeft')show(at-1);else if(e.key==='ArrowRight')show(at+1);});})();
             """;
 
     private static final String MAP_SCRIPT = """
             (function(){var el=document.getElementById('report-map');if(!el)return;var data=[];
             try{data=JSON.parse(document.getElementById('report-markers').textContent||'[]');}catch(e){data=[];}
             var key=window.REPORT_KAKAO_KEY;if(!key||!data.length)return;
-            var fallback=document.getElementById('report-fallback');
-            function fail(){el.style.display='none';if(fallback)fallback.style.display='';}
+            var still=document.getElementById('report-static-map');
+            function fail(){el.style.display='none';if(still)still.style.display='';}
             el.style.display='block';var s=document.createElement('script');
             s.src='https://dapi.kakao.com/v2/maps/sdk.js?appkey='+encodeURIComponent(key)+'&autoload=false';
             s.onerror=fail;
             s.onload=function(){if(!window.kakao||!kakao.maps){fail();return;}kakao.maps.load(function(){
-            if(fallback)fallback.style.display='none';
+            if(still)still.style.display='none';
             var map=new kakao.maps.Map(el,{center:new kakao.maps.LatLng(data[0].lat,data[0].lng),level:5});
             map.addControl(new kakao.maps.ZoomControl(),kakao.maps.ControlPosition.RIGHT);
             var bounds=new kakao.maps.LatLngBounds();

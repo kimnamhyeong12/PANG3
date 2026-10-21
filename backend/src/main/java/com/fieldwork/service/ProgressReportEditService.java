@@ -40,14 +40,17 @@ public class ProgressReportEditService {
     private final TaskService taskService;
     private final ProjectService projectService;
     private final GroupMemberRepository members;
+    private final CompiledReportService compiledReports;
 
     public ProgressReportEditService(TaskProgressRepository progressRepository, TaskProgressService taskProgressService,
-            TaskService taskService, ProjectService projectService, GroupMemberRepository members) {
+            TaskService taskService, ProjectService projectService, GroupMemberRepository members,
+            CompiledReportService compiledReports) {
         this.progressRepository = progressRepository;
         this.taskProgressService = taskProgressService;
         this.taskService = taskService;
         this.projectService = projectService;
         this.members = members;
+        this.compiledReports = compiledReports;
     }
 
     @Transactional(readOnly = true)
@@ -55,6 +58,14 @@ public class ProgressReportEditService {
         TaskProgress progress = load(progressId);
         taskProgressService.validateReader(progress.getTask(), userId);
         return toMap(progress, userId);
+    }
+
+    /** 건별 HTML 용 JSON (읽기 권한 = 보고서를 볼 수 있는 사람). 사진 넣기는 트랜잭션 밖에서. */
+    @Transactional(readOnly = true)
+    public Map<String, Object> htmlJson(Long progressId, Long userId) {
+        TaskProgress progress = load(progressId);
+        taskProgressService.validateReader(progress.getTask(), userId);
+        return compiledReports.singleJson(progress);
     }
 
     @Transactional
@@ -84,8 +95,12 @@ public class ProgressReportEditService {
             if (comment.length() > MAX_COMMENT) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "본문은 10,000자 이내로 입력해 주세요.");
             }
-            commentChanged = !comment.equals(Objects.toString(progress.getMainComment(), ""));
-            progress.setMainComment(comment);
+            commentChanged = !comment.equals(Objects.toString(ProjectService.memoOf(progress), ""));
+            if (commentChanged) {
+                // 앱 메모(field_memo)까지 합쳐 보여 줬으므로, 고친 본문 하나로 정리한다 (D36)
+                progress.setMainComment(comment);
+                progress.setFieldMemo(null);
+            }
         }
         if (body.get("photoComments") instanceof Map<?, ?> changes && !changes.isEmpty()) {
             progress.setFieldPhotos(applyPhotoComments(progress.getFieldPhotos(), changes));
@@ -153,7 +168,7 @@ public class ProgressReportEditService {
         map.put("assigneeName", owner == null ? null : owner.getName());
         map.put("lat", projectService.latOf(progress));
         map.put("lng", projectService.lngOf(progress));
-        map.put("mainComment", progress.getMainComment());
+        map.put("mainComment", ProjectService.memoOf(progress));
         List<Map<String, Object>> photos = new ArrayList<>();
         List<Map<String, Object>> fieldPhotos = progress.getFieldPhotos();
         if (fieldPhotos != null) {
@@ -181,7 +196,7 @@ public class ProgressReportEditService {
     private static String revisionOf(TaskProgress progress) {
         StringBuilder data = new StringBuilder();
         data.append(Objects.toString(progress.getReportName(), "")).append('\u0000')
-                .append(Objects.toString(progress.getMainComment(), "")).append('\u0000');
+                .append(Objects.toString(ProjectService.memoOf(progress), "")).append('\u0000');
         if (progress.getFieldPhotos() != null) {
             for (Map<String, Object> photo : progress.getFieldPhotos()) {
                 data.append(Objects.toString(photo.get("path"), "")).append('\u0001')

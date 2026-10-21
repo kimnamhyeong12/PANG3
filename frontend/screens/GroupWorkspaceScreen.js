@@ -21,6 +21,9 @@ import { transferHistoryPage, mergeTransferHistory, compareTransferHistory } fro
 import GroupLeaveButton from '../components/GroupLeaveButton';
 import { buildMemberColors, softMemberColor } from '../utils/memberColors';
 import { GroupProjectList } from './ProjectScreen';
+import GroupReportsScreen from './GroupReportsScreen';
+
+let lastProjectView = 'projects';
 
 const shortDong = (value) => {
   const text = String(value || '').trim();
@@ -66,14 +69,22 @@ export default function GroupWorkspaceScreen({
   tab = 'dashboard',
   onTabChange,
   onTransfer,
-  onReports,
   onLeaveGroup,
   onOpenProject,
+  onOpenReport,
+  onOpenReports,
+  onPreviewReport,
+  onEditReport,
+  // 보고서를 열거나 수정하는 동안 App 이 이 화면을 숨겨 둔 채 유지한다 (건별 보고서 거르기·폴더 유지)
+  isActive = true,
 }) {
+  // H5: 프로젝트 탭 안 '프로젝트 | 건별 보고서' (건별 = 기존 그룹 보고서 전체보기 화면 그대로)
+  // 보고서를 열었다 돌아와도(화면이 다시 그려져도) 보던 칸을 유지
+  const [projectView, setProjectViewState] = useState(() => lastProjectView);
+  const setProjectView = (value) => { lastProjectView = value; setProjectViewState(value); };
   const [detail, setDetail] = useState(group || null);
   const [sharedTasks, setSharedTasks] = useState(Array.isArray(assignments) ? assignments : []);
   const [loadingSettings, setLoadingSettings] = useState(false);
-  const [reportCount, setReportCount] = useState(null);
   const [transferRequests, setTransferRequests] = useState([]);
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -131,16 +142,14 @@ export default function GroupWorkspaceScreen({
     try {
       setLoadingSettings(true);
       const base = `/api/groups/${group.groupId}`;
-      const [groupDetail, locations, reports, transfers] = await Promise.allSettled([
+      const [groupDetail, locations, transfers] = await Promise.allSettled([
         groupApi(`${base}?userId=${user.userId}`),
         groupApi(`/api/locations/group/${group.groupId}?userId=${user.userId}`),
-        groupApi(`${base}/reports?userId=${user.userId}`).catch(() => []),
         transferHistoryPage(group.groupId, user.userId),
       ]);
 
       if (groupDetail.status === 'fulfilled') setDetail(groupDetail.value || group);
       if (locations.status === 'fulfilled') setSharedTasks(Array.isArray(locations.value) ? locations.value : []);
-      if (reports.status === 'fulfilled') setReportCount(Array.isArray(reports.value) ? reports.value.length : 0);
       if (transfers.status === 'fulfilled') {
         setTransferRequests(transfers.value.items || []);
         setHistoryHasMore(Boolean(transfers.value.hasMore));
@@ -214,7 +223,7 @@ export default function GroupWorkspaceScreen({
 
   return (
     <View style={styles.root}>
-      <ScreenHeader title={groupName} onBack={onBack} />
+      <ScreenHeader title={groupName} onBack={isActive ? onBack : undefined} />
 
       <View style={styles.tabs}>
         <TouchableOpacity
@@ -229,12 +238,6 @@ export default function GroupWorkspaceScreen({
         >
           <Text style={[styles.tabText, tab === 'transfer' && styles.activeText]}>업무 이관</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, tab === 'settings' && styles.activeTab]}
-          onPress={() => onTabChange?.('settings')}
-        >
-          <Text style={[styles.tabText, tab === 'settings' && styles.activeText]}>설정</Text>
-        </TouchableOpacity>
         {!(group?.personal || group?.personalWorkspace || group?.workspaceType === 'PERSONAL') && (
           <TouchableOpacity
             style={[styles.tab, tab === 'projects' && styles.activeTab]}
@@ -243,6 +246,12 @@ export default function GroupWorkspaceScreen({
             <Text style={[styles.tabText, tab === 'projects' && styles.activeText]}>프로젝트</Text>
           </TouchableOpacity>
         )}
+        <TouchableOpacity
+          style={[styles.tab, tab === 'settings' && styles.activeTab]}
+          onPress={() => onTabChange?.('settings')}
+        >
+          <Text style={[styles.tabText, tab === 'settings' && styles.activeText]}>관리</Text>
+        </TouchableOpacity>
       </View>
 
       {tab === 'dashboard' ? (
@@ -255,7 +264,20 @@ export default function GroupWorkspaceScreen({
           showDashboard
         />
       ) : tab === 'projects' ? (
-        <GroupProjectList user={user} group={group} onOpenProject={onOpenProject} />
+        <View style={{ flex: 1 }}>
+          <View style={styles.segment} accessibilityRole="tablist">
+            {[['projects', '프로젝트'], ['reports', '건별 보고서']].map(([key, label]) => (
+              <TouchableOpacity key={key} style={[styles.segmentItem, projectView === key && styles.segmentActive]}
+                onPress={() => setProjectView(key)} accessibilityRole="tab" accessibilityState={{ selected: projectView === key }}>
+                <Text style={[styles.segmentText, projectView === key && styles.segmentTextActive]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {projectView === 'projects'
+            ? <GroupProjectList user={user} group={group} onOpenProject={onOpenProject} />
+            : <GroupReportsScreen user={user} group={group} embedded isActive={isActive && tab === 'projects' && projectView === 'reports'}
+                onOpenReport={onOpenReport} onOpenReports={onOpenReports} onPreviewReport={onPreviewReport} onEditReport={onEditReport} />}
+        </View>
       ) : (
         <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {tab === 'settings' ? <>
@@ -426,24 +448,6 @@ export default function GroupWorkspaceScreen({
           </View>}
 
           {tab === 'settings' && <>
-          <TouchableOpacity style={styles.card} activeOpacity={0.78} onPress={onReports}>
-            <CardTitle icon="document-text" title="그룹 보고서 전체보기" />
-            <View style={styles.reportBar}>
-              <View style={styles.reportSummary}>
-                <Ionicons name="document-text-outline" size={22} color={colors.primary} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.reportLabel}>전체 보고서</Text>
-                  <Text style={styles.reportValue}>
-                    {reportCount == null ? '전체 보기' : `${reportCount}건`}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.reportAction}>
-                <Text style={styles.reportActionText}>전체 보기</Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.primary} />
-              </View>
-            </View>
-          </TouchableOpacity>
 
           <View style={styles.card}>
             <CardTitle icon="settings" title="그룹 설정" />
@@ -496,6 +500,11 @@ function SettingSwitchRow({ icon, title, value, onValueChange, last }) {
 }
 
 const styles = StyleSheet.create({
+  segment: { flexDirection: 'row', marginHorizontal: 20, marginTop: 10, marginBottom: 4, padding: 3, borderRadius: 12, backgroundColor: colors.surfaceMuted },
+  segmentItem: { flex: 1, minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
+  segmentActive: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
+  segmentText: { color: colors.textSoft, fontSize: 13, fontWeight: '700' },
+  segmentTextActive: { color: colors.primaryDark, fontWeight: '900' },
   historyMore: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   historyMoreText: { color: colors.text, fontSize: 12, fontWeight: '700' },
   inviteBox: { marginTop: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -597,36 +606,6 @@ const styles = StyleSheet.create({
   requestReject: { backgroundColor: '#FDE9EB' },
   requestRejectText: { color: '#B94D59' },
   meBadge: { color: colors.textSoft, fontSize: 9.5, fontWeight: '800', backgroundColor: colors.surfaceMuted, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999 },
-  reportBar: {
-    marginTop: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  reportSummary: {
-    flex: 1,
-    minHeight: 66,
-    borderRadius: 14,
-    backgroundColor: colors.surfaceMuted,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  reportLabel: { color: colors.textSoft, fontSize: 10.5 },
-  reportValue: { color: colors.text, fontSize: 15, fontWeight: '900', marginTop: 4 },
-  reportAction: {
-    minHeight: 48,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1.3,
-    borderColor: '#BFD6F5',
-    backgroundColor: colors.surface,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  reportActionText: { color: colors.primary, fontSize: 12, fontWeight: '900' },
   settingRow: {
     minHeight: 54,
     flexDirection: 'row',

@@ -364,7 +364,7 @@ export default function ReportEditorPage() {
     run(async () => {
       await updateCompiledReport(reportId, userId, { groupBy });
       await loadReport();
-    }, '분류 기준을 바꾸지 못했습니다.');
+    }, '목차 구분을 바꾸지 못했습니다.');
   };
 
   const saveTitle = () => {
@@ -560,7 +560,7 @@ export default function ReportEditorPage() {
               {(summary.authors ?? []).join(', ') || '-'}
             </div>
             <div className="re-groupby">
-              <span className="pj-muted">분류 기준</span>
+              <span className="pj-muted" title="보고서 안에서 카드를 나누는 제목이에요. 담을 업무는 왼쪽 필터로 골라요.">목차 구분</span>
               <div className="pj-chips">
                 {GROUP_BY_OPTIONS.map((o) => (
                   <button

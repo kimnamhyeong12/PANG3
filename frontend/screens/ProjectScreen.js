@@ -75,7 +75,8 @@ export function GroupProjectList({ user, group, onOpenProject }) {
             <Text style={styles.projectName} numberOfLines={1}>{project.name}</Text>
             <Text style={styles.projectMeta}>완료 {project.completedCount ?? 0}건</Text>
             <Text style={styles.projectDraft} numberOfLines={1}>
-              {project.latestDraft ? `📄 ${project.latestDraft.title} · 초안` : '보고서 없음'}
+              {[project.finalReportCount ? `✅ 확정 보고서 ${project.finalReportCount}개` : null,
+                project.latestDraft ? `📄 ${project.latestDraft.title} · 작성 중` : null].filter(Boolean).join('  ') || '보고서 없음'}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
@@ -97,6 +98,7 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
   const [project, setProject] = useState(initialProject || null);
   const [data, setData] = useState(null);
   const [reportCounts, setReportCounts] = useState({});
+  const [finals, setFinals] = useState([]); // 앱에서는 확정 보고서만 보고 받는다 (D30)
   const [filters, setFilters] = useState({});
   const [mineOnly, setMineOnly] = useState(null); // null = 프로젝트 권한 확인 전
   const [targetId, setTargetId] = useState(null);
@@ -140,6 +142,13 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
       const counts = {};
       (Array.isArray(list) ? list : []).forEach((report) => { counts[report.reportId] = report.itemCount ?? 0; });
       setReportCounts(counts);
+      // 같은 보고서의 여러 확정 버전 중 가장 최신만
+      const latest = new Map();
+      (Array.isArray(list) ? list : []).filter((report) => report.status === 'FINAL').forEach((report) => {
+        const root = String(report.rootReportId ?? report.reportId);
+        if (!latest.has(root) || (report.version ?? 1) > (latest.get(root).version ?? 1)) latest.set(root, report);
+      });
+      setFinals([...latest.values()]);
     } catch {
       // 건수 표시는 보조 정보라 실패해도 화면은 그대로 쓴다
     }
@@ -312,19 +321,35 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
   const header = (
     <View style={styles.headerBlock}>
       {target ? (
-        <TouchableOpacity style={styles.banner} activeOpacity={0.85} onPress={() => onOpenReport?.(target)}>
+        <View style={styles.banner}>
           <Ionicons name="document-text-outline" size={20} color={colors.primary} />
-          <Text style={styles.bannerText} numberOfLines={1}>
-            {`${target.title} · 초안 · ${reportCounts[target.reportId] ?? 0}건 담김`}
-          </Text>
-          <Text style={styles.bannerLink}>보기 ›</Text>
-        </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.bannerText} numberOfLines={1}>
+              {`담는 중: ${target.title} · ${reportCounts[target.reportId] ?? 0}건`}
+            </Text>
+            <Text style={styles.bannerHint}>작성 중인 보고서예요. 리더가 확정하면 아래 '확정 보고서'에서 보고 받을 수 있어요.</Text>
+          </View>
+        </View>
       ) : (
         <View style={[styles.banner, styles.bannerEmpty]}>
           <Ionicons name="information-circle-outline" size={20} color={colors.textSoft} />
           <Text style={styles.bannerEmptyText}>담을 초안 보고서가 없어요. 보고서는 PC 웹에서 리더가 만들 수 있어요.</Text>
         </View>
       )}
+      {finals.length > 0 ? (
+        <View style={styles.finals}>
+          <Text style={styles.finalsTitle}>확정 보고서</Text>
+          {finals.map((report) => (
+            <TouchableOpacity key={report.reportId} style={styles.finalRow} activeOpacity={0.8} onPress={() => onOpenReport?.(report)}>
+              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+              <Text style={styles.finalText} numberOfLines={1}>
+                {`${report.title}${(report.version ?? 1) > 1 ? ` (v${report.version})` : ''} · ${report.itemCount ?? 0}건`}
+              </Text>
+              <Text style={styles.bannerLink}>보기 · 받기 ›</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
       {drafts.length > 1 ? (
         <TouchableOpacity style={styles.reportSelect} onPress={() => setPicker('report')} activeOpacity={0.8}>
           <Text style={styles.reportSelectText}>담을 보고서 바꾸기 ({drafts.length}개)</Text>
@@ -425,6 +450,11 @@ const styles = StyleSheet.create({
   banner: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, borderRadius: radius.medium, backgroundColor: colors.primarySoft },
   bannerText: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '800' },
   bannerLink: { color: colors.primary, fontSize: 13, fontWeight: '900' },
+  bannerHint: { color: colors.textSoft, fontSize: 11, fontWeight: '700', marginTop: 2, lineHeight: 15 },
+  finals: { gap: 6 },
+  finalsTitle: { color: colors.text, fontSize: 13, fontWeight: '900', marginTop: 4 },
+  finalRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderRadius: radius.medium, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
+  finalText: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '800' },
   bannerEmpty: { backgroundColor: colors.surfaceMuted },
   bannerEmptyText: { flex: 1, color: colors.textSoft, fontSize: 12, fontWeight: '700', lineHeight: 17 },
   reportSelect: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, minHeight: 32 },

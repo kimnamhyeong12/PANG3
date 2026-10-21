@@ -59,6 +59,11 @@ export function linkProjectTasks(projectId, userId, taskIds) {
   return api.post(`/api/projects/${projectId}/tasks`, { userId, taskIds });
 }
 
+// 여러 건 해제 → { unlinked:[taskId] } (연결 안 된 id 는 건너뜀)
+export function unlinkProjectTasks(projectId, userId, taskIds) {
+  return api.post(`/api/projects/${projectId}/tasks/unlink`, { userId, taskIds });
+}
+
 export function unlinkProjectTask(projectId, taskId, userId) {
   return del(`/api/projects/${projectId}/tasks/${taskId}`, { userId });
 }
@@ -117,6 +122,12 @@ export function removeReportItem(reportId, progressId, userId) {
 // text/html → 문자열 (api.get은 JSON 전용이라 Blob으로 받는다)
 export async function fetchCompiledReportHtml(reportId, userId) {
   const blob = await api.download(`${reportPath(reportId)}/html?userId=${encodeURIComponent(userId)}`);
+  return blob.text();
+}
+
+// 건별 보고서 HTML (통합 보고서와 같은 지도+카드 양식, 한 건)
+export async function fetchProgressReportHtml(progressId) {
+  const blob = await api.download(`/api/progress-reports/${progressId}/html`);
   return blob.text();
 }
 

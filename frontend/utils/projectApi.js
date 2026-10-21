@@ -49,8 +49,17 @@ export const removeReportItem = (reportId, progressId, userId) => groupApi(proje
 export const fetchCompiledReport = (reportId, userId) => groupApi(projectPaths.report(reportId, userId));
 
 export async function fetchCompiledReportHtml(reportId, userId) {
+  return fetchReportHtml(`${API_BASE_URL}${projectPaths.reportHtml(reportId, userId)}`);
+}
+
+// 건별 보고서 미리보기: 통합 보고서와 같은 지도+카드 양식, 한 건
+export async function fetchProgressReportHtml(progressId) {
+  return fetchReportHtml(`${API_BASE_URL}/api/progress-reports/${progressId}/html`);
+}
+
+async function fetchReportHtml(url) {
   if (!API_BASE_URL) throw new Error('API_BASE_URL이 설정되어 있지 않습니다.');
-  const response = await apiFetch(`${API_BASE_URL}${projectPaths.reportHtml(reportId, userId)}`);
+  const response = await apiFetch(url);
   const text = await response.text();
   if (!response.ok) {
     let message = `보고서를 불러오지 못했습니다. (오류 ${response.status})`;

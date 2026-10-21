@@ -206,8 +206,7 @@ public class CompiledReportService {
             String reason = null;
             if (progress == null) {
                 reason = "NOT_FOUND";
-            } else if (progress.getTask().getProject() == null
-                    || !project.getProjectId().equals(progress.getTask().getProject().getProjectId())) {
+            } else if (!projectService.isLinked(project, progress.getTask())) {
                 reason = "NOT_IN_PROJECT";
             } else if (!ReportRetentionService.available(progress)) {
                 reason = "EXPIRED";
@@ -417,6 +416,44 @@ public class CompiledReportService {
         return json;
     }
 
+    /** 건별 보고서 한 건을 통합 보고서와 같은 JSON 모양으로 (건별 HTML 미리보기·저장). 권한 검사는 부르는 쪽에서. */
+    public Map<String, Object> singleJson(TaskProgress progress) {
+        Task task = progress.getTask();
+        Map<Long, String> names = new HashMap<>();
+        Map<String, Object> row = itemJson(new CompiledReportItem(), progress, names);
+        String dong = task.getAdminDong() == null || task.getAdminDong().isBlank() ? ProjectService.UNASSIGNED : task.getAdminDong();
+        String day = Objects.toString(row.get("completedAt"), "");
+        day = day.length() >= 10 ? day.substring(0, 10) : null;
+
+        Map<String, Object> section = new LinkedHashMap<>();
+        section.put("key", "single");
+        section.put("label", dong);
+        section.put("count", 1);
+        section.put("items", List.of(row));
+        Map<String, Object> reportMap = new LinkedHashMap<>();
+        reportMap.put("title", row.get("title"));
+        reportMap.put("groupBy", "adminDong");
+        Map<String, Object> projectMap = new LinkedHashMap<>();
+        projectMap.put("name", "건별 보고서");
+        projectMap.put("groupName", task.getGroup() == null ? "개인" : task.getGroup().getName());
+        Map<String, Object> period = new LinkedHashMap<>();
+        period.put("from", day);
+        period.put("to", day);
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("totalCount", 1);
+        summary.put("period", period);
+        summary.put("authors", List.of(projectService.authorName(progress.getPerformedByUserId(), names)));
+        summary.put("bySection", List.of(Map.of("key", "single", "label", dong, "count", 1)));
+
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put("schemaVersion", 1);
+        json.put("report", reportMap);
+        json.put("project", projectMap);
+        json.put("summary", summary);
+        json.put("sections", List.of(section));
+        return json;
+    }
+
     private Map<String, Object> itemJson(CompiledReportItem item, TaskProgress progress, Map<Long, String> names) {
         Task task = progress.getTask();
         Map<String, Object> row = new LinkedHashMap<>();
@@ -439,9 +476,9 @@ public class CompiledReportService {
         row.put("titleOverridden", item.getOverrideTitle() != null);
         row.put("originalTitle", reportName != null ? reportName : auto);
         boolean overridden = item.getOverrideComment() != null;
-        row.put("comment", overridden ? item.getOverrideComment() : progress.getMainComment());
+        row.put("comment", overridden ? item.getOverrideComment() : ProjectService.memoOf(progress));
         row.put("commentOverridden", overridden);
-        row.put("originalComment", progress.getMainComment());
+        row.put("originalComment", ProjectService.memoOf(progress));
         row.put("aiRefinedContent", progress.getAiRefinedContent());
         row.put("photos", photos(task.getTaskId(), progress.getFieldPhotos(), item.getOverridePhotoComments()));
         row.put("locationMapImage", fileUrl(task.getTaskId(), progress.getLocationMapImage()));
@@ -524,9 +561,8 @@ public class CompiledReportService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "보고서에 담긴 항목이 아닙니다."));
     }
 
-    private static boolean belongsTo(TaskProgress progress, Project project) {
-        Project owner = progress.getTask().getProject();
-        return owner != null && project.getProjectId().equals(owner.getProjectId());
+    private boolean belongsTo(TaskProgress progress, Project project) {
+        return projectService.isLinked(project, progress.getTask());
     }
 
     private static void requireDraft(CompiledReport report) {

@@ -25,7 +25,7 @@ class ProjectHwpxPayloadTest {
     ReportHtmlRenderer renderer() {
         FieldworkProperties properties = new FieldworkProperties();
         properties.getUpload().setBaseDir(uploads.toAbsolutePath().toString());
-        return new ReportHtmlRenderer(properties);
+        return new ReportHtmlRenderer(properties, new StaticMapService(false, "", ""));
     }
 
     Map<String, Object> json(String photoUrl, String mapUrl) {
