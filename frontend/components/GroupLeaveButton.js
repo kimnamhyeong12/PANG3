@@ -3,6 +3,7 @@ import { Keyboard, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } 
 import { groupApi } from '../utils/groupApi';
 import { showAlert } from './CustomAlert';
 import { colors } from '../constants/design';
+import SocialAuthButtons from './SocialAuthButtons';
 
 export default function GroupLeaveButton({ group, user, onLeft }) {
   const [open, setOpen] = useState(false);
@@ -24,10 +25,12 @@ export default function GroupLeaveButton({ group, user, onLeft }) {
   return <>
     <TouchableOpacity style={styles.leave} onPress={() => setOpen(true)}><Text style={styles.danger}>그룹 탈퇴</Text></TouchableOpacity>
     <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
-      <View style={styles.backdrop}><View style={styles.dialog}>
+      <View style={styles.backdrop}><TouchableOpacity style={StyleSheet.absoluteFill} accessibilityLabel="그룹 탈퇴 창 닫기" onPress={close} /><View style={styles.dialog}>
         <Text style={styles.title}>그룹 탈퇴</Text>
-        <Text style={styles.description}>탈퇴하면 이 그룹의 작업을 볼 수 없습니다. 확인을 위해 비밀번호를 입력해 주세요.</Text>
-        <TextInput style={styles.input} placeholder="현재 비밀번호" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" editable={!busy} />
+        <Text style={styles.description}>탈퇴하면 이 그룹의 작업을 볼 수 없습니다. 비밀번호 또는 연결된 소셜 계정으로 인증해 주세요.</Text>
+        {user.passwordLoginEnabled !== false && <TextInput style={styles.input} placeholder="현재 비밀번호" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" editable={!busy} />}
+        {open && <SocialAuthButtons mode="verify" disabled={busy} onVerified={setPassword} />}
+        {password.startsWith('social:') && <Text style={{ color: colors.successInk }}>소셜 계정 인증 완료</Text>}
         <View style={styles.actions}>
           <TouchableOpacity style={styles.action} disabled={busy} onPress={close}><Text>취소</Text></TouchableOpacity>
           <TouchableOpacity style={styles.action} disabled={!password || busy} onPress={leave}><Text style={[styles.danger, (!password || busy) && { opacity: 0.4 }]}>{busy ? '탈퇴 중…' : '그룹 탈퇴'}</Text></TouchableOpacity>

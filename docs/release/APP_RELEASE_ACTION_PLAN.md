@@ -1,6 +1,6 @@
 # 출시 실행 계획
 
-기준일 2026-10-15. 공개 Android 출시 기준. P0는 공개 전 필수, P1은 안정성/운영 준비, P2는 후속 개선이다. `완료`는 적힌 범위에만 적용한다. R번호의 상세 근거는 [조사 결과](C:/PANG3-app/APP_RELEASE_READINESS_REPORT.md), 출처 S/C번호는 [근거 목록](C:/PANG3-app/APP_RELEASE_SOURCES.md) 참조.
+기준일 2026-10-15. 공개 Android 출시 기준. P0는 공개 전 필수, P1은 안정성/운영 준비, P2는 후속 개선이다. `완료`는 적힌 범위에만 적용한다. R번호의 상세 근거는 [조사 결과](APP_RELEASE_READINESS_REPORT.md), 출처 S/C번호는 [근거 목록](APP_RELEASE_SOURCES.md) 참조.
 
 ## 실행표
 

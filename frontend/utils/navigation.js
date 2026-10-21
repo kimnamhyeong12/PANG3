@@ -1,4 +1,4 @@
-export const ROOT_SCREENS = new Set(['mapDirect', 'reportList', 'groupHome', 'settings', 'main', 'dashboard']);
+export const ROOT_SCREENS = new Set(['login', 'mapDirect', 'reportList', 'groupHome', 'settings', 'main', 'dashboard']);
 
 export function navigationHistory(history, current, next, replace = false) {
   if (ROOT_SCREENS.has(next)) return [];

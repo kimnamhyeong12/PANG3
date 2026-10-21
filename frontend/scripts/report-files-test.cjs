@@ -21,5 +21,9 @@ const fs = require('node:fs');
   await assert.rejects(prepareIndividualReport({ progressId: 33, userId: 1, baseUrl: 'https://test.local', download,
     fetchReport: async () => ({ ok: false, status: 403, json: async () => ({ message: '접근 권한이 없습니다.' }) }) }), /접근 권한/);
   assert.equal(files.length, 2, 'a later failure does not discard previous files');
+  const renamed = await prepareIndividualReport({ progressId: 44, userId: 1, baseUrl: 'https://test.local', download,
+    fetchReport: async () => ({ ok: true, json: async () => ({ reportName: '수정한/보고서', detailAddress: '원래 방문지', reportDownloadUrl: '/report' }) }) });
+  assert.equal(renamed.name, '수정한/보고서');
+  assert.equal(renamed.filename, '수정한_보고서_44.hwpx');
   console.log('Individual report file checks passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

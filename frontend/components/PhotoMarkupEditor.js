@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ScreenHeader } from './ui';
 import { colors } from '../constants/design';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBackSwipe } from '../utils/screenBack';
 import Svg, { Polyline } from 'react-native-svg';
 import { captureRef } from 'react-native-view-shot';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -73,6 +74,7 @@ export default function PhotoMarkupEditor({
   const originalSizeRef = useRef(null);
   const sessionRef = useRef(0);
   const operationRef = useRef(false);
+  const backSwipe = useBackSwipe(() => { if (!operationRef.current) onCancel?.(); }, visible);
   const originalUriRef = useRef(uri);
   const snapshotRef = useRef(null);
   const historyRef = useRef({ past: [], future: [] });
@@ -730,6 +732,7 @@ export default function PhotoMarkupEditor({
       navigationBarTranslucent
     >
       <View
+        {...backSwipe}
         style={[styles.container, { paddingBottom: Math.max(insets.bottom, 12) }]}
       >
         <ScreenHeader title="사진편집" onBack={() => { if (!operationRef.current) onCancel?.(); }} />

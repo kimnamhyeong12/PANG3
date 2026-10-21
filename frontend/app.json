@@ -2,6 +2,7 @@
   "expo": {
     "name": "FieldworkHelper",
     "slug": "fieldwork-helper",
+    "scheme": "pang3",
     "version": "1.0.0",
     "orientation": "portrait",
     "platforms": [
@@ -50,6 +51,7 @@
             "minSdkVersion": 26,
             "usesCleartextTraffic": true,
             "extraMavenRepos": [
+              "https://devrepo.kakao.com/nexus/repository/kakaomap-releases/",
               "https://devrepo.kakaomobility.com/repository/kakao-mobility-android-knsdk-public/",
               "https://devrepo.kakaomobility.com/repository/kakao-mobility-android-knsdk-release/",
               "https://devrepo.kakaomobility.com/repository/kakao-mobility-android-locationsdk-release/",

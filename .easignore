@@ -1,0 +1,20 @@
+# EAS builds only the mobile client from this monorepo.
+/*
+!/frontend/
+!/frontend/**
+/frontend/node_modules/
+/frontend/android/
+/frontend/ios/
+/frontend/.expo/
+/frontend/.expo-verify/
+/frontend/.env
+/frontend/.env.*
+/frontend/dist/
+/frontend/web-build/
+/frontend/build_log.txt
+**/*.jks
+**/*.keystore
+**/*.pem
+**/*.p8
+**/*.p12
+**/*.key

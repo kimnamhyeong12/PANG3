@@ -5,7 +5,6 @@ import {
   AppState,
   BackHandler,
   Keyboard,
-  PanResponder,
   Platform,
   StatusBar,
   StyleSheet,
@@ -55,7 +54,7 @@ import {
 import { groupApi } from './utils/groupApi';
 import { ROOT_SCREENS, createExitConfirmation, navigationHistory } from './utils/navigation';
 import { locationKey, numberVisits, restoreRouteSession } from './utils/routeSession';
-import { consumeScreenBack } from './utils/screenBack';
+import { consumeScreenBack, useBackSwipe } from './utils/screenBack';
 import { assignmentKey, splitWorkPlan } from './utils/workPlan';
 
 const isPersonalGroup = (group) =>
@@ -396,8 +395,8 @@ function AppContent() {
       workPlanRef.current = { rows, choices, key: cacheKey };
       setPendingWork(plan.pending);
       const sameMap = loadedWorkspaceKeyRef.current === cacheKey &&
-        JSON.stringify(plan.map.map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort()) ===
-        JSON.stringify((currentRouteRef.current.locations || []).map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort());
+        JSON.stringify(plan.map.map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId, row.reportName]).sort()) ===
+        JSON.stringify((currentRouteRef.current.locations || []).map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId, row.reportName]).sort());
       if (sameMap && !wasRouteSessionEnded() && (session?.routeSegments?.length || 0) <= plan.map.filter((row) => row.status !== 'complete').length) return;
       const restored = restoreRouteSession(plan.map, session, calendarDayKey, { singleDestinationOnly: true, explicitlyEnded: wasRouteSessionEnded() });
       setRouteLocations(restored?.locations || plan.map);
@@ -542,10 +541,6 @@ function AppContent() {
     const subscription = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
-        if (screen === 'login') {
-          return false;
-        }
-
         // 보고서 작성 화면은 자체 이탈 확인이 변경 내용을 보호한다.
         if (screen === 'fieldAction') {
           return false;
@@ -564,32 +559,7 @@ function AppContent() {
     return () => subscription.remove();
   }, [screen]);
 
-  const swipeBackResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (
-        evt,
-        gestureState
-      ) =>
-        Platform.OS === 'ios' &&
-        screenRef.current !== 'login' &&
-        !ROOT_SCREENS.has(screenRef.current) &&
-        evt.nativeEvent.pageX - gestureState.dx <= 28 &&
-        gestureState.dx > 18 &&
-        Math.abs(gestureState.dy) < 35,
-
-      onPanResponderRelease: (
-        _evt,
-        gestureState
-      ) => {
-        if (
-          gestureState.dx > 70 &&
-          Math.abs(gestureState.dy) < 80
-        ) {
-          goBack('main');
-        }
-      },
-    })
-  ).current;
+  const swipeBackHandlers = useBackSwipe(() => goBack('main'), screen !== 'login');
 
   const refreshGroupAssignments = useCallback(async () => {
     if (
@@ -664,8 +634,8 @@ function AppContent() {
       let session = teamLoadedKeyRef.current === key ? teamSessionRef.current : saved ? JSON.parse(saved) : null;
       const numbered = numberVisits(rows, session?.visitNumbers || Object.fromEntries((session?.order || []).map((id, index) => [id, index + 1])), { visitOrderVersion: session?.visitOrderVersion });
       const sameMap = teamLoadedKeyRef.current === key &&
-        JSON.stringify(numbered.map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort()) ===
-        JSON.stringify((teamSessionRef.current.locations || []).map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId]).sort());
+        JSON.stringify(numbered.map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId, row.reportName]).sort()) ===
+        JSON.stringify((teamSessionRef.current.locations || []).map((row) => [locationKey(row), row.status, Number(row.lat), Number(row.lng), row.detailAddress, row.roadAddress, row.assigneeUserId, row.reportName]).sort());
       if (sameMap && !wasRouteSessionEnded() && (session?.routeSegments?.length || 0) <= numbered.filter((row) => row.status !== 'complete').length) return;
       const restored = restoreRouteSession(numbered, session, calendarDayKey, { singleDestinationOnly: true, explicitlyEnded: wasRouteSessionEnded() });
       setTeamLocations(restored?.locations || numbered);
@@ -1007,7 +977,8 @@ function AppContent() {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <View
         style={styles.app}
-        {...swipeBackResponder.panHandlers}
+        onTouchStart={() => exitConfirmation.current.reset()}
+        {...swipeBackHandlers}
       >
         <StatusBar barStyle="dark-content" />
 
@@ -1421,6 +1392,8 @@ function AppContent() {
                       Number(selectedLocation?.id ?? selectedLocation?.taskId)
                       ? {
                         ...loc,
+                        reportName: savedReport.reportName || loc.reportName,
+                        completedAt: savedReport.completedAt || loc.completedAt,
                         status:
                           savedReport.taskStatus || savedReport.progressStatus ||
                           savedReport.status ||

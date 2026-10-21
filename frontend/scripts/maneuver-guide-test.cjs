@@ -9,7 +9,7 @@ const path = require('node:path');
   assert.equal(maneuverStep({ ...primary, code: 'LeftTurn' }).label, '좌회전');
   assert.equal(maneuverStep({ ...primary, code: 'UTurn' }).label, '유턴');
   assert.equal(maneuverStep({ ...primary, code: 'Goal', distance: 0 }).label, '목적지 도착');
-  assert.equal(maneuverStep({ ...primary, code: 'FutureUnknownCode' }).label, '경로 따라 이동');
+  assert.equal(maneuverStep({ ...primary, code: 'FutureUnknownCode' }), null);
   for (const distance of [-1, NaN, Infinity, null, '100']) assert.equal(maneuverStep({ ...primary, distance }), null);
   const event = { destinationKey: '1', visible: true, primary, secondary: { code: 'LeftTurn', distance: 100 } };
   assert.equal(maneuverGuide(event, '2'), null);

@@ -44,7 +44,11 @@ def main():
         for value in ['검증 A현장', '검증 B현장', '첫날의 메모', '둘째날의 메모', '첫날 사진', '둘째날 사진', '2026-10-12', '2026-10-13', '작업 중', '작업 후']:
             assert value in text, value
         assert '수정한 보고서 이름' in text
-        assert '조치 완료 일시: 2026-10-13 14:35' in text
+        assert '작업처리시간' in text
+        assert '위치도 및 현장사진(수정한 보고서 이름)' in text
+        assert '조치결과' in text
+        assert '작성일자' not in text
+        assert '2026-10-13 14:35:23' in text
         images = [name for name in package.namelist() if name.startswith('BinData/')]
         assert len(images) >= 2, images
         assert len({package.read(name) for name in images}) >= 2, 'Two visits must not share an overwritten image'

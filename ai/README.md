@@ -72,7 +72,7 @@ cp .env.example .env
 
 ## 팀 문서
 
-- **연동 전체:** [INTEGRATION.md](./INTEGRATION.md)
+- **연동 전체:** [INTEGRATION.md](INTEGRATION.md)
 - **AWS:** [../infra/README.md](../infra/README.md)
 - **DB DDL:** [../backend/sql/schema.sql](../backend/sql/schema.sql)
 

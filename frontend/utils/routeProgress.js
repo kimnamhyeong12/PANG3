@@ -44,6 +44,7 @@ export function remainingRouteProgress(segment, position) {
   const scaleY = Math.PI * 6371000 / 180;
   const scaleX = scaleY * Math.cos(current.lat * Math.PI / 180);
   let total = 0, travelled = 0, nearest = Infinity;
+  let nearestIndex = 1, projected = points[0];
   for (let index = 1; index < points.length; index++) {
     const a = points[index - 1], b = points[index];
     const dx = (b.lng - a.lng) * scaleX, dy = (b.lat - a.lat) * scaleY;
@@ -52,7 +53,11 @@ export function remainingRouteProgress(segment, position) {
     const fraction = squared ? Math.max(0, Math.min(1, (px * dx + py * dy) / squared)) : 0;
     const offset = Math.hypot(px - dx * fraction, py - dy * fraction);
     const length = Math.sqrt(squared);
-    if (offset < nearest) { nearest = offset; travelled = total + length * fraction; }
+    if (offset < nearest) {
+      nearest = offset; travelled = total + length * fraction;
+      nearestIndex = index;
+      projected = { lat: a.lat + (b.lat - a.lat) * fraction, lng: a.lng + (b.lng - a.lng) * fraction };
+    }
     total += length;
   }
   const ratio = total ? Math.max(0, Math.min(1, (total - travelled) / total)) : 0;
@@ -62,5 +67,6 @@ export function remainingRouteProgress(segment, position) {
     distance: Math.round(Math.max(0, Number.isFinite(distance) ? distance : total) * ratio),
     duration: Number.isFinite(duration) ? Math.round(Math.max(0, duration) * ratio) : null,
     distanceFromPath: nearest,
+    remainingPath: [projected, ...points.slice(nearestIndex)],
   };
 }

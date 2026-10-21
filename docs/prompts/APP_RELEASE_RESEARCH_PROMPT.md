@@ -27,11 +27,11 @@
 
 사용 가능한 AGENTS.md 등 프로젝트 지침을 읽고, 다음 자료를 조사 출발점으로 활용해라.
 
-- `RELEASE_CHECKLIST_2026-10-14.md`
-- `RELEASE_AUTH_PROGRESS_2026-10-14.md`
-- `RELEASE_FIXES_2026-10-14.md`
-- `RELEASE_FIXES_2026-10-15.md`
-- `LOCAL_RELEASE_RUN.md`
+- `docs/archive/release/RELEASE_CHECKLIST_2026-10-14.md`
+- `docs/archive/release/RELEASE_AUTH_PROGRESS_2026-10-14.md`
+- `docs/archive/release/RELEASE_FIXES_2026-10-14.md`
+- `docs/archive/release/RELEASE_FIXES_2026-10-15.md`
+- `docs/development/LOCAL_RELEASE_RUN.md`
 - 모바일 package.json, app.json/app.config.js, eas.json, Android Gradle·manifest·리소스·네이티브 모듈
 - 백엔드 pom.xml, 인증·권한·사용자·파일·그룹·보고서 코드, 운영/로컬 설정, DB 변경 스크립트
 - Python 보고서 생성 코드와 의존성, 웹의 인증·이메일 인증·비밀번호 재설정 경로
@@ -129,12 +129,12 @@
 
 저장소에 다음 Markdown 파일을 작성하고, 마지막 답변에는 핵심 판단과 파일 링크를 제공해라.
 
-1. `APP_RELEASE_READINESS_REPORT.md`: 현재 출시 가능 여부와 이유, 구현/로컬 검증/운영 적용/스토어 준비 상태, 출시 차단 문제, 공식 자료와 코드 근거, 비용·불확실성.
-2. `APP_RELEASE_ACTION_PLAN.md`: 우선순위별 실행표. 각 행에 상태, 담당자, 작업, 선행 조건, 근거, 완료 기준을 포함. 오늘부터 진행할 순서와 외부 대기 조건을 표시하되 근거 없는 확정 출시 날짜를 만들지 마라.
-3. `APP_RELEASE_SERVER_HANDOFF.md`: 서버 팀원에게 전달할 준비·설정·DB 변경·배포·백업·운영 검증 항목.
-4. `APP_RELEASE_OWNER_CHECKLIST.md`: 사용자에게 필요한 계정 준비·스토어 입력·심사용 자료·운영 결정·확인 목록. 무엇을 어디에서 준비하는지 쉬운 말로 설명.
-5. `APP_RELEASE_VALIDATION_PLAN.md`: 출시 전 꼭 다시 확인할 시나리오와 기대 결과, 계정/기기/네트워크/환경 조건 및 아직 수행하지 않은 검증.
-6. `APP_RELEASE_SOURCES.md`: 공식 출처 목록과 적용 조건·조사일. 코드 근거는 해당 파일과 줄 번호를 함께 제공.
+1. `docs/release/APP_RELEASE_READINESS_REPORT.md`: 현재 출시 가능 여부와 이유, 구현/로컬 검증/운영 적용/스토어 준비 상태, 출시 차단 문제, 공식 자료와 코드 근거, 비용·불확실성.
+2. `docs/release/APP_RELEASE_ACTION_PLAN.md`: 우선순위별 실행표. 각 행에 상태, 담당자, 작업, 선행 조건, 근거, 완료 기준을 포함. 오늘부터 진행할 순서와 외부 대기 조건을 표시하되 근거 없는 확정 출시 날짜를 만들지 마라.
+3. `docs/release/APP_RELEASE_SERVER_HANDOFF.md`: 서버 팀원에게 전달할 준비·설정·DB 변경·배포·백업·운영 검증 항목.
+4. `docs/release/APP_RELEASE_OWNER_CHECKLIST.md`: 사용자에게 필요한 계정 준비·스토어 입력·심사용 자료·운영 결정·확인 목록. 무엇을 어디에서 준비하는지 쉬운 말로 설명.
+5. `docs/release/APP_RELEASE_VALIDATION_PLAN.md`: 출시 전 꼭 다시 확인할 시나리오와 기대 결과, 계정/기기/네트워크/환경 조건 및 아직 수행하지 않은 검증.
+6. `docs/release/APP_RELEASE_SOURCES.md`: 공식 출처 목록과 적용 조건·조사일. 코드 근거는 해당 파일과 줄 번호를 함께 제공.
 
 실행표의 상태는 `완료`, `운영 확인 필요`, `설정 필요`, `코드 수정 필요`, `사용자 결정 필요`, `보류` 등으로 명확히 구분해라. 우선순위는 다음 기준을 사용해라.
 

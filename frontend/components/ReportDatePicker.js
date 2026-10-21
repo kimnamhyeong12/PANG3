@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useBackSwipe } from '../utils/screenBack';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/design';
 import { calendarCells, currentMonthRange, shiftMonth } from '../utils/calendar';
@@ -12,8 +13,10 @@ export default function ReportDatePicker({ visible, value, title, onSelect, onCl
   const year = Number(month.slice(0, 4));
   const changePage = offset => { if (mode === 'years') setYearPage(previous => previous + offset * 12); else setMonth(shiftMonth(month, offset)); };
 
-  return <Modal visible={visible} transparent animationType="fade" onRequestClose={() => mode === 'days' ? onClose() : setMode('days')}>
-    <View style={styles.overlay}>
+  const goBack = () => mode === 'days' ? onClose() : setMode('days');
+  const backSwipe = useBackSwipe(goBack, visible);
+  return <Modal visible={visible} transparent animationType="fade" onRequestClose={goBack}>
+    <View {...backSwipe} style={styles.overlay}>
       <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} accessibilityLabel="달력 닫기" />
       <View style={styles.sheet}>
         <View style={styles.heading}><Text style={styles.title}>{title}</Text><TouchableOpacity onPress={onClose} style={styles.control} accessibilityLabel="닫기"><Ionicons name="close" size={23} color={colors.text} /></TouchableOpacity></View>

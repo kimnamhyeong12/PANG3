@@ -48,6 +48,7 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
   KNGuidance_VoiceGuideDelegate, KNGuidance_CitsGuideDelegate {
   override val shouldUseAndroidLayout = true
   private val onError by EventDispatcher<Map<String, String>>()
+  private val onMapPress by EventDispatcher<Map<String, Boolean>>()
   private val onEnded by EventDispatcher<Map<String, String>>()
   private val onProgress by EventDispatcher<Map<String, Any>>()
   private val onArrived by EventDispatcher<Map<String, String>>()
@@ -196,13 +197,13 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
     addView(map, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     // React Native cards sit above this surface; the SDK creates no navigation UI.
     map.setZOrderMediaOverlay(true)
-    var touchX = 0f; var touchY = 0f
+    var touchX = 0f; var touchY = 0f; var dragged = false
     map.setOnTouchListener { _, event ->
       when (event.actionMasked) {
-        MotionEvent.ACTION_DOWN -> { touchX = event.x; touchY = event.y }
-        MotionEvent.ACTION_POINTER_DOWN -> following = false
-        MotionEvent.ACTION_MOVE -> if (hypot(event.x - touchX, event.y - touchY) > 8 * resources.displayMetrics.density) following = false
-        MotionEvent.ACTION_UP -> if (!following) refreshNearbyIfNeeded(true)
+        MotionEvent.ACTION_DOWN -> { touchX = event.x; touchY = event.y; dragged = false }
+        MotionEvent.ACTION_POINTER_DOWN -> { following = false; dragged = true }
+        MotionEvent.ACTION_MOVE -> if (hypot(event.x - touchX, event.y - touchY) > 8 * resources.displayMetrics.density) { following = false; dragged = true }
+        MotionEvent.ACTION_UP -> { if (!following) refreshNearbyIfNeeded(true); if (!dragged) onMapPress(mapOf("tapped" to true)) }
       }
       false
     }

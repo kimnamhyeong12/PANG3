@@ -6,6 +6,7 @@ import { showAlert } from '../components/CustomAlert';
 import { PrimaryButton } from '../components/ui';
 import { colors, radius } from '../constants/design';
 import AccountRecovery from '../components/AccountRecovery';
+import SocialAuthButtons from '../components/SocialAuthButtons';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
@@ -46,6 +47,8 @@ export default function LoginScreen({ onLogin, onRegister }) {
         </View>
 
         <View style={styles.form}>
+          <SocialAuthButtons onLogin={onLogin} disabled={loading} />
+          <Text style={{ color: colors.textSoft, textAlign: 'center', marginVertical: 12 }}>또는 아이디로 로그인</Text>
           <Text style={styles.label}>아이디</Text>
           <View style={styles.inputRow}>
             <Ionicons name="person-outline" size={19} color={colors.textSoft} />

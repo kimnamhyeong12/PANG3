@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "max_review_attempts": 3,
+  "candidate_roots": ["tools/agent-workflow", "backend/src", "backend/pom.xml", "frontend", "web", "ai/app.py", "ai/templates/template.hwpx", "ai/requirements.txt"],
+  "candidate_extensions": [".py", ".java", ".js", ".jsx", ".cjs", ".json", ".xml", ".properties", ".kt", ".gradle", ".hwpx", ".ps1", ".patch", ".sh"],
+  "excluded_parts": ["node_modules", "target", "build", ".git", ".expo", "__pycache__", ".gradle", ".expo-verify"],
+  "pilot": {
+    "revision": 1,
+    "title": "보고서 2건 개별 다운로드 시범",
+    "environment": "E1: isolated H2, synthetic photos, MockMvc, offline Python",
+    "platform": "Android (PC checks plus required device QA)",
+    "out_of_scope": ["production deployment", "real account data", "external AI calls", "GPS", "push", "PostgreSQL certification"],
+    "acceptance": [
+      {"id": "AC-001", "description": "Two completed records download individually", "checks": ["report-api-pilot", "mobile-download", "mobile-files"]},
+      {"id": "AC-002", "description": "Different visits/dates/memos/photos retained without overwrite", "checks": ["report-api-pilot"]},
+      {"id": "AC-003", "description": "Unauthenticated and unrelated accounts cannot read photos/reports", "checks": ["report-api-pilot"]},
+      {"id": "AC-004", "description": "Pending records cannot prepare or download reports", "checks": ["report-api-pilot"]},
+      {"id": "AC-005", "description": "Android saves both files and a HWPX viewer displays both", "checks": ["android-report-device"]}
+    ],
+    "required_checks": ["report-api-pilot", "mobile-files", "mobile-download", "report-export", "android-report-device"],
+    "tasks": [
+      {"id": "DEV-001", "description": "Use real Java/Python generation in an isolated API pilot", "checks": ["report-api-pilot"]},
+      {"id": "DEV-002", "description": "Exercise existing mobile download logic and synthetic export", "checks": ["mobile-files", "mobile-download", "report-export"]},
+      {"id": "QA-001", "description": "Confirm Android save and HWPX viewer on a separate device step", "checks": ["android-report-device"]}
+    ]
+  }
+}

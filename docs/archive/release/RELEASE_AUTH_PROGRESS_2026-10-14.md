@@ -1,5 +1,7 @@
 # 출시 준비 1차: 인증·자동 로그인·이메일 복구
 
+> 보관 문서: 작성 당시의 조사·변경 기록입니다. 현재 구현·검증 상태는 [문서 목차](../../README.md)에서 관련 문서를 확인하세요. 아래 작업 지시는 이 기록을 열었다는 이유로 실행하지 않습니다.
+
 브랜치: `codex/app-release`. 같은 앱의 코드를 수정했다. 별도 출시용 앱 프로젝트를 복제한 작업이 아니다. 운영 서버, AWS, 카카오 콘솔, EAS 자격 증명, Google Play는 변경하지 않았고 실제 사용자 데이터도 수정하지 않았다.
 
 ## 구현한 동작
@@ -68,6 +70,6 @@ H2 테스트는 운영 PostgreSQL 마이그레이션 검증을 대신하지 않�
 - 개인정보처리방침·앱 밖 삭제 요청 경로·스토어 자료·실기기 전체 업무 검증.
 - 실제 권한/담당자 변경과 저장의 동시성·파일 내용/용량·게이트웨이 요청 제한 등 운영 보안 추가 검증.
 
-전체 출시 항목은 `RELEASE_CHECKLIST_2026-10-14.md`에 유지한다. 이 보고서는 첫 단계의 구현 결과이며 앱 출시 완료를 의미하지 않는다. 커밋·푸시·운영 배포는 하지 않았다.
+전체 출시 항목은 `docs/archive/release/RELEASE_CHECKLIST_2026-10-14.md`에 유지한다. 이 보고서는 첫 단계의 구현 결과이며 앱 출시 완료를 의미하지 않는다. 커밋·푸시·운영 배포는 하지 않았다.
 
 참고: [Expo SecureStore](https://docs.expo.dev/versions/latest/sdk/securestore/), [Spring Security 인증 구조](https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html).

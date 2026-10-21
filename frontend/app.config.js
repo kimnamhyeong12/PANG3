@@ -6,6 +6,7 @@ const config = require('./app.json').expo;
 // EAS can supply this as a build environment variable. Local prebuilds may use .env.
 function nativeAppKey() {
   if (process.env.KAKAO_NATIVE_APP_KEY) return process.env.KAKAO_NATIVE_APP_KEY;
+  if (process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY) return process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY;
   const envPath = path.join(__dirname, '.env');
   if (!fs.existsSync(envPath)) return '';
   const match = fs.readFileSync(envPath, 'utf8').match(/^KAKAO_NATIVE_APP_KEY\s*=\s*(.*)$/m);

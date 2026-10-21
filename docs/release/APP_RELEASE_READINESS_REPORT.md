@@ -22,7 +22,7 @@
 | 설정·지원 | 계정 관리와 알림 토글 구현 | 설정 확인 기록 | 문의·운영정책은 ‘준비 중’, 실제 지원 기능 아님 |
 | 배포 | Expo 57.0.28 / RN 0.86.3, Spring Boot 3.5.14 / Java 17, Python 3.11 이미지 | 로컬 arm64 APK 있음 | 정식 AAB·업로드 인증서·Play 설치는 미확인 |
 
-기존 검증 근거는 [최신 수정 기록](C:/PANG3-app/RELEASE_FIXES_2026-10-15.md), `backend/target/surefire-reports`의 2026-10-15 결과다. 이번 조사에서 그 결과 파일과 코드를 확인했다. 이 문서 작성 중 전체 기능 테스트를 새로 실행했다고 주장하지 않는다.
+기존 검증 근거는 [최신 수정 기록](../archive/release/RELEASE_FIXES_2026-10-15.md), `backend/target/surefire-reports`의 2026-10-15 결과다. 이번 조사에서 그 결과 파일과 코드를 확인했다. 이 문서 작성 중 전체 기능 테스트를 새로 실행했다고 주장하지 않는다.
 
 ## 2. 공개 전 P0 항목
 
@@ -113,4 +113,4 @@ USD 금액은 환율·세금·지역·추가 사용량을 포함한 원화 청�
 
 AWS/Play/Expo/Kakao 콘솔의 실제 승인·결제·키 제한, 운영 DB 스키마/트래픽/백업은 미확인이다. 이번 조사에서 운영 배포·스토어 제출·계정 생성/이전·키 교체·실사용자 메일·DB 변경·push/merge는 하지 않았다. 실제 주행·16KB 기기·Play 설치·HWPX 뷰어 전수 검증도 하지 않았다.
 
-구체적 실행은 [담당자별 계획](C:/PANG3-app/APP_RELEASE_ACTION_PLAN.md), [서버 전달 문서](C:/PANG3-app/APP_RELEASE_SERVER_HANDOFF.md), [사용자 준비](C:/PANG3-app/APP_RELEASE_OWNER_CHECKLIST.md), [검증 계획](C:/PANG3-app/APP_RELEASE_VALIDATION_PLAN.md), [공식 출처·코드 근거](C:/PANG3-app/APP_RELEASE_SOURCES.md)에 정리했다.
+구체적 실행은 [담당자별 계획](APP_RELEASE_ACTION_PLAN.md), [서버 전달 문서](APP_RELEASE_SERVER_HANDOFF.md), [사용자 준비](APP_RELEASE_OWNER_CHECKLIST.md), [검증 계획](APP_RELEASE_VALIDATION_PLAN.md), [공식 출처·코드 근거](APP_RELEASE_SOURCES.md)에 정리했다.

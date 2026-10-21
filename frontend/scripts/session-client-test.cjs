@@ -18,6 +18,13 @@ function fixture(handler, initial = null) {
   return { session, calls, stored: () => stored, expired: () => expired };
 }
 (async () => {
+  const social = fixture(async () => response(200));
+  const socialUser = await social.session.loginWithSocialResult({ ...tokenResult('social'), passwordLoginEnabled: false });
+  assert.equal(socialUser.passwordLoginEnabled, false);
+  assert.equal(social.stored().refreshToken, 'refresh-social');
+  assert.equal(socialUser.accessToken, undefined, 'provider results keep app tokens out of user/profile state');
+  await social.session.logout();
+  assert.equal(social.stored(), null);
   const availability = fixture(async (url) => {
     assert.ok(url.includes('/api/auth/login-id/availability?'), 'ID checks must not refresh a login session');
     return response(200, { available: true });

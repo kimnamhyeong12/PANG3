@@ -5,7 +5,7 @@ import { apiFetch as fetch } from '../utils/auth';
 import { coordinateInput } from '../utils/coordinateInput';
 import { maneuverGuide } from '../utils/maneuverGuide';
 import { safetyGuideNotice } from '../utils/safetyGuide';
-import { consumeScreenBack, useScreenBackHandler } from '../utils/screenBack';
+import { consumeScreenBack, useBackSwipe, useScreenBackHandler } from '../utils/screenBack';
 // 키보드 자판 내 엔터가 안먹힘
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -32,9 +32,10 @@ import MapWorkspaceSwitcher from '../components/MapWorkspaceSwitcher';
 import PlaceSearchOverlay from '../components/PlaceSearchOverlay';
 import SafetyGuideBadge from '../components/SafetyGuideBadge';
 import SearchResultSheet from '../components/SearchResultSheet';
+import RegistrationFab from '../components/RegistrationFab';
 import WorkplaceField from '../components/WorkplaceField';
 import { BUSAN_DISTRICT_CODES } from '../constants/busanDistricts';
-import { KakaoNavigationView, beginRouteSession, discardSdkPreview, endRouteSession, isKakaoNavigationAvailable, isSdkPreviewAvailable, previewSdkRoute, wasRouteTaskRemoved } from '../modules/kakao-navigation';
+import { KakaoNavigationView, KakaoWalkingMapView, isWalkingMapAvailable, beginRouteSession, discardSdkPreview, endRouteSession, isKakaoNavigationAvailable, isSdkPreviewAvailable, previewSdkRoute, wasRouteTaskRemoved } from '../modules/kakao-navigation';
 import {
   stopRouteNotification,
   updateRouteNotification,
@@ -148,6 +149,7 @@ function NormalMapScreen({
   isGuiding,
   setIsGuiding,
   setTotalDuration,
+  panelOpen = false,
   setPanelOpen,
   routeResumeToken = 0,
   recordReturn,
@@ -176,6 +178,7 @@ function NormalMapScreen({
   useEffect(() => { if (isActive) onSearchVisibilityChange?.(searchOpen); return () => { if (isActive) onSearchVisibilityChange?.(false); }; }, [searchOpen, isActive]);
   const focusPlaces = (rows) => setFocusRequest(previous => ({ coordinates: rows.filter(hasVisitCoordinates), token: previous.token + 1 }));
   const [preview, setPreview] = useState(null);
+  const [previewDetailView, setPreviewDetailView] = useState(false);
   const previewRequestRef = useRef(0);
   const guideRequestRef = useRef(0);
   const orderSetRef = useRef(null);
@@ -190,13 +193,20 @@ function NormalMapScreen({
   const [nativeManeuver, setNativeManeuver] = useState(null);
   const [nearbyCategory, setNearbyCategory] = useState(null);
   const [guideMap3D, setGuideMap3D] = useState(true);
+  const [walkHeadingFollow, setWalkHeadingFollow] = useState(true);
+  const [walkOverviewRequest, setWalkOverviewRequest] = useState(0);
+  const [walkingMapError, setWalkingMapError] = useState('');
+  const [walkingMapReady, setWalkingMapReady] = useState(false);
   const [guideRecenterRequest, setGuideRecenterRequest] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [searchedPlace, setSearchedPlace] = useState(null);
+  const [registrationDraft, setRegistrationDraft] = useState(null);
   const [placeName, setPlaceName] = useState('');
   const [task, setTask] = useState('');
   const registrationBusyRef = useRef(false);
   const [registrationBusy, setRegistrationBusy] = useState(false);
+  const [markerMoveBusy, setMarkerMoveBusy] = useState(false);
+  const markerMoveBusyRef = useRef(false);
   const [clearSearchMarkerSignal, setClearSearchMarkerSignal] = useState(0);
 
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -463,7 +473,8 @@ function NormalMapScreen({
     };
   }, []);
 
-  const closeAddSheet = () => {
+  const closeAddSheet = (discard = false) => {
+    setRegistrationDraft(discard ? null : searchedPlace ? { place: searchedPlace, name: placeName, task } : registrationDraft);
     Animated.timing(sheetY, {
       toValue: 420,
       duration: 180,
@@ -478,6 +489,8 @@ function NormalMapScreen({
   };
 
   useScreenBackHandler(() => {
+      if (searchOpen) { setSearchOpen(false); return true; }
+      if (guideMenuOpen) { setGuideMenuOpen(false); return true; }
       if (dongOpen) {
         setDongOpen(false);
         return true;
@@ -504,12 +517,21 @@ function NormalMapScreen({
         return true;
       }
 
-      if (resultsMode) { setResultsMode(false); return true; }
       if (searchedPlace) {
+        if (registrationBusy) return true;
         closeAddSheet();
         return true;
       }
-
+      if (resultsMode) { setResultsMode(false); setSelectedSearchPinId(null); return true; }
+      if (pendingOpen) {
+        if (!pendingBusy) { setPendingOpen(false); setPendingSelected([]); }
+        return true;
+      }
+      if (publicCategoryOpen) { setPublicCategoryOpen(false); return true; }
+      if (publicFacilityMode) {
+        if (!publicSaving) resetAddModes();
+        return true;
+      }
 
       if (visitListOpen) {
         setVisitListOpen(false);
@@ -521,7 +543,8 @@ function NormalMapScreen({
         setPreview(null);
         return true;
       }
-
+      if (panelOpen) { setPanelOpen?.(false); return true; }
+      if (isGuiding) { requestStopGuidance(); return true; }
       return false;
   }, isActive);
 
@@ -681,6 +704,7 @@ function NormalMapScreen({
     return () => { cancelled = true; };
   }, [publicFacilityMode, publicCategory, selectedDong, activeGroup?.regionSido, activeGroup?.regionSigungu, user?.workSido, user?.workSigungu]);
 
+  const allPublicSelected = publicItems.length > 0 && publicItems.every(item => publicSelectedIds.includes(item.id));
   const togglePublicFacility = (item) => {
     setPublicSelectedIds((previous) => previous.includes(item.id)
       ? previous.filter((id) => id !== item.id)
@@ -988,7 +1012,7 @@ function NormalMapScreen({
 
       setKeyword('');
 
-      closeAddSheet();
+      closeAddSheet(true);
     } catch (error) {
       console.log(error);
       showAlert(
@@ -1121,6 +1145,8 @@ function NormalMapScreen({
   const membershipKey = visitSetKey(locations || []);
   const [recommendationBasis, setRecommendationBasis] = useState('distance');
   const [recommendationBusy, setRecommendationBusy] = useState(false);
+  const [recommendationReadyKey, setRecommendationReadyKey] = useState('');
+  const [nextAfterCompletion, setNextAfterCompletion] = useState(null);
   const recommendationReturn = includeReturn ? returnDisplayMarker : null;
   const returnOrderKey = recommendationReturn ? `${recommendationReturn.lat}:${recommendationReturn.lng}` : '';
   const locationReady = hasVisitCoordinates(currentLocation);
@@ -1145,6 +1171,7 @@ function NormalMapScreen({
     setKakaoDestination(null);
     setNativeProgress(null); setNativeSafety(null); setNativeManeuver(null);
     setPublicFacilityMode(false);
+    setRegistrationDraft(null);
     setSearchOpen(false); setResultsMode(false); setFocusRequest({ coordinates: [], token: 0 });
     setDongOpen(false);
     setSelectedDong(null);
@@ -1164,12 +1191,13 @@ function NormalMapScreen({
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 35000);
     setRecommendationBasis('distance');
+    setRecommendationReadyKey('');
     setRecommendationBusy(true);
     setLocations?.((previous) => recommendVisitOrder(
       Array.isArray(previous) ? previous : locations || [], currentLocation, pinnedKey, recommendationReturn
     ));
     const pending = (locations || []).filter(row => !isCompleted(row));
-    if (!pending.length) { clearTimeout(timer); setRecommendationBusy(false); return; }
+    if (!pending.length) { clearTimeout(timer); setRecommendationBusy(false); setRecommendationReadyKey(recommendationKey); return; }
     fetch(`${API_BASE_URL}/api/routes/order`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
       body: JSON.stringify({ currentLocation, locations: pending, returnLocation: recommendationReturn,
@@ -1188,7 +1216,7 @@ function NormalMapScreen({
       });
       setRecommendationBasis(result.basis === 'roadDuration' ? 'roadDuration' : 'distance');
     }).catch(() => { /* The visible distance recommendation remains available. */ })
-      .finally(() => { clearTimeout(timer); if (active) setRecommendationBusy(false); });
+      .finally(() => { clearTimeout(timer); if (active) { setRecommendationBusy(false); setRecommendationReadyKey(recommendationKey); } });
     return () => { active = false; clearTimeout(timer); controller.abort(); orderSetRef.current = null; };
   }, [isActive, membershipKey, locationReady, scopeKey, returnOrderKey, transportMode, isGuiding, activeSegment?.destinationKey]);
 
@@ -1196,6 +1224,7 @@ function NormalMapScreen({
     if (isGuiding) endRouteSession();
     guideRequestRef.current += 1;
     setIsGuiding(false);
+    setGuideMenuOpen(false);
     setKakaoDestination(null);
     setNativeProgress(null); setNativeSafety(null); setNativeManeuver(null);
     setRouteSegments([]);
@@ -1227,6 +1256,7 @@ function NormalMapScreen({
     }
     const request = ++previewRequestRef.current;
     const targetKey = locationKey(target);
+    setPreviewDetailView(false);
     setPreview({ targetKey, mode, segment: null, loading: true, coords: `${target.lat},${target.lng}` });
     setVisitListOpen(false);
     if (!hasVisitCoordinates(currentLocation)) {
@@ -1239,7 +1269,7 @@ function NormalMapScreen({
         discardSdkPreview(result.segment.sdkPreviewId); return;
       }
       setPreview({ targetKey, mode, loading: false, coords: `${target.lat},${target.lng}`,
-        segment: { ...result.segment, destinationKey: targetKey } });
+        segment: { ...result.segment, destinationKey: targetKey, previewCameraId: request } });
       return true;
     } catch (error) {
       if (request === previewRequestRef.current) {
@@ -1250,10 +1280,12 @@ function NormalMapScreen({
   };
 
   const handleVisitPress = (target) => {
+    if (markerMoveBusyRef.current) return;
+    setNextAfterCompletion(null);
     if (target?.isSearchResult) { setSelectedSearchPinId(target.id); focusPlaces([target]); return; }
     if (target?.isPublicFacility) { togglePublicFacility(target); return; }
     if (publicFacilityMode) return;
-    if (isCompleted(target)) { onLocationClick?.(target, 'report'); return; }
+    if (isCompleted(target) || target.status === 'working') { onLocationClick?.(target, 'report'); return; }
     if (locationKey(target) === routeVisibleKey && !target.isReturnLocation) {
       onLocationClick?.(target, 'report');
       return;
@@ -1262,8 +1294,49 @@ function NormalMapScreen({
     previewVisit(target);
   };
 
+  const handleMarkerDrag = async (target, point) => {
+    if (markerMoveBusyRef.current || !hasVisitCoordinates(point)) return;
+    const id = target.id ?? target.taskId;
+    if (id == null) return;
+    const previous = { lat: Number(target.lat ?? target.latitude), lng: Number(target.lng ?? target.longitude) };
+    if (Math.abs(previous.lat - point.lat) + Math.abs(previous.lng - point.lng) < 0.000001) return;
+    markerMoveBusyRef.current = true; setMarkerMoveBusy(true);
+    const applyPosition = (position) => setLocations?.(rows => rows.map(row => String(row.id ?? row.taskId) === String(id)
+      ? { ...row, lat: position.lat, lng: position.lng, latitude: position.lat, longitude: position.lng } : row));
+    previewRequestRef.current += 1; setPreview(null);
+    applyPosition(point);
+    try {
+      const latest = await fetch(`${API_BASE_URL}/api/task-progress/task/${id}`);
+      if (!latest.ok) throw new Error('최신 보고서를 확인하지 못했습니다.');
+      const text = await latest.text();
+      const report = text.trim() ? JSON.parse(text) : null;
+      let address = report?.locationAddress || target.roadAddress || target.detailAddress || '';
+      if (KAKAO_REST_API_KEY) {
+        try {
+          const response = await fetch(`https://dapi.kakao.com/v2/local/geo/coord2address.json?x=${point.lng}&y=${point.lat}`, { headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` } });
+          if (response.ok) {
+            const data = await response.json();
+            address = data.documents?.[0]?.road_address?.address_name || data.documents?.[0]?.address?.address_name || address;
+          }
+        } catch (_) { /* Coordinates can still be saved with the existing address. */ }
+      }
+      const response = await fetch(`${API_BASE_URL}/api/task-progress/task/${id}/location`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latitude: point.lat, longitude: point.lng, locationAddress: address,
+          ...(report?.progressId ? { progressId: report.progressId, expectedRevision: report.revision } : {}) }),
+      });
+      const saved = await response.json();
+      if (!response.ok) throw new Error(saved.message || '위치를 저장하지 못했습니다.');
+      applyPosition({ lat: Number(saved.taskLatitude ?? point.lat), lng: Number(saved.taskLongitude ?? point.lng) });
+      if (isGuiding && activeSegment?.destinationKey === String(id)) handleStopGuidance();
+      onDataChanged?.();
+    } catch (error) {
+      applyPosition(previous);
+      showAlert('위치 변경 실패', error.message || '원래 위치로 되돌렸습니다.');
+    } finally { markerMoveBusyRef.current = false; setMarkerMoveBusy(false); }
+  };
+
   const handledRecordRef = useRef(null);
-  const [recordNextOffer, setRecordNextOffer] = useState(null);
   const nextVisit = (excluded) => markers.find((row) => !isCompleted(row) && !row.isReturnLocation &&
     locationKey(row) !== String(excluded) && hasVisitCoordinates(row)) || recommendationReturn;
   useEffect(() => {
@@ -1272,14 +1345,20 @@ function NormalMapScreen({
     clearGuidance();
     previewRequestRef.current += 1; setPreview(null);
     if (hasVisitCoordinates(recordReturn)) focusPlaces([recordReturn]);
-    const next = nextVisit(recordReturn.taskId);
     if (recordReturn.status === 'complete') {
-      setRecordNextOffer(null);
-      if (next) previewVisit(next);
-    } else if (recordReturn.status === 'working') {
-      setRecordNextOffer({ taskId: recordReturn.taskId, scope: scopeKey });
-    } else setRecordNextOffer(null);
+      setNextAfterCompletion({ excluded: recordReturn.taskId, scope: scopeKey });
+    } else setNextAfterCompletion(null);
   }, [isActive, recordReturn?.token, scopeKey]);
+
+  useEffect(() => {
+    if (!nextAfterCompletion || !isActive || isGuiding || recommendationBusy) return;
+    if (nextAfterCompletion.scope !== scopeKey) { setNextAfterCompletion(null); return; }
+    const expectedKey = `${scopeKey}:${membershipKey}:${returnOrderKey}:${transportMode}:`;
+    if (recommendationReadyKey !== expectedKey) return;
+    setNextAfterCompletion(null);
+    const next = nextVisit(nextAfterCompletion.excluded);
+    if (next && !preview) previewVisit(next);
+  }, [nextAfterCompletion, isActive, isGuiding, recommendationBusy, recommendationReadyKey, scopeKey, membershipKey, returnOrderKey, transportMode, markers, preview]);
 
   const handleStartGuidance = async (explicitTarget = null, requestedMode = null) => {
     const target = hasVisitCoordinates(explicitTarget) ? explicitTarget : cardTarget;
@@ -1343,6 +1422,14 @@ function NormalMapScreen({
   const handleStopGuidance = () => {
     clearGuidance();
     setSegmentChanging(false);
+    setGuideMenuOpen(false);
+  };
+
+  const requestStopGuidance = () => {
+    showAlert('안내 종료', '길안내를 종료할까요?', [
+      { text: '계속 안내', style: 'cancel' },
+      { text: '안내 종료', style: 'destructive', onPress: handleStopGuidance },
+    ]);
   };
 
   const handleReroute = async (position = currentLocation, mode = activeSegment?.mode || transportMode) => {
@@ -1406,6 +1493,24 @@ function NormalMapScreen({
     if (cardTarget) previewVisit(cardTarget, mode);
   };
 
+  const walkingNative = isWalkingMapAvailable() && isGuiding && activeSegment?.mode === 'walk' && !walkingMapError;
+  useEffect(() => { setWalkingMapError(''); setWalkingMapReady(false); }, [isGuiding, activeSegment?.destinationKey, activeSegment?.mode]);
+  useEffect(() => {
+    if (!walkingNative || walkingMapReady || !isActive || preview) return;
+    const timeout = setTimeout(() => setWalkingMapError('도보 지도 시작 시간 초과'), 15000);
+    return () => clearTimeout(timeout);
+  }, [walkingNative, walkingMapReady, isActive, preview]);
+  const walkingNativePath = useMemo(() => [...(guidanceProgress?.remainingPath || activeSegment?.path || []), ...(activeSegment?.connectorPath || [])]
+    .map(point => ({ lat: Number(point.lat ?? point.latitude ?? point.y), lng: Number(point.lng ?? point.longitude ?? point.x) }))
+    .filter(hasVisitCoordinates), [activeSegment, guidanceProgress?.remainingPath]);
+  const raisedSheetVisible = coordSheetOpen || searchedPlace || resultsMode || pendingOpen || dongOpen ||
+    (publicFacilityMode && !!publicCategory && publicSheetOpen && !publicCategoryOpen);
+  const showMapBack = !root || (Platform.OS === 'ios' && !!(searchOpen || coordSheetOpen || mapSelectMode ||
+    addMenuOpen || resultsMode || searchedPlace || pendingOpen || publicFacilityMode || publicCategoryOpen ||
+    visitListOpen || preview || dongOpen || panelOpen));
+  const guideMenuSwipe = useBackSwipe(() => setGuideMenuOpen(false), guideMenuOpen && isActive);
+  const workplaceSwipe = useBackSwipe(() => setWorkplaceOpen(false), workplaceOpen && !workplaceBusy);
+
 
   useEffect(() => {
     if (!isGuiding || !activeTarget || !activeSegment) { stopRouteNotification(); return; }
@@ -1417,12 +1522,6 @@ function NormalMapScreen({
 
   return (
     <View style={styles.container} onLayout={event => setMapHeight(event.nativeEvent.layout.height)}>
-      {recordNextOffer?.scope === scopeKey && isActive && nextVisit(recordNextOffer.taskId) && <TouchableOpacity
-        accessibilityRole="button" accessibilityLabel="다음 방문지 경로 보기"
-        style={{ position: 'absolute', top: 110, right: 16, zIndex: 20, backgroundColor: '#FFFFFF', padding: 12, borderRadius: 12 }}
-        onPress={() => { const next = nextVisit(recordNextOffer.taskId); setRecordNextOffer(null); if (next) previewVisit(next); }}>
-        <Text style={{ color: '#2477F3', fontWeight: '700' }}>{nextVisit(recordNextOffer.taskId)?.isReturnLocation ? '근무지 복귀' : '다음 방문지'}</Text>
-      </TouchableOpacity>}
       <KakaoMapWebView
         locations={displayLocations}
         displayOnlyLocations={displayOnlyLocations}
@@ -1430,9 +1529,12 @@ function NormalMapScreen({
         guideTarget={activeTarget}
         onReturnArrival={handleStopGuidance}
         previewRouteSegment={preview?.segment || null}
-        routeViewportPadding={{ top: topOverlayBottom ? topOverlayBottom + 56 : 300,
+        previewDestination={isActive ? previewTarget : null}
+        previewDetailView={previewDetailView}
+        emphasizeHighlighted={!!preview}
+        routeViewportPadding={{ top: topOverlayBottom ? topOverlayBottom + (preview ? 48 : 56) : 300,
           bottom: !resultsMode && !mapSelectMode && !publicFacilityMode && !searchedPlace && !coordSheetOpen && !pendingOpen && !dongOpen
-            ? (cardTarget ? bottomOverlayHeight : 0) + pendingOverlayHeight + 52 : 40, left: 40, right: 40 }}
+            ? (cardTarget ? bottomOverlayHeight : 0) + pendingOverlayHeight + (preview ? 28 : 52) : 40, left: preview ? 24 : 40, right: preview ? 24 : 40 }}
         highlightedLocationKey={resultsMode ? selectedSearchPinId : cardTarget ? locationKey(cardTarget) : null}
         focusCoordinates={publicFacilityMode ? publicViewCoordinates : focusRequest.coordinates}
         focusToken={focusRequest.token}
@@ -1452,6 +1554,8 @@ function NormalMapScreen({
         selectionCoordinateRequest={coordinateRequest}
         onCurrentLocationChange={setCurrentLocation}
         onMarkerClick={handleVisitPress}
+        onMarkerDrag={handleMarkerDrag}
+        markerDragEnabled={!markerMoveBusy}
         onLocationsChange={(next) => {
           const updated = new Map(next.filter((item) => !item.isReturnLocation).map((item) => [locationKey(item), item]));
           setLocations?.((previous) => (Array.isArray(previous) ? previous : locations || [])
@@ -1460,6 +1564,16 @@ function NormalMapScreen({
         }}
         onRerouteRequest={handleReroute}
       />
+      {walkingNative && <KakaoWalkingMapView style={[StyleSheet.absoluteFill, { height: mapHeight }, preview && { opacity: 0 }]}
+        pointerEvents={preview ? 'none' : 'auto'} userLocation={currentLocation ? { lat: Number(currentLocation.lat), lng: Number(currentLocation.lng) } : null}
+        route={walkingNativePath} mapActive={isActive && !preview} headingFollow={walkHeadingFollow}
+        recenterRequest={guideRecenterRequest} overviewRequest={walkOverviewRequest}
+        onReady={event => { setWalkingMapReady(true); if (!event.nativeEvent?.headingAvailable) { setWalkHeadingFollow(false); showAlert('방향 센서', '이 기기에서는 북쪽 고정 지도를 사용합니다.'); } }}
+        onError={event => { setWalkingMapError(event.nativeEvent?.message || '도보 지도 오류'); showAlert('도보 지도', '네이티브 지도를 불러오지 못해 기본 지도로 안내합니다.'); }} />}
+      {walkingNative && !walkingMapReady && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator color={colors.primary} /><Text style={{ color: colors.textSoft, marginTop: 12 }}>도보 지도 준비 중</Text></View>}
+      {walkingNative && !preview && <View style={[styles.guideNearbyControls, { bottom: bottomOverlayHeight + 28 }]}>
+        <TouchableOpacity accessibilityLabel="내 위치로 돌아가기" onPress={() => { setWalkHeadingFollow(true); setGuideRecenterRequest(value => value + 1); }} style={styles.guideNearbyButton}><Ionicons name="locate" size={24} color={colors.primary} /></TouchableOpacity>
+      </View>}
       {kakaoDestination && (
         <KakaoNavigationView
           style={[StyleSheet.absoluteFill, { top: 0 }, preview && { opacity: 0 }]}
@@ -1546,6 +1660,7 @@ function NormalMapScreen({
           <View style={styles.routeTrafficClip}>
             {trafficRail.map((section, index) => <View key={index} style={{ position: 'absolute', left: 0, right: 0,
               bottom: `${section.start * 100}%`, height: `${section.fraction * 100}%`, backgroundColor: section.color }} />)}
+            <View style={[styles.routeProgressPassed, { height: `${routeCompletionRatio * 100}%` }]} />
           </View>
           <View style={[styles.routeProgressPosition, { bottom: `${routeCompletionRatio * 100}%` }]}>
             <Ionicons name="navigate" size={14} color={colors.primary} style={{ transform: [{ rotate: '-45deg' }] }} />
@@ -1611,14 +1726,23 @@ function NormalMapScreen({
         </View>
       </View>}
 
-      {addMenuOpen && (
-        <Pressable style={[StyleSheet.absoluteFill, { zIndex: 19 }]}
-          accessibilityLabel="방문지 추가 메뉴 닫기" onPress={() => setAddMenuOpen(false)} />
-      )}
-      {!isGuiding && <View style={[styles.topOverlay, { top: screenInsets.top + 6 }]} pointerEvents="box-none"
+      {(raisedSheetVisible || visitListOpen || publicCategoryOpen) && <Pressable
+        style={[StyleSheet.absoluteFill, { zIndex: raisedSheetVisible ? 29 : 19 }]}
+        accessibilityLabel="열린 목록 닫기" onPress={() => {
+          Keyboard.dismiss(); setCoordSheetOpen(false); setPendingOpen(false); setDongOpen(false);
+          setPublicSheetOpen(false); setPublicCategoryOpen(false); setVisitListOpen(false);
+          setResultsMode(false); if (searchedPlace) closeAddSheet();
+          previewRequestRef.current += 1; setPreview(null);
+        }} />}
+      {Platform.OS === 'ios' && isGuiding && <TouchableOpacity accessibilityRole="button" accessibilityLabel="뒤로가기"
+        onPress={() => { if (!consumeScreenBack()) onBack?.(); }}
+        style={[styles.smallTopButton, { position: 'absolute', top: screenInsets.top + 6, left: 12, minWidth: 44, zIndex: 80 }]}>
+        <Ionicons name="arrow-back" size={22} color="#2477F3" />
+      </TouchableOpacity>}
+      {!isGuiding && <View style={[styles.topOverlay, { top: screenInsets.top + 6 }, publicCategoryOpen && { zIndex: 40 }, Platform.OS === 'ios' && showMapBack && { zIndex: 80 }]} pointerEvents="box-none"
         onLayout={event => { const { y, height } = event.nativeEvent.layout; setTopOverlayBottom(y + height); }}>
         {(!isGuiding || preview) && <View style={styles.searchControlRow}>
-          {!root && <TouchableOpacity style={[styles.smallTopButton, { minWidth: 44, minHeight: 44 }]} accessibilityLabel="뒤로가기" onPress={() => { if (!consumeScreenBack()) onBack?.(); }}><Ionicons name="arrow-back" size={22} color="#2477F3" /></TouchableOpacity>}
+          {showMapBack && <TouchableOpacity style={[styles.smallTopButton, { minWidth: 44, minHeight: 44 }]} accessibilityLabel="뒤로가기" onPress={() => { if (!consumeScreenBack()) onBack?.(); }}><Ionicons name="arrow-back" size={22} color="#2477F3" /></TouchableOpacity>}
           {publicFacilityMode && <TouchableOpacity
             style={styles.smallTopButton}
             onPress={() => { setPublicCategoryOpen(false); dongOpen ? setDongOpen(false) : loadDongs(); }}
@@ -1629,102 +1753,21 @@ function NormalMapScreen({
             <Text style={styles.smallTopText}>{selectedDongName || '행정동'}</Text>
           </TouchableOpacity>}
           <View style={styles.searchBox}>
-            <TouchableOpacity onPress={() => { resetAddModes(); setAddMenuOpen(value => !value); }} accessibilityLabel="방문지 추가 방법"><Ionicons name="menu" size={21} color="#2477F3" /></TouchableOpacity>
             <TouchableOpacity style={{ flex: 1, height: 44 }} disabled={publicFacilityMode || resultsMode}
-              onPress={() => { resetAddModes(); setAddMenuOpen(value => !value); }}
-              accessibilityRole="button" accessibilityLabel="방문지 추가 방법" accessible={!publicFacilityMode && !resultsMode}>
+              onPress={() => { resetAddModes(); openSearch(); }}
+              accessibilityRole="button" accessibilityLabel="주소 또는 장소 검색" accessible={!publicFacilityMode && !resultsMode}>
               <View pointerEvents="none" style={{ flex: 1 }}>
-                <TextInput style={styles.searchInput} value={publicFacilityMode ? (PUBLIC_FACILITY_CATEGORIES.find(item => item.key === publicCategory)?.label || '') : resultsMode ? resultQuery : ''} placeholder={publicFacilityMode ? '공공시설물 카테고리 선택' : '방문지를 추가해주세요'} placeholderTextColor="#9AA6B2" editable={false} accessible={publicFacilityMode || resultsMode} />
+                <TextInput style={styles.searchInput} value={publicFacilityMode ? (PUBLIC_FACILITY_CATEGORIES.find(item => item.key === publicCategory)?.label || '') : resultsMode ? resultQuery : ''} placeholder={publicFacilityMode ? '공공시설물 카테고리 선택' : '주소 또는 장소 검색'} placeholderTextColor="#9AA6B2" editable={false} accessible={publicFacilityMode || resultsMode} />
               </View>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => { if (resultsMode) { setResultsMode(false); setKeyword(''); } else if (publicFacilityMode) { if (!selectedDong) loadDongs(); else setPublicCategoryOpen(value => !value); } else setAddMenuOpen(value => !value); }} accessibilityLabel={resultsMode ? '검색 결과 닫기' : '방문지 추가 방법'}><Ionicons name={resultsMode ? 'close' : publicFacilityMode ? 'chevron-down' : 'search'} size={23} color="#2477F3" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => { if (resultsMode) { setResultsMode(false); setKeyword(''); } else if (publicFacilityMode) { if (!selectedDong) loadDongs(); else setPublicCategoryOpen(value => !value); } else { resetAddModes(); openSearch(); } }} accessibilityLabel={resultsMode ? '검색 결과 닫기' : '방문지 추가 방법'}><Ionicons name={resultsMode ? 'close' : publicFacilityMode ? 'chevron-down' : 'search'} size={23} color="#2477F3" /></TouchableOpacity>
           </View>
 
-          {publicFacilityMode && <TouchableOpacity style={styles.smallTopButton}
+          {publicFacilityMode && <TouchableOpacity style={[styles.smallTopButton, styles.compactCloseButton]} hitSlop={6}
             accessibilityLabel="공공시설물 조회 닫기" onPress={() => { resetAddModes(); setDongOpen(false); }}>
-            <Ionicons name="close" size={20} color="#2477F3" />
+            <Ionicons name="close" size={18} color="#2477F3" />
           </TouchableOpacity>}
         </View>}
-        {addMenuOpen && (
-          <View style={styles.addMenuBox}>
-            <TouchableOpacity style={styles.addMenuItem} onPress={() => { setAddMenuOpen(false); returnDisplayMarker ? previewVisit(returnDisplayMarker) : setWorkplaceOpen(true); }}><Ionicons name="home-outline" size={18} color="#2477F3" /><View style={{ flex: 1 }}><Text style={styles.addMenuTitle}>근무지 복귀</Text><Text style={styles.addMenuDesc}>{user?.workplaceAddress || '근무지를 등록하고 복귀 경로 확인'}</Text></View></TouchableOpacity>
-            <TouchableOpacity
-              style={styles.addMenuItem}
-              onPress={() => {
-                resetAddModes();
-                setAddMenuOpen(false);
-                openSearch();
-              }}
-            >
-              <Ionicons name="location-outline" size={18} color="#2477F3" />
-              <View>
-                <Text style={styles.addMenuTitle}>주소/장소로 검색</Text>
-                <Text style={styles.addMenuDesc}>도로명, 지번, 상호명으로 검색</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.addMenuItem}
-              onPress={() => {
-                resetAddModes();
-                setAddMenuOpen(false);
-
-                setCoordSheetOpen(false);
-                setDirectCenter(null);
-                setCenterAddress('');
-                setLocationSettingMode(true);
-
-                setCoordinateText({ lat: '', lng: '' });
-                setCoordinateRequest(null);
-                setMapSelectMode(true);
-
-              }}
-            >
-              <Ionicons name="map-outline" size={18} color="#2477F3" />
-              <View>
-                <Text style={styles.addMenuTitle}>지도에서 직접 선택</Text>
-                <Text style={styles.addMenuDesc}>지도를 눌러 이 위치 선택</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.addMenuItem}
-              onPress={() => {
-                resetAddModes();
-                setAddMenuOpen(false);
-                setPublicFacilityMode(true);
-                setPublicSheetOpen(true);
-                setKeyword('');
-                setPublicCategory('');
-                setPublicItems([]);
-                setPublicSelectedIds([]);
-                setPublicCategoryOpen(false);
-                loadDongs();
-
-              }}
-            >
-              <Ionicons name="business-outline" size={18} color="#2477F3" />
-              <View><Text style={styles.addMenuTitle}>공공시설물</Text><Text style={styles.addMenuDesc}>행정동을 선택해 AED · 버스정류장 조회</Text></View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.addMenuItem}
-              onPress={() => {
-                setAddMenuOpen(false);
-                setBulkUploadOpen(true);
-              }}
-            >
-              <Ionicons name="grid-outline" size={18} color="#2477F3" />
-              <View>
-                <Text style={styles.addMenuTitle}>엑셀 일괄 등록</Text>
-                <Text style={styles.addMenuDesc}>xcel · CSV 파일 불러오기</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.addMenuItemLast} onPress={() => { setAddMenuOpen(false); setPhotoUploadOpen(true); }}>
-              <Ionicons name="image-outline" size={18} color="#2477F3" />
-              <View><Text style={styles.addMenuTitle}>사진으로 등록</Text><Text style={styles.addMenuDesc}>사진 GPS로 방문지 등록</Text></View>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {publicFacilityMode && selectedDong && publicCategoryOpen && !dongOpen && (
           <View style={styles.publicCategoryBox}>
             <View style={styles.publicCategoryHeader}>
@@ -1811,6 +1854,7 @@ function NormalMapScreen({
           <TouchableOpacity
             style={styles.chevronButton}
             onPress={() => setVisitListOpen(!visitListOpen)}
+            accessibilityLabel={visitListOpen ? '방문지 목록 접기' : '방문지 목록 펼치기'}
           >
             <Ionicons
               name={visitListOpen ? 'chevron-up' : 'chevron-down'}
@@ -1840,10 +1884,12 @@ function NormalMapScreen({
               style={{ paddingHorizontal: 12, paddingBottom: 10 }}>
               <Text style={{ color: '#2477F3', fontSize: 12 }}>{returnDisplayMarker ? `근무지 복귀 포함: ${includeReturn ? '켜짐' : '꺼짐'}` : '복귀 근무지 등록'}</Text>
             </TouchableOpacity>
+            <ScrollView accessibilityLabel="방문지 목록" style={{ maxHeight: Math.max(120, mapHeight - screenInsets.top - screenInsets.bottom - 320) }}
+              nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
             {visitDisplayMarkers.map((loc, index) => (
               <View
                 key={`${loc.detailAddress || 'loc'}-${loc.lat}-${loc.lng}-${index}`}
-                style={styles.visitItem}
+                style={[styles.visitItem, preview?.targetKey === locationKey(loc) && { backgroundColor: colors.primarySoft }]}
               >
                 <TouchableOpacity
                   style={styles.visitMain}
@@ -1893,6 +1939,7 @@ function NormalMapScreen({
                 <Text style={styles.visitTask} numberOfLines={1}>{recommendationReturn.roadAddress}</Text>
               </View>
             </TouchableOpacity>}
+            </ScrollView>
           </View>
         )}
 
@@ -1902,38 +1949,69 @@ function NormalMapScreen({
       {!resultsMode && !publicFacilityMode && !mapSelectMode && !searchedPlace && !coordSheetOpen && cardTarget && (
         <View style={styles.destinationCard}
           onLayout={event => setBottomOverlayHeight(event.nativeEvent.layout.height)}>
-          {isGuiding && !preview ? <View style={styles.guidanceBar}>
-            <TouchableOpacity style={styles.guidanceRefreshButton} disabled={segmentChanging}
-              onPress={() => handleStartGuidance(activeTarget, activeSegment?.mode || transportMode)}
-              accessibilityLabel="교통정보 반영해 경로 새로고침">
-              {segmentChanging ? <ActivityIndicator color={colors.primary} /> : <Ionicons name="refresh" size={28} color={colors.text} />}
-            </TouchableOpacity>
+          {isGuiding && !preview ? <>
+            <View style={styles.guidanceBar}>
             <View style={styles.guidanceBarInfo}>
               <TouchableOpacity style={styles.guidancePlaceRow} onPress={() => setGuideShowDestination(value => !value)} accessibilityLabel="현재 위치와 목적지 번갈아 보기">
                 <Ionicons name={guideShowDestination ? 'location' : 'locate-outline'} size={18} color={colors.textSoft} />
                 <Text style={styles.guidancePlaceText} numberOfLines={1}>{guideShowDestination ? (cardTarget.detailAddress || cardTarget.roadAddress || '방문지') : (guideCurrentAddress || '위치 확인 중…')}</Text>
               </TouchableOpacity>
               <View style={styles.guidanceMetrics}>
-                <Text style={styles.guidanceArrival}>{formatDuration(cardDuration) || '시간 확인 중'}</Text>
                 <Text style={styles.guidanceDistance}>{formatDistance(cardDistance)}</Text>
+                <Text style={styles.guidanceArrival}>{formatDuration(cardDuration) || '시간 확인 중'}</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.guidanceMenuButton} onPress={() => setGuideMenuOpen(true)} accessibilityLabel="안내 메뉴"><Ionicons name="menu" size={28} color={colors.text} /></TouchableOpacity>
-          </View> : <>
+              <View style={styles.guidanceTools}>
+                <TouchableOpacity style={styles.guidanceRefreshButton} disabled={segmentChanging}
+                  onPress={() => handleStartGuidance(activeTarget, activeSegment?.mode || transportMode)}
+                  accessibilityLabel="경로 새로고침">
+                  {segmentChanging ? <ActivityIndicator color={colors.primary} /> : <Ionicons name="refresh" size={22} color={colors.text} />}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.guidanceMenuButton} onPress={() => setGuideMenuOpen(true)} accessibilityLabel="지도 보고서 그룹 설정 메뉴"><Ionicons name="menu" size={25} color={colors.text} /></TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.guidanceActions}>
+              {['car', 'walk'].map(mode => {
+                const selected = (activeSegment?.mode || transportMode) === mode;
+                return <TouchableOpacity key={mode} accessibilityRole="button" accessibilityState={{ selected }}
+                  accessibilityLabel={mode === 'car' ? '차량 안내' : '도보 안내'} disabled={segmentChanging}
+                  style={[styles.guidanceAction, selected && styles.guidanceActionActive]}
+                  onPress={() => { if (!selected) handleStartGuidance(activeTarget, mode); }}>
+                  <Ionicons name={mode === 'car' ? 'car-outline' : 'walk-outline'} size={18} color={selected ? colors.primary : colors.textSoft} />
+                  <Text style={[styles.guidanceActionText, selected && { color: colors.primary }]}>{mode === 'car' ? '차량' : '도보'}</Text>
+                </TouchableOpacity>;
+              })}
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="안내 종료" style={[styles.guidanceAction, styles.guidanceStopAction]} onPress={requestStopGuidance}>
+                <Ionicons name="stop-circle-outline" size={18} color={colors.danger} /><Text style={[styles.guidanceActionText, { color: colors.danger }]}>안내 종료</Text>
+              </TouchableOpacity>
+            </View>
+          </> : <>
             <View style={styles.destinationTitleRow}>
-              <TouchableOpacity style={{ flex: 1, minHeight: 36, justifyContent: 'center' }} disabled={cardTarget.isReturnLocation} onPress={() => onLocationClick?.(cardTarget, 'report')}>
+              <TouchableOpacity style={{ flex: 1, minWidth: 0, minHeight: 40, justifyContent: 'center' }} disabled={cardTarget.isReturnLocation} onPress={() => onLocationClick?.(cardTarget, 'report')}>
                 <Text style={styles.destinationName} numberOfLines={1}>{cardTarget.detailAddress || cardTarget.roadAddress || '방문지'}</Text>
               </TouchableOpacity>
+              {!!preview?.segment && <TouchableOpacity accessibilityRole="button" accessibilityLabel={previewDetailView ? '전체 경로 보기' : '목적지 확대'} style={styles.previewOverviewButton} onPress={() => setPreviewDetailView(value => !value)}>
+                <Text style={styles.previewOverviewText}>{previewDetailView ? '전체 경로' : '확대'}</Text>
+              </TouchableOpacity>}
               <TouchableOpacity style={styles.routeMenuButton} accessibilityLabel="경로 미리보기 닫기" onPress={() => { previewRequestRef.current += 1; setPreview(null); }}><Ionicons name="close" size={20} color={colors.textSoft} /></TouchableOpacity>
             </View>
             <View style={styles.destinationModesRow}>
               <View style={styles.previewMetrics}>
                 {preview?.loading || preview?.error ? <Text style={styles.previewMessage}>{preview?.loading ? '경로 확인 중…' : preview.error}</Text> : <>
-                  <Text style={styles.distanceText}>{formatDistance(cardDistance)}</Text>
-                  <Text style={styles.durationText}>{formatDuration(cardDuration)}</Text>
+                  <Text style={styles.previewDistanceText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{formatDistance(cardDistance)}</Text>
+                  <Text style={styles.previewDurationText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{formatDuration(cardDuration)}</Text>
                 </>}
               </View>
-              {['car', 'walk'].map(mode => <TouchableOpacity key={mode} disabled={segmentChanging || preview?.loading} style={[styles.transportPill, (preview?.mode || activeSegment?.mode || transportMode) === mode && styles.transportPillActive]} onPress={() => handleTransportPress(mode)} accessibilityLabel={mode === 'car' ? '차량 경로' : '도보 경로'}><Text style={[(preview?.mode || activeSegment?.mode || transportMode) === mode ? styles.transportTextActive : styles.transportText]}>{mode === 'car' ? '차량' : '도보'}</Text></TouchableOpacity>)}
+              {['car', 'walk'].map(mode => {
+                const selected = (preview?.mode || activeSegment?.mode || transportMode) === mode;
+                return <TouchableOpacity key={mode} accessibilityRole="button" accessibilityState={{ selected }}
+                  disabled={segmentChanging || preview?.loading}
+                  style={[styles.guidanceAction, selected && styles.guidanceActionActive]}
+                  onPress={() => handleTransportPress(mode)} accessibilityLabel={mode === 'car' ? '차량 경로' : '도보 경로'}>
+                  <Ionicons name={mode === 'car' ? 'car-outline' : 'walk-outline'} size={18} color={selected ? colors.primary : colors.textSoft} />
+                  <Text style={[styles.guidanceActionText, selected && { color: colors.primary }]}>{mode === 'car' ? '차량' : '도보'}</Text>
+                </TouchableOpacity>;
+              })}
             </View>
             <TouchableOpacity style={[styles.routeStart, (!cardSegment || isCompleted(cardTarget) || segmentChanging) && { opacity: 0.4 }]} disabled={!cardSegment || isCompleted(cardTarget) || segmentChanging} onPress={() => handleStartGuidance()}><Text style={styles.routeStartText}>{isGuiding ? '이곳으로 안내 변경' : '안내 시작'}</Text></TouchableOpacity>
             {!!preview?.error && <TouchableOpacity onPress={() => previewVisit(cardTarget, preview.mode)} style={{ minHeight: 36, justifyContent: 'center' }}><Text style={{ color: colors.primary }}>경로 다시 불러오기</Text></TouchableOpacity>}
@@ -1942,12 +2020,8 @@ function NormalMapScreen({
         </View>
       )}
       <Modal visible={guideMenuOpen && isActive && isGuiding} transparent navigationBarTranslucent={false} statusBarTranslucent={false} animationType="fade" onRequestClose={() => setGuideMenuOpen(false)}>
-        <Pressable style={[styles.guideMenuBackdrop, { paddingBottom: Math.max(screenInsets.bottom, 16) + 20 }]} onPress={() => setGuideMenuOpen(false)}>
+        <Pressable {...guideMenuSwipe} style={[styles.guideMenuBackdrop, { paddingBottom: Math.max(screenInsets.bottom, 16) + 20 }]} onPress={() => setGuideMenuOpen(false)}>
           <View style={styles.guideMenuSheet} onStartShouldSetResponder={() => true}>
-          <View style={styles.guideMenu}>
-          {['car', 'walk'].map(mode => <TouchableOpacity key={mode} accessibilityRole="button" accessibilityState={{ selected: transportMode === mode }} style={[styles.guideMenuItem, transportMode === mode && styles.guideMenuItemActive]} onPress={() => { setGuideMenuOpen(false); if (mode !== transportMode) handleStartGuidance(activeTarget, mode); }}><Ionicons name={mode === 'car' ? 'car-outline' : 'walk-outline'} size={20} color={colors.text} /><Text style={[styles.guideMenuText, transportMode === mode && styles.guideMenuTextActive]}>{mode === 'car' ? '차량' : '도보'}</Text></TouchableOpacity>)}
-          <TouchableOpacity style={styles.guideMenuItem} onPress={() => { setGuideMenuOpen(false); handleStopGuidance(); }}><Ionicons name="stop-circle-outline" size={20} color={colors.danger} /><Text style={[styles.guideMenuText, { color: colors.danger }]}>안내 종료</Text></TouchableOpacity>
-          </View>
           {renderGuidanceNavigation?.(() => setGuideMenuOpen(false))}
           </View>
         </Pressable>
@@ -2100,7 +2174,12 @@ function NormalMapScreen({
                   ? '공공시설물을 불러오는 중...'
                   : `${PUBLIC_FACILITY_CATEGORIES.find((item) => item.key === publicCategory)?.label || '공공시설물'} ${publicItems.length}곳`}
               </Text>
-              <Text style={styles.publicFacilityCount}>{publicSelectedIds.length}곳 선택</Text>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel={allPublicSelected ? '공공시설물 전체 해제' : '공공시설물 전체 선택'}
+                disabled={publicLoading || publicSaving || !publicItems.length}
+                style={[styles.publicSelectAllButton, (publicLoading || publicSaving || !publicItems.length) && { opacity: 0.4 }]}
+                onPress={() => setPublicSelectedIds(allPublicSelected ? [] : publicItems.map(item => item.id))}>
+                <Text style={styles.publicSelectAllText}>{allPublicSelected ? '전체 해제' : '전체 선택'}</Text>
+              </TouchableOpacity>
             </View>
           </View>
           <ScrollView style={styles.publicFacilityList} nestedScrollEnabled>
@@ -2224,9 +2303,20 @@ function NormalMapScreen({
         setSelectedSearchPinId(`search:${place.id}:${index}`);
         focusPlaces([placeLocation(place)]);
       }} onAdd={addSearchPlace} />}
+      {!isGuiding && !searchOpen && !mapSelectMode && !searchedPlace && !coordSheetOpen && !pendingOpen && !dongOpen && !(publicFacilityMode && publicSheetOpen) && !resultsMode && <RegistrationFab
+        open={addMenuOpen} onClose={() => setAddMenuOpen(false)} onToggle={() => setAddMenuOpen(value => !value)}
+        bottom={cardTarget ? bottomOverlayHeight + 23 : 23}
+        items={[
+          ...(registrationDraft ? [{ label: '작성 이어하기', icon: 'create-outline', onPress: () => { sheetY.setValue(0); setSearchedPlace(registrationDraft.place); setPlaceName(registrationDraft.name); setTask(registrationDraft.task); } }] : []),
+          { label: '지도 선택', icon: 'map-outline', onPress: () => { resetAddModes(); setDirectCenter(null); setCenterAddress(''); setLocationSettingMode(true); setCoordinateText({ lat: '', lng: '' }); setCoordinateRequest(null); setMapSelectMode(true); } },
+          { label: '공공시설물', icon: 'business-outline', onPress: () => { resetAddModes(); setPublicFacilityMode(true); setPublicSheetOpen(true); setKeyword(''); setPublicCategory(''); setPublicItems([]); setPublicSelectedIds([]); setPublicCategoryOpen(false); loadDongs(); } },
+          { label: '엑셀 등록', icon: 'grid-outline', onPress: () => setBulkUploadOpen(true) },
+          { label: '사진 등록', icon: 'image-outline', onPress: () => setPhotoUploadOpen(true) },
+          { label: '근무지', icon: 'home-outline', onPress: () => returnDisplayMarker ? previewVisit(returnDisplayMarker) : setWorkplaceOpen(true) },
+        ]} />}
       {searchOpen && isActive && <PlaceSearchOverlay userId={user?.userId} initialQuery={searchInitialQuery} center={currentLocation} locations={locations || []} onClose={() => setSearchOpen(false)} onResults={showResults} onAdd={addSearchPlace} />}
       <Modal visible={workplaceOpen} transparent animationType="fade" onRequestClose={() => !workplaceBusy && setWorkplaceOpen(false)}>
-        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.35)' }}><View style={{ padding: 20, borderRadius: 18, backgroundColor: '#FFFFFF' }}>
+        <View {...workplaceSwipe} style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.35)' }}><Pressable style={StyleSheet.absoluteFill} accessibilityLabel="근무지 등록 닫기" onPress={() => !workplaceBusy && setWorkplaceOpen(false)} /><View style={{ padding: 20, borderRadius: 18, backgroundColor: '#FFFFFF' }}>
           <Text style={{ fontSize: 18, fontWeight: '700', color: '#10285B' }}>근무지 등록</Text>
           <WorkplaceField value={workplaceCandidate} onChange={setWorkplaceCandidate} userId={user?.userId} disabled={workplaceBusy} />
           <TouchableOpacity disabled={!workplaceCandidate?.workplaceAddress || workplaceBusy} onPress={saveWorkplace} style={{ backgroundColor: '#2477F3', padding: 14, borderRadius: 12, alignItems: 'center', opacity: workplaceCandidate?.workplaceAddress ? 1 : 0.5 }}><Text style={{ color: '#FFFFFF', fontWeight: '700' }}>{workplaceBusy ? '저장 중...' : '근무지 저장'}</Text></TouchableOpacity>
@@ -2263,6 +2353,7 @@ const styles = StyleSheet.create({
   routeProgressRail: { position: 'absolute', right: 8, width: 28, alignItems: 'center', zIndex: 15 },
   routeProgressTrack: { width: 10, borderRadius: 6, backgroundColor: '#FFFFFF', elevation: 1 },
   routeTrafficClip: { position: 'absolute', left: 2, right: 2, top: 2, bottom: 2, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.primary },
+  routeProgressPassed: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#9CA3AF' },
   routeProgressPosition: { position: 'absolute', left: -9, marginBottom: -14, width: 28, height: 28, borderRadius: 14, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.primary },
   guideNearbyControls: { position: 'absolute', right: 20, zIndex: 18, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, overflow: 'hidden', elevation: 3 },
   guideNearbyButton: { width: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.line },
@@ -2275,24 +2366,34 @@ const styles = StyleSheet.create({
   coordinateRow: { flexDirection: 'row', gap: 10 }, coordinateLabel: { color: colors.textSoft, fontSize: 12, marginBottom: 4 },
   coordinateInput: { minHeight: 44, borderRadius: 10, backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 12, color: colors.text, fontSize: 14 },
   selectionHint: { position: 'absolute', left: 20, right: 20, borderRadius: 10, backgroundColor: colors.text, padding: 9, zIndex: 21, alignItems: 'center' }, selectionHintText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
-  guidanceRefreshButton: { position: 'absolute', left: -4, top: 0, bottom: 0, width: 44, minHeight: 64, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+  guidanceRefreshButton: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
   guidanceBar: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   guidanceBarInfo: { flex: 1, minWidth: 0 },
-  guidancePlaceRow: { minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 48, gap: 8 },
-  guidancePlaceText: { flexShrink: 1, color: colors.textSoft, fontSize: 13, textAlign: 'center' },
-  guidanceMetrics: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', paddingHorizontal: 40, flexWrap: 'wrap', columnGap: 14, rowGap: 2 },
-  guidanceArrival: { color: colors.text, fontSize: 24, fontWeight: '900', textAlign: 'center' },
-  guidanceDistance: { color: colors.text, fontSize: 22, fontWeight: '800', textAlign: 'center' },
-  guidanceMenuButton: { position: 'absolute', right: -4, top: 0, bottom: 0, width: 44, minHeight: 64, alignItems: 'center', justifyContent: 'center' },
-  previewMetrics: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 10 },
+  guidancePlaceRow: { minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 6 },
+  guidancePlaceText: { flexShrink: 1, color: colors.textSoft, fontSize: 12, textAlign: 'left' },
+  guidanceMetrics: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'flex-start', flexWrap: 'wrap', columnGap: 10, rowGap: 2 },
+  guidanceArrival: { color: colors.textSoft, fontSize: 14, fontWeight: '700', textAlign: 'left' },
+  guidanceDistance: { color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'left' },
+  guidanceTools: { flexDirection: 'row', alignItems: 'center' },
+  guidanceMenuButton: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
+  guidanceActions: { flexDirection: 'row', gap: 6, marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.line },
+  guidanceAction: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 12, borderRadius: 10 },
+  guidanceActionActive: { backgroundColor: colors.primarySoft },
+  guidanceActionText: { color: colors.textSoft, fontSize: 12, fontWeight: '700' },
+  guidanceStopAction: { marginLeft: 'auto' },
+  previewMetrics: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'baseline', columnGap: 6 },
+  previewDistanceText: { flexShrink: 1, color: colors.text, fontSize: 18, fontWeight: '900' },
+  previewDurationText: { flexShrink: 1, color: colors.text, fontSize: 13, fontWeight: '700' },
+  previewOverviewButton: { minHeight: 40, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.primarySoft },
+  previewOverviewText: { color: colors.primary, fontSize: 13, fontWeight: '700' },
   durationText: { color: colors.text, fontSize: 14, fontWeight: '700' },
   previewMessage: { color: colors.textSoft, fontSize: 13 },
-  destinationTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, routeMenuButton: { width: 44, height: 36, alignItems: 'center', justifyContent: 'center' },
+  destinationTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, routeMenuButton: { width: 44, height: 40, alignItems: 'center', justifyContent: 'center' },
   destinationModesRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 4 }, transportPill: { minHeight: 36, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted, borderRadius: 18 }, transportPillActive: { backgroundColor: colors.primary }, transportText: { color: colors.textSoft, fontSize: 12, fontWeight: '700' }, transportTextActive: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   distanceText: { color: colors.text, fontSize: 22, fontWeight: '900' }, arrivalText: { color: colors.textSoft, fontSize: 12, marginTop: 2 },
   routeStart: { minHeight: 46, backgroundColor: colors.primary, borderRadius: 14, marginTop: 8, justifyContent: 'center', alignItems: 'center' }, routeStartText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   guideMenuSheet: { backgroundColor: colors.surface, borderRadius: 18, overflow: 'hidden' },
-  guideMenuBackdrop: { flex: 1, justifyContent: 'flex-end', padding: 20, backgroundColor: 'rgba(16,40,91,0.25)' }, guideMenu: { flexDirection: 'row', gap: 8, borderRadius: 18, backgroundColor: colors.surface, padding: 10 }, guideMenuItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 60, paddingHorizontal: 4 }, guideMenuItemActive: { backgroundColor: colors.primarySoft, borderRadius: 12 }, guideMenuText: { color: colors.text, fontSize: 11, fontWeight: '700' }, guideMenuTextActive: { fontWeight: '900' },
+  guideMenuBackdrop: { flex: 1, justifyContent: 'flex-end', padding: 20, backgroundColor: 'rgba(16,40,91,0.25)' },
 
   destinationCard: { marginTop: 5, paddingHorizontal: 8, paddingVertical: 6, position: 'absolute', left: 12, right: 12, bottom: 12, zIndex: 25, backgroundColor: colors.surface, borderRadius: 20, padding: 16, elevation: 2, },
   destinationHead: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -2376,6 +2477,7 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
 
+  compactCloseButton: { width: 32, minWidth: 32, height: 32, paddingHorizontal: 0, borderRadius: 9, alignSelf: 'center' },
   smallTopButton: {
     height: 46,
     minWidth: 78,
@@ -2954,6 +3056,8 @@ const styles = StyleSheet.create({
   },
   publicFacilityActionTitle: { color: '#10285B', fontSize: 12.5, fontWeight: '900' },
   publicFacilityCount: { color: '#2477F3', fontSize: 10, fontWeight: '800' },
+  publicSelectAllButton: { minHeight: 32, paddingHorizontal: 8, justifyContent: 'center' },
+  publicSelectAllText: { color: '#2477F3', fontSize: 12, fontWeight: '700' },
   pendingSelectAll: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 5 },
   pendingSelectAllText: { color: '#2477F3', fontSize: 10, fontWeight: '800' },
   publicFacilityList: { flex: 1 },

@@ -21,6 +21,7 @@ import {
 } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
 import { colors, shadow } from '../constants/design';
+import SocialAuthButtons from '../components/SocialAuthButtons';
 
 const DISTRICTS = [
   '중구',
@@ -343,19 +344,17 @@ export default function GroupSettingsScreen({
 
       <Modal visible={leaveOpen} transparent animationType="fade" onRequestClose={() => setLeaveOpen(false)}>
         <View style={styles.leaveBackdrop}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} accessibilityLabel="그룹 탈퇴 창 닫기" onPress={() => !leaving && setLeaveOpen(false)} />
           <View style={styles.leaveSheet}>
             <Text style={styles.leaveTitle}>그룹 탈퇴</Text>
             <Text style={styles.leaveDescription}>
-              맡은 방문지는 남은 팀원에게 넘어갑니다. 비밀번호를 입력해 주세요.
+              맡은 방문지는 남은 팀원에게 넘어갑니다. 비밀번호 또는 연결된 소셜 계정으로 인증해 주세요.
             </Text>
-            <TextInput
-              style={styles.leaveInput}
-              value={leavePassword}
-              onChangeText={setLeavePassword}
-              placeholder="현재 비밀번호"
-              secureTextEntry
-              autoCapitalize="none"
-            />
+            {user.passwordLoginEnabled !== false && <TextInput
+              style={styles.leaveInput} value={leavePassword} onChangeText={setLeavePassword}
+              placeholder="현재 비밀번호" secureTextEntry autoCapitalize="none" />}
+            {leaveOpen && <SocialAuthButtons mode="verify" disabled={leaving} onVerified={setLeavePassword} />}
+            {leavePassword.startsWith('social:') && <Text style={{ color: colors.successInk }}>소셜 계정 인증 완료</Text>}
             <View style={styles.leaveActions}>
               <TouchableOpacity onPress={() => { setLeaveOpen(false); setLeavePassword(''); }}>
                 <Text style={styles.leaveCancel}>취소</Text>
