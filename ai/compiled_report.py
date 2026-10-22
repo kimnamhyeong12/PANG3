@@ -76,14 +76,14 @@ def grid_table(doc, header: list[str], rows: list[list[str]], widths: list[int])
     doc.add_paragraph()
 
 
-def overview_map(doc, path: str, work_dir: Path) -> None:
+def overview_map(doc, path: str, work_dir: Path, image_ext="webp") -> None:
     """서버가 만든 전체 위치도(번호 핀 = 항목 번호)를 본문 폭으로 넣는다."""
-    target = str(work_dir / "overview_map.jpg")
+    target = str(work_dir / f"overview_map.{image_ext}")
     if not sanitize_image(path, target, canvas_size=(960, 560), fit_mode="contain"):  # 서버 위치도와 같은 크기(여백 없이)
         return
     heading(doc, "위치도")
     with open(target, "rb") as f:
-        ref = doc.add_image(f.read(), "jpg")
+        ref = doc.add_image(f.read(), image_ext)
     # 건별 양식(app.py)과 같이 표 칸 안에 넣어야 한글에서 자리가 흐트러지지 않는다
     table = doc.add_table(rows=1, cols=1, width=45354, height=25800)
     table.set_column_widths([45354])
@@ -98,7 +98,7 @@ PHOTO_W, PHOTO_H = 20835, 14324  # 2칸 표 한 칸 (건별 보고서 사진 비
 
 
 def photo_grid(doc, cells: list[dict]) -> None:
-    """cells: [{"path": 정리된 jpg 또는 None, "label": "작업 전"}] — 2칸씩 한 줄, 사진 아래 이름 칸."""
+    """cells: [{"path": 정리된 이미지 또는 None, "label": "작업 전"}] — 2칸씩 한 줄, 사진 아래 이름 칸."""
     for i in range(0, len(cells), 2):
         chunk = cells[i:i + 2]
         table = doc.add_table(rows=2, cols=2, width=FULL_WIDTH)
@@ -109,7 +109,7 @@ def photo_grid(doc, cells: list[dict]) -> None:
             table.rows[0].cells[c].set_size(height=PHOTO_H)
             if cell["path"]:
                 with open(cell["path"], "rb") as f:
-                    ref = doc.add_image(f.read(), "jpg")
+                    ref = doc.add_image(f.read(), Path(cell["path"]).suffix.lstrip("."))
                 table.rows[0].cells[c].paragraphs[0].add_picture(ref, width=PHOTO_W, height=PHOTO_H)
             elif cell["label"]:
                 table.set_cell_text(0, c, "사진 미등록")
@@ -119,7 +119,7 @@ def photo_grid(doc, cells: list[dict]) -> None:
         doc.add_paragraph()
 
 
-def append_item(doc, item: dict, number: int, work_dir: Path) -> None:
+def append_item(doc, item: dict, number: int, work_dir: Path, image_ext="webp") -> None:
     """항목 하나: 제목 → 4칸(작업 전·중·후·위치도) → 메모(본문, 작업 전·중·후 설명) (D36)."""
     author = (item.get("author") or {}).get("name")
     title = item.get("title") or item.get("address")
@@ -131,7 +131,7 @@ def append_item(doc, item: dict, number: int, work_dir: Path) -> None:
 
     groups, extra = {slot: [] for slot in SLOTS}, []
     for idx, photo in enumerate(item.get("photo_files") or []):
-        target = str(work_dir / f"p{number}_{idx}.jpg")
+        target = str(work_dir / f"p{number}_{idx}.{image_ext}")
         if not sanitize_image(photo.get("path"), target, canvas_size=(1600, 1100), fit_mode="contain"):
             continue
         entry = {"path": target, "comment": str(photo.get("comment") or "").strip()}
@@ -139,7 +139,7 @@ def append_item(doc, item: dict, number: int, work_dir: Path) -> None:
 
     map_path = None
     if item.get("map_file"):
-        target = str(work_dir / f"m{number}.jpg")
+        target = str(work_dir / f"m{number}.{image_ext}")
         map_path = sanitize_image(item["map_file"], target, canvas_size=(1600, 1100), fit_mode="cover") and target
 
     # 단계마다 첫 사진이 4칸에 들어가고, 남는 사진은 아래에 2칸씩 이어 붙인다
@@ -172,6 +172,7 @@ def build(payload: dict) -> str:
     out = Path(output_path)
     work_dir = out.parent / "_work" / uuid4().hex
     work_dir.mkdir(parents=True, exist_ok=True)
+    image_ext = "jpg" if payload.get("image_format") == "jpg" else "webp"
 
     template = AI_DIR / "templates" / "template.hwpx"
     if template.exists():
@@ -202,7 +203,7 @@ def build(payload: dict) -> str:
         ])
 
         if payload.get("overview_map_file"):
-            overview_map(doc, payload["overview_map_file"], work_dir)
+            overview_map(doc, payload["overview_map_file"], work_dir, image_ext)
 
         # 위치 목록 (번호는 섹션 순서를 따른다)
         heading(doc, "위치 목록")
@@ -224,7 +225,7 @@ def build(payload: dict) -> str:
             heading(doc, f"{text(section.get('label'))} ({len(items)}건)")
             for item in items:
                 number += 1
-                append_item(doc, item, number, work_dir)
+                append_item(doc, item, number, work_dir, image_ext)
 
         doc.add_paragraph().add_run("위와 같이 보고합니다.", size=10, color=BODY, font=FONT)
 
@@ -242,7 +243,7 @@ def build(payload: dict) -> str:
         fix_hwpx_images(str(out))  # D32: 그림 원본 크기 보정
         return str(out.resolve())
     finally:
-        for temp in work_dir.glob("*.jpg"):
+        for temp in work_dir.glob(f"*.{image_ext}"):
             try:
                 temp.unlink()
             except OSError:
