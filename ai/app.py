@@ -127,10 +127,7 @@ def sanitize_image(
                     centering=(0.5, 0.5),
                 )
             # Compress the bytes embedded in HWPX, keeping its picture box unchanged.
-            if Path(target_path).suffix.lower() == ".webp":
-                canvas.save(target_path, "WEBP", quality=80, method=4)
-            else:
-                canvas.save(target_path, "JPEG", quality=80, optimize=True)
+            canvas.save(target_path, "JPEG", quality=80, optimize=True)
         return target_path
     except Exception as e:
         print(f"[Image Sanitizer Error] {source_path}: {e}", file=sys.stderr)
@@ -267,7 +264,7 @@ def create_fieldwork_report(report_data: dict, output_filename: str, document=No
         paragraph = cell.paragraphs[0]
         if image_path and os.path.isfile(image_path):
             with open(image_path, "rb") as source:
-                image_ref = doc.add_image(source.read(), Path(image_path).suffix.lower().lstrip("."))
+                image_ref = doc.add_image(source.read(), "png" if str(image_path).lower().endswith(".png") else "jpg")
             paragraph.add_picture(image_ref, width=image_width, height=image_height)
         else:
             paragraph.add_run(empty_text, size=10, color="#6B7280", font=font)
@@ -461,12 +458,9 @@ def run_pipeline(payload: dict, document=None, combined_path=None) -> dict:
     work_dir = output_dir / "_work" / uuid4().hex
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    # Keep JPEG available as an explicit compatibility fallback.
-    image_ext = "jpg" if payload.get("image_format") == "jpg" else "webp"
-
     map_sanitized = sanitize_image(
         payload.get("map_image"),
-        str(work_dir / f"map.{image_ext}"),
+        str(work_dir / "map.jpg"),
         canvas_size=(1920, 1080),
         # 흰 여백 없이 박스를 꽉 채우도록 cover로 (모서리가 살짝 잘릴 수 있음)
         fit_mode="cover",
@@ -476,7 +470,7 @@ def run_pipeline(payload: dict, document=None, combined_path=None) -> dict:
     captions = []
     for idx, raw in enumerate(payload.get("field_photos") or []):
         src = raw.get("path") or raw.get("file")
-        temp = str(work_dir / f"field_{idx}.{image_ext}")
+        temp = str(work_dir / f"field_{idx}.jpg")
         # Preserve the entire field photo inside its report cell.
         sanitized = sanitize_image(src, temp, canvas_size=(1600, 1100), fit_mode="contain")
         _, caption = parse_photo_comment(raw.get("comment", ""), idx + 1)
@@ -551,7 +545,7 @@ def run_pipeline(payload: dict, document=None, combined_path=None) -> dict:
         document=document,
     )
 
-    for temp in work_dir.glob(f"*.{image_ext}"):
+    for temp in work_dir.glob("*.jpg"):
         try:
             temp.unlink()
         except OSError:

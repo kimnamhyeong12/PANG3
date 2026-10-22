@@ -254,7 +254,7 @@ public class TaskProgressService {
             return new Prepared(toResponseMap(progress, progress.getTask()), aiReportService.buildPayload(progress.getTask(), progress));
         });
         String existing = (String) snapshot.response.get("reportFilePath");
-        if (fileStorageService.exists(existing)) return snapshot.response;
+        if (fileStorageService.isReusableReport(existing)) return snapshot.response;
         Map<String, Object> result;
         try { result = aiReportService.generatePayload(snapshot.payload, userId); }
         catch (org.springframework.web.server.ResponseStatusException error) { throw error; }
