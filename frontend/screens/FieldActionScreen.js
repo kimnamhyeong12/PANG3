@@ -921,7 +921,7 @@ export default function FieldActionScreen({
 
       const capturedUri = await captureRef(mapWrapperRef, {
         format: 'jpg',
-        quality: 0.9,
+        quality: 0.7,
       });
 
       setMapEditor({
@@ -1011,7 +1011,7 @@ export default function FieldActionScreen({
       try {
         mapRef.current?.injectJavaScript(`window.setExternalPosition?.(${Number(selectedLatitude)}, ${Number(selectedLongitude)}); true;`);
         await new Promise(resolve => setTimeout(resolve, 400));
-        const uri = await captureRef(mapWrapperRef, { format: 'jpg', quality: 0.8 });
+        const uri = await captureRef(mapWrapperRef, { format: 'jpg', quality: 0.7 });
         form.append('mapImage', new File(uri));
       } catch (captureError) { console.log('Position map capture failed:', captureError?.message); }
       const response = await expoFetch(`${API_BASE_URL}/api/task-progress/task/${taskId}/location`, {
@@ -1089,7 +1089,7 @@ export default function FieldActionScreen({
 
           mapImageUri = await captureRef(mapWrapperRef, {
             format: 'jpg',
-            quality: 0.8,
+            quality: 0.7,
           });
         } catch (captureError) {
           console.log('지도 캡처 실패:', captureError?.message);
@@ -1147,8 +1147,8 @@ export default function FieldActionScreen({
       );
 
       const appendImage = async (name, uri) => {
-        const image = /\.webp(?:[?#]|$)/i.test(uri) ? { uri } : await ImageManipulator.manipulateAsync(uri, [], {
-          compress: 0.9, format: ImageManipulator.SaveFormat.WEBP,
+        const image = await ImageManipulator.manipulateAsync(uri, [], {
+          compress: 0.7, format: ImageManipulator.SaveFormat.JPEG,
         });
         form.append(name, new File(image.uri));
       };

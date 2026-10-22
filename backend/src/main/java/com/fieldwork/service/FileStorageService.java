@@ -16,14 +16,11 @@ public class FileStorageService {
 
     private final Path baseDir;
     private final FieldworkProperties.Upload limits;
-    private final String pythonCommand;
     private static final Object UPLOAD_LOCK = new Object();
 
     public FileStorageService(FieldworkProperties properties) {
         this.baseDir = ProjectPaths.resolve(properties.getUpload().getBaseDir()).toAbsolutePath().normalize();
         this.limits = properties.getUpload();
-        String python = properties.getAi().getPythonPath();
-        this.pythonCommand = python.contains("/") || python.contains("\\") ? ProjectPaths.resolve(python).toString() : python;
         if (limits.getMaxFileBytes() < 1 || limits.getMaxFileBytes() > 60L * 1024 * 1024
                 || limits.getMaxPixels() < 1 || limits.getMaxPixels() > 50000000 || limits.getMaxTaskBytes() < 1
                 || limits.getMaxUserBytes() < 1 || limits.getMaxTotalBytes() < 1)
@@ -55,7 +52,7 @@ public class FileStorageService {
             var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
             Long uploader = auth != null && auth.getPrincipal() instanceof Long id ? id : 0L;
             checkQuota(directory, uploader, sanitized.length);
-            Path target = directory.resolve(prefix + "_u" + uploader + "_" + UUID.randomUUID() + ".webp");
+            Path target = directory.resolve(prefix + "_u" + uploader + "_" + UUID.randomUUID() + ".jpg");
             Files.write(target, sanitized, java.nio.file.StandardOpenOption.CREATE_NEW);
             return target.toString();
         }
@@ -110,8 +107,8 @@ public class FileStorageService {
             return ".jpg";
         }
         String extension = name.substring(name.lastIndexOf('.')).toLowerCase(java.util.Locale.ROOT);
-        if (!java.util.Set.of(".jpg", ".jpeg", ".png", ".webp").contains(extension)) {
-            throw invalid("JPG, PNG, WebP 사진을 업로드해 주세요.");
+        if (!java.util.Set.of(".jpg", ".jpeg", ".png").contains(extension)) {
+            throw invalid("JPG, PNG 사진을 업로드해 주세요. 앱을 새로고침한 뒤 다시 저장해 주세요.");
         }
         return extension;
     }
@@ -123,11 +120,16 @@ public class FileStorageService {
             var reader = readers.next();
             try {
                 String format = reader.getFormatName().toLowerCase(java.util.Locale.ROOT);
-                if (!java.util.Set.of("jpeg", "jpg", "png", "webp").contains(format)) throw invalid("JPG, PNG, WebP 사진을 업로드해 주세요.");
+                if (!java.util.Set.of("jpeg", "jpg", "png").contains(format)) throw invalid("JPG, PNG 사진을 업로드해 주세요.");
                 reader.setInput(input, true, true);
                 int width = reader.getWidth(0), height = reader.getHeight(0);
                 if (width <= 0 || height <= 0 || (long) width * height > limits.getMaxPixels()) throw invalid("사진 해상도가 너무 큽니다.");
-                var image = reader.read(0);
+                // Subsample before allocating the decoded bitmap, including older clients' large photos.
+                var readParam = reader.getDefaultReadParam();
+                int step = Math.max(1, (Math.max(width, height) + 1919) / 1920);
+                if (step > 1) readParam.setSourceSubsampling(step, step, 0, 0);
+                var image = reader.read(0, readParam);
+                width = image.getWidth(); height = image.getHeight();
                 int orientation = jpegOrientation(bytes);
                 boolean swap = orientation >= 5;
                 var normalized = new java.awt.image.BufferedImage(swap ? height : width, swap ? width : height, java.awt.image.BufferedImage.TYPE_INT_RGB);
@@ -146,36 +148,23 @@ public class FileStorageService {
                     };
                     graphics.drawImage(image, transform, null);
                 } finally { graphics.dispose(); image.flush(); }
-                try { return encodeWebp(normalized); }
+                try { return encodeJpeg(normalized); }
                 finally { normalized.flush(); }
             } finally { reader.dispose(); }
         } catch (javax.imageio.IIOException | IllegalArgumentException error) { throw invalid("손상되었거나 지원하지 않는 사진입니다."); }
     }
-    private byte[] encodeWebp(java.awt.image.BufferedImage image) throws IOException {
-        // Reuse the deployed Pillow runtime; never execute filenames as shell commands.
-        Path temporary = Files.createTempDirectory("fieldwork-webp-");
-        Path input = temporary.resolve("input.png"), output = temporary.resolve("output.webp");
-        Process process = null;
-        try {
-            if (!javax.imageio.ImageIO.write(image, "png", input.toFile())) throw new IOException("Image encoder unavailable");
-            process = new ProcessBuilder(pythonCommand, "-c",
-                    "from PIL import Image; import sys; Image.open(sys.argv[1]).save(sys.argv[2], format='WEBP', quality=90, method=4)",
-                    input.toString(), output.toString())
-                    .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
-            if (!process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)) throw new IOException("WebP conversion timed out");
-            if (process.exitValue() != 0 || !Files.isRegularFile(output)) throw new IOException("WebP encoder unavailable");
-            if (Files.size(output) > limits.getMaxFileBytes()) throw invalid("변환한 사진 파일이 너무 큽니다.");
-            return Files.readAllBytes(output);
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt(); throw new IOException("WebP conversion interrupted", interrupted);
-        } finally {
-            if (process != null && process.isAlive()) {
-                process.destroyForcibly();
-                try { process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS); }
-                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
-            }
-            Files.deleteIfExists(input); Files.deleteIfExists(output); Files.deleteIfExists(temporary);
-        }
+    private byte[] encodeJpeg(java.awt.image.BufferedImage image) throws IOException {
+        var writer = javax.imageio.ImageIO.getImageWritersByFormatName("jpg").next();
+        var bytes = new java.io.ByteArrayOutputStream();
+        try (var output = new javax.imageio.stream.MemoryCacheImageOutputStream(bytes)) {
+            writer.setOutput(output);
+            var param = writer.getDefaultWriteParam();
+            param.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
+            param.setCompressionQuality(0.7f);
+            writer.write(null, new javax.imageio.IIOImage(image, null, null), param);
+        } finally { writer.dispose(); }
+        if (bytes.size() > limits.getMaxFileBytes()) throw invalid("변환한 사진 파일이 너무 큽니다.");
+        return bytes.toByteArray();
     }
     private void checkQuota(Path task, Long uploader, long incoming) throws IOException {
         long total = 0, taskTotal = 0, userTotal = 0; int count = 0, taskCount = 0;
@@ -186,7 +175,7 @@ public class FileStorageService {
                 if (!Files.isRegularFile(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) continue;
                 long size = Files.size(path); total += size; count++;
                 if (path.startsWith(task)) { taskTotal += size; taskCount++; }
-                if (path.getFileName().toString().matches(".*_u" + uploader + "_[0-9a-f-]+\\.(jpg|jpeg|png|webp)")) userTotal += size;
+                if (path.getFileName().toString().matches(".*_u" + uploader + "_[0-9a-f-]+\\.(jpg|jpeg|png)")) userTotal += size;
                 if (total + incoming > limits.getMaxTotalBytes() || taskTotal + incoming > limits.getMaxTaskBytes()
                         || userTotal + incoming > limits.getMaxUserBytes()
                         || count >= 20000 || taskCount >= 1000) throw quota();

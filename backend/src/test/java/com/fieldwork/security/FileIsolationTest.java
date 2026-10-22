@@ -56,4 +56,21 @@ class FileIsolationTest {
         assertEquals(413, assertThrows(ResponseStatusException.class, () -> storage.saveMultipart(2L,"photo",
                 new MockMultipartFile("photo","photo.png","image/png",image()))).getStatusCode().value());
     }
+
+    @Test void storesJpegAndBoundsDecodedDimensionsWithoutAWebpPlugin() throws Exception {
+        FieldworkProperties config = new FieldworkProperties(); config.getUpload().setBaseDir(temp.toString());
+        var original = new java.awt.image.BufferedImage(3840, 1920, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        var bytes = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(original, "png", bytes); original.flush();
+        String saved = new FileStorageService(config).saveMultipart(1L, "photo",
+                new MockMultipartFile("photo", "photo.png", "image/png", bytes.toByteArray()));
+        assertTrue(saved.endsWith(".jpg"));
+        var decoded = javax.imageio.ImageIO.read(Path.of(saved).toFile());
+        assertEquals(1920, decoded.getWidth()); assertEquals(960, decoded.getHeight()); decoded.flush();
+        byte[] jpeg = Files.readAllBytes(Path.of(saved));
+        assertEquals(255, jpeg[0] & 255); assertEquals(216, jpeg[1] & 255);
+        assertFalse(javax.imageio.ImageIO.getImageReadersByFormatName("webp").hasNext());
+        assertThrows(ResponseStatusException.class, () -> new FileStorageService(config).saveMultipart(1L, "photo",
+                new MockMultipartFile("photo", "photo.webp", "image/webp", bytes.toByteArray())));
+    }
 }

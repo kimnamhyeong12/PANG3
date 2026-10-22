@@ -688,7 +688,7 @@ export default function PhotoMarkupEditor({
   const save = () => runEdit(
     async () => {
       const result = await renderImage(cropMode);
-      return ImageManipulator.manipulateAsync(result.uri, [], { compress: 0.9, format: ImageManipulator.SaveFormat.WEBP });
+      return ImageManipulator.manipulateAsync(result.uri, [], { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG });
     },
     (result) => onComplete?.(result.uri)
   );

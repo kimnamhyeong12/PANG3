@@ -40,6 +40,83 @@ public class ReportRetentionService {
         LocalDateTime expiry = expiresAt(report);
         return expiry == null || expiry.isAfter(LocalDateTime.now(ZoneId.of("Asia/Seoul")));
     }
+
+    /** User-requested removal of the retired WebP uploads; runs after each deployment. */
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void removeRetiredWebp() {
+        int changed = 0;
+        for (int page = 0; ; page++) {
+            var rows = repository.findAll(PageRequest.of(page, 100,
+                    org.springframework.data.domain.Sort.by("progressId")));
+            List<String> obsolete = new ArrayList<>();
+            for (TaskProgress row : rows) {
+                if (!hasWebp(row)) continue;
+                Boolean updated = transactions.execute(status -> {
+                    TaskProgress report = repository.findLocked(row.getProgressId()).orElse(null);
+                    if (report == null || !hasWebp(report)) return false;
+                    if (webp(report.getLocationMapImage())) {
+                        obsolete.add(report.getLocationMapImage());
+                        report.setLocationMapImage(null);
+                    }
+                    if (report.getFieldPhotos() != null) {
+                        var kept = new ArrayList<Map<String, Object>>();
+                        for (var photo : report.getFieldPhotos()) {
+                            Object path = photo.get("path");
+                            if (path == null) path = photo.get("uri");
+                            if (webp(photo.get("path")) || webp(photo.get("uri"))) {
+                                if (webp(photo.get("path"))) obsolete.add(photo.get("path").toString());
+                                if (webp(photo.get("uri"))) obsolete.add(photo.get("uri").toString());
+                            } else kept.add(photo);
+                        }
+                        report.setFieldPhotos(kept);
+                    }
+                    if (report.getReportFilePath() != null) obsolete.add(report.getReportFilePath());
+                    report.setReportFilePath(null);
+                    return true;
+                });
+                if (Boolean.TRUE.equals(updated)) changed++;
+            }
+            // Only remove files after the corresponding reference changes have committed.
+            obsolete.forEach(value -> {
+                Path file = safePath(value);
+                if (file != null) try { Files.deleteIfExists(file); }
+                catch (java.io.IOException error) { log.warn("Retired WebP attachment removal failed: {}", file, error); }
+            });
+            if (!rows.hasNext()) break;
+        }
+        int deleted = removeWebpFiles(uploads) + removeWebpFiles(output);
+        log.info("Retired WebP cleanup: {} report records updated, {} files removed", changed, deleted);
+    }
+
+    private static boolean webp(Object value) {
+        return value != null && value.toString().toLowerCase(Locale.ROOT).matches(".*\\.webp(?:[?#].*)?$");
+    }
+
+    private static boolean hasWebp(TaskProgress report) {
+        return webp(report.getLocationMapImage()) || report.getFieldPhotos() != null
+                && report.getFieldPhotos().stream().anyMatch(photo -> webp(photo.get("path")) || webp(photo.get("uri")));
+    }
+
+    private int removeWebpFiles(Path root) {
+        if (!Files.isDirectory(root) || Files.isSymbolicLink(root)) return 0;
+        int removed = 0;
+        try (var paths = Files.walk(root)) {
+            var iterator = paths.iterator();
+            while (iterator.hasNext()) {
+                Path file = iterator.next();
+                if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) || safePath(file.toString()) == null) continue;
+                boolean remove = webp(file.getFileName());
+                if (!remove && file.getFileName().toString().endsWith(".hwpx")) {
+                    try (var zip = new java.util.zip.ZipFile(file.toFile())) {
+                        remove = zip.stream().anyMatch(entry -> entry.getName().startsWith("BinData/") && webp(entry.getName()));
+                    } catch (java.io.IOException ignored) { /* Other damaged caches follow normal retention. */ }
+                }
+                if (remove) try { Files.delete(file); removed++; }
+                catch (java.io.IOException error) { log.warn("Retired WebP file removal failed: {}", file, error); }
+            }
+        } catch (java.io.IOException error) { log.warn("Retired WebP cleanup failed: {}", root, error); }
+        return removed;
+    }
     @Scheduled(cron = "0 0 3 * * *", zone = "Asia/Seoul")
     public void cleanup() {
         LocalDateTime cutoff = LocalDateTime.now(ZoneId.of("Asia/Seoul")).minusYears(1);

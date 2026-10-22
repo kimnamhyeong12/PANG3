@@ -127,7 +127,7 @@ def sanitize_image(
                     centering=(0.5, 0.5),
                 )
             # Compress the bytes embedded in HWPX, keeping its picture box unchanged.
-            canvas.save(target_path, "JPEG", quality=80, optimize=True)
+            canvas.save(target_path, "JPEG", quality=70, optimize=True)
         return target_path
     except Exception as e:
         print(f"[Image Sanitizer Error] {source_path}: {e}", file=sys.stderr)

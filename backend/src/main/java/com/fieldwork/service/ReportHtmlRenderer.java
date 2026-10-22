@@ -259,7 +259,9 @@ public class ReportHtmlRenderer {
         try {
             Path file = resolveFile(url);
             BufferedImage source = file == null ? null : readDownscaled(file);
-            if (source != null) result = "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(toJpeg(source));
+            if (source != null) try {
+                result = "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(toJpeg(source));
+            } finally { source.flush(); }
         } catch (Exception | OutOfMemoryError ignored) {
             result = null;
         }
@@ -322,7 +324,14 @@ public class ReportHtmlRenderer {
             g.dispose();
         }
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        if (!ImageIO.write(target, "jpg", out)) throw new java.io.IOException("no jpeg writer");
+        var writer = ImageIO.getImageWritersByFormatName("jpg").next();
+        try (var stream = new javax.imageio.stream.MemoryCacheImageOutputStream(out)) {
+            writer.setOutput(stream);
+            var param = writer.getDefaultWriteParam();
+            param.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
+            param.setCompressionQuality(0.7f);
+            writer.write(null, new javax.imageio.IIOImage(target, null, null), param);
+        } finally { writer.dispose(); target.flush(); }
         return out.toByteArray();
     }
 

@@ -97,7 +97,7 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
     const edge = 2400;
     const resize = Math.max(item.width || 0, item.height || 0) > edge
       ? [{ resize: item.width >= item.height ? { width: edge } : { height: edge } }] : [];
-    const converted = await ImageManipulator.manipulateAsync(item.uri, resize, { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG });
+    const converted = await ImageManipulator.manipulateAsync(item.uri, resize, { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG });
     const file = new File(converted.uri);
     try {
       const body = new FormData();
