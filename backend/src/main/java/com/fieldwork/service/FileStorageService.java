@@ -65,17 +65,6 @@ public class FileStorageService {
         return Files.exists(Paths.get(absolutePath));
     }
 
-    /** Regenerate reports from the short-lived WebP export rollout on next download. */
-    public boolean isReusableReport(String absolutePath) {
-        if (absolutePath == null || absolutePath.isBlank()) return false;
-        try (var report = new java.util.zip.ZipFile(absolutePath)) {
-            return report.stream().noneMatch(entry -> entry.getName().startsWith("BinData/")
-                    && entry.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".webp"));
-        } catch (IOException | java.nio.file.InvalidPathException error) {
-            return false;
-        }
-    }
-
     public Path resolveReadable(String pathOrUri) {
         if (pathOrUri == null || pathOrUri.isBlank()) {
             return null;

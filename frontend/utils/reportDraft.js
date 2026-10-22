@@ -20,8 +20,7 @@ export function preservePhoto(key, uri) {
   const dir = directory(key);
   dir.create({ intermediates: true, idempotent: true });
   if (uri.startsWith(dir.uri.replace(/\/+$/, '') + '/')) return uri;
-  const extension = uri.match(/\.(webp|png|jpe?g|heic|heif)(?:[?#]|$)/i)?.[1]?.toLowerCase() || 'jpg';
-  const target = new File(dir, `${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`);
+  const target = new File(dir, `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
   new File(uri).copy(target);
   return target.uri;
 }
