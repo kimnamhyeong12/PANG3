@@ -17,6 +17,7 @@ import com.kakaomobility.knsdk.*
 import com.kakaomobility.knsdk.common.gps.KNGPSData
 import com.kakaomobility.knsdk.common.objects.KNError
 import com.kakaomobility.knsdk.common.util.FloatPoint
+import com.kakaomobility.knsdk.common.util.IntPoint
 import com.kakaomobility.knsdk.guidance.knguidance.*
 import com.kakaomobility.knsdk.guidance.knguidance.citsguide.KNGuide_Cits
 import com.kakaomobility.knsdk.guidance.knguidance.common.KNLocation
@@ -80,6 +81,9 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
   private var initialPosition: FloatPoint? = null
   private var cameraInitialized = false
   private var lastDestination: Map<String, Any?>? = null
+  private var destinationPoint: FloatPoint? = null
+  private var destinationMarker: KNMapMarker? = null
+  private val destinationIcon by lazy { DestinationPin.bitmap(context) }
   private var nearbyCategory: String? = null
   private var nearbyRequestId = 0
   private var nearbyOrigin: FloatPoint? = null
@@ -172,6 +176,12 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
       ?: run { fail("현재 화면에서 카카오 길안내를 사용할 수 없습니다."); return }
     priority = prepared.priority
     preparedTrip = prepared.trip
+    val requested = prepared.result["requestedDestination"] as? Map<*, *>
+    val goalLat = (requested?.get("lat") as? Number)?.toDouble()
+    val goalLng = (requested?.get("lng") as? Number)?.toDouble()
+    destinationPoint = if (goalLat != null && goalLng != null) KNSDK.convertWGS84ToKATEC(goalLng, goalLat).let {
+      FloatPoint(it.x.toFloat(), it.y.toFloat())
+    } else null
     initialPosition = prepared.route.routePolylineWGS84()?.firstOrNull()?.let { point ->
       val lng = point["x"]?.toDouble(); val lat = point["y"]?.toDouble()
       if (lng == null || lat == null) null else KNSDK.convertWGS84ToKATEC(lng, lat).let { FloatPoint(it.x.toFloat(), it.y.toFloat()) }
@@ -189,6 +199,7 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
     nearbyRequestId++; nearbyLoading = false; nearbyOrigin = null
     clearNearbyMarkers()
     safetyMarkers.clear()
+    destinationMarker = null
     val map = KNMapView(activity)
     mapView = map
     map.visibility = if (mapActive) View.VISIBLE else View.INVISIBLE
@@ -263,8 +274,29 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
   private fun updateRoute(route: KNRoute?) {
     if (route == null) return
     mapView?.setRoute(route)
+    updateDestinationMarker(route)
     routeSafeties = route.safetyList().orEmpty()
     updateSafetyMarkers()
+  }
+
+  private fun updateDestinationMarker(route: KNRoute) {
+    val map = mapView ?: return
+    if (!map.isInitialize()) return
+    destinationMarker?.let { map.removeMarker(it) }
+    val point = destinationPoint ?: KakaoRouteEngine.routePath(route)?.lastOrNull()?.let { end ->
+      KNSDK.convertWGS84ToKATEC(end.getValue("longitude"), end.getValue("latitude")).let { FloatPoint(it.x.toFloat(), it.y.toFloat()) }
+    } ?: return
+    val marker = KNMapMarker(point).apply {
+      icon = destinationIcon
+      pixelOffset = IntPoint(0, (destinationIcon.height * (1f - DestinationPin.ANCHOR_Y)).toInt())
+      priority = 10000
+      isVisible = true
+      setVisibleRange(0.1f, 9999f)
+      callOutBubbleUpdate = KNMapMarker.KNMapCalloutBubbleUpdate.Builder().setTitle("목적지").build()
+      isVisibleCalloutBubble = false
+    }
+    map.addMarker(marker)
+    destinationMarker = marker
   }
 
   fun setMap3D(enabled: Boolean) {
@@ -432,6 +464,7 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
     nearbyRequestId++; nearbyLoading = false; nearbyOrigin = null
     clearNearbyMarkers()
     safetyMarkers.clear(); routeSafeties = emptyList(); aroundSafeties = emptyList()
+    destinationMarker?.let { mapView?.removeMarker(it) }; destinationMarker = null; destinationPoint = null
     mapView = null
     removeAllViews()
     cameraInitialized = false; lastGps = null; initialPosition = null

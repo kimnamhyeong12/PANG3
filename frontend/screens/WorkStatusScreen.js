@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/design';
 import { ScreenHeader } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
-import { BUSAN_DISTRICT_CODES } from '../constants/busanDistricts';
+import { regionBoundariesPath } from '../utils/workRegion';
 import { koreaDayKey, isCurrentWork } from '../utils/completionDay';
 import { buildMemberColors } from '../utils/memberColors';
 import GroupDashboardScreen from './GroupDashboardScreen';
@@ -69,7 +69,7 @@ function shortName(v){const p=String(v||'').trim().split(/\\s+/);return(p[p.leng
 function esc(v){return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function post(v){window.ReactNativeWebView.postMessage(JSON.stringify(v))}
 kakao.maps.load(function(){
- const map=new kakao.maps.Map(document.getElementById('map'),{center:new kakao.maps.LatLng(35.1046,128.9747),level:7});
+ const map=new kakao.maps.Map(document.getElementById('map'),{center:new kakao.maps.LatLng(36.3,127.8),level:13});
  const bounds=new kakao.maps.LatLngBounds();let hasBounds=false;const regionBounds=new kakao.maps.LatLngBounds();let hasRegionBounds=false;const byArea={};
  assignments.forEach(i=>{const a=shortName(i.adminDong||i.admin_dong);if(a)(byArea[a]||(byArea[a]=[])).push(i)});
  function addRing(feature,ring,areaBounds,areaKey){
@@ -109,7 +109,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
   useEffect(() => {
     let active = true;
     setDistrictView(null); setFocusedAreaBounds(null); setSelectedAreaKey(null);
-    const sido = group?.regionSido || user?.workSido || '부산광역시';
+    const sido = group?.regionSido || user?.workSido || '';
     const district = group?.regionSigungu || user?.workSigungu;
     if (!district || !KAKAO_REST_API_KEY) return;
     const controller = new AbortController();
@@ -141,47 +141,23 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
     setLoadingBoundary(true);
     setBoundaryError('');
     try {
-      // 그룹 업무현황의 최초 지도 범위는 '방문지 좌표'가 아니라
-      // 그룹에 설정된 시/군/구 전체 SGIS 경계를 기준으로 잡는다.
-      //
-      // 중요: group.regionAdmCode가 행정동 코드로 저장돼 있을 수 있으므로
-      // 사하구/영도구 같은 regionSigungu 값이 있으면 반드시 구·군 코드를 우선한다.
-      const districtCode =
-        ((!group?.regionSido || String(group.regionSido).includes('부산'))
-          ? BUSAN_DISTRICT_CODES[group?.regionSigungu]
-          : null) ||
-        (personalWorkspace && (!user?.workSido || String(user.workSido).includes('부산'))
-          ? BUSAN_DISTRICT_CODES[user?.workSigungu]
-          : null);
-
-      const primaryCode = districtCode || group?.regionAdmCode || null;
-
-      const fallbackCodes = assignments.map((item) =>
-        (!item.sido || String(item.sido).includes('부산'))
-          ? BUSAN_DISTRICT_CODES[item.sigungu]
-          : null
-      ).filter(Boolean);
-
-      // 그룹 시군구가 정해져 있으면 그 경계 하나만 요청한다.
-      // 방문지 데이터에 잘못된 시군구/좌표가 섞여도 최초 화면 범위에 영향을 주지 않는다.
-      const codes = Array.from(
-        new Set((primaryCode ? [primaryCode] : fallbackCodes).filter(Boolean))
-      );
-      if (!codes.length) {
+      const primaryPath = regionBoundariesPath(personalWorkspace
+        ? { sido: user?.workSido, sigungu: user?.workSigungu, admCode: group?.regionAdmCode }
+        : { sido: group?.regionSido, sigungu: group?.regionSigungu, admCode: group?.regionAdmCode });
+      const paths = [...new Set(primaryPath ? [primaryPath] : assignments.map(item =>
+        regionBoundariesPath({ sido: item.sido, sigungu: item.sigungu })).filter(Boolean))];
+      if (!paths.length) {
         setBoundaries({ type: 'FeatureCollection', features: [] });
-        if (!personalWorkspace) {
-          setBoundaryError('표시할 행정동 경계를 찾지 못했습니다.');
-        }
+        if (!personalWorkspace) setBoundaryError('활동지역을 설정하면 행정동 경계를 볼 수 있습니다.');
         return;
       }
-      const results = await Promise.allSettled(codes.map((code) => groupApi(
-        `/api/sgis/boundaries?admCode=${encodeURIComponent(code)}`
-      )));
-      const features = results.flatMap((result, index) => result.status === 'fulfilled' && result.value?.type === 'FeatureCollection'
-        ? (result.value.features || []).filter(feature => {
-          const featureCode = String(feature.properties?.adm_cd || '');
-          return !featureCode || featureCode.startsWith(String(codes[index]));
-        }) : []);
+      const results = await Promise.allSettled(paths.map(path => groupApi(path)));
+      const unique = new Map();
+      results.forEach(result => {
+        if (result.status !== 'fulfilled') return;
+        (result.value?.features || []).forEach(feature => unique.set(feature.properties?.adm_cd || JSON.stringify(feature.properties), feature));
+      });
+      const features = [...unique.values()];
       setBoundaries({ type: 'FeatureCollection', features });
       if (features.length === 0) setBoundaryError('행정동 경계를 불러오지 못했습니다.');
     } catch (error) {

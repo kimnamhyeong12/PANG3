@@ -47,8 +47,6 @@ export default function LoginScreen({ onLogin, onRegister }) {
         </View>
 
         <View style={styles.form}>
-          <SocialAuthButtons onLogin={onLogin} disabled={loading} />
-          <Text style={{ color: colors.textSoft, textAlign: 'center', marginVertical: 12 }}>또는 아이디로 로그인</Text>
           <Text style={styles.label}>아이디</Text>
           <View style={styles.inputRow}>
             <Ionicons name="person-outline" size={19} color={colors.textSoft} />
@@ -63,12 +61,14 @@ export default function LoginScreen({ onLogin, onRegister }) {
           </View>
 
           <PrimaryButton title={loading ? '로그인 중...' : '로그인'} onPress={login} disabled={!id.trim() || !pw || loading} style={styles.loginButton} />
-          <TouchableOpacity onPress={() => setForgot(true)}><Text style={{ color: colors.primary, textAlign: 'center', padding: 12 }}>비밀번호 찾기</Text></TouchableOpacity>
+          <View style={styles.accountLinks}>
+            <TouchableOpacity style={styles.accountLink} onPress={() => setForgot(true)}><Text style={styles.registerMuted}>비밀번호 찾기</Text></TouchableOpacity>
+            <Text style={styles.registerMuted}>·</Text>
+            <TouchableOpacity style={styles.accountLink} onPress={onRegister}><Text style={styles.registerText}>회원가입</Text></TouchableOpacity>
+          </View>
 
-          <TouchableOpacity style={styles.registerButton} onPress={onRegister} activeOpacity={0.7}>
-            <Text style={styles.registerMuted}>처음 사용하시나요?</Text>
-            <Text style={styles.registerText}>회원가입</Text>
-          </TouchableOpacity>
+          <Text style={{ color: colors.textSoft, textAlign: 'center', marginVertical: 12 }}>간편 로그인</Text>
+          <SocialAuthButtons compact onLogin={onLogin} disabled={loading} />
         </View>
         </>}
       </ScrollView>
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
   logo: { width: 46, height: 46, borderRadius: 15, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   brand: { color: colors.text, fontSize: 20, fontWeight: '900' },
   brandSub: { color: colors.textSoft, fontSize: 11, marginTop: 2 },
-  intro: { marginTop: 74, marginBottom: 30 },
+  intro: { marginTop: 36, marginBottom: 24 },
   title: { color: colors.text,  fontWeight: '900', fontSize: 24, },
   description: { color: colors.textSoft, fontSize: 13, marginTop: 8 },
   form: { gap: 10 },
@@ -91,7 +91,8 @@ const styles = StyleSheet.create({
   inputRow: { height: 56, borderRadius: radius.medium,  borderColor: colors.line,  flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, backgroundColor: colors.surfaceMuted, borderWidth: 0, },
   input: { flex: 1, minHeight: 48,  borderColor: colors.line,  fontSize: 14, color: colors.text, backgroundColor: 'transparent', borderRadius: 0, },
   loginButton: { marginTop: 12 },
-  registerButton: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 12, padding: 10 },
+  accountLinks: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  accountLink: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
   registerMuted: { color: colors.textSoft, fontSize: 12 },
   registerText: { color: colors.primary, fontSize: 12, fontWeight: '900' },
 });

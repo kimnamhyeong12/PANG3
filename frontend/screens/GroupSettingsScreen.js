@@ -21,45 +21,9 @@ import {
 } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
 import { colors, shadow } from '../constants/design';
+import WorkRegionField from '../components/WorkRegionField';
+import { parseWorkRegion, isWorkRegionComplete, serializeWorkRegion } from '../utils/workRegion';
 import SocialAuthButtons from '../components/SocialAuthButtons';
-
-const DISTRICTS = [
-  '중구',
-  '서구',
-  '동구',
-  '영도구',
-  '부산진구',
-  '동래구',
-  '남구',
-  '북구',
-  '해운대구',
-  '사하구',
-  '금정구',
-  '강서구',
-  '연제구',
-  '수영구',
-  '사상구',
-  '기장군',
-];
-
-const DISTRICT_CODES = {
-  중구: '21010',
-  서구: '21020',
-  동구: '21030',
-  영도구: '21040',
-  부산진구: '21050',
-  동래구: '21060',
-  남구: '21070',
-  북구: '21080',
-  해운대구: '21090',
-  사하구: '21100',
-  금정구: '21110',
-  강서구: '21120',
-  연제구: '21130',
-  수영구: '21140',
-  사상구: '21150',
-  기장군: '21310',
-};
 
 export default function GroupSettingsScreen({
   user,
@@ -81,9 +45,7 @@ export default function GroupSettingsScreen({
   const [leaving, setLeaving] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [leavePassword, setLeavePassword] = useState('');
-  const [draftDistrict, setDraftDistrict] = useState(
-    group?.regionSigungu || ''
-  );
+  const [draftRegion, setDraftRegion] = useState(() => parseWorkRegion(group?.regionSido, group?.regionSigungu));
 
   const load = useCallback(async () => {
     if (!group?.groupId || !user?.userId) return;
@@ -107,7 +69,7 @@ export default function GroupSettingsScreen({
   }, [load]);
 
   const saveRegion = async () => {
-    if (!draftDistrict || regionSaving) return;
+    if (!isWorkRegionComplete(draftRegion) || regionSaving) return;
 
     try {
       setRegionSaving(true);
@@ -116,9 +78,8 @@ export default function GroupSettingsScreen({
         method: 'PATCH',
         body: JSON.stringify({
           leaderUserId: user.userId,
-          regionSido: '부산광역시',
-          regionSigungu: draftDistrict,
-          regionAdmCode: DISTRICT_CODES[draftDistrict],
+          regionSido: draftRegion.sido,
+          regionSigungu: serializeWorkRegion(draftRegion),
         }),
       });
 
@@ -130,7 +91,7 @@ export default function GroupSettingsScreen({
 
       showAlert(
         '활동지역 변경 완료',
-        `부산광역시 ${draftDistrict}로 변경했습니다.`
+        `${draftRegion.sido} ${serializeWorkRegion(draftRegion)}로 변경했습니다.`
       );
     } catch (error) {
       showAlert('활동지역 변경 실패', error.message);
@@ -166,7 +127,7 @@ export default function GroupSettingsScreen({
 
   const regionSido =
     detail?.regionSido ||
-    '부산광역시';
+    '';
 
   const regionSigungu =
     detail?.regionSigungu ||
@@ -236,7 +197,7 @@ export default function GroupSettingsScreen({
               }
               icon="location-outline"
               onPress={() => {
-                setDraftDistrict(regionSigungu);
+                setDraftRegion(parseWorkRegion(regionSido, regionSigungu));
                 setRegionOpen(true);
               }}
               style={styles.fullButton}
@@ -407,7 +368,7 @@ export default function GroupSettingsScreen({
               <Text
                 style={styles.regionSheetTitle}
               >
-                활동 구·군 선택
+                활동지역 선택
               </Text>
 
               <TouchableOpacity
@@ -423,40 +384,8 @@ export default function GroupSettingsScreen({
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              style={styles.regionList}
-            >
-              {DISTRICTS.map((item) => (
-                <TouchableOpacity
-                  key={item}
-                  style={[
-                    styles.regionOption,
-                    draftDistrict === item &&
-                      styles.regionOptionActive,
-                  ]}
-                  onPress={() =>
-                    setDraftDistrict(item)
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.regionOptionText,
-                      draftDistrict === item &&
-                        styles.regionOptionTextActive,
-                    ]}
-                  >
-                    {item}
-                  </Text>
-
-                  {draftDistrict === item ? (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={21}
-                      color={colors.primary}
-                    />
-                  ) : null}
-                </TouchableOpacity>
-              ))}
+            <ScrollView style={styles.regionList} nestedScrollEnabled>
+              <WorkRegionField value={draftRegion} onChange={setDraftRegion} label="활동지역" required disabled={regionSaving} />
             </ScrollView>
 
             <PrimaryButton
@@ -467,7 +396,7 @@ export default function GroupSettingsScreen({
               }
               onPress={saveRegion}
               disabled={
-                !draftDistrict ||
+                !isWorkRegionComplete(draftRegion) ||
                 regionSaving
               }
             />

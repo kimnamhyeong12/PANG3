@@ -41,7 +41,7 @@ export default function LoginPage() {
           <div className="header-logo">
             <IconLogo size={18} />
           </div>
-          <span className="header-title">사하구 외근도우미</span>
+          <span className="header-title">외근도우미</span>
         </div>
         {error && <p className="form-error">{error}</p>}
         <div className="field">

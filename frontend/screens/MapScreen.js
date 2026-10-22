@@ -34,7 +34,7 @@ import SafetyGuideBadge from '../components/SafetyGuideBadge';
 import SearchResultSheet from '../components/SearchResultSheet';
 import RegistrationFab from '../components/RegistrationFab';
 import WorkplaceField from '../components/WorkplaceField';
-import { BUSAN_DISTRICT_CODES } from '../constants/busanDistricts';
+import { regionBoundariesPath } from '../utils/workRegion';
 import { KakaoNavigationView, KakaoWalkingMapView, isWalkingMapAvailable, beginRouteSession, discardSdkPreview, endRouteSession, isKakaoNavigationAvailable, isSdkPreviewAvailable, previewSdkRoute, wasRouteTaskRemoved } from '../modules/kakao-navigation';
 import {
   stopRouteNotification,
@@ -359,15 +359,10 @@ function NormalMapScreen({
   }, [mapSelectMode, directCenter?.lat, directCenter?.lng]);
   const loadDongs = async (openSheet = true) => {
     const requestId = ++dongLoadIdRef.current;
-    const teamDistrict = locationScope === 'team' ? activeGroup?.regionSigungu : null;
-    const admCode = teamDistrict
-      ? ((activeGroup?.regionSido || '').includes('부산')
-        ? BUSAN_DISTRICT_CODES[teamDistrict]
-        : null) || activeGroup?.regionAdmCode
-      : user?.workSido === '부산광역시'
-        ? BUSAN_DISTRICT_CODES[user?.workSigungu]
-        : activeGroup?.regionAdmCode;
-    if (!admCode) {
+    const regionPath = regionBoundariesPath(locationScope === 'team'
+      ? { sido: activeGroup?.regionSido, sigungu: activeGroup?.regionSigungu, admCode: activeGroup?.regionAdmCode }
+      : { sido: user?.workSido, sigungu: user?.workSigungu });
+    if (!regionPath) {
       setDongLoading(false);
       showAlert('지역 정보 필요', '설정에서 근무 시·군·구를 선택해주세요.');
       return;
@@ -378,7 +373,7 @@ function NormalMapScreen({
     }
     try {
       setDongLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/sgis/boundaries?admCode=${encodeURIComponent(admCode)}`);
+      const response = await fetch(`${API_BASE_URL}${regionPath}`);
       if (!response.ok) throw new Error('경계를 불러오지 못했습니다.');
       const data = await response.json();
       if (requestId === dongLoadIdRef.current) {
@@ -665,7 +660,7 @@ function NormalMapScreen({
     const props = selectedDong?.properties || {};
     const fullName = String(props.adm_nm || props.adm_name || props.name || '').trim();
     const parts = fullName.split(/\s+/).filter(Boolean);
-    const selectedSido = props.sido_nm || parts[0] || activeGroup?.regionSido || user?.workSido || '부산광역시';
+    const selectedSido = props.sido_nm || parts[0] || activeGroup?.regionSido || user?.workSido || '';
     const selectedSigungu = props.sgg_nm || (parts.length >= 3 ? parts[parts.length - 2] : '') || activeGroup?.regionSigungu || user?.workSigungu || '';
     const selectedAdminDong = parts.length ? parts[parts.length - 1] : '';
     const admCode = props.adm_cd || props.admCode || '';
@@ -1285,11 +1280,7 @@ function NormalMapScreen({
     if (target?.isSearchResult) { setSelectedSearchPinId(target.id); focusPlaces([target]); return; }
     if (target?.isPublicFacility) { togglePublicFacility(target); return; }
     if (publicFacilityMode) return;
-    if (isCompleted(target) || target.status === 'working') { onLocationClick?.(target, 'report'); return; }
-    if (locationKey(target) === routeVisibleKey && !target.isReturnLocation) {
-      onLocationClick?.(target, 'report');
-      return;
-    }
+    if (isCompleted(target)) { onLocationClick?.(target, 'report'); return; }
     if (preview?.loading && preview.targetKey === locationKey(target)) return;
     previewVisit(target);
   };

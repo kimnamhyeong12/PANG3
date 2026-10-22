@@ -315,7 +315,7 @@ public class CompiledReportService {
 
     /** 건별 HWPX(ai/app.py)와 같은 자동 제목. */
     public static String autoTitle(Task task) {
-        String place = firstNonBlank(task.getDetailAddress(), task.getRoadAddress(), "사하구 관내");
+        String place = firstNonBlank(task.getDetailAddress(), task.getRoadAddress(), "작업 현장");
         String category = firstNonBlank(task.getTaskCategory(), "현장 점검");
         return "위치도 및 현장사진(" + place + ", " + category + ")";
     }

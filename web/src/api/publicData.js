@@ -6,6 +6,13 @@ export function fetchBoundaries(admCode) {
   return api.get('/api/sgis/boundaries', { admCode });
 }
 
+
+export function fetchRegionBoundaries(sido, sigungu, legacyCode) {
+  if (sido && sigungu) return api.get('/api/sgis/boundaries/by-region', { sido, sigungu });
+  if (/^\d{5}$/.test(String(legacyCode || ''))) return fetchBoundaries(legacyCode);
+  return Promise.resolve({ type: 'FeatureCollection', features: [] });
+}
+
 // AedController GET /api/aeds/by-dong?admCode= (SGIS 행정동 코드, 예: 21100510)
 // → [{ aedId, modelName, address, productName, businessTel, lat, lng, sido, sigungu, adminDong }]
 export function fetchAedsByDong(admCode) {

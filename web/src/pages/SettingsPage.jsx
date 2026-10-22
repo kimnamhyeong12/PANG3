@@ -167,8 +167,8 @@ function MembersSection({ groupId, user }) {
 }
 
 function RegionSection({ groupId, group, user, onSaved }) {
-  const initialSido = SIDO_LIST.find((s) => s.name === group?.regionSido) ?? SIDO_LIST[1];
-  const [sidoCode, setSidoCode] = useState(initialSido.code);
+  const initialSido = SIDO_LIST.find((s) => s.name === group?.regionSido);
+  const [sidoCode, setSidoCode] = useState(initialSido?.code || '');
   const [sigunguList, setSigunguList] = useState([]);
   const [sigunguCode, setSigunguCode] = useState(group?.regionAdmCode ?? '');
   const [listLoading, setListLoading] = useState(false);
@@ -179,8 +179,8 @@ function RegionSection({ groupId, group, user, onSaved }) {
 
   // 그룹이 바뀌면 현재 값으로 초기화
   useEffect(() => {
-    const sido = SIDO_LIST.find((s) => s.name === group?.regionSido) ?? SIDO_LIST[1];
-    setSidoCode(sido.code);
+    const sido = SIDO_LIST.find((s) => s.name === group?.regionSido);
+    setSidoCode(sido?.code || '');
     setSigunguCode(group?.regionAdmCode ?? '');
     setSaveError(null);
     setSaved(null);
@@ -191,20 +191,28 @@ function RegionSection({ groupId, group, user, onSaved }) {
     setListLoading(true);
     setListError(null);
     setSigunguList([]);
+    if (!sidoCode) { setListLoading(false); return () => {}; }
     fetchSigunguList(sidoCode)
-      .then((list) => !cancelled && setSigunguList(list))
+      .then((list) => {
+        if (cancelled) return;
+        setSigunguList(list);
+        if (SIDO_LIST.find(s => s.code === sidoCode)?.name === group?.regionSido) {
+          const match = list.find(s => s.name.replace(/\s+/g, '') === String(group?.regionSigungu || '').replace(/\s+/g, ''));
+          if (match) setSigunguCode(current => current || match.code);
+        }
+      })
       .catch((e) => !cancelled && setListError(errorMessage(e, '시·군·구 목록을 불러오지 못했습니다.')))
       .finally(() => !cancelled && setListLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [sidoCode]);
+  }, [sidoCode, group?.regionSido, group?.regionSigungu]);
 
   useEffect(() => loadSigungu(), [loadSigungu]);
 
   const sido = SIDO_LIST.find((s) => s.code === sidoCode);
   const sigungu = sigunguList.find((s) => s.code === sigunguCode);
-  const unchanged = sido?.name === group?.regionSido && sigunguCode === group?.regionAdmCode;
+  const unchanged = sido?.name === group?.regionSido && sigungu?.name?.replace(/\s+/g, '') === String(group?.regionSigungu || '').replace(/\s+/g, '');
 
   const onSave = async () => {
     if (!sido || !sigungu) return;
@@ -260,6 +268,7 @@ function RegionSection({ groupId, group, user, onSaved }) {
                 setSigunguCode('');
               }}
             >
+              <option value="">시·도를 선택하세요</option>
               {SIDO_LIST.map((s) => (
                 <option key={s.code} value={s.code}>
                   {s.name}

@@ -96,7 +96,6 @@ jobs:
               sleep 10
             done
             docker compose up -d
-            docker exec sahagu-api test -s /app/data/busan-entrances.jsonl.gz
             docker image prune -f
 
       

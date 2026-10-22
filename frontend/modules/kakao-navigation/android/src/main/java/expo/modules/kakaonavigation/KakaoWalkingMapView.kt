@@ -28,6 +28,7 @@ import com.kakao.vectormap.camera.CameraPosition
 import com.kakao.vectormap.camera.CameraUpdateFactory
 import com.kakao.vectormap.label.Label
 import com.kakao.vectormap.label.LabelOptions
+import com.kakao.vectormap.label.LabelStyle
 import com.kakao.vectormap.label.TransformMethod
 import com.kakao.vectormap.route.*
 import expo.modules.kotlin.AppContext
@@ -35,6 +36,9 @@ import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.max
 
 /** Walking route display only. Routing remains the Kakao walking REST API. */
 class KakaoWalkingMapView(context: Context, appContext: AppContext) : ExpoView(context, appContext),
@@ -62,10 +66,12 @@ class KakaoWalkingMapView(context: Context, appContext: AppContext) : ExpoView(c
   private var route = emptyList<LatLng>()
   private var currentLabel: Label? = null
   private var destinationLabel: Label? = null
+  private val destinationStyle by lazy { LabelStyle.from(DestinationPin.bitmap(context)).setApplyDpScale(false).setAnchorPoint(0.5f, DestinationPin.ANCHOR_Y) }
+  private val routeDirectionLabels = mutableListOf<Label>()
   private val routeArrowBitmap by lazy {
     val density = resources.displayMetrics.density
-    val width = (12 * density).toInt().coerceAtLeast(12)
-    val height = (5 * density).toInt().coerceAtLeast(5)
+    val width = (7 * density).toInt().coerceAtLeast(7)
+    val height = (10 * density).toInt().coerceAtLeast(10)
     Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
       val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
@@ -74,11 +80,11 @@ class KakaoWalkingMapView(context: Context, appContext: AppContext) : ExpoView(c
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
       }
-      // Route textures run along their horizontal axis, from the first point to the last.
+      // North-facing chevron; each label is rotated to its own route segment bearing.
       val chevron = Path().apply {
-        moveTo(width * 0.35f, height * 0.18f)
-        lineTo(width * 0.65f, height * 0.5f)
-        lineTo(width * 0.35f, height * 0.82f)
+        moveTo(width * 0.18f, height * 0.65f)
+        lineTo(width * 0.5f, height * 0.35f)
+        lineTo(width * 0.82f, height * 0.65f)
       }
       Canvas(bitmap).drawPath(chevron, paint)
     }
@@ -202,15 +208,6 @@ class KakaoWalkingMapView(context: Context, appContext: AppContext) : ExpoView(c
     drawRoute()
   }
 
-  private fun markerBitmap(color: Int): Bitmap {
-    val size = (28 * resources.displayMetrics.density).toInt().coerceAtLeast(28)
-    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap); val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    paint.color = Color.WHITE; canvas.drawCircle(size / 2f, size / 2f, size * 0.46f, paint)
-    paint.color = color; canvas.drawCircle(size / 2f, size / 2f, size * 0.32f, paint)
-    return bitmap
-  }
-
   private fun drawPosition() {
     val target = position ?: return
     val kakaoMap = map ?: return
@@ -256,15 +253,47 @@ class KakaoWalkingMapView(context: Context, appContext: AppContext) : ExpoView(c
     val kakaoMap = map ?: return
     val layer = kakaoMap.routeLineManager?.layer ?: return
     layer.removeAll()
+    routeDirectionLabels.forEach { it.remove() }; routeDirectionLabels.clear()
     destinationLabel?.remove(); destinationLabel = null
     if (route.size < 2) return
     val density = resources.displayMetrics.density
-    val pattern = RouteLinePattern.from(routeArrowBitmap, 56f * density)
     val styles = RouteLineStyles.from(
-      RouteLineStyle.from(7f * density, Color.rgb(36, 119, 243), 2f * density, Color.WHITE, pattern))
+      RouteLineStyle.from(7f * density, Color.rgb(36, 119, 243), 2f * density, Color.WHITE))
     layer.addRouteLine(RouteLineOptions.from(RouteLineSegment.from(route, styles)))
+    drawRouteDirections(kakaoMap)
     destinationLabel = kakaoMap.labelManager?.layer?.addLabel(
-      LabelOptions.from("walking-destination", route.last()).setStyles(markerBitmap(Color.rgb(227, 77, 89))))
+      LabelOptions.from("walking-destination", route.last()).setStyles(destinationStyle).setRank(10000L))
+  }
+
+  private fun drawRouteDirections(kakaoMap: KakaoMap) {
+    val labelLayer = kakaoMap.labelManager?.layer ?: return
+    // Route coordinates are ordered from the current position toward the destination.
+    val lengths = route.zipWithNext { start, end ->
+      val east = Math.toRadians(end.longitude - start.longitude) * cos(Math.toRadians((start.latitude + end.latitude) / 2))
+      val north = Math.toRadians(end.latitude - start.latitude)
+      hypot(east, north) * 6371000.0
+    }
+    val spacing = max(35.0, lengths.sum() / 100.0)
+    var nextAt = spacing / 2
+    var travelled = 0.0
+    for (index in lengths.indices) {
+      val length = lengths[index]
+      if (length < 0.1) continue
+      val start = route[index]; val end = route[index + 1]
+      val east = (end.longitude - start.longitude) * cos(Math.toRadians((start.latitude + end.latitude) / 2))
+      val north = end.latitude - start.latitude
+      val bearing = atan2(east, north).toFloat()
+      while (nextAt <= travelled + length && routeDirectionLabels.size < 100) {
+        val fraction = (nextAt - travelled) / length
+        val point = LatLng.from(start.latitude + (end.latitude - start.latitude) * fraction,
+          start.longitude + (end.longitude - start.longitude) * fraction)
+        val arrow = labelLayer.addLabel(LabelOptions.from("walking-route-arrow-${routeDirectionLabels.size}", point)
+          .setTransform(TransformMethod.AbsoluteRotation_Decal).setStyles(routeArrowBitmap))
+        arrow?.let { it.rotateTo(bearing); routeDirectionLabels.add(it) }
+        nextAt += spacing
+      }
+      travelled += length
+    }
   }
 
   private fun followCamera(resetZoom: Boolean) {
@@ -351,5 +380,6 @@ class KakaoWalkingMapView(context: Context, appContext: AppContext) : ExpoView(c
     pauseMap(); owner?.lifecycle?.removeObserver(this); owner = null
     mapView?.finish(); mapView?.let { removeView(it) }; mapView = null; map = null
     currentLabel = null; destinationLabel = null
+    routeDirectionLabels.clear()
   }
 }

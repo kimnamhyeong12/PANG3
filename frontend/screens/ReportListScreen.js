@@ -2,7 +2,6 @@ import { showAlert } from '../components/CustomAlert';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Platform,
   View,
   Text,
   TextInput,
@@ -68,6 +67,7 @@ export default function ReportListScreen({
   const [checkingReports, setCheckingReports] = useState(false);
   const [reportReload, setReportReload] = useState(0);
   const [query, setQuery] = useState('');
+  const [folderUnread, setFolderUnread] = useState(false);
   useEffect(() => {
     let active = true;
     setCheckingReports(true);
@@ -141,7 +141,10 @@ export default function ReportListScreen({
       fallback: () => onCreateReport?.(locs.map(loc => ({ ...loc, progressId: reportOf(loc).progressId }))),
     });
     const savedTasks = locs.filter(loc => saved.includes(reportOf(loc).progressId)).map(getTaskId);
-    if (savedTasks.length) setSelectedIds(prev => prev.filter(id => !savedTasks.includes(id)));
+    if (savedTasks.length) {
+      setFolderUnread(true);
+      setSelectedIds(prev => prev.filter(id => !savedTasks.includes(id)));
+    }
   };
 
   const handleDownloadSelected = () => {
@@ -170,19 +173,23 @@ export default function ReportListScreen({
     const tone = workStatus(loc.status);
     const finished = loc.status === 'complete';
     const title = titleOf(loc);
+    const fileState = reportable ? files.stateOf(reportOf(loc)) : 'new';
     // 저장된 보고서가 있으면 카드 누르기 = 미리보기, 없으면 작성
     const preview = reportable && !!onPreviewReport;
     return <ReportFileCard key={taskId ?? index} title={title} checked={checked} selectable={reportable} busy={files.downloading}
-      style={{ backgroundColor: finished ? colors.surface : tone.background, borderColor: checked ? colors.primary : finished ? colors.line : 'transparent' }}
+      style={{ backgroundColor: tone.background, borderColor: checked ? colors.text : 'transparent' }}
       onToggle={() => toggleSelect(loc)}
       onPress={() => preview ? onPreviewReport({ ...reportOf(loc), title }) : onSelectLocation?.(loc)}
       pressLabel={preview ? `${title} 미리보기` : `${title} 보고서 ${finished ? '수정' : '작성'}`}
       editLabel={finished ? '수정' : '작성'} onEdit={() => onSelectLocation?.(loc)}
-      downloadable={reportable} state={reportable ? files.stateOf(reportOf(loc)) : 'new'}
+      downloadable={reportable} state={fileState} badgeInContent hideSavedFolder
       onDownload={() => download([loc])}
-      onOpenFolder={Platform.OS === 'android' ? files.openFolder : () => download([loc])}>
+      >
       <View style={styles.cardRow}>
+        <View style={styles.numberColumn}>
         <View style={[styles.number, { backgroundColor: tone.color }]}><Text style={styles.numberText}>{loc.markerNumber || index + 1}</Text></View>
+        {reportable && fileState === 'saved' && <Text style={styles.received}>받음</Text>}
+        </View>
         <View style={styles.cardInfo}>
           <Text style={styles.itemTitle} numberOfLines={2}>{title}</Text>
           <View style={styles.meta}>
@@ -205,11 +212,17 @@ export default function ReportListScreen({
   return (
     <View style={styles.container}>
       {/* 이 탭은 내 작업 결과만 보인다 */}
-      <ScreenHeader root={!selectedIds.length} title="보고서 작성(개인)" onBack={onBack}
+      <ScreenHeader root={!selectedIds.length} title="보고서 작성" onBack={onBack}
         right={Object.values(savedReports).some(report => report.error) ? <TouchableOpacity accessibilityLabel="보고서 상태 다시 확인" onPress={() => setReportReload(value => value + 1)}><Text style={{ color: colors.primary }}>다시 확인</Text></TouchableOpacity> : null} />
       {/* 그룹 바꾸기 (D37): 제목 줄에선 그룹 이름이 잘려 제목 아래 한 줄로. 받는 동안은 잠금 */}
       <View style={[styles.groupRow, files.downloading && styles.disabled]} pointerEvents={files.downloading ? 'none' : 'auto'}>
-        <MapWorkspaceSwitcher userId={user?.userId} activeGroup={activeGroup} onSelect={onSelectGroup} />
+        <TouchableOpacity style={styles.folderButton} onPress={() => { setFolderUnread(false); files.openFolder(); }}
+          accessibilityRole="button" accessibilityLabel={folderUnread ? '저장 폴더 열기, 새 다운로드 있음' : '저장 폴더 열기'}>
+          <Ionicons name="folder-open-outline" size={17} color={colors.text} />
+          <Text style={styles.folderText}>폴더 열기</Text>
+          {folderUnread && <View style={styles.folderDot} />}
+        </TouchableOpacity>
+        <MapWorkspaceSwitcher userId={user?.userId} activeGroup={activeGroup} onSelect={onSelectGroup} dropdown />
       </View>
 
       <ScrollView
@@ -239,18 +252,18 @@ export default function ReportListScreen({
           </View>
         ) : <>
           <View style={styles.search}>
-            <Ionicons name="search" size={18} color={colors.primary} />
+            <Ionicons name="search" size={18} color={colors.text} />
             <TextInput style={styles.searchInput} value={query} onChangeText={setQuery} placeholder="주소 · 보고서 이름 · 메모 검색"
               placeholderTextColor={colors.textFaint} returnKeyType="search" accessibilityLabel="보고서 검색" />
             {!!query && <TouchableOpacity onPress={() => setQuery('')} accessibilityLabel="검색 지우기"><Ionicons name="close-circle" size={18} color={colors.textFaint} /></TouchableOpacity>}
           </View>
-          {section('쓸 것', todo)}
-          {section('끝난 것', done)}
+          {section('작업 전·중', todo)}
+          {section('작업 후', done)}
           {!todo.length && !done.length && <Text style={styles.emptyDesc}>{`'${query.trim()}'에 맞는 보고서가 없습니다.`}</Text>}
         </>}
       </ScrollView>
 
-      <ReportDownloadFooter toast={files.toast} onOpenFolder={files.openFolder} count={selectedLocations.length}
+      <ReportDownloadFooter toast={files.toast} count={selectedLocations.length} alwaysVisible
         hint={downloadCountText(selectedLocations.map(reportOf), files.stateOf)} busy={files.downloading} onDownload={handleDownloadSelected} />
     </View>
   );
@@ -258,7 +271,10 @@ export default function ReportListScreen({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  groupRow: { flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 4 },
+  groupRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingHorizontal: 20, paddingBottom: 4 },
+  folderButton: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, borderRadius: 9, borderWidth: 1, borderColor: colors.text, backgroundColor: colors.surface },
+  folderText: { color: colors.text, fontSize: 11, fontWeight: '800' },
+  folderDot: { position: 'absolute', right: -3, top: -3, width: 10, height: 10, borderRadius: 5, backgroundColor: colors.danger, borderWidth: 1.5, borderColor: colors.surface },
   body: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 20, gap: 12 },
   emptyBox: { padding: 28, alignItems: 'center', backgroundColor: colors.surfaceMuted, borderRadius: 16 },
   emptyTitle: { marginTop: 12, fontSize: 15, fontWeight: '800', color: colors.text },
@@ -271,6 +287,8 @@ const styles = StyleSheet.create({
   sectionCount: { color: colors.textSoft, fontSize: 12, fontWeight: '700' },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   number: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  numberColumn: { width: 34, alignItems: 'center', gap: 4 },
+  received: { color: colors.successInk, backgroundColor: colors.successSoft, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5, overflow: 'hidden', fontSize: 10, fontWeight: '800' },
   numberText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
   cardInfo: { flex: 1 }, itemTitle: { fontSize: 14, lineHeight: 21, fontWeight: '800', color: colors.text },
   meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 3 },

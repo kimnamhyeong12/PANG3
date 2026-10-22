@@ -33,5 +33,6 @@ export async function downloadProtectedFile(url, name = 'report.hwpx') {
 }
 export async function localImageForEditing(uri) {
   const base = process.env.EXPO_PUBLIC_API_BASE_URL;
-  return base && uri?.startsWith(`${base}/api/files/`) ? downloadProtectedFile(uri, 'photo.jpg') : uri;
+  const extension = uri?.match(/\.(webp|png|jpe?g)(?:[?#]|$)/i)?.[1] || 'jpg';
+  return base && uri?.startsWith(`${base}/api/files/`) ? downloadProtectedFile(uri, `photo.${extension}`) : uri;
 }

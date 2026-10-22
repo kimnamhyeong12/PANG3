@@ -142,6 +142,28 @@ public class SgisBoundaryService {
                 ignored -> convertFeatureCollection(requestBoundary(getAccessToken(), code, 2)));
     }
 
+    /** Resolve by the saved nationwide region name, never a Busan-only code table. */
+    public JsonNode getWorkRegionBoundaries(String sido, String sigungu) {
+        WorkRegion.validate(sido, sigungu);
+        String district = WorkRegion.normalizeSigungu(sido, sigungu);
+        String cacheKey = "work-region:" + sido.trim() + ":" + district;
+        JsonNode cached = cachedBoundaries.get(cacheKey);
+        if (cached != null) return cached;
+        JsonNode source = getSidoAdministrativeDongBoundaries(sido);
+        ObjectNode result = objectMapper.createObjectNode();
+        result.put("type", "FeatureCollection");
+        ArrayNode features = result.putArray("features");
+        for (JsonNode feature : source.path("features")) {
+            String name = feature.path("properties").path("adm_nm").asText("").trim().replaceAll("\\s+", " ");
+            int separator = name.indexOf(' ');
+            String local = separator < 0 ? name : name.substring(separator + 1);
+            // SGIS may spell general districts as 천안시동남구 while the account stores 천안시 동남구.
+            if ("세종특별자치시".equals(sido.trim()) || local.replace(" ", "").startsWith(district.replace(" ", ""))) features.add(feature);
+        }
+        cachedBoundaries.putIfAbsent(cacheKey, result);
+        return result;
+    }
+
     private String getAccessToken() {
         long now = Instant.now().getEpochSecond();
         if (accessToken != null && now < accessTokenExpiresAtEpochSeconds - 60) {

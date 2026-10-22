@@ -222,7 +222,7 @@ def clean_markdown_for_hwp(text: str) -> str:
 
 
 def create_fieldwork_report(report_data: dict, output_filename: str, document=None, save: bool = True) -> str:
-    location_name = str(report_data.get("location_name") or "사하구 관내")
+    location_name = str(report_data.get("location_name") or "작업 현장")
     task_category = str(report_data.get("task_category") or "현장 점검")
     main_comment = str(report_data.get("main_comment") or "")
     map_image = report_data.get("map_image_path")
@@ -395,7 +395,7 @@ def run_gemini_analysis(
 
     captions_text = "\n".join(f"- {c}" for c in photo_captions if c) or "(없음)"
     prompt = f"""
-당신은 부산광역시 사하구청의 현장 조사 전문 공무원입니다.
+당신은 현장 조사 및 시설물 점검 보고서 작성 전문가입니다.
 '{location_name}' 현장 사진과 담당자 메모를 바탕으로
 공식 행정 보고서에 넣을 '현장 상황 요약 및 조치 의견'을 작성하세요.
 
@@ -444,7 +444,7 @@ def run_pipeline(payload: dict, document=None, combined_path=None) -> dict:
         for report in reports:
             run_pipeline({**report, "output_dir": str(output_dir)}, document=doc, combined_path=batch_path)
         return {"ok": True, "report_file": batch_path, "report_count": len(reports)}
-    location_name = payload.get("location_name") or "사하구"
+    location_name = payload.get("location_name") or "작업 현장"
     task_category = payload.get("task_category") or "현장 점검"
     field_memo = payload.get("field_memo") or ""
     main_comment = payload.get("main_comment") or ""

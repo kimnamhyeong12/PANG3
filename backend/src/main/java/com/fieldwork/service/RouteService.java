@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -27,11 +26,6 @@ public class RouteService {
 
     private final RestTemplate restTemplate;
     private final KakaoWalkingClient walkingClient = new KakaoWalkingClient();
-    private static final double MAX_ENTRANCE_SNAP_METERS = 50;
-
-    @Autowired(required = false)
-    private BusanEntranceService busanEntranceService;
-
     public RouteService() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5_000);
@@ -220,32 +214,8 @@ public class RouteService {
 
         for (int i = 0; i < routePoints.size() - 1; i++) {
             Map<String, Object> start = routePoints.get(i);
-            if (i == 0 && start.containsKey("markerLatitude")) start = originalMarkerPoint(start);
-            Map<String, Object> entrance = routePoints.get(i + 1);
-            // Building-group entrances are not necessarily vehicle entrances. Let Kakao
-            // resolve the original POI first; never invent a road point by extrapolation.
-            Map<String, Object> end = entrance.containsKey("markerLatitude")
-                    ? originalMarkerPoint(entrance) : entrance;
-            RoadSelection selection;
-            try {
-                selection = selectRoadLeg(start, end, priority);
-            } catch (RoadPathUnavailable error) {
-                if (!entrance.containsKey("markerLatitude")) throw error;
-                end = entrance;
-                selection = selectRoadLeg(start, end, priority);
-            }
-            // A successful route to a building can still stop at its rear wall.
-            // Try the real entrance when the provider's arrival misses it.
-            if (entrance.containsKey("markerLatitude") && end != entrance
-                    && !endsNearEntrance(selection.leg().path(), entrance)) {
-                try {
-                    RoadSelection entranceSelection = selectRoadLeg(start, entrance, priority);
-                    end = entrance;
-                    selection = entranceSelection;
-                } catch (RoadPathUnavailable unavailable) {
-                    // Some recorded entrances are pedestrian-only. Keep the usable road route.
-                }
-            }
+            Map<String, Object> end = routePoints.get(i + 1);
+            RoadSelection selection = selectRoadLeg(start, end, priority);
             RoadLeg leg = selection.leg();
             totalDistance += leg.distance();
             totalDuration += leg.duration();
@@ -259,12 +229,10 @@ public class RouteService {
             Map<String, Double> navigationEnd = leg.path().get(leg.path().size() - 1);
             segment.put("navigationDestination", Map.of("lat", navigationEnd.get("latitude"),
                     "lng", navigationEnd.get("longitude")));
-            segment.put("entranceMatched", entrance.containsKey("markerLatitude")
-                    && endsNearEntrance(leg.path(), entrance));
             segment.put("routeDiagnostics", Map.of(
                     "requestedOrigin", Map.of("latitude", getLat(start), "longitude", getLng(start)),
                     "requestedDestination", Map.of("latitude", getLat(end), "longitude", getLng(end)),
-                    "destinationSource", end.containsKey("markerLatitude") ? "entranceFallback" : "original",
+                    "destinationSource", "original",
                     "candidates", selection.candidates()));
             segments.add(segment);
             // The next vehicle leg starts at the actual road arrival, not inside the building.
@@ -376,9 +344,6 @@ public class RouteService {
             }
         }
         if (path.size() < 2) throw new RoadPathUnavailable("차량 경로 좌표가 부족합니다.");
-        if (end.containsKey("markerLatitude") && !endsNearEntrance(path, end)) {
-            throw new RoadPathUnavailable("차량 경로가 출입구 근처에 연결되지 않았습니다.");
-        }
         if (summary == null || !(summary.get("distance") instanceof Number distance)
                 || !(summary.get("duration") instanceof Number duration)
                 || distance.intValue() <= 0 || duration.intValue() < 0) {
@@ -398,19 +363,7 @@ public class RouteService {
         double distance = 0, duration = 0;
         for (int i = 0; i < points.size() - 1; i++) {
             Map<String, Object> start = points.get(i), end = points.get(i + 1);
-            Map<String, Object> route;
-            try {
-                route = walkingClient.route(getLat(start), getLng(start), getLat(end), getLng(end), key);
-                if (end.containsKey("markerLatitude") &&
-                        !endsNearEntrance((List<Map<String, Double>>) route.get("path"), end)) {
-                    throw new IllegalStateException("도보 경로가 출입구 근처에 연결되지 않았습니다.");
-                }
-            } catch (RuntimeException error) {
-                if (!end.containsKey("markerLatitude")) throw error;
-                end = originalMarkerPoint(end);
-                points.set(i + 1, end);
-                route = walkingClient.route(getLat(start), getLng(start), getLat(end), getLng(end), key);
-            }
+            Map<String, Object> route = walkingClient.route(getLat(start), getLng(start), getLat(end), getLng(end), key);
             List<Map<String, Double>> segmentPath = (List<Map<String, Double>>) route.get("path");
             path.addAll(segmentPath);
             segments.add(makeSegment(i, start, end, segmentPath, "walk"));
@@ -437,30 +390,12 @@ public class RouteService {
 
         for (Map<String, Object> location : locations) {
             Map<String, Object> endpoint = new HashMap<>(location);
-            if (busanEntranceService != null) {
-                double markerLat = getLat(location), markerLng = getLng(location);
-                busanEntranceService.find(markerLat, markerLng).ifPresent(entrance -> {
-                    double distance = distanceMeters(markerLat, markerLng,
-                            entrance.latitude(), entrance.longitude());
-                    if (distance > 2 && distance <= 500) {
-                        endpoint.put("markerLatitude", markerLat);
-                        endpoint.put("markerLongitude", markerLng);
-                        endpoint.put("lat", entrance.latitude());
-                        endpoint.put("lng", entrance.longitude());
-                    }
-                });
-            }
+            endpoint.remove("markerLatitude");
+            endpoint.remove("markerLongitude");
             routePoints.add(endpoint);
         }
 
         return routePoints;
-    }
-
-    private Map<String, Object> originalMarkerPoint(Map<String, Object> entrancePoint) {
-        Map<String, Object> original = new HashMap<>(entrancePoint);
-        original.put("lat", ((Number) original.remove("markerLatitude")).doubleValue());
-        original.put("lng", ((Number) original.remove("markerLongitude")).doubleValue());
-        return original;
     }
 
     private Map<String, Object> makeSegment(
@@ -477,16 +412,13 @@ public class RouteService {
         segment.put("toName", String.valueOf(end.get("name")));
         segment.put("mode", mode);
         segment.put("path", segmentPath);
-        if ("car".equals(mode) || (end.containsKey("markerLatitude") && end.containsKey("markerLongitude"))) {
+        if ("car".equals(mode)) {
             Map<String, Double> routeEnd = segmentPath.isEmpty()
                     ? Map.of("latitude", getLat(end), "longitude", getLng(end))
                     : segmentPath.get(segmentPath.size() - 1);
-            double markerLat = end.containsKey("markerLatitude")
-                    ? ((Number) end.get("markerLatitude")).doubleValue() : getLat(end);
-            double markerLng = end.containsKey("markerLongitude")
-                    ? ((Number) end.get("markerLongitude")).doubleValue() : getLng(end);
+            double markerLat = getLat(end), markerLng = getLng(end);
             double gap = distanceMeters(routeEnd.get("latitude"), routeEnd.get("longitude"), markerLat, markerLng);
-            if (!"car".equals(mode) || (gap > 2 && gap <= 500)) {
+            if (gap > 2 && gap <= 500) {
                 segment.put("connectorPath", List.of(routeEnd,
                         Map.of("latitude", markerLat, "longitude", markerLng)));
             }
@@ -499,17 +431,6 @@ public class RouteService {
         double north = (lat2 - lat1) * 111_000;
         double east = (lng2 - lng1) * 111_000 * Math.cos(Math.toRadians((lat1 + lat2) / 2));
         return Math.hypot(north, east);
-    }
-
-    private boolean endsNearEntrance(List<Map<String, Double>> path, Map<String, Object> entrance) {
-        return endsWithinMeters(path, entrance, MAX_ENTRANCE_SNAP_METERS);
-    }
-
-    private boolean endsWithinMeters(List<Map<String, Double>> path, Map<String, Object> entrance, double meters) {
-        if (path == null || path.isEmpty()) return false;
-        Map<String, Double> last = path.get(path.size() - 1);
-        return distanceMeters(last.get("latitude"), last.get("longitude"),
-                getLat(entrance), getLng(entrance)) <= meters;
     }
 
     public Map<String, Object> getSingleSegmentPath(

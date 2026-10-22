@@ -31,7 +31,7 @@ public final class WorkRegion {
         if (sido == null || sido.isBlank()) throw new IllegalArgumentException("시·도를 선택해주세요.");
         if (selected == null || selected.isBlank()) throw new IllegalArgumentException("시·군·구를 선택해주세요.");
         String region = ALIASES.getOrDefault(sido.trim(), sido.trim());
-        String value = selected.trim().replaceAll("\\s+", " ");
+        String value = normalizeSigungu(sido, selected);
         for (JsonNode parent : DATA.path("districtsByRegion").path(region)) {
             String name = parent.asText();
             if (!value.equals(name) && !value.startsWith(name + " ")) continue;
@@ -45,5 +45,21 @@ public final class WorkRegion {
             throw new IllegalArgumentException("해당 시의 구를 선택해주세요.");
         }
         throw new IllegalArgumentException("근무지역을 목록에서 다시 선택해주세요.");
+    }
+
+    public static String normalizeSigungu(String sido, String selected) {
+        String region = ALIASES.getOrDefault(sido == null ? "" : sido.trim(), sido == null ? "" : sido.trim());
+        String value = selected == null ? "" : selected.trim().replaceAll("\\s+", " ");
+        String compact = value.replace(" ", "");
+        for (JsonNode parent : DATA.path("districtsByRegion").path(region)) {
+            String name = parent.asText();
+            JsonNode children = DATA.path("subdistrictsByRegion").path(region).path(name);
+            if (children.isMissingNode() && compact.equals(name.replace(" ", ""))) return name;
+            for (JsonNode child : children) {
+                String canonical = name + " " + child.asText();
+                if (compact.equals(canonical.replace(" ", ""))) return canonical;
+            }
+        }
+        return value;
     }
 }

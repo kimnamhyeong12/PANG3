@@ -39,7 +39,8 @@ public class FileController {
 
         FileSystemResource resource = new FileSystemResource(file);
         return ResponseEntity.ok()
-                .contentType(MediaType.IMAGE_JPEG)
+                .contentType(fileName.toLowerCase(java.util.Locale.ROOT).endsWith(".webp") ? MediaType.parseMediaType("image/webp") :
+                        fileName.toLowerCase(java.util.Locale.ROOT).endsWith(".png") ? MediaType.IMAGE_PNG : MediaType.IMAGE_JPEG)
                 .body(resource);
     }
 }

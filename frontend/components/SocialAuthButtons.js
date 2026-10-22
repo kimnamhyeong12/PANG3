@@ -7,7 +7,7 @@ import { performSocialAuth } from '../utils/socialAuth';
 import { showAlert } from './CustomAlert';
 import { colors } from '../constants/design';
 
-export default function SocialAuthButtons({ mode = 'login', onLogin, onVerified, onLinked, disabled = false }) {
+export default function SocialAuthButtons({ mode = 'login', onLogin, onVerified, onLinked, disabled = false, compact = false }) {
   const [providers, setProviders] = useState(null);
   const [linked, setLinked] = useState([]);
   const [pending, setPending] = useState('');
@@ -42,19 +42,19 @@ export default function SocialAuthButtons({ mode = 'login', onLogin, onVerified,
     } catch (error) { if (!abort.signal.aborted) showAlert('소셜 로그인', error.message); }
     finally { if (controller.current === abort) controller.current = null; setPending(''); }
   };
-  return <View style={{ gap: 10 }}>
+  return <View style={compact ? styles.compactRow : { gap: 10 }}>
     {['google', 'kakao'].filter(provider => mode !== 'verify' || linked.includes(provider)).map(provider => {
       const name = provider === 'google' ? 'Google' : '카카오';
       const connected = mode === 'link' && linked.includes(provider);
       return <Pressable key={provider} accessibilityRole="button" disabled={disabled || !!pending || !providers?.[provider] || connected}
         accessibilityLabel={`${name}${mode === 'link' ? ' 계정 연결' : '로 계속하기'}`} onPress={() => start(provider)}
-        style={[styles.button, provider === 'kakao' && { backgroundColor: '#FEE500', borderColor: '#FEE500' }, (!providers?.[provider] || disabled || connected) && { opacity: 0.5 }]}>
+        style={[styles.button, compact && styles.compactButton, provider === 'kakao' && { backgroundColor: '#FEE500', borderColor: '#FEE500' }, (!providers?.[provider] || disabled || connected) && { opacity: 0.5 }]}>
         <Ionicons name={provider === 'google' ? 'logo-google' : 'chatbubble'} size={20} color={provider === 'google' ? '#4285F4' : '#191919'} />
-        <Text style={styles.label}>{name}{connected ? ' 연결됨' : mode === 'link' ? ' 계정 연결' : '로 계속하기'}</Text>
-        {providers && !providers[provider] && <Text style={{ fontSize: 11, color: colors.textSoft }}>준비 중</Text>}
+        {!compact && <Text style={styles.label}>{name}{connected ? ' 연결됨' : mode === 'link' ? ' 계정 연결' : '로 계속하기'}</Text>}
+        {!compact && providers && !providers[provider] && <Text style={{ fontSize: 11, color: colors.textSoft }}>준비 중</Text>}
       </Pressable>;
     })}
-    {loadFailed && <Pressable onPress={() => setReload(value => value + 1)}><Text style={{ color: colors.primary, textAlign: 'center' }}>로그인 연결 다시 확인</Text></Pressable>}
+    {loadFailed && !compact && <Pressable onPress={() => setReload(value => value + 1)}><Text style={{ color: colors.primary, textAlign: 'center' }}>로그인 연결 다시 확인</Text></Pressable>}
     {mode === 'verify' && providers && !linked.length && <Text style={{ color: colors.textSoft }}>연결된 소셜 계정이 없습니다.</Text>}
     <Modal visible={!!pending} transparent animationType="fade" onRequestClose={cancel}>
       <View style={styles.overlay}><Pressable style={StyleSheet.absoluteFill} onPress={cancel} accessibilityLabel="소셜 로그인 취소" /><View style={styles.sheet}>
@@ -65,6 +65,8 @@ export default function SocialAuthButtons({ mode = 'login', onLogin, onVerified,
   </View>;
 }
 const styles = StyleSheet.create({
+  compactRow: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 12 },
+  compactButton: { width: 52, height: 52, borderRadius: 26, gap: 0 },
   button: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, borderWidth: 1, borderColor: colors.line, backgroundColor: '#FFFFFF', borderRadius: 14 },
   label: { color: '#191919', fontSize: 14, fontWeight: '700', textAlign: 'center' },
   overlay: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#10285B66' },

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { groupApi } from '../utils/groupApi';
@@ -8,8 +8,11 @@ import { colors } from '../constants/design';
 const personal = group => Boolean(group?.personalWorkspace || group?.personal || group?.workspaceType === 'PERSONAL');
 const label = group => personal(group) || !group ? '개인 업무공간' : group.groupName;
 
-export default function MapWorkspaceSwitcher({ userId, activeGroup, onSelect }) {
+export default function MapWorkspaceSwitcher({ userId, activeGroup, onSelect, dropdown = false }) {
   const insets = useSafeAreaInsets();
+  const window = useWindowDimensions();
+  const trigger = useRef(null);
+  const [anchor, setAnchor] = useState(null);
   const [open, setOpen] = useState(false);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -17,6 +20,13 @@ export default function MapWorkspaceSwitcher({ userId, activeGroup, onSelect }) 
   const [reload, setReload] = useState(0);
   const [switching, setSwitching] = useState(false);
   const busy = useRef(false);
+  const openSelector = () => {
+    if (!dropdown) { setOpen(true); return; }
+    trigger.current?.measureInWindow((x, y, width, height) => {
+      setAnchor({ left: Math.max(12, Math.min(x, window.width - 252)), top: y + height + 4 });
+      setOpen(true);
+    });
+  };
   useEffect(() => {
     if (!open || !userId) return;
     let current = true;
@@ -36,21 +46,21 @@ export default function MapWorkspaceSwitcher({ userId, activeGroup, onSelect }) 
     finally { busy.current = false; setSwitching(false); }
   };
   return <>
-    <TouchableOpacity style={styles.badge} onPress={() => setOpen(true)} disabled={!onSelect || !userId}
-      accessibilityRole="button" accessibilityLabel={`사용 중인 그룹: ${label(activeGroup)}. 그룹 전환`}>
-      <Ionicons name={personal(activeGroup) || !activeGroup ? 'person-outline' : 'people-outline'} size={12} color={colors.text} />
-      <Text style={styles.name} numberOfLines={1}>{label(activeGroup)}</Text>
-      <Ionicons name="chevron-down" size={12} color={colors.textSoft} />
+    <TouchableOpacity ref={trigger} collapsable={false} style={[styles.badge, dropdown && styles.dropdownBadge]} onPress={openSelector} disabled={!onSelect || !userId}
+      accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel={`사용 중인 그룹: ${label(activeGroup)}. 그룹 전환`}>
+      <Ionicons name={personal(activeGroup) || !activeGroup ? 'person-outline' : 'people-outline'} size={dropdown ? 17 : 12} color={colors.text} />
+      <Text style={[styles.name, dropdown && styles.dropdownName]} numberOfLines={1}>{label(activeGroup)}</Text>
+      <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={12} color={dropdown ? colors.text : colors.textSoft} />
     </TouchableOpacity>
-    <Modal visible={open} transparent animationType="fade" onRequestClose={() => { if (!busy.current) setOpen(false); }}>
-      <View style={styles.backdrop}>
+    <Modal visible={open} transparent statusBarTranslucent={dropdown} animationType="fade" onRequestClose={() => { if (!busy.current) setOpen(false); }}>
+      <View style={dropdown ? styles.dropdownBackdrop : styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="그룹 전환 닫기" onPress={() => { if (!busy.current) setOpen(false); }} />
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <View style={styles.heading}><Text style={styles.title}>그룹 전환</Text><TouchableOpacity disabled={switching} onPress={() => setOpen(false)} accessibilityLabel="닫기" style={styles.close}><Ionicons name="close" size={22} color={colors.text} /></TouchableOpacity></View>
+        <View style={dropdown ? [styles.dropdown, anchor, { width: Math.min(240, window.width - 24), maxHeight: Math.max(80, Math.min(320, window.height - (anchor?.top || 0) - insets.bottom - 12)) }] : [styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          {!dropdown && <View style={styles.heading}><Text style={styles.title}>그룹 전환</Text><TouchableOpacity disabled={switching} onPress={() => setOpen(false)} accessibilityLabel="닫기" style={styles.close}><Ionicons name="close" size={22} color={colors.text} /></TouchableOpacity></View>}
           {loading ? <ActivityIndicator style={{ padding: 20 }} color={colors.primary} /> : <ScrollView>
             {groups.map(group => {
               const selected = String(group.groupId) === String(activeGroup?.groupId);
-              return <TouchableOpacity key={group.groupId} disabled={switching} onPress={() => select(group)} style={styles.row}
+              return <TouchableOpacity key={group.groupId} disabled={switching} onPress={() => select(group)} style={[styles.row, dropdown && styles.dropdownRow, dropdown && selected && styles.selectedRow]}
                 accessibilityRole="button" accessibilityState={{ selected, disabled: switching }}>
                 <Ionicons name={personal(group) ? 'person-outline' : 'people-outline'} size={20} color={colors.text} />
                 <Text style={[styles.rowText, selected && { color: colors.primary }]}>{label(group)}</Text>
@@ -68,6 +78,12 @@ export default function MapWorkspaceSwitcher({ userId, activeGroup, onSelect }) 
 }
 const styles = StyleSheet.create({
   badge: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 32, paddingHorizontal: 10, borderRadius: 16, backgroundColor: '#FFFFFFF2', maxWidth: '75%' },
+  dropdownBadge: { maxWidth: '60%', flexShrink: 1, minHeight: 36, paddingHorizontal: 8, gap: 5, borderRadius: 9, borderWidth: 1, borderColor: colors.text, backgroundColor: colors.surface },
+  dropdownName: { fontSize: 11, fontWeight: '800' },
+  dropdownBackdrop: { flex: 1 },
+  dropdown: { position: 'absolute', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: 4, elevation: 8, shadowColor: colors.text, shadowOpacity: 0.14, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  dropdownRow: { minHeight: 48, paddingVertical: 12, paddingHorizontal: 10, borderBottomWidth: 0, borderRadius: 8 },
+  selectedRow: { backgroundColor: colors.primarySoft },
   name: { flexShrink: 1, fontSize: 11, fontWeight: '700', color: colors.text },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#10213D66' },
   sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 20, maxHeight: '65%' },

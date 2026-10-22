@@ -24,8 +24,13 @@ public class SgisBoundaryController {
 
     @GetMapping("/boundaries")
     public JsonNode getAdministrativeBoundaries(
-            @RequestParam(defaultValue = "21100") String admCode) {
+            @RequestParam String admCode) {
         return sgisBoundaryService.getAdministrativeBoundaries(admCode);
+    }
+
+    @GetMapping("/boundaries/by-region")
+    public JsonNode getWorkRegionBoundaries(@RequestParam String sido, @RequestParam String sigungu) {
+        return sgisBoundaryService.getWorkRegionBoundaries(sido, sigungu);
     }
 
     @GetMapping("/boundaries/by-sido")

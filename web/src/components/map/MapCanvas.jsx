@@ -11,9 +11,9 @@ import {
   taskMarkerImage,
 } from './markerImages.js';
 
-// 부산 사하구청 부근
-const DEFAULT_CENTER = { lat: 35.1046, lng: 128.9749 };
-const DEFAULT_LEVEL = 6;
+// No selected region: start with a national overview.
+const DEFAULT_CENTER = { lat: 36.3, lng: 127.8 };
+const DEFAULT_LEVEL = 13;
 
 /*
  * 행정동 경계가 지도 조작을 막지 않도록 하는 원칙 (모바일 앱 버그 재발 방지)

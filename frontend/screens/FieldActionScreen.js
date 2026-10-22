@@ -25,6 +25,7 @@ import { colors } from '../constants/design';
 import { cleanReportName } from '../utils/reportName';
 
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { WebView } from 'react-native-webview';
 import { captureRef } from 'react-native-view-shot';
 
@@ -36,6 +37,7 @@ import {
 import VoiceTextInput from '../components/VoiceTextInput';
 import PhotoMarkupEditor from '../components/PhotoMarkupEditor';
 import ReportLocationPicker from '../components/ReportLocationPicker';
+import ReportPhotoPicker from '../components/ReportPhotoPicker';
 
 import {
   API_BASE_URL,
@@ -112,11 +114,11 @@ function getInteractiveMapHtml(latitude, longitude, selecting = false) {
 
   const lat = valid
     ? Number(latitude)
-    : 35.104578;
+    : 36.3;
 
   const lng = valid
     ? Number(longitude)
-    : 128.975;
+    : 127.8;
 
   return `
     <!DOCTYPE html>
@@ -464,6 +466,7 @@ export default function FieldActionScreen({
   const [completedAt, setCompletedAt] = useState(location?.completedAt || '');
   const [photos, setPhotos] =
     useState(createEmptyPhotos());
+  const [photoPickerIndex, setPhotoPickerIndex] = useState(null);
 
   const [
     fieldMemo,
@@ -806,26 +809,9 @@ export default function FieldActionScreen({
     await launchPhotoPick(index, () => ImagePicker.launchCameraAsync({ quality: 0.7 }));
   };
 
-  /*
-   * 앨범에서 사진 선택
-   */
-  const pickPhotoFromLibrary =
-    async (index) => {
-      const permission =
-        await ImagePicker
-          .requestMediaLibraryPermissionsAsync();
-
-      if (!permission.granted) {
-        showAlert(
-          '사진 접근 권한이 필요합니다.'
-        );
-        return;
-      }
-
-      await launchPhotoPick(index, () => ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'], allowsMultipleSelection: false, quality: 0.7,
-      }));
-    };
+  const pickPhotoFromLibrary = index => launchPhotoPick(index, () => ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'], allowsMultipleSelection: false, allowsEditing: false, quality: 0.7,
+  }));
 
   const launchPhotoPick = async (index, launch) => {
     try {
@@ -852,28 +838,7 @@ export default function FieldActionScreen({
   const selectPhoto = (
     index
   ) => {
-    showAlert(
-      '사진 선택',
-      '사진을 가져올 방법을 선택해주세요.',
-      [
-        {
-          text: '취소',
-          style: 'cancel',
-        },
-        {
-          text: '사진 촬영',
-          onPress: () =>
-            takePhoto(index),
-        },
-        {
-          text: '앨범 선택',
-          onPress: () =>
-            pickPhotoFromLibrary(
-              index
-            ),
-        },
-      ]
-    );
+    setPhotoPickerIndex(index);
   };
 
   /*
@@ -1181,11 +1146,14 @@ export default function FieldActionScreen({
         )
       );
 
-      const appendImage = (name, uri) => {
-        form.append(name, new File(uri));
+      const appendImage = async (name, uri) => {
+        const image = /\.webp(?:[?#]|$)/i.test(uri) ? { uri } : await ImageManipulator.manipulateAsync(uri, [], {
+          compress: 0.9, format: ImageManipulator.SaveFormat.WEBP,
+        });
+        form.append(name, new File(image.uri));
       };
-      for (const photo of uploadPhotos) appendImage('fieldPhotos', photo.uri);
-      if (mapImageUri) appendImage('mapImage', mapImageUri);
+      for (const photo of uploadPhotos) await appendImage('fieldPhotos', photo.uri);
+      if (mapImageUri) await appendImage('mapImage', mapImageUri);
 
       const res =
         await expoFetch(
@@ -1479,6 +1447,9 @@ export default function FieldActionScreen({
       {editingLocation && <ReportLocationPicker latitude={latitude} longitude={longitude} address={locationAddress}
         buildMapHtml={getInteractiveMapHtml} saving={positionSaving} onCancel={cancelLocationEdit} onConfirm={saveLocationPosition} />}
 
+      <ReportPhotoPicker visible={photoPickerIndex !== null} onClose={() => setPhotoPickerIndex(null)}
+        onCamera={() => takePhoto(photoPickerIndex)}
+        onLibrary={() => pickPhotoFromLibrary(photoPickerIndex)} />
       <PhotoMarkupEditor
         visible={
           photoEditor.visible

@@ -83,9 +83,10 @@ public class GroupService {
         group.setName(groupName.trim());
         group.setLeader(leader);
         group.setPersonal(false);
-        group.setRegionSido(regionSido == null || regionSido.isBlank() ? "遺?곌킅??떆" : regionSido.trim());
-        group.setRegionSigungu(regionSigungu == null ? "" : regionSigungu.trim());
-        group.setRegionAdmCode(regionAdmCode == null ? "" : regionAdmCode.trim());
+        WorkRegion.validateOptional(regionSido, regionSigungu);
+        group.setRegionSido(regionSido == null ? "" : regionSido.trim());
+        group.setRegionSigungu(WorkRegion.normalizeSigungu(regionSido, regionSigungu));
+        group.setRegionAdmCode(regionAdmCode != null && regionAdmCode.matches("\\d{5}") ? regionAdmCode : "");
         WorkGroup savedGroup = workGroupRepository.save(group);
 
         GroupMember leaderMember = new GroupMember();
@@ -112,16 +113,10 @@ public class GroupService {
         if (group.isPersonal()) {
             throw new RuntimeException("媛쒖씤 ?낅Т怨듦컙? 怨듦났?낅Т ?붾㈃?먯꽌 援?룰뎔???좏깮?⑸땲??");
         }
-        if (regionSigungu == null || regionSigungu.isBlank()
-                || regionAdmCode == null || regionAdmCode.isBlank()) {
-            throw new RuntimeException("?쒕룞 援?룰뎔???좏깮?댁＜?몄슂.");
-        }
-
-        group.setRegionSido(regionSido == null || regionSido.isBlank()
-                ? "遺?곌킅??떆"
-                : regionSido.trim());
-        group.setRegionSigungu(regionSigungu.trim());
-        group.setRegionAdmCode(regionAdmCode.trim());
+        WorkRegion.validate(regionSido, regionSigungu);
+        group.setRegionSido(regionSido.trim());
+        group.setRegionSigungu(WorkRegion.normalizeSigungu(regionSido, regionSigungu));
+        group.setRegionAdmCode(regionAdmCode != null && regionAdmCode.matches("\\d{5}") ? regionAdmCode : "");
 
         WorkGroup saved = workGroupRepository.save(group);
         Map<String, Object> result = groupSummary(saved,

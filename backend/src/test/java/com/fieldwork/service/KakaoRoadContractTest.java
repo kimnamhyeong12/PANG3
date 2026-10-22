@@ -59,11 +59,6 @@ public class KakaoRoadContractTest {
         RouteService service = new RouteService();
         set(service, "kakaoRestApiKey", "synthetic-test-key");
         set(service, "restTemplate", stub);
-        if (withEntrance) set(service, "busanEntranceService", new BusanEntranceService(new ObjectMapper()) {
-            @Override public Optional<Entrance> find(double lat, double lng) {
-                return Optional.of(new Entrance(lat + 0.0008, lng));
-            }
-        });
         return service;
     }
 
@@ -95,22 +90,6 @@ public class KakaoRoadContractTest {
         assert ((List<?>) segment(result).get("trafficSections")).size() == 1;
         assert segment(result).get("totalDistance").equals(1360);
         assert END.get("lat").equals(35.1538830767717);
-        // A valid route to the school centre must not hide an arrival at the wrong wall.
-        Stub wrongWall = new Stub(r -> response(r, 1000, 100, 0));
-        Map<String, Object> entranceRoute = service(wrongWall, true)
-                .getSingleSegmentPath(START, END, "car", null, "RECOMMEND");
-        assert wrongWall.calls.size() == 2;
-        assert wrongWall.calls.get(1).destination().equals(END.get("lng") + "," +
-                (((Number) END.get("lat")).doubleValue() + 0.0008));
-        assert segment(entranceRoute).get("entranceMatched").equals(true);
-        Map<?, ?> navigationEnd = (Map<?, ?>) segment(entranceRoute).get("navigationDestination");
-        assert navigationEnd.get("lat").equals(((Number) END.get("lat")).doubleValue() + 0.0008);
-        assert !navigationEnd.get("lat").equals(END.get("lat"));
-        Stub unreachableEntrance = new Stub(r -> r.destination().equals("128.997466947464,35.1538830767717")
-                ? response(r, 1000, 100, 0) : Map.of("routes", List.of(Map.of("result_code", 104))));
-        Map<String, Object> roadFallback = service(unreachableEntrance, true)
-                .getSingleSegmentPath(START, END, "car", null, "RECOMMEND");
-        assert segment(roadFallback).get("entranceMatched").equals(false);
         Stub recommended = new Stub(r -> response(r, 1849, 326, 0));
         Map<String, Object> sdkPreview = service(recommended, false).getSingleSegmentPath(START, END, "car", null, "RECOMMEND");
         assert segment(sdkPreview).get("routePriority").equals("RECOMMEND");
@@ -179,7 +158,7 @@ public class KakaoRoadContractTest {
                 Map.of("lat", 37.0, "lng", 127.0), Map.of("lat", 37.02, "lng", 127.02), "walk", "synthetic-test-key");
         assert ((Number) walkResult.get("totalDistance")).intValue() == 123;
         assert ((Number) walkResult.get("totalDuration")).intValue() == 99;
-        System.out.println("PASS road options, original POI, time/distance/toll tradeoffs, optional failures, invalid summaries, entrance fallback, auth failures, road continuity, same point, connectors and traffic");
+        System.out.println("PASS road options, original POI, time/distance/toll tradeoffs, optional failures, invalid summaries, auth failures, road continuity, same point, connectors and traffic");
     }
 
     private static void live(boolean dasun) throws Exception {
@@ -187,7 +166,6 @@ public class KakaoRoadContractTest {
         if (key == null || key.isBlank()) throw new IllegalStateException("KAKAO_REST_API_KEY is required");
         RouteService service = new RouteService();
         set(service, "kakaoRestApiKey", key);
-        set(service, "busanEntranceService", new BusanEntranceService(new ObjectMapper()));
         Map<String, Object> destination = dasun ? Map.of("lat", 35.0636823232284,
                 "lng", 128.985493965177, "name", "다선초등학교") : END;
         Map<String, Object> result = service.getSingleSegmentPath(START, destination, "car", null,

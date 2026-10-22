@@ -12,7 +12,7 @@ Android/iOS 빌드 구성은 app.json, app.config.js, eas.json 및 ANDROID_BUILD
 
 - screens/: 현재 사용하는 앱 화면
 - components/: 지도, 장소 검색, 사진 편집, 일괄 등록 등
-- constants/busanDistricts.js: 지도와 업무 현황이 공유하는 부산 SGIS 구·군 코드
+- utils/workRegion.js: 전국 시·도/시·군·구 선택과 지역별 행정동 경계 조회
 - utils/, services/: 경로·업무 계획·보고서·알림 처리
 - modules/kakao-navigation/: Android 차량 미리보기·안내 및 알림 생명주기
 - scripts/*-test.cjs: Node로 실행하는 기능 검증 스크립트

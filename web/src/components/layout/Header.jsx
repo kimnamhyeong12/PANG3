@@ -63,7 +63,7 @@ export default function Header() {
         <div className="header-logo">
           <IconLogo size={18} />
         </div>
-        <span className="header-title">사하구 외근도우미</span>
+        <span className="header-title">외근도우미</span>
         <span className="badge badge-navy">관리자</span>
         <GroupSwitcher />
       </div>

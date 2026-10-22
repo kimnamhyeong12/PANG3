@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useGroup } from '../context/GroupContext.jsx';
 import { fetchGroupTasks } from '../api/tasks.js';
-import { fetchAedsByDong, fetchBoundaries, fetchBusStopsByDong, fetchByDongs } from '../api/publicData.js';
+import { fetchAedsByDong, fetchRegionBoundaries, fetchBusStopsByDong, fetchByDongs } from '../api/publicData.js';
 import { loadKakaoMaps } from '../lib/kakaoLoader.js';
 import { normalizeStatus } from '../utils/taskStatus.js';
 import MapCanvas from '../components/map/MapCanvas.jsx';
@@ -13,8 +13,6 @@ import { errorMessage } from '../api/client.js';
 
 const LOADING = Symbol('loading');
 
-// 그룹 지역 코드가 없을 때 기본값 (앱과 동일: 21100 = 부산 사하구)
-const DEFAULT_ADM_CODE = '21100';
 
 const LAYERS = [
   { key: 'tasks', label: '현장 업무' },
@@ -104,7 +102,11 @@ export default function MapPage() {
   const [searchError, setSearchError] = useState(null);
   const [searchResult, setSearchResult] = useState(null);
 
-  const admCode = currentGroup?.regionAdmCode || DEFAULT_ADM_CODE;
+  const personal = currentGroup?.personal || currentGroup?.personalWorkspace || currentGroup?.workspaceType === 'PERSONAL';
+  const regionSido = personal ? user?.workSido || currentGroup?.regionSido : currentGroup?.regionSido;
+  const regionSigungu = personal ? user?.workSigungu || currentGroup?.regionSigungu : currentGroup?.regionSigungu;
+  const legacyCode = currentGroup?.regionAdmCode;
+  const admCode = [regionSido, regionSigungu, legacyCode].join('|');
 
   useEffect(() => {
     let cancelled = false;
@@ -130,13 +132,13 @@ export default function MapPage() {
   useEffect(() => {
     let cancelled = false;
     setBoundaryError(null);
-    fetchBoundaries(admCode)
+    fetchRegionBoundaries(regionSido, regionSigungu, legacyCode)
       .then((data) => !cancelled && setBoundaryData({ admCode, data }))
       .catch((e) => !cancelled && setBoundaryError(errorMessage(e, '행정동 경계를 불러오지 못했습니다.')));
     return () => {
       cancelled = true;
     };
-  }, [admCode, boundaryReloadKey]);
+  }, [admCode, regionSido, regionSigungu, legacyCode, boundaryReloadKey]);
 
   const tasks = taskData.groupId === groupId ? taskData.list : [];
   const tasksLoading = tasksFetching || taskData.groupId !== groupId;

@@ -169,7 +169,7 @@ export default function GroupWorkspaceScreen({
 
   const members = detail?.members || group?.members || [];
   const groupName = detail?.groupName || group?.groupName || '그룹 선택';
-  const regionText = [detail?.regionSido || group?.regionSido || '부산광역시', detail?.regionSigungu || group?.regionSigungu || '활동지역 미설정']
+  const regionText = [detail?.regionSido || group?.regionSido || '', detail?.regionSigungu || group?.regionSigungu || '활동지역 미설정']
     .filter(Boolean)
     .join(' · ');
 
