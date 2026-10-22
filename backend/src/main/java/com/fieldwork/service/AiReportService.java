@@ -38,6 +38,11 @@ public class AiReportService {
     }
     @jakarta.annotation.PreDestroy public void stop() { coordinator.close(); }
 
+    // 앱에서 위치도를 캡처하지 않은 보고서(웹 등록·데이터 이관 등)에 서버 지도(StaticMapService)를 대신 넣는다
+    private ReportHtmlRenderer mapRenderer;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setMapRenderer(ReportHtmlRenderer mapRenderer) { this.mapRenderer = mapRenderer; }
+
     public Map<String, Object> generatePayload(Map<String, Object> payload, Long userId) throws Exception {
         String json = objectMapper.writer().with(com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
                 .writeValueAsString(resolveWorkAddresses(payload));
@@ -104,7 +109,29 @@ public class AiReportService {
         if (address.isBlank()) address = reverseAddress(source.get("latitude"), source.get("longitude"));
         result.put("location_address", address);
         result.put("location_name", address.isBlank() ? "주소 확인 불가" : address);
+        if (!(source.get("map_image") instanceof String map) || map.isBlank()) {
+            String fallback = fallbackMap(source.get("latitude"), source.get("longitude"));
+            if (fallback != null) result.put("map_image", fallback);
+        }
         return result;
+    }
+
+    /** 좌표로 만든 위치도 파일 (같은 좌표면 다시 쓴다). 지도를 못 받으면 null → 보고서엔 '위치도 미등록'. */
+    private String fallbackMap(Object latitude, Object longitude) {
+        if (mapRenderer == null || !(latitude instanceof Number lat) || !(longitude instanceof Number lng)) return null;
+        try {
+            Path dir = ProjectPaths.resolve(properties.getAi().getOutputDir()).resolve("_maps");
+            Path file = dir.resolve(String.format(java.util.Locale.ROOT, "%.6f_%.6f.jpg", lat.doubleValue(), lng.doubleValue()));
+            if (!java.nio.file.Files.isRegularFile(file)) {
+                var image = mapRenderer.singleMap(lat, lng);
+                if (image == null) return null;
+                java.nio.file.Files.createDirectories(dir);
+                java.nio.file.Files.write(file, image.jpeg());
+            }
+            return file.toAbsolutePath().toString();
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     private String reverseAddress(Object latitude, Object longitude) {

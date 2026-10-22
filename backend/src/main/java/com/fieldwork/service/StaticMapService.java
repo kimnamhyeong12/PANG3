@@ -40,7 +40,7 @@ public class StaticMapService {
     private static final int MAX_ZOOM = 18;
     private static final int MIN_ZOOM = 7;
     private static final int PAD = 56;
-    private static final int TILE_CACHE = 400;
+    private static final int TILE_CACHE = 48; // 타일 1장 ~256KB(디코딩). 400장이면 ~100MB 라 작은 운영 서버 메모리를 압박했다
 
     /** 핀 위치(이미지 기준 0~1 비율)와 JPEG. */
     public record MapImage(byte[] jpeg, int width, int height, List<PinSpot> pins) {}

@@ -46,7 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Transactional
 class ProjectReportServiceTest {
     @Configuration @EnableAutoConfiguration @EntityScan("com.fieldwork.entity") @EnableJpaRepositories("com.fieldwork.repository")
-    @Import({ProjectService.class, CompiledReportService.class, ReportHtmlRenderer.class, StaticMapService.class, AdminDongService.class, CompiledReportHwpxService.class, FieldworkProperties.class,
+    @Import({ProjectService.class, CompiledReportService.class, ReportHtmlRenderer.class, StaticMapService.class, AdminDongService.class, CompiledReportHwpxService.class, ReportWorkGate.class, FieldworkProperties.class,
             ProjectController.class, CompiledReportController.class, ProjectExceptionHandler.class})
     static class TestConfig {}
 

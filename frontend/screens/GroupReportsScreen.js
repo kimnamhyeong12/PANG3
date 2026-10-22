@@ -60,8 +60,13 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
     return () => { active = false; };
   }, [group.groupId, user.userId, isActive]);
 
-  const members = useMemo(() => [...Array.from(new Set(reports.filter(item => !item.performedByDeparted && item.performedByUserId != null).map(item => String(item.performedByUserId)))),
-    ...(reports.some(item => item.performedByDeparted) ? ['__departed__'] : [])], [reports]);
+  // 작업자 목록: 본인을 맨 위에 (목록이 길면 끝에 있던 본인이 스크롤 아래로 숨었음)
+  const members = useMemo(() => {
+    const ids = Array.from(new Set(reports.filter(item => !item.performedByDeparted && item.performedByUserId != null).map(item => String(item.performedByUserId))));
+    const me = String(user.userId);
+    return [...(ids.includes(me) ? [me] : []), ...ids.filter(id => id !== me),
+      ...(reports.some(item => item.performedByDeparted) ? ['__departed__'] : [])];
+  }, [reports, user.userId]);
   const dongs = useMemo(() => Array.from(new Set(reports.map((item) => item.adminDong).filter(Boolean))), [reports]);
   const visible = useMemo(() => reports.filter((item) => {
     const day = String(item.createdAt || '').slice(0, 10);
@@ -95,7 +100,8 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
     const report = reports.find(item => String(item.performedByUserId) === value);
     const name = report?.performedByName || '작업자';
     const sameName = new Set(reports.filter(item => item.performedByName === name && !item.performedByDeparted).map(item => item.performedByUserId));
-    return sameName.size > 1 ? `${name} (${report?.performedByLoginId || value})` : name;
+    const label = sameName.size > 1 ? `${name} (${report?.performedByLoginId || value})` : name;
+    return value === String(user.userId) ? `나 · ${label}` : label;
   };
   const filterField = (key, label, values, selected, setSelected) => (
     <View style={[styles.filterColumn, openFilter === key && styles.filterColumnOpen]}>
@@ -105,7 +111,7 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
         <Ionicons name={openFilter === key ? 'chevron-up' : 'chevron-down'} size={17} color={colors.textSoft} />
       </TouchableOpacity>
       {openFilter === key && <View style={styles.filterOptions}>
-        <ScrollView nestedScrollEnabled style={{ maxHeight: 220 }} keyboardShouldPersistTaps="handled">
+        <ScrollView nestedScrollEnabled style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
           {['', ...values].map(value => <TouchableOpacity key={value || '__all__'} style={styles.filterOption} onPress={() => { setSelected(value); setSelectedPlace(null); setOpenFilter(null); }}>
             <Text style={[styles.filterValue, selected === value && { color: colors.primary, fontWeight: '800' }]}>{key === 'member' ? workerLabel(value) : value || '전체'}</Text>
             {selected === value && <Ionicons name="checkmark" size={16} color={colors.primary} />}
