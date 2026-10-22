@@ -7,7 +7,7 @@ import { EmptyState, ScreenHeader, SecondaryButton } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
 import { colors, radius } from '../constants/design';
 import { downloadProtectedFile } from '../utils/auth';
-import { openReportFile, saveReportToDownloads } from '../modules/kakao-navigation';
+import { openReportDownloadsFolder, saveReportToDownloads } from '../modules/kakao-navigation';
 import { fetchCompiledReportHtml, fetchProgressReportHtml, injectKakaoKey, prepareCompiledHwpx } from '../utils/projectApi';
 
 // D15: 기존 KakaoMapWebView와 같은 키·baseUrl로 보고서 지도 표시
@@ -54,11 +54,12 @@ export default function CompiledReportViewScreen({ user, reportId, progressId, t
       const fileName = prepared.fileName || `${safeFileName(title)}.hwpx`;
       const uri = await downloadProtectedFile(prepared.downloadUrl, fileName);
       if (Platform.OS === 'android') {
-        // 건별 보고서 다운로드(DownloadScreen)와 같이: Download/외근도우미 에 보고서 이름으로 저장 → 바로 열기
-        const savedUri = await saveReportToDownloads(uri, fileName);
+        // 건별 보고서 받기와 같이: Download/외근도우미 에 저장 → 폴더 열기
+        // (파일을 바로 열면 hwp+zip 을 등록한 다른 앱(통신사 PASS 등)이 뜨는 폰이 있었다)
+        await saveReportToDownloads(uri, fileName);
         showAlert('HWPX 저장 완료', `다운로드 폴더(외근도우미)에 저장했어요.\n${fileName}`, [
           { text: '닫기', style: 'cancel' },
-          { text: '열기', onPress: () => openReportFile(savedUri).catch((openError) => showAlert('파일 열기', openError.message)) },
+          { text: '폴더 열기', onPress: () => openReportDownloadsFolder().catch((openError) => showAlert('폴더 열기', openError.message)) },
         ]);
       } else if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: 'application/octet-stream', dialogTitle: `${fileName} 받기` });

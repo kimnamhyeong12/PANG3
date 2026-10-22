@@ -4,6 +4,7 @@ import com.fieldwork.security.CurrentUser;
 import com.fieldwork.service.CompiledReportHwpxService;
 import com.fieldwork.service.CompiledReportService;
 import com.fieldwork.service.ReportHtmlRenderer;
+import com.fieldwork.service.ReportWorkGate;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -31,11 +32,13 @@ public class CompiledReportController {
     private final CompiledReportService reports;
     private final ReportHtmlRenderer renderer;
     private final CompiledReportHwpxService hwpx;
+    private final ReportWorkGate gate;
 
-    public CompiledReportController(CompiledReportService reports, ReportHtmlRenderer renderer, CompiledReportHwpxService hwpx) {
+    public CompiledReportController(CompiledReportService reports, ReportHtmlRenderer renderer, CompiledReportHwpxService hwpx, ReportWorkGate gate) {
         this.reports = reports;
         this.renderer = renderer;
         this.hwpx = hwpx;
+        this.gate = gate;
     }
 
     @GetMapping
@@ -66,10 +69,11 @@ public class CompiledReportController {
     }
 
     @GetMapping("/html")
-    public ResponseEntity<String> html(@PathVariable Long reportId, @RequestParam(required = false) Long userId) {
+    public ResponseEntity<String> html(@PathVariable Long reportId, @RequestParam(required = false) Long userId) throws Exception {
+        Long uid = CurrentUser.require(userId);
         // JSON is built inside a transaction; photo embedding runs here, outside of it.
-        Map<String, Object> json = reports.getJson(reportId, CurrentUser.require(userId));
-        return ResponseEntity.ok().contentType(HTML_UTF8).body(renderer.render(json));
+        String body = gate.run(() -> renderer.render(reports.getJson(reportId, uid)));
+        return ResponseEntity.ok().contentType(HTML_UTF8).body(body);
     }
 
     @PostMapping("/finalize")
@@ -90,8 +94,9 @@ public class CompiledReportController {
     }
 
     @PostMapping("/hwpx/prepare")
-    public Map<String, Object> prepareHwpx(@PathVariable Long reportId, @RequestParam(required = false) Long userId) {
-        return hwpx.prepare(reportId, CurrentUser.require(userId));
+    public Map<String, Object> prepareHwpx(@PathVariable Long reportId, @RequestParam(required = false) Long userId) throws Exception {
+        Long uid = CurrentUser.require(userId);
+        return gate.run(() -> hwpx.prepare(reportId, uid));
     }
 
     @GetMapping("/hwpx/{key}/download")
