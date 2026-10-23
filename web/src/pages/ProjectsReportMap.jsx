@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { downloadProtectedFile } from '../api/projects.js';
 import { loadKakaoMaps } from '../lib/kakaoLoader.js';
+import { createReportMarkerLayer } from '../../../backend/src/main/resources/report-marker-layout.js';
 
 // 보고서 HTML(ReportHtmlRenderer)과 같은 규칙: 핀 채움 = 완료 상태색, 테두리 = 작성자색
 export const AUTHOR_COLORS = ['#2477F3', '#12A9A5', '#BE9446', '#7A5BD6', '#E34D59', '#1551A6', '#C87973', '#078A88'];
@@ -73,7 +74,9 @@ function pinElement(marker, active, onPick) {
 export default function ReportMap({ markers, activeN = null, onPick, height = 420, fallback = null }) {
   const boxRef = useRef(null);
   const mapRef = useRef(null);
-  const overlaysRef = useRef([]);
+  const layerRef = useRef(null);
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
   const [failed, setFailed] = useState(false);
   const usable = markers.filter((m) => Number.isFinite(m.lat) && Number.isFinite(m.lng));
   const markerKey = usable.map((m) => `${m.n}:${m.lat}:${m.lng}:${m.color}:${m.title ?? ''}`).join('|');
@@ -82,7 +85,8 @@ export default function ReportMap({ markers, activeN = null, onPick, height = 42
     if (usable.length === 0) {
       // 지도 div가 사라지므로 다음에 핀이 생기면 새로 만든다
       mapRef.current = null;
-      overlaysRef.current = [];
+      layerRef.current?.destroy();
+      layerRef.current = null;
       return undefined;
     }
     let cancelled = false;
@@ -95,19 +99,22 @@ export default function ReportMap({ markers, activeN = null, onPick, height = 42
           mapRef.current.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
         }
         const map = mapRef.current;
-        overlaysRef.current.forEach((o) => o.setMap(null));
+        layerRef.current?.destroy();
+        setFailed(false);
         const bounds = new kakao.maps.LatLngBounds();
-        overlaysRef.current = usable.map((m) => {
+        usable.forEach((m) => {
           const position = new kakao.maps.LatLng(m.lat, m.lng);
           bounds.extend(position);
-          return new kakao.maps.CustomOverlay({ position, content: pinElement(m, m.n === activeN, onPick), yAnchor: 1, zIndex: m.n === activeN ? 10 : 5, map });
         });
-        if (usable.length > 1) map.setBounds(bounds);
+        if (usable.length > 1) map.setBounds(bounds, 72, 64, 72, 64);
         else map.setCenter(first);
+        layerRef.current = createReportMarkerLayer(map, kakao, boxRef.current, usable, pinElement, n => onPickRef.current?.(n), activeN);
       })
       .catch(() => !cancelled && setFailed(true));
     return () => {
       cancelled = true;
+      layerRef.current?.destroy();
+      layerRef.current = null;
     };
     // 핀 구성이 바뀔 때만 다시 그린다 (onPick은 매 렌더 새 함수라 제외)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -115,13 +122,7 @@ export default function ReportMap({ markers, activeN = null, onPick, height = 42
 
   // 선택 핀만 강조 (지도 범위는 그대로)
   useEffect(() => {
-    overlaysRef.current.forEach((overlay, i) => {
-      const m = usable[i];
-      if (!m) return;
-      const el = overlay.getContent();
-      if (el?.classList) el.classList.toggle('is-active', m.n === activeN);
-      overlay.setZIndex(m.n === activeN ? 10 : 5);
-    });
+    layerRef.current?.setActive(activeN);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeN, markerKey]);
 
