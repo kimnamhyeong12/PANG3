@@ -415,7 +415,7 @@ public class ReportHtmlRenderer {
             .rp-map{display:none;width:100%;height:420px;border-radius:12px;border:1px solid #DCE7F5;overflow:hidden}
             .rp-static{position:relative;border-radius:12px;border:1px solid #DCE7F5;overflow:hidden;line-height:0}
             .rp-static img{display:block;width:100%;height:auto}
-            .rp-hot{position:absolute;width:34px;height:42px;margin:-42px 0 0 -17px;border-radius:50% 50% 40% 40%}
+            .rp-hot{position:absolute;width:36px;height:36px;transform:translate(-50%,-50%);border-radius:50%}
             .rp-hot:hover,.rp-hot:focus,.rp-hot.rp-on{outline:3px solid #7A5BD6;outline-offset:-3px}
             .rp-table tbody tr[data-n]{cursor:pointer}
             .rp-table tbody tr[data-n]:hover td{background:#F4F8FF}
@@ -490,7 +490,17 @@ public class ReportHtmlRenderer {
             document.addEventListener('keydown',function(e){if(box.hidden)return;if(e.key==='Escape')hide();else if(e.key==='ArrowLeft')show(at-1);else if(e.key==='ArrowRight')show(at+1);});})();
             """;
 
-    private static final String MAP_SCRIPT = """
+    private static String markerLayoutScript() {
+        try (var stream = ReportHtmlRenderer.class.getResourceAsStream("/report-marker-layout.js")) {
+            if (stream == null) throw new IllegalStateException("Missing report marker layout script");
+            return new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+                    .replace("export function ", "function ");
+        } catch (java.io.IOException ex) {
+            throw new IllegalStateException("Cannot load report marker layout script", ex);
+        }
+    }
+
+    private static final String MAP_SCRIPT = markerLayoutScript() + """
             (function(){var el=document.getElementById('report-map');if(!el)return;var data=[];
             try{data=JSON.parse(document.getElementById('report-markers').textContent||'[]');}catch(e){data=[];}
             var key=window.REPORT_KAKAO_KEY;if(!key||!data.length)return;
@@ -504,16 +514,18 @@ public class ReportHtmlRenderer {
             var map=new kakao.maps.Map(el,{center:new kakao.maps.LatLng(data[0].lat,data[0].lng),level:5});
             map.addControl(new kakao.maps.ZoomControl(),kakao.maps.ControlPosition.RIGHT);
             var bounds=new kakao.maps.LatLngBounds();
-            data.forEach(function(m){var pos=new kakao.maps.LatLng(m.lat,m.lng);bounds.extend(pos);
+            data.forEach(function(m){bounds.extend(new kakao.maps.LatLng(m.lat,m.lng));});
+            function pick(n){var card=document.getElementById('item-'+n);if(!card)return;
+            card.scrollIntoView({behavior:'smooth',block:'start'});card.classList.add('rp-hit');
+            setTimeout(function(){card.classList.remove('rp-hit');},1600);}
+            function makePin(m,active,onPick){
             var pin=document.createElement('div');pin.className='rp-pin';pin.title=m.n+'. '+m.title;
             var body=document.createElement('div');body.className='rp-pin-body';body.style.borderColor=m.color;
             var n=document.createElement('span');n.className='rp-pin-n';n.textContent=String(m.n);
             pin.appendChild(body);pin.appendChild(n);
-            pin.onclick=function(){var card=document.getElementById('item-'+m.n);if(!card)return;
-            card.scrollIntoView({behavior:'smooth',block:'start'});card.classList.add('rp-hit');
-            setTimeout(function(){card.classList.remove('rp-hit');},1600);};
-            new kakao.maps.CustomOverlay({position:pos,content:pin,yAnchor:1,map:map});});
-            if(data.length>1)map.setBounds(bounds);});};
+            pin.onclick=function(){onPick(m.n);};return pin;}
+            if(data.length>1)map.setBounds(bounds,72,64,72,64);
+            createReportMarkerLayer(map,kakao,el,data,makePin,pick);});};
             document.head.appendChild(s);})();
             """;
 }

@@ -110,13 +110,16 @@ public class StaticMapService {
                 g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
                 List<PinSpot> spots = new ArrayList<>();
-                // 남쪽(아래) 핀이 위에 겹치도록 위도 큰 것부터 그린다
-                List<Marker> ordered = new ArrayList<>(markers);
-                ordered.sort((a, b) -> Double.compare(b.lat(), a.lat()));
-                for (Marker m : ordered) {
-                    double x = worldX(m.lng(), scale) - left, y = worldY(m.lat(), scale) - top;
-                    drawPin(g, x, y, m.n(), parse(m.color()));
-                    spots.add(new PinSpot(m.n(), x / width, y / height));
+                List<ReportMarkerLayout.Point> points = new ArrayList<>();
+                Map<Integer, Marker> byNumber = new LinkedHashMap<>();
+                for (Marker m : markers) {
+                    points.add(new ReportMarkerLayout.Point(m.n(), worldX(m.lng(), scale) - left, worldY(m.lat(), scale) - top));
+                    byNumber.put(m.n(), m);
+                }
+                List<ReportMarkerLayout.Label> labels = ReportMarkerLayout.arrange(points, width, height);
+                drawMarkers(g, labels, byNumber);
+                for (ReportMarkerLayout.Label label : labels) {
+                    spots.add(new PinSpot(label.point().n(), label.x() / width, label.y() / height));
                 }
                 drawAttribution(g, width, height);
                 spots.sort((a, b) -> Integer.compare(a.n(), b.n()));
@@ -141,6 +144,38 @@ public class StaticMapService {
             if (maxX - minX <= width - 2 * PAD && maxY - minY <= height - 2 * PAD - 30) return z;
         }
         return MIN_ZOOM;
+    }
+
+    static void drawMarkers(Graphics2D g, List<ReportMarkerLayout.Label> labels, Map<Integer, Marker> markers) {
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        for (var label : labels) if (label.moved()) {
+            double dx = label.x() - label.point().x(), dy = label.y() - label.point().y();
+            double length = Math.hypot(dx, dy);
+            var line = new java.awt.geom.Line2D.Double(label.point().x(), label.point().y(),
+                    label.x() - dx / length * 15, label.y() - dy / length * 15);
+            g.setColor(Color.WHITE); g.setStroke(new BasicStroke(5f)); g.draw(line);
+            g.setColor(parse(markers.get(label.point().n()).color())); g.setStroke(new BasicStroke(2f)); g.draw(line);
+        }
+        for (var label : labels) if (label.moved()) {
+            g.setColor(Color.WHITE);
+            g.fill(new Ellipse2D.Double(label.point().x() - 6, label.point().y() - 6, 12, 12));
+            g.setColor(parse(markers.get(label.point().n()).color()));
+            g.fill(new Ellipse2D.Double(label.point().x() - 3.5, label.point().y() - 3.5, 7, 7));
+        }
+        for (var label : labels) {
+            Color color = parse(markers.get(label.point().n()).color());
+            if (!label.moved()) { drawPin(g, label.point().x(), label.point().y(), label.point().n(), color); continue; }
+            var circle = new Ellipse2D.Double(label.x() - 15, label.y() - 15, 30, 30);
+            g.setColor(new Color(0x4F9588)); g.fill(circle);
+            g.setColor(Color.WHITE); g.setStroke(new BasicStroke(5f)); g.draw(circle);
+            g.setColor(color); g.setStroke(new BasicStroke(3f)); g.draw(circle);
+            String text = String.valueOf(label.point().n());
+            g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, text.length() > 2 ? 10 : 12));
+            FontMetrics fm = g.getFontMetrics();
+            g.setColor(Color.WHITE);
+            g.drawString(text, (float)(label.x() - fm.stringWidth(text) / 2.0),
+                    (float)(label.y() + (fm.getAscent() - fm.getDescent()) / 2.0));
+        }
     }
 
     private static double worldX(double lng, double scale) {
