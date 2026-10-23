@@ -11,7 +11,7 @@ import { apiFetch } from '../utils/auth';
 
 const restKey = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY || '';
 
-export default function ReportLocationPicker({ latitude, longitude, address, buildMapHtml, saving, onCancel, onConfirm }) {
+export default function ReportLocationPicker({ latitude, longitude, address, buildMapHtml, saving, onCancel, onConfirm, title = '위치 바꾸기', confirmLabel = '이 위치로 변경' }) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef(null);
   const alive = useRef(true);
@@ -67,7 +67,7 @@ export default function ReportLocationPicker({ latitude, longitude, address, bui
   };
   return <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={cancel}>
     <View {...swipe} style={styles.container}>
-      <ScreenHeader title="위치 바꾸기" onBack={cancel} />
+      <ScreenHeader title={title} onBack={cancel} />
       <View style={styles.mapArea}>
         <WebView ref={mapRef} source={{ html, baseUrl: 'https://localhost/' }} originWhitelist={['*']}
           style={styles.map} javaScriptEnabled domStorageEnabled scrollEnabled={false}
@@ -105,7 +105,7 @@ export default function ReportLocationPicker({ latitude, longitude, address, bui
         <Text style={styles.address} numberOfLines={2}>{moving ? '위치 이동 중…' : resolving ? '주소 확인 중…' : selectedAddress || '선택한 위치'}</Text>
         {valid && <Text style={styles.coordinates}>{point.latitude.toFixed(6)}, {point.longitude.toFixed(6)}</Text>}
         {!!error && <Text style={styles.error}>{error}</Text>}
-        <PrimaryButton title={saving ? '위치 저장 중…' : '이 위치로 변경'} onPress={confirm} disabled={saving || !ready || !valid || moving || resolving || locating} />
+        <PrimaryButton title={saving ? '위치 저장 중…' : confirmLabel} onPress={confirm} disabled={saving || !ready || !valid || moving || resolving || locating} />
       </View>
     </View>
   </Modal>;

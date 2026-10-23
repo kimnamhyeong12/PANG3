@@ -22,7 +22,9 @@ export function locationError(row) {
   if (locationName(row).length > 255) return '방문지 이름은 255자 이하여야 합니다.';
   const lat = text(row.lat);
   const lng = text(row.lng);
-  if (!lat || !lng) return '위도와 경도가 모두 필요합니다.';
+  if (!lat && !lng) return '위도·경도 값이 비어 있습니다.';
+  if (!lat) return '위도 값이 비어 있습니다.';
+  if (!lng) return '경도 값이 비어 있습니다.';
   for (const [value, min, max, label] of [[lat, -90, 90, '위도'], [lng, -180, 180, '경도']]) {
     if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(value) || !Number.isFinite(Number(value))) {
       return `${label}가 숫자가 아닙니다.`;

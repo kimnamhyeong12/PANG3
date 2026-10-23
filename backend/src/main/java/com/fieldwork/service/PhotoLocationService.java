@@ -26,6 +26,11 @@ public class PhotoLocationService {
     // The task, assignment and initial photo record commit together per photo.
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> create(Long userId, Long groupId, String name, Double lat, Double lng, MultipartFile photo) throws Exception {
+        return create(userId, groupId, name, lat, lng, photo, null, null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> create(Long userId, Long groupId, String name, Double lat, Double lng, MultipartFile photo, String roadAddress, String task) throws Exception {
         if (userId == null || userId <= 0) throw new IllegalArgumentException("로그인 사용자 정보가 필요합니다.");
         if (groupId != null && groupId <= 0) throw new IllegalArgumentException("업무공간을 확인해 주세요.");
         String displayName = name == null ? "" : name.trim();
@@ -38,6 +43,11 @@ public class PhotoLocationService {
         body.put("createdByUserId", userId);
         if (groupId != null) body.put("groupId", groupId);
         body.put("detailAddress", displayName);
+        if (roadAddress != null && !roadAddress.isBlank()) body.put("roadAddress", roadAddress.trim());
+        if (task != null && !task.isBlank()) {
+            if (!List.of("점검", "공사", "안전", "환경", "민원").contains(task.trim())) throw new IllegalArgumentException("업무 종류를 확인해 주세요.");
+            body.put("task", task.trim());
+        }
         body.put("lat", lat); body.put("lng", lng); body.put("status", "pending");
         // Existing TaskService enforces group membership and creates the assignment.
         Map<String, Object> location = tasks.createFromFrontendBody(body);
@@ -63,6 +73,7 @@ public class PhotoLocationService {
         progress.setTask(tasks.getById(taskId));
         progress.setPerformedByUserId(userId);
         progress.setLatitude(lat); progress.setLongitude(lng);
+        progress.setLocationAddress(roadAddress == null ? null : roadAddress.trim());
         progress.setProgressStatus("pending");
         progress.setMainComment(""); progress.setFieldMemo("");
         progress.setFieldPhotos(List.of(Map.of("type", "before", "path", savedPath,

@@ -2320,6 +2320,8 @@ function NormalMapScreen({
         userId={user?.userId}
         groupId={activeGroup?.groupId ?? null}
         onDataChanged={onDataChanged}
+        initialLocation={currentLocation}
+        onRegistered={places => { if (places.length) focusPlaces(places); }}
         apiBaseUrl={API_BASE_URL}
         onClose={() => setPhotoUploadOpen(false)}
       />
@@ -2328,6 +2330,7 @@ function NormalMapScreen({
         userId={user?.userId}
         groupId={activeGroup?.groupId ?? null}
         onDataChanged={onDataChanged}
+        initialLocation={currentLocation}
         apiBaseUrl={API_BASE_URL}
         onClose={() => setBulkUploadOpen(false)}
       />

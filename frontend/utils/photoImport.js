@@ -67,7 +67,7 @@ export async function importPhotos({ items, context, buildForm, fetchImpl = apiF
     if (item.error || !usablePhotoCoordinates(item.lat, item.lng)) throw new Error('GPS 위치가 있는 사진만 등록할 수 있습니다.');
     if (!String(item.name || '').trim() || item.name.trim().length > 255) throw new Error('방문지 이름은 1~255자로 입력해 주세요.');
   }
-  const result = { savedCount: 0, failures: [], unknownCount: 0, pendingCount: items.length, processedCount: 0 };
+  const result = { savedCount: 0, failures: [], unknownCount: 0, pendingCount: items.length, processedCount: 0, locations: [] };
   for (let index = 0; index < items.length; index++) {
     const item = items[index];
     let upload;
@@ -89,6 +89,7 @@ export async function importPhotos({ items, context, buildForm, fetchImpl = apiF
         throw error;
       }
       if (!data || !Number.isSafeInteger(data.taskId) || data.taskId <= 0 || !Number.isSafeInteger(data.progressId) || data.progressId <= 0) throw new Error('서버의 사진 등록 결과를 확인할 수 없습니다.');
+      result.locations.push({ ...data, lat: item.lat, lng: item.lng, detailAddress: item.name });
       result.savedCount++;
       result.processedCount++;
       result.pendingCount--;

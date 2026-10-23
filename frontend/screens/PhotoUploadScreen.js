@@ -3,97 +3,135 @@ import { File } from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library/legacy';
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Linking, Modal, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Alert, AppState, Image, KeyboardAvoidingView, Modal, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScreenHeader, PrimaryButton, EmptyState } from '../components/ui';
+import { showAlert } from '../components/CustomAlert';
+import ReportLocationPicker from '../components/ReportLocationPicker';
+import { colors, radius, spacing } from '../constants/design';
+import { apiFetch } from '../utils/auth';
 import { uploadContext } from '../utils/bulkUpload';
-import { importPhotos } from '../utils/photoImport';
+import { importPhotos, photoCoordinates, usablePhotoCoordinates } from '../utils/photoImport';
 import { resolvePhotoMetadata } from '../utils/photoMetadata';
 import { requestPhotoPermissions } from '../utils/photoPermissions';
-import OriginalPhotoPicker from '../components/OriginalPhotoPicker';
+import { mergeRegistrationPhotos, registrationProblem, photoAddress, suggestedPhotoName } from '../utils/photoRegistration';
+import { getInteractiveMapHtml } from '../utils/reportLocationMap';
 import { useScreenBackHandler } from '../utils/screenBack';
+import { readDraft, writeDraft, clearDraft, preservePhoto } from '../utils/reportDraft';
 
 const MAX_PHOTOS = 20;
 const ANDROID_EXPO_GO = Platform.OS === 'android' && Constants.executionEnvironment === 'storeClient';
+const restKey = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY || '';
 
-export default function PhotoUploadScreen({ visible, onClose, onHome, userId, groupId, onDataChanged, apiBaseUrl }) {
+export default function PhotoUploadScreen({ visible, onClose, userId, groupId, onDataChanged, onRegistered, initialLocation, apiBaseUrl }) {
+  const insets = useSafeAreaInsets();
   const [items, setItems] = useState([]);
-  const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState('idle');
   const [result, setResult] = useState(null);
+  const [editingId, setEditingId] = useState(null);
   const [refreshError, setRefreshError] = useState('');
-  const [permissionState, setPermissionState] = useState(null);
-  const [originalPickerVisible, setOriginalPickerVisible] = useState(false);
   const lock = useRef(false);
-  const refreshVersion = useRef(0);
-  useEffect(() => () => { refreshVersion.current++; }, []);
-  const selected = items.filter(item => item.selected && !item.error);
-  const close = () => {
-    if (lock.current) return;
-    refreshVersion.current++;
-    setOriginalPickerVisible(false);
-    setItems([]); setResult(null); setRefreshError(''); setPermissionState(null); onClose?.();
+  const generation = useRef(0);
+  const restoredKey = useRef(null);
+  const announcedOutcome = useRef(null);
+  const [draftReady, setDraftReady] = useState(false);
+  const key = `pang3:photoRegistration:${apiBaseUrl}:${userId}:${groupId ?? 'personal'}`;
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const snapshot = useRef(null);
+  snapshot.current = { photos: items, result, phase };
+  const busy = phase !== 'idle';
+  const editing = items.find(item => item.id === editingId);
+  const registrationItems = items.filter(item => usablePhotoCoordinates(item.lat, item.lng));
+  const problem = registrationProblem(registrationItems);
+  useEffect(() => {
+    generation.current++; restoredKey.current = null; setDraftReady(false);
+    setItems([]); setResult(null); setEditingId(null); setRefreshError('');
+    return () => { generation.current++; };
+  }, [key]);
+  const flushDraft = async () => {
+    if (restoredKey.current !== key) return true;
+    try { await writeDraft(key, snapshot.current); return true; }
+    catch { return false; }
   };
-  const home = () => {
+  useEffect(() => {
+    if (!visible || !draftReady || restoredKey.current !== key) return;
+    const timer = setTimeout(() => { flushDraft(); }, 350);
+    return () => clearTimeout(timer);
+  }, [items, result, phase, visible, draftReady, key]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', next => { if (next !== 'active') flushDraft(); });
+    return () => subscription.remove();
+  }, [key]);
+  const close = async () => {
     if (lock.current) return;
+    lock.current = true;
+    const saved = await flushDraft();
+    lock.current = false;
+    if (!saved) { showAlert('작성 내용 보관 실패', '내용을 보관하지 못했습니다. 잠시 후 다시 시도해 주세요.'); return; }
+    setEditingId(null); onClose?.();
+  };
+  const back = () => {
+    if (lock.current) return;
+    if (editingId) { setEditingId(null); return; }
     close();
-    onHome?.();
   };
-  useScreenBackHandler(() => { close(); return true; }, visible);
-  const readSelectedAssets = async (assets, permissionError = '') => {
-    const resolved = [];
-    for (const [index, asset] of assets.slice(0, MAX_PHOTOS).entries()) {
-      resolved.push(await resolvePhotoMetadata(asset, index, {
-        platform: Platform.OS, expoGo: ANDROID_EXPO_GO, permissionError,
-        readAssetInfo: id => MediaLibrary.getAssetInfoAsync(id, { shouldDownloadFromNetwork: true }),
-      }));
-    }
-    refreshVersion.current++;
-    setItems(resolved); setResult(null); setRefreshError('');
-  };
-  const confirmOriginalPhotos = async assets => {
-    if (lock.current) return;
-    lock.current = true; setBusy(true); setOriginalPickerVisible(false);
-    try { await readSelectedAssets(assets); }
-    catch (error) { Alert.alert('원본 사진 확인 실패', error?.message || '원본 GPS를 읽을 수 없습니다.'); }
-    finally { lock.current = false; setBusy(false); }
-  };
-  const pick = async () => {
-    if (lock.current) return;
-    lock.current = true; setBusy(true);
-    try {
-      const permission = await requestPhotoPermissions({
-        platform: Platform.OS, version: Platform.Version, expoGo: ANDROID_EXPO_GO,
-        picker: ImagePicker, library: MediaLibrary, android: PermissionsAndroid,
-      });
-      setPermissionState(permission);
-      if (!permission.pickerAllowed) return;
-      const metadataPermissionError = permission.metadataError;
-      if (Platform.OS === 'android' && !ANDROID_EXPO_GO && !metadataPermissionError) {
-        // Read original MediaLibrary IDs directly instead of relying on a
-        // system picker's optional assetId or trying to reverse a cache URI.
-        setOriginalPickerVisible(true);
-        return;
-      }
-      const picked = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: MAX_PHOTOS,
-        allowsEditing: false, exif: true, quality: 1,
-      });
-      if (picked.canceled) return;
-      if ((picked.assets?.length || 0) > MAX_PHOTOS) Alert.alert('선택 장수 안내', `한 번에 ${MAX_PHOTOS}장까지 등록할 수 있어 처음 ${MAX_PHOTOS}장만 불러옵니다.`);
-      await readSelectedAssets(picked.assets || [], metadataPermissionError);
-    } catch (error) { Alert.alert('사진 선택 실패', error?.message || '사진을 읽을 수 없습니다.'); }
-    finally { lock.current = false; setBusy(false); }
-  };
-  const openPhotoSettings = async () => {
-    try { await Linking.openSettings(); }
-    catch { Alert.alert('설정 열기 실패', '휴대폰 설정에서 이 앱의 사진 접근 권한을 확인해 주세요.'); }
-  };
+  useScreenBackHandler(() => { back(); return true; }, visible);
   const change = (id, values) => {
     if (lock.current || result) return;
     setItems(previous => previous.map(item => item.id === id ? { ...item, ...values } : item));
   };
+  const pick = async (fresh = false) => {
+    if (lock.current || !draftReady) return;
+    const previous = fresh ? [] : itemsRef.current;
+    if (previous.length >= MAX_PHOTOS) { Alert.alert('사진 선택', `한 번에 ${MAX_PHOTOS}장까지 등록할 수 있습니다.`); return; }
+    lock.current = true; setPhase('picking');
+    const version = generation.current;
+    try {
+      // Android may redact GPS while copying the picker URI. Obtain permission
+      // before opening the picker, rather than after receiving the cached copy.
+      let permission = null;
+      if (Platform.OS === 'android') {
+        permission = await requestPhotoPermissions({ platform: Platform.OS, version: Platform.Version,
+          expoGo: ANDROID_EXPO_GO, picker: ImagePicker, library: MediaLibrary, android: PermissionsAndroid });
+      }
+      // Same native gallery as the report form; resolve GPS before editing or encoding.
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: MAX_PHOTOS - previous.length,
+        allowsEditing: false, exif: true, quality: 1, legacy: Platform.OS === 'android',
+      });
+      if (version !== generation.current || picked.canceled) return;
+      setPhase('reading');
+      const assets = (picked.assets || []).slice(0, MAX_PHOTOS - previous.length);
+      // Only request original-library access if the selected photo needs GPS lookup.
+      if (!permission && assets.some(asset => !photoCoordinates(asset.exif) && asset.assetId)) {
+        permission = await requestPhotoPermissions({ platform: Platform.OS, version: Platform.Version,
+          expoGo: ANDROID_EXPO_GO, picker: ImagePicker, library: MediaLibrary, android: PermissionsAndroid });
+      }
+      const incoming = await Promise.all(assets.map(async (asset, index) => {
+        const item = await resolvePhotoMetadata(asset, index, { platform: Platform.OS, expoGo: ANDROID_EXPO_GO,
+          permissionError: permission?.metadataError,
+          readAssetInfo: id => MediaLibrary.getAssetInfoAsync(id, { shouldDownloadFromNetwork: true }),
+        });
+        let address = '';
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        try { address = await photoAddress(item.lat, item.lng, { fetchImpl: apiFetch, key: restKey, signal: controller.signal }); }
+        catch { /* Valid GPS is still usable if the address service is unavailable. */ }
+        finally { clearTimeout(timer); }
+        const sourceId = asset.assetId ? `asset:${asset.assetId}` : `uri:${asset.uri}`;
+        return { ...item, uri: preservePhoto(key, item.uri), sourceId, id: sourceId, name: '', address, task: '', selected: true };
+      }));
+      if (version !== generation.current) return;
+      setItems(mergeRegistrationPhotos(previous, incoming, MAX_PHOTOS));
+      if (fresh) { setResult(null); setRefreshError(''); }
+    } catch (error) {
+      if (version === generation.current) Alert.alert('사진 선택 실패', error?.message || '사진을 다시 선택해 주세요.');
+    } finally { lock.current = false; setPhase('idle'); }
+  };
   const buildForm = async (item, context) => {
-    // Read GPS from the picker result before any encoding that can remove EXIF.
     const edge = 2400;
     const resize = Math.max(item.width || 0, item.height || 0) > edge
       ? [{ resize: item.width >= item.height ? { width: edge } : { height: edge } }] : [];
@@ -104,6 +142,7 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
       body.append('createdByUserId', String(context.createdByUserId));
       if (context.groupId != null) body.append('groupId', String(context.groupId));
       body.append('name', item.name.trim());
+      body.append('roadAddress', item.address || ''); body.append('task', item.task || '');
       body.append('lat', String(item.lat)); body.append('lng', String(item.lng));
       body.append('photo', file);
       return { body, cleanup: () => { if (file.exists) file.delete(); } };
@@ -113,105 +152,157 @@ export default function PhotoUploadScreen({ visible, onClose, onHome, userId, gr
     if (lock.current || result) return;
     let context;
     try {
+      if (problem) throw new Error(problem === 'location-required' ? '사진 위치를 확인하지 못했습니다.' : problem);
       context = uploadContext(userId, groupId, apiBaseUrl);
       context.url = context.url.replace(/\/bulk$/, '/photos');
-      if (!selected.length) throw new Error('GPS가 있는 사진을 선택해 주세요.');
-      if (selected.some(item => !item.name.trim())) throw new Error('선택한 사진의 방문지 이름을 입력해 주세요.');
     } catch (error) { Alert.alert('등록 준비 확인', error.message); return; }
-    lock.current = true; setBusy(true); setRefreshError('');
-    setResult({ savedCount: 0, processedCount: 0, unknownCount: 0, pendingCount: selected.length, failures: [] });
+    lock.current = true; setPhase('uploading'); setRefreshError('');
+    setResult({ savedCount: 0, processedCount: 0, unknownCount: 0, pendingCount: registrationItems.length, failures: [], locations: [] });
+    const version = generation.current;
     try {
-      const outcome = await importPhotos({ items: selected, context, buildForm, onProgress: setResult });
-      setResult(outcome);
+      // Persist the locked submission before the first POST. Reopening a draft
+      // must never allow a possibly committed request to be submitted twice.
+      await writeDraft(key, { photos: items, result: { savedCount: 0, processedCount: 0, unknownCount: 0,
+        pendingCount: registrationItems.length, failures: [], locations: [] }, phase: 'uploading' });
+      const outcome = await importPhotos({ items: registrationItems, context, buildForm, onProgress: value => {
+        if (version === generation.current) setResult(value);
+      } });
+      if (version === generation.current) setResult(outcome);
     } catch (error) {
-      setResult(null);
-      Alert.alert('등록 실패', error?.message || '등록을 시작할 수 없습니다.');
+      if (version === generation.current) { setResult(null); Alert.alert('등록 실패', error?.message || '등록을 시작할 수 없습니다.'); }
     } finally {
-      // Upload completion unlocks navigation independently of the list refresh.
-      lock.current = false; setBusy(false);
-      const version = ++refreshVersion.current;
+      lock.current = false; setPhase('idle');
       Promise.resolve().then(() => onDataChanged?.()).catch(() => {
-        if (version === refreshVersion.current) setRefreshError('목록 새로고침에 실패했습니다. 지도 또는 목록을 다시 열어 주세요.');
+        if (version === generation.current) setRefreshError('목록을 새로고침하지 못했습니다. 지도를 다시 열어 주세요.');
       });
     }
   };
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={close}>
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.header}>
-          <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>사진으로 방문지 등록</Text>
-          {!!onHome && <TouchableOpacity disabled={busy} onPress={home}><Text style={[styles.link, { marginRight: 16 }]}>홈으로</Text></TouchableOpacity>}
-          <TouchableOpacity disabled={busy} onPress={close}><Text style={styles.link}>닫기</Text></TouchableOpacity>
-        </View>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text style={styles.description}>사진을 선택하고 GPS 위치와 이름을 확인하세요. 선택한 사진마다 방문지를 만들고, 사진을 작업 전 기록에 연결합니다.</Text>
-          <TouchableOpacity style={styles.button} disabled={busy} onPress={pick}>
-            <Text style={styles.buttonText}>{Platform.OS === 'android' && !ANDROID_EXPO_GO ? '원본 사진 선택' : '사진 선택'} · 최대 {MAX_PHOTOS}장</Text>
-          </TouchableOpacity>
-          {!!permissionState?.metadataError && <View style={styles.card}>
-            <Text style={styles.error}>{permissionState.metadataError}</Text>
-            {permissionState.settingsRecommended && <TouchableOpacity disabled={busy} onPress={openPhotoSettings}>
-              <Text style={styles.link}>앱 권한 설정 열기</Text>
-            </TouchableOpacity>}
-            <Text style={styles.description}>설정에서 돌아온 뒤 사진 선택을 다시 누르면 권한을 재확인합니다.</Text>
-          </View>}
-          {permissionState?.limited && <Text style={styles.description}>선택한 사진만 접근하도록 허용된 상태입니다. 원본 위치를 읽지 못하면 앱 설정에서 대상 사진을 추가하거나 전체 사진 접근을 허용한 뒤 다시 선택해 주세요.</Text>}
-          {ANDROID_EXPO_GO && <Text style={styles.error}>Android Expo Go에서는 원본 사진 GPS 조회가 제한됩니다. 위치가 표시되지 않으면 개발용 APK에서 확인해 주세요.</Text>}
-          <Text style={styles.description}>사진 원본의 위치를 사용합니다. 위치를 읽지 못하면 사진 접근·사진 위치 권한과 원본의 위치 정보를 확인해 주세요. 현재 기기 위치로 대신 등록하지 않습니다.</Text>
-          {!!items.length && <Text style={styles.summary}>전체 {items.length}장 · 위치 확인 실패 {items.filter(item => item.error).length}장 · 등록 선택 {selected.length}장</Text>}
-          {items.map(item => (
-            <View key={item.id} style={styles.card}>
+  const finish = async () => {
+    if (lock.current) return;
+    lock.current = true;
+    try {
+      await clearDraft(key);
+      restoredKey.current = null; setDraftReady(false);
+      onRegistered?.(result?.locations || []);
+      setItems([]); setResult(null); onClose?.();
+    } catch { showAlert('작성 내용 정리 실패', '잠시 후 다시 시도해 주세요.'); }
+    finally { lock.current = false; }
+  };
+  const startNew = async () => {
+    if (lock.current) return;
+    lock.current = true;
+    try {
+      await clearDraft(key);
+      setItems([]); setResult(null); setRefreshError('');
+      itemsRef.current = []; snapshot.current = { photos: [], result: null, phase: 'idle' };
+      announcedOutcome.current = null;
+    } catch { showAlert('작성 내용 정리 실패', '잠시 후 다시 시도해 주세요.'); }
+    finally { lock.current = false; }
+  };
+  useEffect(() => {
+    if (!visible || busy || !draftReady || !result || announcedOutcome.current === result) return;
+    announcedOutcome.current = result;
+    const failed = result.failures.filter(entry => !entry.unknown).length;
+    const complete = !failed && !result.unknownCount && !result.pendingCount;
+    const message = complete ? '' : [
+      `실패 ${failed}곳 · 저장 여부 미확인 ${result.unknownCount}곳 · 미전송 ${result.pendingCount}곳`,
+      ...result.failures.map(entry => `${entry.fileName}: ${entry.reason}`),
+      result.unknownCount ? '중복 등록을 피하려면 지도에서 저장 여부를 먼저 확인해 주세요.' : '',
+    ].filter(Boolean).join('\n');
+    showAlert(complete ? `방문지 ${result.savedCount}곳을 추가했어요` : `${result.savedCount}곳 등록 · 확인이 필요해요`,
+      [message, refreshError].filter(Boolean).join('\n'), [
+        { text: '지도 보기', onPress: finish },
+        { text: '새 사진 등록', onPress: startNew },
+      ], { cancelable: true, onDismiss: finish });
+  }, [visible, busy, draftReady, result]);
+  const point = editing && usablePhotoCoordinates(editing.lat, editing.lng) ? editing
+    : initialLocation && usablePhotoCoordinates(initialLocation.lat, initialLocation.lng) ? initialLocation : { lat: 36.3, lng: 127.8 };
+  return <Modal visible={visible} animationType="slide" onRequestClose={back} onShow={async () => {
+    if (restoredKey.current === key) return;
+    const version = generation.current;
+    try {
+      const draft = await readDraft(key);
+      if (version !== generation.current) return;
+      setItems(draft?.photos || []);
+      const outcome = draft?.result || null;
+      if (outcome && draft.phase === 'uploading' && outcome.pendingCount > 0) {
+        outcome.failures = [...outcome.failures, { fileName: '등록 중이던 사진', reason: '등록 결과는 지도에서 확인해 주세요.', unknown: true }];
+        outcome.unknownCount += outcome.pendingCount; outcome.pendingCount = 0;
+      }
+      setResult(outcome); restoredKey.current = key; setDraftReady(true);
+    } catch { showAlert('작성 내용 불러오기 실패', '임시 저장 내용을 불러오지 못했습니다. 닫은 뒤 다시 열어 주세요.'); }
+  }}>
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScreenHeader title="사진으로 등록" onBack={back} />
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {busy && phase !== 'picking' && <View style={styles.loading} accessibilityLiveRegion="polite"><ActivityIndicator color={colors.primary} />
+          <Text style={styles.description}>{phase === 'reading' ? '사진의 촬영 위치와 주소를 확인하고 있어요.' : `방문지 등록 중 · ${result?.savedCount || 0}/${registrationItems.length}곳`}</Text></View>}
+        <View pointerEvents={result ? 'none' : 'auto'}>
+          {!!items.length && <View style={styles.heading}><Text style={styles.section}>방문지 {registrationItems.length}곳</Text><TouchableOpacity onPress={() => pick()} disabled={busy || !draftReady} style={styles.textButton} accessibilityRole="button"><Text style={styles.link}>사진 추가</Text></TouchableOpacity></View>}
+          {!items.length && phase !== 'reading' && <EmptyState icon="images-outline" title="등록할 사진을 선택해 주세요" description={`최대 ${MAX_PHOTOS}장까지 선택할 수 있어요.`} />}
+          {items.map(item => {
+            const located = usablePhotoCoordinates(item.lat, item.lng);
+            if (!located) return <View key={item.id} style={styles.photoRow}>
               <View style={styles.row}>
-                <Image source={{ uri: item.uri }} style={styles.thumbnail} />
+                <Image source={{ uri: item.uri }} style={styles.thumbnail} resizeMode="cover" />
+                <Text style={[styles.details, styles.warningText]}>위치정보 없음 · 등록 불가</Text>
+                <TouchableOpacity disabled={busy} onPress={() => setItems(previous => previous.filter(photo => photo.id !== item.id))}
+                  style={styles.remove} hitSlop={6} accessibilityLabel={`${item.fileName} 제외`} accessibilityRole="button">
+                  <Ionicons name="close" size={20} color={colors.textSoft} />
+                </TouchableOpacity>
+              </View>
+            </View>;
+            return <View key={item.id} style={styles.photoRow}>
+              <View style={styles.row}><Image source={{ uri: item.uri }} style={styles.thumbnail} resizeMode="cover" />
                 <View style={styles.details}>
-                  <Text numberOfLines={2} style={styles.fileName}>{item.fileName}</Text>
-                  <Text style={styles.description}>{item.error || `위도 ${item.lat.toFixed(6)}\n경도 ${item.lng.toFixed(6)}`}</Text>
-                  <TouchableOpacity disabled={busy || !!result || !!item.error} onPress={() => change(item.id, { selected: !item.selected })}>
-                    <Text style={styles.link}>{item.error ? '등록 제외' : item.selected ? '✓ 등록 선택됨' : '○ 등록에서 제외됨'}</Text>
-                  </TouchableOpacity>
+                  <View style={styles.itemHeading}>
+                    <Text style={styles.label}>방문지 이름</Text>
+                    <TouchableOpacity disabled={busy} onPress={() => setItems(previous => previous.filter(photo => photo.id !== item.id))} style={styles.remove} hitSlop={6} accessibilityLabel={`${item.fileName} 제외`} accessibilityRole="button"><Ionicons name="close" size={20} color={colors.textSoft} /></TouchableOpacity>
+                  </View>
+                  <TextInput style={styles.input} value={item.name} onChangeText={name => change(item.id, { name })} editable={!busy} maxLength={255}
+                    placeholder="방문지명을 입력해 주세요" placeholderTextColor={colors.textFaint} accessibilityLabel={`${item.fileName} 방문지 이름`} />
+                  {located && <TouchableOpacity disabled={busy} onPress={() => setEditingId(item.id)} style={styles.locationButton}>
+                    <Text style={styles.locationText}>{item.coordinateSource === 'manual' ? '직접 지정한 위치 · 확인·변경' : '촬영 위치 확인됨 · 확인·변경'}</Text>
+                  </TouchableOpacity>}
                 </View>
               </View>
-              <TextInput style={styles.input} value={item.name} onChangeText={name => change(item.id, { name })}
-                editable={!busy && !result && !item.error} maxLength={255} placeholder="방문지 이름" accessibilityLabel={`${item.fileName} 방문지 이름`} />
-            </View>
-          ))}
-          {busy && <ActivityIndicator size="large" color="#2477F3" />}
-          {!!items.length && <TouchableOpacity style={[styles.button, (!selected.length || busy || result) && styles.disabled]} disabled={!selected.length || busy || !!result} onPress={upload}>
-            <Text style={styles.buttonText}>{busy ? '처리 중...' : `선택한 ${selected.length}장 방문지 등록`}</Text>
-          </TouchableOpacity>}
-          {result && <View style={styles.card}>
-            <Text style={styles.summary}>등록 성공 {result.savedCount}장 · 실패 {result.failures.filter(entry => !entry.unknown).length}장</Text>
-            <Text style={styles.description}>저장 여부 미확인 {result.unknownCount}장 · 미전송 {result.pendingCount}장</Text>
-            {result.failures.map((entry, index) => <Text key={index} style={styles.error}>{entry.fileName}: {entry.unknown ? '저장 여부 확인 필요 · ' : ''}{entry.reason}</Text>)}
-            {!!refreshError && <Text style={styles.error}>{refreshError}</Text>}
-            {!busy && <Text style={styles.description}>이 선택 목록은 다시 전송할 수 없습니다. 미확인 항목은 목록에서 저장 여부를 확인하세요. 새 사진 선택으로 다음 등록을 시작할 수 있습니다.</Text>}
-            {!busy && <TouchableOpacity style={styles.button} onPress={close}><Text style={styles.buttonText}>지도로 돌아가기</Text></TouchableOpacity>}
-            {!busy && !!onHome && <TouchableOpacity style={styles.button} onPress={home}><Text style={styles.buttonText}>홈으로 돌아가기</Text></TouchableOpacity>}
-          </View>}
-        </ScrollView>
-        <OriginalPhotoPicker visible={visible && originalPickerVisible} maximum={MAX_PHOTOS}
-          onCancel={() => setOriginalPickerVisible(false)} onConfirm={confirmOriginalPhotos} />
-      </SafeAreaView>
-    </Modal>
-  );
+              <View style={styles.chips}>{['점검', '공사', '안전', '환경', '민원'].map(task => <TouchableOpacity key={task} disabled={busy} accessibilityRole="button" accessibilityState={{ selected: item.task === task }}
+                onPress={() => change(item.id, { task: item.task === task ? '' : task })} style={[styles.chip, item.task === task && styles.chipSelected]}><Text style={[styles.chipText, item.task === task && styles.link]}>{task}</Text></TouchableOpacity>)}</View>
+            </View>;
+          })}
+        </View>
+      </ScrollView>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        {items.length ? <PrimaryButton title={phase === 'uploading' ? '등록 중…' : `방문지 ${registrationItems.length}곳 등록`} disabled={busy || !!problem || !!result} onPress={upload} />
+          : <PrimaryButton title="사진 선택" icon="images-outline" disabled={busy || !draftReady} onPress={() => pick()} />}
+      </View>
+      {editing && <ReportLocationPicker key={editing.id} latitude={point.lat} longitude={point.lng} address={editing.address} title="위치 지정" confirmLabel="이 위치로 지정"
+        buildMapHtml={getInteractiveMapHtml} saving={false} onCancel={() => setEditingId(null)} onConfirm={position => {
+          const address = position.locationAddress === '주소 확인 불가' ? '' : position.locationAddress;
+          change(editing.id, { lat: position.latitude, lng: position.longitude, address,
+            name: editing.name.trim() || suggestedPhotoName(address, items.filter(item => item.id !== editing.id)), coordinateSource: 'manual', error: '' });
+          setEditingId(null);
+        }} />}
+    </KeyboardAvoidingView>
+  </Modal>;
 }
-
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F4F6F9' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, backgroundColor: '#FFFFFF' },
-  title: { fontSize: 19, fontWeight: '700', color: '#10285B' },
-  content: { padding: 16, paddingBottom: 32 },
-  description: { color: '#5C6675', fontSize: 13, lineHeight: 20, marginVertical: 6 },
-  summary: { color: '#10285B', fontWeight: '700', lineHeight: 22, marginVertical: 8 },
-  button: { backgroundColor: '#2477F3', padding: 15, borderRadius: 10, alignItems: 'center', marginVertical: 10 },
-  buttonText: { color: '#FFFFFF', fontWeight: '700' },
-  disabled: { opacity: 0.5 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 14, marginVertical: 7 },
-  row: { flexDirection: 'row', gap: 12 },
-  thumbnail: { width: 90, height: 90, borderRadius: 8, backgroundColor: '#E8ECF2' },
-  details: { flex: 1 },
-  fileName: { color: '#23344D', fontWeight: '600' },
-  link: { color: '#2477F3', paddingVertical: 6 },
-  input: { marginTop: 12, padding: 12, borderWidth: 1, borderColor: '#DAE0E8', borderRadius: 8, color: '#23344D' },
-  error: { color: '#A62B2B', fontSize: 13, lineHeight: 20, marginVertical: 4 },
+  screen: { flex: 1, backgroundColor: colors.background }, content: { paddingHorizontal: spacing.page, paddingBottom: 24 },
+  heading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, section: { fontSize: 16, fontWeight: '900', color: colors.text },
+  description: { color: colors.textSoft, fontSize: 13, lineHeight: 20, marginVertical: 8 }, loading: { paddingVertical: 20, alignItems: 'center', gap: 8 },
+  photoRow: { paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.line }, row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  thumbnail: { width: 64, height: 76, borderRadius: radius.small, backgroundColor: colors.surfaceMuted }, details: { flex: 1 },
+  itemHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 18, marginBottom: 8 },
+  label: { fontSize: 11, lineHeight: 16, fontWeight: '700', color: colors.textSoft },
+  input: { borderWidth: 1, borderColor: colors.line, borderRadius: radius.small, paddingHorizontal: 8, paddingVertical: 8, color: colors.text, fontSize: 14, lineHeight: 20, minHeight: 38 },
+  remove: { width: 24, height: 18, alignItems: 'center', justifyContent: 'center' },
+  locationButton: { minHeight: 20, marginTop: 6, justifyContent: 'center' }, locationText: { color: colors.primary, fontSize: 11, lineHeight: 17, fontWeight: '600' },
+  textButton: { minHeight: 44, justifyContent: 'center', paddingVertical: 8 }, link: { color: colors.primary, fontSize: 13, fontWeight: '700' },
+  warning: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.warningSoft, paddingHorizontal: 10, borderRadius: radius.small, marginTop: 8 },
+  warningText: { flex: 1, minWidth: 0, color: colors.warningInk, fontSize: 11 },
+  warningAction: { minHeight: 36, justifyContent: 'center' }, warningLink: { color: colors.primary, fontSize: 12, fontWeight: '700' },
+  chips: { flexDirection: 'row', gap: 6, marginTop: 6 },
+  chip: { flex: 1, minWidth: 0, minHeight: 38, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.line, borderRadius: radius.pill },
+  chipSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft }, chipText: { color: colors.textSoft, fontSize: 13, textAlign: 'center' },
+  footer: { paddingHorizontal: spacing.page, paddingTop: 12, borderTopWidth: 1, borderColor: colors.line, backgroundColor: colors.surface },
 });

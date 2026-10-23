@@ -22,10 +22,12 @@ public class PhotoLocationController {
             @RequestParam("name") String name,
             @RequestParam("lat") Double lat,
             @RequestParam("lng") Double lng,
+            @RequestParam(value = "roadAddress", required = false) String roadAddress,
+            @RequestParam(value = "task", required = false) String task,
             @RequestPart("photo") MultipartFile photo) throws Exception {
         Long userId = CurrentUser.require(createdByUserId);
         try {
-            return ResponseEntity.ok(service.create(userId, groupId, name, lat, lng, photo));
+            return ResponseEntity.ok(service.create(userId, groupId, name, lat, lng, photo, roadAddress, task));
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage() == null ? "사진과 GPS 정보를 확인해 주세요." : ex.getMessage()));
         }

@@ -9,8 +9,8 @@ const locationCoordinates = (location) => {
 export async function resolvePhotoMetadata(asset, index, { platform, expoGo, readAssetInfo, permissionError } = {}) {
   const item = photoItem(asset, index);
   if (!item.error) return { ...item, coordinateSource: 'picker-exif' };
-  if (platform !== 'android' || !asset.uri) return item;
-  if (expoGo) return { ...item, error: 'Android Expo Go에서는 원본 사진 위치 조회가 제한됩니다. 개발용 앱에서 사진 위치 권한을 허용한 뒤 확인해 주세요.' };
+  if (!['android', 'ios'].includes(platform) || !asset.uri) return item;
+  if (platform === 'android' && expoGo) return { ...item, error: 'Android Expo Go에서는 원본 사진 위치 조회가 제한됩니다. 개발용 앱에서 사진 위치 권한을 허용한 뒤 확인해 주세요.' };
   if (permissionError) return { ...item, error: permissionError };
   if (!asset.assetId) return { ...item, error: '시스템 사진 선택 결과에 원본 ID가 없습니다. 사진 선택을 다시 눌러 원본 사진 목록에서 선택해 주세요. 원본에 GPS가 없다는 뜻은 아닙니다.' };
   try {
