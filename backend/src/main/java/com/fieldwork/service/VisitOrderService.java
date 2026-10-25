@@ -19,6 +19,9 @@ public class VisitOrderService {
     @jakarta.annotation.PreDestroy public void stop() { workers.shutdownNow(); }
     @Value("${kakao.rest-api-key}") private String key;
     private record Cached(long time, double[] durations) {}
+    private record WalkingLeg(long time, double duration) {}
+    private final java.util.concurrent.ConcurrentHashMap<String,java.util.concurrent.CompletableFuture<Double>> walkingRequests = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String,WalkingLeg> walkingLegs = Collections.synchronizedMap(new LinkedHashMap<>());
     private final Map<String, Cached> cache = Collections.synchronizedMap(new LinkedHashMap<>());
     public VisitOrderService() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
@@ -46,46 +49,81 @@ public class VisitOrderService {
         double[][] costs = new double[points.size()][points.size()];
         String basis = "roadDuration";
         String notice = "";
+        List<Integer> walkingOrder = null;
         try {
             // The standard multi-destination API supports at most 30 targets and a 10km radius.
-            if (!("car".equals(mode) || "walk".equals(mode)) || n > ("walk".equals(mode) ? 8 : 29)) throw new IllegalStateException();
+            if (!("car".equals(mode) || "walk".equals(mode)) || n > ("walk".equals(mode) ? 20 : 29)) throw new IllegalStateException();
             long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(25);
             List<java.util.concurrent.CompletableFuture<double[]>> requests = new ArrayList<>();
             for (int i = 0; i <= n && n > 0; i++) {
                 int origin = i;
-                requests.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> "walk".equals(mode) ? walkingDurations(points.get(origin), points, walkingKey, deadline) : durations(points.get(origin), points), workers));
+                requests.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> "walk".equals(mode) ? walkingDurations(points.get(origin), points, walkingKey, deadline, n <= 8, home != null) : durations(points.get(origin), points), workers));
             }
             java.util.concurrent.CompletableFuture.allOf(requests.toArray(java.util.concurrent.CompletableFuture[]::new))
                 .orTimeout(25, java.util.concurrent.TimeUnit.SECONDS).join();
-            for (int i = 0; i < requests.size(); i++) costs[i] = requests.get(i).join();
+            for (int i = 0; i < requests.size(); i++) costs[i] = requests.get(i).join().clone();
+            if ("walk".equals(mode) && n > 8) {
+                // Bound provider calls: query nearby candidates, then validate both candidate itineraries.
+                walkingOrder = solve(costs,n,home != null,pinned);
+                refineWalkingOrder(walkingOrder,costs,points,home != null,walkingKey,deadline);
+                walkingOrder = solve(costs,n,home != null,pinned);
+                refineWalkingOrder(walkingOrder,costs,points,home != null,walkingKey,deadline);
+            }
         } catch (RuntimeException error) {
+            walkingOrder = null;
             basis = "distance";
             notice = "이동시간 비교를 사용할 수 없어 근무지 복귀를 포함한 거리 기준으로 추천합니다.";
             for (int i = 0; i < points.size(); i++) for (int j = 0; j < points.size(); j++) costs[i][j] = distance(points.get(i), points.get(j));
         }
-        List<Integer> order = solve(costs, n, home != null, pinned);
+        List<Integer> order = walkingOrder != null ? walkingOrder : solve(costs, n, home != null, pinned);
         List<Map<String, Object>> ordered = order.stream().map(i -> pending.get(i)).toList();
         Map<String, Object> result = new HashMap<>();
         result.put("optimizedLocations", ordered); result.put("includesReturn", home != null);
         result.put("basis", basis); result.put("notice", notice);
-        result.put("algorithm", n <= 12 ? "exact" : "heuristic");
+        result.put("algorithm", "walk".equals(mode) && n > 8 && "roadDuration".equals(basis) ? "heuristic" : n <= 12 ? "exact" : "heuristic");
         result.put("totalCost", cost(order, costs, n, home != null));
         return result;
     }
-    private double[] walkingDurations(Map<String,Object> origin,List<Map<String,Object>> points,String walkingKey,long deadline) {
-        String cacheKey="walk:"+AuthSessionService.hash(Objects.toString(walkingKey,""))+":"+origin.get("lat")+","+origin.get("lng")+":"+points.stream().map(p->p.get("lat")+","+p.get("lng")).toList();
-        Cached existing=cache.get(cacheKey);
-        if(existing!=null && System.currentTimeMillis()-existing.time<300000) return existing.durations;
-        double[] result=new double[points.size()];
-        for(int i=0;i<points.size();i++) {
-            if (System.nanoTime() > deadline || Thread.currentThread().isInterrupted()) throw new IllegalStateException("Walking recommendation timed out");
-            Map<String,Object> destination=points.get(i);
-            if(distance(origin,destination)<1) result[i]=0;
-            else result[i]=((Number)walkingClient.route(((Number)origin.get("lat")).doubleValue(),((Number)origin.get("lng")).doubleValue(),
-                ((Number)destination.get("lat")).doubleValue(),((Number)destination.get("lng")).doubleValue(),walkingKey).get("totalDuration")).doubleValue();
+    private static String coordinateKey(Map<String,Object> point) {
+        return Double.toString(Double.parseDouble(point.get("lat").toString()))+","+Double.toString(Double.parseDouble(point.get("lng").toString()));
+    }
+    private double walkingDuration(Map<String,Object> origin,Map<String,Object> destination,String walkingKey,long deadline) {
+        if (distance(origin,destination)<1) return 0;
+        if (System.nanoTime()>deadline || Thread.currentThread().isInterrupted()) throw new IllegalStateException("Walking recommendation timed out");
+        String legKey=AuthSessionService.hash(Objects.toString(walkingKey,""))+":"+coordinateKey(origin)+":"+coordinateKey(destination);
+        WalkingLeg previous=walkingLegs.get(legKey);
+        if(previous!=null && System.currentTimeMillis()-previous.time<300000) return previous.duration;
+        var own = new java.util.concurrent.CompletableFuture<Double>();
+        var pending = walkingRequests.putIfAbsent(legKey,own);
+        if(pending != null) {
+            try { return pending.get(Math.max(1,deadline-System.nanoTime()),java.util.concurrent.TimeUnit.NANOSECONDS); }
+            catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("Walking recommendation interrupted",e);}
+            catch(Exception e){throw new IllegalStateException("Walking recommendation unavailable",e);}
         }
-        synchronized(cache){if(cache.size()>=512)cache.remove(cache.keySet().iterator().next());cache.put(cacheKey,new Cached(System.currentTimeMillis(),result));}
+        try {
+            double duration=((Number)walkingClient.route(((Number)origin.get("lat")).doubleValue(),((Number)origin.get("lng")).doubleValue(),
+                ((Number)destination.get("lat")).doubleValue(),((Number)destination.get("lng")).doubleValue(),walkingKey).get("totalDuration")).doubleValue();
+            synchronized(walkingLegs){if(walkingLegs.size()>=4096)walkingLegs.remove(walkingLegs.keySet().iterator().next());walkingLegs.put(legKey,new WalkingLeg(System.currentTimeMillis(),duration));}
+            own.complete(duration);return duration;
+        } catch(RuntimeException e){own.completeExceptionally(e);throw e;}
+        finally{walkingRequests.remove(legKey,own);}
+    }
+    private double[] walkingDurations(Map<String,Object> origin,List<Map<String,Object>> points,String walkingKey,long deadline,boolean full,boolean home) {
+        double[] result=new double[points.size()];
+        for(int i=0;i<points.size();i++) result[i]=distance(origin,points.get(i))/1.25*1.3;
+        List<Integer> candidates=new ArrayList<>();
+        // No route returns to the start; only destinations and the optional workplace are needed.
+        for(int i=1;i<points.size();i++) if(distance(origin,points.get(i))>=1)candidates.add(i);
+        candidates.sort(Comparator.comparingDouble(i->distance(origin,points.get(i))));
+        Set<Integer> query=new LinkedHashSet<>(full?candidates:candidates.subList(0,Math.min(4,candidates.size())));
+        if(home)query.add(points.size()-1);
+        for(int i:query)result[i]=walkingDuration(origin,points.get(i),walkingKey,deadline);
         return result;
+    }
+    private void refineWalkingOrder(List<Integer> order,double[][] costs,List<Map<String,Object>> points,boolean home,String key,long deadline) {
+        int from=0;
+        for(int visit:order){int to=visit+1;costs[from][to]=walkingDuration(points.get(from),points.get(to),key,deadline);from=to;}
+        if(home)costs[from][points.size()-1]=walkingDuration(points.get(from),points.get(points.size()-1),key,deadline);
     }
     private double[] durations(Map<String, Object> origin, List<Map<String, Object>> points) {
         String cacheKey = origin.get("lat") + "," + origin.get("lng") + ":" + points.stream()
