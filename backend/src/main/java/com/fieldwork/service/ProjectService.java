@@ -36,7 +36,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
-/** 프로젝트 CRUD, 업무 연결, 완료 항목 조회. 권한: 리더 = 생성/수정, 멤버 = 보기. */
+/** 프로젝트 CRUD, 업무 연결, 완료 항목 조회. 권한: 그룹 구성원 = 생성/수정/조회. */
 @Service
 public class ProjectService {
     public static final String UNASSIGNED = "(미지정)";
@@ -119,7 +119,7 @@ public class ProjectService {
     @Transactional
     public Map<String, Object> create(Long groupId, Long userId, Map<String, Object> body) {
         WorkGroup group = loadGroup(groupId);
-        requireLeader(group, userId);
+        requireMember(group, userId);
         if (group.isPersonal()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "개인 작업공간에서는 프로젝트를 만들 수 없습니다.");
         }
@@ -141,6 +141,7 @@ public class ProjectService {
         map.put("completedCount", eligibleProgress(project).size());
         map.put("taskCount", projects.findTasks(project).size());
         map.put("isLeader", isLeader(project.getGroup(), userId));
+        map.put("canManage", true);
         return map;
     }
 
@@ -182,7 +183,7 @@ public class ProjectService {
     @Transactional
     public Map<String, Object> update(Long projectId, Long userId, Map<String, Object> body) {
         Project project = loadProject(projectId);
-        requireLeader(project.getGroup(), userId);
+        requireMember(project.getGroup(), userId);
         if (body.containsKey("name")) project.setName(requireName(body.get("name")));
         if (body.containsKey("startDate")) project.setStartDate(parseDate(body.get("startDate")));
         if (body.containsKey("endDate")) project.setEndDate(parseDate(body.get("endDate")));
@@ -209,7 +210,8 @@ public class ProjectService {
     @Transactional
     public Map<String, Object> linkTasks(Long projectId, Long userId, Object rawTaskIds) {
         Project project = loadProject(projectId);
-        requireLeader(project.getGroup(), userId);
+        requireMember(project.getGroup(), userId);
+        projects.lockById(projectId).orElseThrow();
         List<Long> ids = parseIds(rawTaskIds, "taskIds");
         List<Task> found = tasks.findAllById(ids);
         if (found.size() != ids.size()) {
@@ -238,7 +240,7 @@ public class ProjectService {
     @Transactional
     public Map<String, Object> unlinkTask(Long projectId, Long taskId, Long userId) {
         Project project = loadProject(projectId);
-        requireLeader(project.getGroup(), userId);
+        requireMember(project.getGroup(), userId);
         List<ProjectTask> found = links.findLinks(project, List.of(taskId));
         if (found.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트에 연결된 업무가 아닙니다.");
@@ -251,7 +253,7 @@ public class ProjectService {
     @Transactional
     public Map<String, Object> unlinkTasks(Long projectId, Long userId, Object rawTaskIds) {
         Project project = loadProject(projectId);
-        requireLeader(project.getGroup(), userId);
+        requireMember(project.getGroup(), userId);
         List<ProjectTask> found = links.findLinks(project, parseIds(rawTaskIds, "taskIds"));
         unlink(project, found);
         return Map.of("unlinked", found.stream().map(link -> link.getTask().getTaskId()).toList());

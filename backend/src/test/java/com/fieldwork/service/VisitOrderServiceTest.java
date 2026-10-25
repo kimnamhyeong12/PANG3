@@ -35,6 +35,26 @@ class VisitOrderServiceTest {
             server.verify();
         } finally { service.stop(); }
     }
+    @Test void walkingOrderUsesWalkingDurationsAndCachesThem() throws Exception {
+        VisitOrderService service=new VisitOrderService();
+        var walking=org.springframework.test.util.ReflectionTestUtils.getField(service,"walkingClient");
+        var http=(org.springframework.web.client.RestTemplate)org.springframework.test.util.ReflectionTestUtils.getField(walking,"http");
+        var server=org.springframework.test.web.client.MockRestServiceServer.bindTo(http).ignoreExpectOrder(true).build();
+        double[][] times={{0,10,1},{10,0,10},{10,1,0}};
+        var mapper=new com.fasterxml.jackson.databind.ObjectMapper();
+        server.expect(org.springframework.test.web.client.ExpectedCount.times(6),org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(org.hamcrest.Matchers.startsWith("https://dapi.kakao.com/v2/routing/walk?")))
+          .andRespond(request->{
+            Map<String,String> query=new HashMap<>();for(String pair:request.getURI().getQuery().split("&")){String[] parts=pair.split("=");query.put(parts[0],parts[1]);}
+            int from=(int)Math.round((Double.parseDouble(query.get("start_x"))-129)*1000), to=(int)Math.round((Double.parseDouble(query.get("end_x"))-129)*1000);
+            var body=Map.of("status","OK","route",Map.of("properties",Map.of("totalDistance",100,"totalTime",times[from][to]),"legs",List.of(Map.of("steps",List.of(Map.of("path",Map.of("points",List.of(List.of(129,35),List.of(129.001,35)))))))));
+            var response=new org.springframework.mock.http.client.MockClientHttpResponse(mapper.writeValueAsBytes(body),org.springframework.http.HttpStatus.OK);
+            response.getHeaders().setContentType(org.springframework.http.MediaType.APPLICATION_JSON);return response;
+          });
+        Map<String,Object> start=Map.of("lat",35,"lng",129),a=Map.of("id",1,"lat",35,"lng",129.001),b=Map.of("id",2,"lat",35,"lng",129.002);
+        try {var result=service.recommend(start,List.of(a,b),null,null,"walk","synthetic");assertEquals(List.of(b,a),result.get("optimizedLocations"));assertEquals("roadDuration",result.get("basis"));
+          assertEquals(List.of(b,a),service.recommend(start,List.of(a,b),null,null,"walk","synthetic").get("optimizedLocations"));server.verify();
+        } finally {service.stop();}
+    }
     @Test void returnChangesOrderAndUserChoiceStaysFirst() {
         // Open route favours A->B. B->home is expensive, so the closed route is B->A.
         double[][] c = {{0,1,2,0}, {0,0,1,1}, {0,2,0,100}, {0,0,0,0}};

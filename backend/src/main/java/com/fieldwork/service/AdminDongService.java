@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class AdminDongService {
     private final String key;
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
+    private final HttpClient http;
     private final ObjectMapper json = new ObjectMapper();
     private final Map<String, String[]> cache = new ConcurrentHashMap<>();
 
@@ -33,6 +33,7 @@ public class AdminDongService {
             @Value("${KAKAO_REST_API_KEY:}") String envKey) {
         String chosen = key == null || key.isBlank() ? envKey : key;
         this.key = chosen == null ? "" : chosen.trim();
+        this.http = this.key.isEmpty() ? null : HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
     }
 
     /** 업무에 행정동이 없으면 채운다. 바뀌었으면 true (저장은 호출한 쪽에서). */

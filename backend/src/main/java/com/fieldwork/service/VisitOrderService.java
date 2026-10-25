@@ -13,6 +13,7 @@ import org.springframework.web.client.RestTemplate;
 @SuppressWarnings("unchecked")
 public class VisitOrderService {
     private final RestTemplate client;
+    private final KakaoWalkingClient walkingClient = new KakaoWalkingClient();
     private final java.util.concurrent.ExecutorService workers = new java.util.concurrent.ThreadPoolExecutor(4, 4, 0,
             java.util.concurrent.TimeUnit.SECONDS, new java.util.concurrent.ArrayBlockingQueue<>(128));
     @jakarta.annotation.PreDestroy public void stop() { workers.shutdownNow(); }
@@ -27,6 +28,10 @@ public class VisitOrderService {
     }
     public Map<String, Object> recommend(Map<String, Object> start, List<Map<String, Object>> visits,
             Map<String, Object> home, String pinnedKey, String mode) {
+        return recommend(start,visits,home,pinnedKey,mode,key);
+    }
+    public Map<String, Object> recommend(Map<String, Object> start, List<Map<String, Object>> visits,
+            Map<String, Object> home, String pinnedKey, String mode, String walkingKey) {
         requirePoint(start);
         if (home != null) requirePoint(home);
         if (visits == null || visits.size() > 500) throw new IllegalArgumentException("방문지를 확인해 주세요.");
@@ -43,11 +48,12 @@ public class VisitOrderService {
         String notice = "";
         try {
             // The standard multi-destination API supports at most 30 targets and a 10km radius.
-            if (!"car".equals(mode) || n > 29) throw new IllegalStateException();
+            if (!("car".equals(mode) || "walk".equals(mode)) || n > ("walk".equals(mode) ? 8 : 29)) throw new IllegalStateException();
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(25);
             List<java.util.concurrent.CompletableFuture<double[]>> requests = new ArrayList<>();
             for (int i = 0; i <= n && n > 0; i++) {
                 int origin = i;
-                requests.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> durations(points.get(origin), points), workers));
+                requests.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> "walk".equals(mode) ? walkingDurations(points.get(origin), points, walkingKey, deadline) : durations(points.get(origin), points), workers));
             }
             java.util.concurrent.CompletableFuture.allOf(requests.toArray(java.util.concurrent.CompletableFuture[]::new))
                 .orTimeout(25, java.util.concurrent.TimeUnit.SECONDS).join();
@@ -64,6 +70,21 @@ public class VisitOrderService {
         result.put("basis", basis); result.put("notice", notice);
         result.put("algorithm", n <= 12 ? "exact" : "heuristic");
         result.put("totalCost", cost(order, costs, n, home != null));
+        return result;
+    }
+    private double[] walkingDurations(Map<String,Object> origin,List<Map<String,Object>> points,String walkingKey,long deadline) {
+        String cacheKey="walk:"+AuthSessionService.hash(Objects.toString(walkingKey,""))+":"+origin.get("lat")+","+origin.get("lng")+":"+points.stream().map(p->p.get("lat")+","+p.get("lng")).toList();
+        Cached existing=cache.get(cacheKey);
+        if(existing!=null && System.currentTimeMillis()-existing.time<300000) return existing.durations;
+        double[] result=new double[points.size()];
+        for(int i=0;i<points.size();i++) {
+            if (System.nanoTime() > deadline || Thread.currentThread().isInterrupted()) throw new IllegalStateException("Walking recommendation timed out");
+            Map<String,Object> destination=points.get(i);
+            if(distance(origin,destination)<1) result[i]=0;
+            else result[i]=((Number)walkingClient.route(((Number)origin.get("lat")).doubleValue(),((Number)origin.get("lng")).doubleValue(),
+                ((Number)destination.get("lat")).doubleValue(),((Number)destination.get("lng")).doubleValue(),walkingKey).get("totalDuration")).doubleValue();
+        }
+        synchronized(cache){if(cache.size()>=512)cache.remove(cache.keySet().iterator().next());cache.put(cacheKey,new Cached(System.currentTimeMillis(),result));}
         return result;
     }
     private double[] durations(Map<String, Object> origin, List<Map<String, Object>> points) {

@@ -13,6 +13,8 @@ import java.util.Optional;
 
 public interface ProjectTaskRepository extends JpaRepository<ProjectTask, Long> {
 
+    void deleteByTask_TaskId(Long taskId);
+
     boolean existsByProjectAndTask(Project project, Task task);
 
     Optional<ProjectTask> findByProjectAndTask(Project project, Task task);

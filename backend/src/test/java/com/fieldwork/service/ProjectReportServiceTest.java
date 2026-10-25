@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(classes = ProjectReportServiceTest.TestConfig.class, properties = {
-        "spring.config.location=classpath:/auth-test.properties",
+        "spring.config.location=classpath:/auth-test.properties", "kakao.rest-api-key=", "KAKAO_REST_API_KEY=",
         "spring.datasource.url=jdbc:h2:mem:projectreport;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
         "fieldwork.report-map.enabled=false"})
 @Transactional
@@ -136,13 +136,13 @@ class ProjectReportServiceTest {
         assertStatus(HttpStatus.NOT_FOUND, () -> projects.taskContext(-1L, member.getUserId()));
     }
 
-    @Test void onlyLeaderCreatesAndEditsAndPersonalGroupIsRejected() {
+    @Test void membersManageProjectsAndPersonalGroupIsRejected() {
         Map<String, Object> body = new HashMap<>(Map.of("name", "멤버 프로젝트"));
-        assertStatus(HttpStatus.FORBIDDEN, () -> projects.create(group.getGroupId(), member.getUserId(), body));
-        assertStatus(HttpStatus.FORBIDDEN, () -> projects.update(projectId, member.getUserId(), body));
-        assertStatus(HttpStatus.FORBIDDEN, () -> reports.create(projectId, member.getUserId(), new HashMap<>(Map.of("title", "x"))));
+        assertEquals("공원", projects.create(group.getGroupId(), member.getUserId(), new HashMap<>(Map.of("name","공원"))).get("name"));
+        assertEquals(body.get("name"), projects.update(projectId, member.getUserId(), body).get("name"));
+        assertEquals("x", reports.create(projectId, member.getUserId(), new HashMap<>(Map.of("title", "x"))).get("title"));
         Task t = task(group, "하단동", null);
-        assertStatus(HttpStatus.FORBIDDEN, () -> projects.linkTasks(projectId, member.getUserId(), List.of(t.getTaskId())));
+        assertTrue(projects.linkTasks(projectId, member.getUserId(), List.of(t.getTaskId())).containsKey("linked"));
         WorkGroup personal = group(true, leader);
         assertStatus(HttpStatus.BAD_REQUEST, () -> projects.create(personal.getGroupId(), leader.getUserId(), body));
         WorkGroup other = group(false, leader);
@@ -178,7 +178,7 @@ class ProjectReportServiceTest {
         assertEquals(1, items.size());
         assertEquals(List.of(reportId), items.get(0).get("inReportIds"));
         assertEquals(1, ((Number) reports.list(projectId, member.getUserId()).get(0).get("itemCount")).intValue());
-        assertStatus(HttpStatus.FORBIDDEN, () -> reports.removeItem(reportId, done.getProgressId(), member.getUserId()));
+        assertStatus(HttpStatus.FORBIDDEN, () -> reports.removeItem(reportId, done.getProgressId(), outsider.getUserId()));
         reports.removeItem(reportId, done.getProgressId(), leader.getUserId());
         assertEquals(0, list(reports.getJson(reportId, member.getUserId()).get("sections")).size());
     }
@@ -189,7 +189,7 @@ class ProjectReportServiceTest {
         Long reportId = newReport("adminDong");
         reports.addItems(reportId, member.getUserId(), List.of(p.getProgressId()));
         Map<String, Object> body = new HashMap<>(); body.put("overrideComment", "전봇대 불법 현수막 3매를 제거함.");
-        assertStatus(HttpStatus.FORBIDDEN, () -> reports.updateItem(reportId, p.getProgressId(), member.getUserId(), body));
+        assertStatus(HttpStatus.FORBIDDEN, () -> reports.updateItem(reportId, p.getProgressId(), outsider.getUserId(), body));
         reports.updateItem(reportId, p.getProgressId(), leader.getUserId(), body);
         em.flush(); em.clear();
 
@@ -287,7 +287,7 @@ class ProjectReportServiceTest {
         assertEquals(List.of(b.getTaskId()), projects.unlinkTasks(projectId, leader.getUserId(), List.of(a.getTaskId(), b.getTaskId())).get("unlinked"));
         assertEquals(List.of(), commentsOf(reports.getJson(reportId, member.getUserId())));
         assertEquals(1, projects.tasks(other, member.getUserId()).size());
-        assertStatus(HttpStatus.FORBIDDEN, () -> projects.unlinkTasks(other, member.getUserId(), List.of(b.getTaskId())));
+        assertStatus(HttpStatus.FORBIDDEN, () -> projects.unlinkTasks(other, outsider.getUserId(), List.of(b.getTaskId())));
         assertEquals("EXPIRED", list(reports.addItems(reportId, member.getUserId(), List.of(pc.getProgressId())).get("skipped")).get(0).get("reason"));
     }
 
@@ -298,7 +298,7 @@ class ProjectReportServiceTest {
         TaskProgress p2 = progress(t2, "complete", "두 번째");
         Long reportId = newReport("adminDong");
         reports.addItems(reportId, member.getUserId(), List.of(p.getProgressId()));
-        assertStatus(HttpStatus.FORBIDDEN, () -> reports.finalizeReport(reportId, member.getUserId()));
+        assertStatus(HttpStatus.FORBIDDEN, () -> reports.finalizeReport(reportId, outsider.getUserId()));
         assertEquals("FINAL", reports.finalizeReport(reportId, leader.getUserId()).get("status"));
 
         Map<String, Object> body = new HashMap<>(Map.of("title", "바뀐 제목"));
@@ -330,7 +330,7 @@ class ProjectReportServiceTest {
         reports.finalizeReport(v1, leader.getUserId());
         projects.unlinkTask(projectId, gone.getTaskId(), leader.getUserId());
 
-        assertStatus(HttpStatus.FORBIDDEN, () -> reports.revise(v1, member.getUserId()));
+        assertStatus(HttpStatus.FORBIDDEN, () -> reports.revise(v1, outsider.getUserId()));
         Map<String, Object> v2 = reports.revise(v1, leader.getUserId());
         assertEquals(2, v2.get("version"));
         assertEquals("DRAFT", v2.get("status"));
@@ -360,7 +360,7 @@ class ProjectReportServiceTest {
         Map<String, Object> change = new HashMap<>();
         change.put("overrideTitle", "하단동 현수막 정비");
         change.put("overridePhotoComments", Map.of("0", "보고서용 설명"));
-        assertStatus(HttpStatus.FORBIDDEN, () -> reports.updateItem(reportId, p.getProgressId(), member.getUserId(), change));
+        assertStatus(HttpStatus.FORBIDDEN, () -> reports.updateItem(reportId, p.getProgressId(), outsider.getUserId(), change));
         reports.updateItem(reportId, p.getProgressId(), leader.getUserId(), change);
         item = list(list(reports.getJson(reportId, leader.getUserId()).get("sections")).get(0).get("items")).get(0);
         assertEquals("하단동 현수막 정비", item.get("title"));

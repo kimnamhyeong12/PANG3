@@ -61,3 +61,14 @@ CREATE TABLE IF NOT EXISTS project_tasks (
 );
 CREATE INDEX IF NOT EXISTS idx_project_tasks_task ON project_tasks(task_id);
 COMMIT;
+
+-- Persistent destinations survive repeated task creation and deletion.
+CREATE TABLE IF NOT EXISTS project_places (
+ place_id bigserial PRIMARY KEY,
+ project_id bigint NOT NULL REFERENCES projects(project_id),
+ name varchar(255), road_address varchar(255), lat double precision, lng double precision,
+ category varchar(255), sido varchar(255), sigungu varchar(255), admin_dong varchar(255)
+);
+CREATE INDEX IF NOT EXISTS idx_project_places_project ON project_places(project_id);
+ALTER TABLE task ADD COLUMN IF NOT EXISTS project_place_id bigint;
+CREATE INDEX IF NOT EXISTS idx_task_project_place ON task(project_place_id);

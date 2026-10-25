@@ -78,6 +78,11 @@ public class Task {
     @JoinColumn(name = "group_id")
     private WorkGroup group;
 
+    @Column(name = "project_place_id")
+    private Long projectPlaceId;
+    public Long getProjectPlaceId() { return projectPlaceId; }
+    public void setProjectPlaceId(Long value) { projectPlaceId = value; }
+
     public Long getTaskId() {
         return taskId;
     }

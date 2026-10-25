@@ -237,7 +237,8 @@ public class TaskProgressService {
     // Correcting a report never reopens a completed task or changes status from an old visit.
     private void syncReportStatus(Task task, TaskProgress progress) {
         if (!isCurrentRecord(task, progress)) return;
-        if (!"complete".equalsIgnoreCase(task.getTaskStatus())) syncTaskStatus(task, progress.getProgressStatus());
+        syncTaskStatus(task, progress.getProgressStatus());
+        if (!"complete".equalsIgnoreCase(progress.getProgressStatus())) progress.setCompletedAt(null);
         if ("complete".equalsIgnoreCase(progress.getProgressStatus()) && progress.getCompletedAt() == null)
             progress.setCompletedAt(task.getCompletedAt());
     }
@@ -352,6 +353,7 @@ public class TaskProgressService {
         result.put("taskLatitude", task.getLat());
         result.put("taskLongitude", task.getLng());
         result.put("taskId", task.getTaskId());
+        result.put("projects", taskService.projectContextForTask(task));
         result.put("latitude", progress.getLatitude());
         result.put("longitude", progress.getLongitude());
         result.put("locationAddress", progress.getLocationAddress());

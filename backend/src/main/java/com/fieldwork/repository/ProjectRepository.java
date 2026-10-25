@@ -11,6 +11,10 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface ProjectRepository extends JpaRepository<Project, Long> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Project p where p.projectId = :id")
+    java.util.Optional<Project> lockById(@Param("id") Long id);
+
 
     List<Project> findByGroupOrderByProjectIdDesc(WorkGroup group);
 

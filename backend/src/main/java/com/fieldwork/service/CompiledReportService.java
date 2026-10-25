@@ -64,7 +64,7 @@ public class CompiledReportService {
     @Transactional
     public Map<String, Object> create(Long projectId, Long userId, Map<String, Object> body) {
         Project project = projectService.loadProject(projectId);
-        projectService.requireLeader(project.getGroup(), userId);
+        projectService.requireMember(project.getGroup(), userId);
         CompiledReport report = new CompiledReport();
         report.setProject(project);
         report.setTitle(requireTitle(body.get("title")));
@@ -80,7 +80,7 @@ public class CompiledReportService {
     @Transactional
     public Map<String, Object> update(Long reportId, Long userId, Map<String, Object> body) {
         CompiledReport report = loadReport(reportId);
-        projectService.requireLeader(report.getProject().getGroup(), userId);
+        projectService.requireMember(report.getProject().getGroup(), userId);
         requireDraft(report);
         if (body.containsKey("title")) report.setTitle(requireTitle(body.get("title")));
         if (body.containsKey("groupBy")) report.setGroupBy(requireGroupBy(body.get("groupBy")));
@@ -106,7 +106,7 @@ public class CompiledReportService {
     @Transactional
     public Map<String, Object> finalizeReport(Long reportId, Long userId) {
         CompiledReport report = lockReport(reportId);
-        projectService.requireLeader(report.getProject().getGroup(), userId);
+        projectService.requireMember(report.getProject().getGroup(), userId);
         requireDraft(report);
         LocalDateTime now = LocalDateTime.now();
         report.setStatus("FINAL");
@@ -123,7 +123,7 @@ public class CompiledReportService {
     public Map<String, Object> revise(Long reportId, Long userId) {
         CompiledReport source = lockReport(reportId);
         Project project = source.getProject();
-        projectService.requireLeader(project.getGroup(), userId);
+        projectService.requireMember(project.getGroup(), userId);
         if (!"FINAL".equals(source.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "확정된 보고서만 수정본을 만들 수 있습니다.");
         }
@@ -238,7 +238,7 @@ public class CompiledReportService {
     @Transactional
     public Map<String, Object> updateItem(Long reportId, Long progressId, Long userId, Map<String, Object> body) {
         CompiledReport report = loadReport(reportId);
-        projectService.requireLeader(report.getProject().getGroup(), userId);
+        projectService.requireMember(report.getProject().getGroup(), userId);
         requireDraft(report);
         CompiledReportItem item = loadItem(report, progressId);
         if (body.containsKey("overrideComment")) {
@@ -328,7 +328,7 @@ public class CompiledReportService {
     @Transactional
     public Map<String, Object> removeItem(Long reportId, Long progressId, Long userId) {
         CompiledReport report = loadReport(reportId);
-        projectService.requireLeader(report.getProject().getGroup(), userId);
+        projectService.requireMember(report.getProject().getGroup(), userId);
         requireDraft(report);
         items.delete(loadItem(report, progressId));
         items.flush();

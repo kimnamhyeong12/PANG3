@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Collection;
 
 public interface TaskRepository extends JpaRepository<Task, Long> {
+    List<Task> findByProjectPlaceId(Long placeId);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select task from Task task where task.taskId = :taskId")
     Optional<Task> findByIdForUpdate(@Param("taskId") Long taskId);

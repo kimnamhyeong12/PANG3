@@ -13,8 +13,8 @@ public class VisitOrderController {
     public record OrderRequest(Map<String, Object> currentLocation, List<Map<String, Object>> locations,
             Map<String, Object> returnLocation, String pinnedKey, String transportMode) {}
     @PostMapping("/order")
-    public Map<String, Object> recommend(@RequestBody OrderRequest body) {
-        return guard.call("order", body, null, () -> service.recommend(body.currentLocation(), body.locations(), body.returnLocation(), body.pinnedKey(),
-                body.transportMode() == null ? "car" : body.transportMode()));
+    public Map<String, Object> recommend(@RequestBody OrderRequest body, @RequestHeader(value="X-Kakao-Walk-Key",required=false) String walkingKey) {
+        return guard.call("order", body, walkingKey, () -> service.recommend(body.currentLocation(), body.locations(), body.returnLocation(), body.pinnedKey(),
+                body.transportMode() == null ? "car" : body.transportMode(), walkingKey));
     }
 }

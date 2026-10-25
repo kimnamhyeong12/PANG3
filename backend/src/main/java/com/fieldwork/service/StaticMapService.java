@@ -53,8 +53,7 @@ public class StaticMapService {
     private final String tileUrl;
     private final String referer;
     private final String attribution;
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3))
-            .followRedirects(HttpClient.Redirect.NORMAL).build();
+    private final HttpClient http;
     private final Map<String, BufferedImage> tiles = new LinkedHashMap<>(64, 0.75f, true) {
         @Override protected boolean removeEldestEntry(Map.Entry<String, BufferedImage> eldest) {
             return size() > TILE_CACHE;
@@ -65,6 +64,7 @@ public class StaticMapService {
             @Value("${fieldwork.report-map.vworld-key:${VWORLD_API_KEY:}}") String vworldKey,
             @Value("${fieldwork.report-map.referer:${fieldwork.auth.public-url:}}") String referer) {
         this.enabled = enabled;
+        this.http = enabled ? HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).followRedirects(HttpClient.Redirect.NORMAL).build() : null;
         this.referer = referer == null ? "" : referer.trim();
         String key = vworldKey == null ? "" : vworldKey.trim();
         if (!key.isEmpty()) {

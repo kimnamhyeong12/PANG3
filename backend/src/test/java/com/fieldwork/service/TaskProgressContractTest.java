@@ -13,7 +13,8 @@ public class TaskProgressContractTest {
         final Task task;
         final User owner;
         int statusWrites;
-        Tasks(Task task, User owner) { super(null,null,null,null,null,null,null,null); this.task=task; this.owner=owner; }
+        Tasks(Task task, User owner) { super(null,null,null,null,null,null,null,null,null,null,null); this.task=task; this.owner=owner; }
+        @Override public List<Map<String,Object>> projectContextForTask(Task task) { return List.of(); }
         @Override public Task getById(Long id) { return task; }
         @Override public User currentAssignee(Task task) { return owner; }
         @Override public void requireEditor(Long id, Long userId) { if (!owner.getUserId().equals(userId)) throw new IllegalArgumentException("\uD604\uC7AC \uB2F4\uB2F9\uC790\uB9CC \uBCC0\uACBD\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4."); }

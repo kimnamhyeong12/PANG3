@@ -1,6 +1,12 @@
 package com.fieldwork.service;
 
 import com.fieldwork.entity.Task;
+import com.fieldwork.entity.Project;
+import com.fieldwork.entity.ProjectPlace;
+import com.fieldwork.entity.ProjectTask;
+import com.fieldwork.repository.ProjectRepository;
+import com.fieldwork.repository.ProjectTaskRepository;
+import com.fieldwork.repository.ProjectPlaceRepository;
 import com.fieldwork.entity.LocationAssignment;
 import com.fieldwork.entity.User;
 import com.fieldwork.entity.WorkGroup;
@@ -24,6 +30,9 @@ import java.util.stream.Collectors;
 @Service
 public class TaskService {
 
+    private final ProjectRepository projectRepository;
+    private final ProjectTaskRepository projectTaskRepository;
+    private final ProjectPlaceRepository projectPlaceRepository;
     private final TaskRepository taskRepository;
     private final TaskProgressRepository taskProgressRepository;
     private final LocationAssignmentRepository locationAssignmentRepository;
@@ -41,8 +50,12 @@ public class TaskService {
             WorkGroupRepository workGroupRepository,
             GroupMemberRepository groupMemberRepository,
             GroupService groupService,
-            PushNotificationService pushNotificationService
+            PushNotificationService pushNotificationService,
+            ProjectRepository projectRepository, ProjectTaskRepository projectTaskRepository, ProjectPlaceRepository projectPlaceRepository
     ) {
+        this.projectRepository = projectRepository;
+        this.projectTaskRepository = projectTaskRepository;
+        this.projectPlaceRepository = projectPlaceRepository;
         this.taskRepository = taskRepository;
         this.taskProgressRepository = taskProgressRepository;
         this.locationAssignmentRepository = locationAssignmentRepository;
@@ -178,7 +191,7 @@ public class TaskService {
         );
         LocalDate originalWorkDate = requestedWorkDate != null
                 ? requestedWorkDate
-                : LocalDate.now();
+                : LocalDate.now(java.time.ZoneId.of("Asia/Seoul"));
         task.setWorkDate(originalWorkDate);
 
         // scheduledDate???꾩옱 ?대뒓 ?좎쭨???낅Т 紐⑸줉???ㅼ뼱媛 ?덈뒗吏瑜??섑??몃떎.
@@ -210,7 +223,36 @@ public class TaskService {
                 str(body.get("admin_dong"))
         ));
 
+        Long projectId = toLong(body.get("projectId"));
+        Project project = null;
+        if (projectId != null) {
+            project = projectRepository.findById(projectId).orElseThrow(() -> new IllegalArgumentException("프로젝트를 찾을 수 없습니다."));
+            if (!project.getGroup().getGroupId().equals(targetGroup.getGroupId())) throw new IllegalArgumentException("같은 그룹의 프로젝트를 선택해주세요.");
+            if (!"ACTIVE".equals(project.getStatus())) throw new IllegalArgumentException("보관된 프로젝트에는 방문지를 등록할 수 없습니다.");
+            Long placeId = toLong(body.get("projectPlaceId"));
+            ProjectPlace place;
+            if (placeId != null) {
+                place = projectPlaceRepository.findById(placeId).orElseThrow(() -> new IllegalArgumentException("저장된 방문지를 찾을 수 없습니다."));
+                if (!place.getProject().getProjectId().equals(projectId)) throw new IllegalArgumentException("프로젝트와 방문지가 일치하지 않습니다.");
+            } else {
+                if (task.getLat() == null || task.getLng() == null || !Double.isFinite(task.getLat()) || !Double.isFinite(task.getLng())
+                        || Math.abs(task.getLat()) > 90 || Math.abs(task.getLng()) > 180) throw new IllegalArgumentException("유효한 방문지 좌표가 필요합니다.");
+                // Lock the project row to serialize destination de-duplication.
+                projectRepository.lockById(projectId).orElseThrow();
+                place = projectPlaceRepository.findByProject_ProjectIdOrderByPlaceId(projectId).stream()
+                    .filter(p -> Math.abs(p.getLat()-task.getLat()) < 0.000001 && Math.abs(p.getLng()-task.getLng()) < 0.000001
+                        && Objects.equals(p.getName(),task.getDetailAddress())).findFirst().orElse(null);
+                if (place == null) {
+                    place = new ProjectPlace(); place.setProject(project); place.setName(task.getDetailAddress());
+                    place.setRoadAddress(task.getRoadAddress()); place.setLat(task.getLat()); place.setLng(task.getLng()); place.setCategory(task.getTaskCategory());
+                    place.setSido(task.getSido()); place.setSigungu(task.getSigungu()); place.setAdminDong(task.getAdminDong());
+                    place = projectPlaceRepository.save(place);
+                }
+            }
+            task.setProjectPlaceId(place.getPlaceId());
+        }
         Task savedTask = taskRepository.save(task);
+        if (project != null) projectTaskRepository.saveAndFlush(new ProjectTask(project, savedTask));
 
         // 1??洹몃９怨??쇰컲 ??먯? ?깅줉 利됱떆 蹂몄씤 ?대떦?쇰줈 ?곌껐?쒕떎.
         // ?ㅼ씤 洹몃９????μ씠 異붽???諛⑸Ц吏???대떦??吏???붾㈃?먯꽌 諛곗젙?쒕떎.
@@ -242,10 +284,6 @@ public class TaskService {
 
     @Transactional
     public Task updateStatusEntity(Task task, String status) {
-        if ("complete".equalsIgnoreCase(task.getTaskStatus())
-                && !"complete".equalsIgnoreCase(status)) {
-            throw new IllegalArgumentException("완료한 방문지의 상태는 변경할 수 없습니다.");
-        }
         applyStatusTransition(task, status);
         return taskRepository.save(task);
     }
@@ -400,6 +438,7 @@ public class TaskService {
         }
 
         // ?대떦??諛곗젙 ??젣
+        projectTaskRepository.deleteByTask_TaskId(taskId);
         locationAssignmentRepository.deleteByTask_TaskId(taskId);
 
         // 吏꾪뻾 湲곕줉 ??젣
@@ -415,11 +454,17 @@ public class TaskService {
         return result;
     }
 
+    public List<Map<String,Object>> projectContextForTask(Task task) {
+        return projectTaskRepository.findProjects(task).stream().map(p -> Map.<String,Object>of("projectId",p.getProjectId(),"name",p.getName())).toList();
+    }
+
     public Map<String, Object> toFrontendMap(Task task) {
         Map<String, Object> map = new HashMap<>();
 
         map.put("id", task.getTaskId());
         map.put("taskId", task.getTaskId());
+        map.put("projectPlaceId", task.getProjectPlaceId());
+        map.put("projectIds", projectTaskRepository.findProjects(task).stream().map(Project::getProjectId).toList());
         map.put("task_id", task.getTaskId());
 
         map.put("detailAddress", task.getDetailAddress());
