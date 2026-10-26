@@ -32,6 +32,7 @@ import MapWorkspaceSwitcher from '../components/MapWorkspaceSwitcher';
 import ProjectBrowser from '../components/ProjectBrowser';
 import { dailyReturnChoice, koreaDay } from '../utils/dailyReturn';
 import PlaceSearchOverlay from '../components/PlaceSearchOverlay';
+import PublicFacilityControls from '../components/PublicFacilityControls';
 import SafetyGuideBadge from '../components/SafetyGuideBadge';
 import SearchResultSheet from '../components/SearchResultSheet';
 import RegistrationFab from '../components/RegistrationFab';
@@ -171,7 +172,9 @@ function NormalMapScreen({
   const [mapHeight, setMapHeight] = useState(600);
   const screenInsets = useSafeAreaInsets();
   const [topOverlayBottom, setTopOverlayBottom] = useState(0);
-  const [publicCategoryAnchor, setPublicCategoryAnchor] = useState({ x: 85, width: 0 });
+  const [topOverlayFrame, setTopOverlayFrame] = useState({ x: 20, y: screenInsets.top + 6 });
+  const [searchControlFrame, setSearchControlFrame] = useState({ x: 10, y: 50 });
+  const [publicCategoryAnchor, setPublicCategoryAnchor] = useState({ x: 85, y: 0, width: 0, height: 52 });
   const [visitStripHeight, setVisitStripHeight] = useState(52);
   const [bottomOverlayHeight, setBottomOverlayHeight] = useState(0);
   const [pendingOverlayHeight, setPendingOverlayHeight] = useState(0);
@@ -1799,83 +1802,41 @@ function NormalMapScreen({
         <Ionicons name="arrow-back" size={22} color="#2477F3" />
       </TouchableOpacity>}
       {!isGuiding && <View style={[styles.topOverlay, { top: screenInsets.top + 6, backgroundColor: colors.surface, borderRadius: 20, padding: 10, gap: 6, elevation: 4 }, publicCategoryOpen && { zIndex: 40 }, Platform.OS === 'ios' && showMapBack && { zIndex: 80 }]} pointerEvents="box-none"
-        onLayout={event => { const { y, height } = event.nativeEvent.layout; setTopOverlayBottom(y + height); }}>
+        onLayout={event => { const { x, y, height } = event.nativeEvent.layout; setTopOverlayBottom(y + height); setTopOverlayFrame({ x, y }); }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <View style={{ flex: 1, minWidth: 0 }}><MapWorkspaceSwitcher userId={user?.userId} activeGroup={activeGroup} onSelect={onSelectGroup} dropdown compact /></View>
           <View style={{ flexDirection: 'row', backgroundColor: colors.surfaceMuted, borderRadius: 12 }}>
             {['car', 'walk'].map(mode => <TouchableOpacity key={mode} accessibilityRole="button" accessibilityLabel={mode === 'car' ? '차량 이동' : '도보 이동'} accessibilityState={{ selected: transportMode === mode }} onPress={() => handleTransportPress(mode)} style={{ width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: transportMode === mode ? colors.primarySoft : 'transparent' }}><Ionicons name={mode === 'car' ? 'car-outline' : 'walk-outline'} size={23} color={transportMode === mode ? colors.primary : colors.textSoft} /></TouchableOpacity>)}
           </View>
         </View>
-        {(!isGuiding || preview) && <View style={styles.searchControlRow}>
+        {publicFacilityMode ? <PublicFacilityControls
+          regionLabel={selectedDongName}
+          categoryLabel={PUBLIC_FACILITY_CATEGORIES.find(item => item.key === publicCategory)?.label || ''}
+          expanded={publicCategoryOpen && !dongOpen}
+          onRegionPress={() => { setPublicCategoryOpen(false); dongOpen ? setDongOpen(false) : loadDongs(); }}
+          onCategoryPress={() => { if (!selectedDong) loadDongs(); else setPublicCategoryOpen(value => !value); }}
+          onClose={() => { resetAddModes(); setDongOpen(false); }}
+          onBack={showMapBack ? () => { if (!consumeScreenBack()) onBack?.(); } : undefined}
+          onLayout={event => { const { x, y } = event.nativeEvent.layout; setSearchControlFrame({ x, y }); }}
+          onCategoryLayout={event => { const { x, y, width, height } = event.nativeEvent.layout; setPublicCategoryAnchor({ x, y, width, height }); }}
+        /> : <View style={styles.searchControlRow}>
           {showMapBack && <TouchableOpacity style={[styles.smallTopButton, { minWidth: 44, minHeight: 44 }]} accessibilityLabel="뒤로가기" onPress={() => { if (!consumeScreenBack()) onBack?.(); }}><Ionicons name="arrow-back" size={22} color="#2477F3" /></TouchableOpacity>}
-          {publicFacilityMode && <TouchableOpacity
-            style={[styles.smallTopButton, styles.publicRegionButton]}
-            onPress={() => { setPublicCategoryOpen(false); dongOpen ? setDongOpen(false) : loadDongs(); }}
-            accessibilityRole="button"
-            accessibilityLabel="공공시설물 조회 지역 선택"
-          >
-            <Ionicons name="map-outline" size={13} color="#2477F3" />
-            <Text style={styles.smallTopText}>{selectedDongName || '행정동'}</Text>
-          </TouchableOpacity>}
-          <View style={styles.searchBox}
-            onLayout={event => { const { x, width } = event.nativeEvent.layout; setPublicCategoryAnchor({ x, width }); }}>
+          <View style={styles.searchBox}>
             <TouchableOpacity style={{ flex: 1, height: 44 }} disabled={resultsMode}
-              onPress={() => { if (publicFacilityMode) { if (!selectedDong) loadDongs(); else setPublicCategoryOpen(value => !value); } else { resetAddModes(); openSearch(); } }}
-              accessibilityRole="button" accessibilityLabel={publicFacilityMode ? '공공시설물 카테고리 선택' : '주소 또는 장소 검색'} accessible={!resultsMode}>
+              onPress={() => { resetAddModes(); openSearch(); }}
+              accessibilityRole="button" accessibilityLabel="주소 또는 장소 검색" accessible={!resultsMode}>
               <View pointerEvents="none" style={{ flex: 1 }}>
-                <TextInput style={styles.searchInput} value={publicFacilityMode ? (PUBLIC_FACILITY_CATEGORIES.find(item => item.key === publicCategory)?.label || '') : resultsMode ? resultQuery : ''} placeholder={publicFacilityMode ? '공공시설물 카테고리 선택' : '주소 또는 장소 검색'} placeholderTextColor="#9AA6B2" editable={false} accessible={publicFacilityMode || resultsMode} />
+                <TextInput style={styles.searchInput} value={resultsMode ? resultQuery : ''}
+                  placeholder="주소 또는 장소 검색" placeholderTextColor="#9AA6B2" editable={false} accessible={resultsMode} />
               </View>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => { if (resultsMode) { setResultsMode(false); setKeyword(''); } else if (publicFacilityMode) { if (!selectedDong) loadDongs(); else setPublicCategoryOpen(value => !value); } else { resetAddModes(); openSearch(); } }} accessibilityLabel={resultsMode ? '검색 결과 닫기' : '방문지 추가 방법'}><Ionicons name={resultsMode ? 'close' : publicFacilityMode ? 'chevron-down' : 'search'} size={23} color="#2477F3" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => { if (resultsMode) { setResultsMode(false); setKeyword(''); } else { resetAddModes(); openSearch(); } }}
+              accessibilityLabel={resultsMode ? '검색 결과 닫기' : '방문지 추가 방법'}>
+              <Ionicons name={resultsMode ? 'close' : 'search'} size={23} color="#2477F3" />
+            </TouchableOpacity>
           </View>
-
-          {publicFacilityMode && <TouchableOpacity style={[styles.smallTopButton, styles.compactCloseButton]} hitSlop={6}
-            accessibilityLabel="공공시설물 조회 닫기" onPress={() => { resetAddModes(); setDongOpen(false); }}>
-            <Ionicons name="close" size={18} color="#2477F3" />
-          </TouchableOpacity>}
         </View>}
-        {publicFacilityMode && selectedDong && publicCategoryOpen && !dongOpen && (
-          <View style={[styles.publicCategoryBox, { marginLeft: publicCategoryAnchor.x, width: publicCategoryAnchor.width || undefined }]}>
-            <View style={styles.publicCategoryHeader}>
-              <View>
-                <Text style={styles.publicCategoryTitle}>공공시설물 선택</Text>
-                <Text style={styles.publicCategoryDesc}>
-                  {selectedDong?.properties?.adm_nm || '선택 행정동'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => {
-                  setPublicFacilityMode(false);
-                  setPublicCategoryOpen(false);
-                  setPublicCategory('');
-                  setPublicItems([]);
-                  setPublicSelectedIds([]);
-                  setPublicSheetOpen(true);
-                }}
-              >
-                <Ionicons name="close" size={20} color="#607195" />
-              </TouchableOpacity>
-            </View>
-            {PUBLIC_FACILITY_CATEGORIES.map((item) => (
-              <TouchableOpacity
-                key={item.key}
-                style={styles.publicCategoryItem}
-                onPress={() => {
-                  setPublicCategory(item.key);
-                  setPublicCategoryOpen(false);
-                  setPublicSelectedIds([]);
-                  setPublicSheetOpen(true);
-                }}
-              >
-                <Ionicons name={item.icon} size={19} color="#2477F3" />
-                <Text style={styles.publicCategoryItemText}>{item.label}</Text>
-                {publicCategory === item.key ? (
-                  <Ionicons name="checkmark-circle" size={19} color="#2477F3" />
-                ) : null}
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+
 
         <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 42, paddingHorizontal: 8 }} onPress={() => setVisitListOpen(!visitListOpen)} accessibilityLabel={visitListOpen ? "방문지 목록 접기" : "방문지 목록 펼치기"}>
           <Text style={{ color: colors.text, fontWeight: '800', fontSize: 16 }}>방문지 {markers.length}개</Text>
@@ -1945,6 +1906,33 @@ function NormalMapScreen({
 
 
       </View>}
+        {publicFacilityMode && selectedDong && publicCategoryOpen && !dongOpen && (
+          <View accessibilityLabel="공공시설물 카테고리 목록" style={[styles.publicCategoryBox, {
+            left: topOverlayFrame.x + searchControlFrame.x + publicCategoryAnchor.x,
+            top: topOverlayFrame.y + searchControlFrame.y + publicCategoryAnchor.y + publicCategoryAnchor.height + 6,
+            width: publicCategoryAnchor.width || undefined,
+          }]}>
+            {PUBLIC_FACILITY_CATEGORIES.map((item, index) => (
+              <TouchableOpacity
+                key={item.key}
+                style={[styles.publicCategoryItem, index === 0 && { borderTopWidth: 0 }]}
+                onPress={() => {
+                  setPublicCategory(item.key);
+                  setPublicCategoryOpen(false);
+                  setPublicSelectedIds([]);
+                  setPublicSheetOpen(true);
+                }}
+              >
+                <Ionicons name={item.icon} size={19} color="#2477F3" />
+                <Text style={styles.publicCategoryItemText}>{item.label}</Text>
+                {publicCategory === item.key ? (
+                  <Ionicons name="checkmark-circle" size={19} color="#2477F3" />
+                ) : null}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
       {mapSelectMode && <View style={[styles.selectionHint, { top: (topOverlayBottom || screenInsets.top + 180) + 8 }]} pointerEvents="none"><Text style={styles.selectionHintText}>지도를 움직여 위치를 선택하세요</Text></View>}
       {!resultsMode && !publicFacilityMode && !mapSelectMode && !searchedPlace && !coordSheetOpen && cardTarget && (
         <View style={styles.destinationCard}
@@ -2460,8 +2448,6 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
 
-  compactCloseButton: { width: 52, minWidth: 52, height: 52, paddingHorizontal: 0, borderRadius: 11, alignSelf: 'center', shadowOpacity: 0, elevation: 0 },
-  publicRegionButton: { height: 52, shadowOpacity: 0, elevation: 0 },
   smallTopButton: {
     height: 46,
     minWidth: 78,
@@ -2965,28 +2951,19 @@ const styles = StyleSheet.create({
   },
 
   publicCategoryBox: {
-    alignSelf: 'flex-start',
+    position: 'absolute',
     zIndex: 65,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#DCE7F5',
-    padding: 12,
+    borderColor: colors.line,
+    padding: 4,
     shadowColor: '#2466B5',
     shadowOpacity: 0.13,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
   },
-  publicCategoryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-    paddingBottom: 8,
-  },
-  publicCategoryTitle: { color: '#10285B', fontSize: 14, fontWeight: '900' },
-  publicCategoryDesc: { color: '#607195', fontSize: 10, marginTop: 3 },
   publicCategoryItem: {
     minHeight: 48,
     flexDirection: 'row',
