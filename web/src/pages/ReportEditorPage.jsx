@@ -253,7 +253,7 @@ export default function ReportEditorPage() {
     if (!projectId) return;
     fetchProject(projectId, userId)
       .then((p) => {
-        setIsLeader(Boolean(p?.isLeader));
+        setIsLeader(Boolean(p?.canManage ?? p?.isLeader));
         setMine((m) => m ?? !p?.isLeader);
       })
       .catch(() => {

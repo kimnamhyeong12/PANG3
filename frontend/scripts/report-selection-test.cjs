@@ -30,6 +30,7 @@ const design = load('../constants/design.js');
 const Screen = load('../screens/ReportListScreen.js', {
   '../constants/design': design,
   '../components/MapWorkspaceSwitcher': 'MapWorkspaceSwitcher',
+  '../components/ProjectReportLink': 'ProjectReportLink',
   '../utils/screenBack': { useScreenBackHandler() {} },
   '../utils/auth': { apiFetch() {} },
   '../utils/api': { API_BASE_URL: 'http://test' },
@@ -56,7 +57,7 @@ const nodes = n => !n || typeof n !== 'object' ? [] : Array.isArray(n) ? n.flatM
   : typeof n.type === 'function' ? nodes(n.type(n.props)) : [n, ...nodes(n.props?.children)];
 const render = () => { stateIndex = 0; tree = Screen(props); return nodes(tree); };
 const find = label => render().find(n => n.props?.accessibilityLabel === label);
-assert.ok(!render().some(n => n.type === 'PrimaryButton'), 'bottom bar only after something is selected');
+assert.ok(render().find(n => n.type === 'PrimaryButton').props.disabled, 'download action is disabled until reports are selected');
 assert.equal(find('방문지 1 받기 선택, 보고서 저장 후 선택 가능').props.disabled, true);
 assert.equal(find('방문지 2 받기 선택').props.disabled, false);
 assert.equal(find('방문지 1 받기'), undefined, 'no download button before a report is saved');
@@ -69,12 +70,12 @@ assert.equal(edited, 2);
 assert.deepEqual(Array.from(props.selectedIds), [2], 'editing must not toggle selection');
 find('방문지 3 수정').props.onPress();
 assert.equal(edited, 3);
-assert.ok(find('방문지 3 다시 받기'), 'changed report shows re-download');
+assert.ok(render().some(n => n.props?.children === '고쳐짐 · 다시 받기'), 'changed report is marked for re-download in the selected-report footer');
 find('방문지 3 받기 선택').props.onPress();
 const all = render();
 const button = all.find(n => n.type === 'PrimaryButton');
-assert.ok(render().some(n => n.props?.title === '보고서 작성(개인)'), 'personal report tab title');
-assert.equal(button.props.title, '2건 받기');
+assert.ok(render().some(n => n.props?.title === '보고서 작성'), 'personal report tab title');
+assert.equal(button.props.title, '2건 보고서 다운로드');
 assert.ok(all.some(n => n.props?.children === 'new,changed'), 'bottom hint counts new and changed');
 button.props.onPress();
 assert.deepEqual(Array.from(generated, row => [row.id, row.progressId]), [[2, 20], [3, 30]], 'iOS falls back to the download screen with progressIds');
@@ -94,4 +95,4 @@ assert.equal(coordinateInput('91', '129'), null);
 assert.equal(coordinateInput('35', '181'), null);
 assert.equal(coordinateInput('NaN', '129'), null);
 assert.deepEqual(JSON.parse(JSON.stringify(coordinateInput('-35.1', '129.123456'))), { lat: -35.1, lng: 129.123456 });
-console.log('Report selection checks passed: checkboxes from the start, bar only when selected, download states, iOS fallback and coordinate validation');
+console.log('Report selection checks passed: checkboxes from the start, disabled download action until selected, download states, iOS fallback and coordinate validation');

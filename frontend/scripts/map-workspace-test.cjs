@@ -12,7 +12,7 @@ const react = {
 const jsx=(type,props)=>({type,props:props||{}});
 const dependencies = {
   react, 'react/jsx-runtime': {jsx,jsxs:jsx},
-  'react-native': {ActivityIndicator:'Spinner',Modal:'Modal',Pressable:'Pressable',ScrollView:'ScrollView',Text:'Text',TouchableOpacity:'Button',View:'View',StyleSheet:{create:v=>v}},
+  'react-native': {useWindowDimensions:()=>({width:390,height:844}),ActivityIndicator:'Spinner',Modal:'Modal',Pressable:'Pressable',ScrollView:'ScrollView',Text:'Text',TouchableOpacity:'Button',View:'View',StyleSheet:{create:v=>v}},
   '@expo/vector-icons':{Ionicons:'Icon'},
   'react-native-safe-area-context':{useSafeAreaInsets:()=>({bottom:0})},
   '../utils/groupApi':{groupApi:async()=>{requests++;return groups;}},
@@ -29,7 +29,7 @@ async function settle(){for(let i=0;i<8;i++)await Promise.resolve();render();}
   render();assert.equal(requests,0);
   const badge=()=>nodes().find(n=>n.props.accessibilityLabel?.startsWith('사용 중인 그룹:'));
   badge().props.onPress();render();await settle();assert.equal(requests,1);
-  const rows=()=>nodes().filter(n=>n.type==='Button'&&n.props.accessibilityState);
+  const rows=()=>nodes().filter(n=>n.type==='Button'&&n.props.accessibilityState?.selected!==undefined);
   assert.equal(rows().length,2);
   await rows()[0].props.onPress();render();assert.equal(selections.length,0,'current group closes without resetting its route');
   badge().props.onPress();render();await settle();

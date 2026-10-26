@@ -274,7 +274,7 @@ export default function GroupWorkspaceScreen({
             ))}
           </View>
           {projectView === 'projects'
-            ? <GroupProjectList user={user} group={group} onOpenProject={onOpenProject} />
+            ? <GroupProjectList user={user} group={group} onOpenProject={onOpenProject} onChanged={onRefresh} />
             : <GroupReportsScreen user={user} group={group} embedded isActive={isActive && tab === 'projects' && projectView === 'reports'}
                 onOpenReport={onOpenReport} onOpenReports={onOpenReports} onPreviewReport={onPreviewReport} onEditReport={onEditReport} />}
         </View>

@@ -5,14 +5,14 @@ import { colors } from '../constants/design';
 import { REGIONS, DISTRICTS_BY_REGION, childDistricts, selectWorkRegion } from '../utils/workRegion';
 
 const labels = { sido: '시·도', sigungu: '시·군·구', gu: '구' };
-export default function WorkRegionField({ value, onChange, disabled = false, required = false, label = '근무지역' }) {
+export default function WorkRegionField({ value, onChange, disabled = false, required = false, showOptional = true, label = '근무지역' }) {
   const [picker, setPicker] = useState(null);
   const children = childDistricts(value);
   const options = picker === 'sido' ? REGIONS : picker === 'sigungu'
     ? DISTRICTS_BY_REGION[value.sido] || [] : children;
   const levels = children.length ? ['sido', 'sigungu', 'gu'] : ['sido', 'sigungu'];
   return <View style={styles.root}>
-    <View style={styles.heading}><Text style={styles.label}>{label}{required ? <Text style={styles.required}> *</Text> : ' (선택)'}</Text>
+    <View style={styles.heading}><Text style={styles.label}>{label}{required ? <Text style={styles.required}> *</Text> : showOptional ? ' (선택)' : ''}</Text>
       {!required && !!value.sido && <TouchableOpacity disabled={disabled} onPress={() => onChange({ sido: '', sigungu: '', gu: '' })} accessibilityLabel="근무지역 선택 해제"><Text style={styles.clear}>선택 해제</Text></TouchableOpacity>}
     </View>
     {levels.map(level => {

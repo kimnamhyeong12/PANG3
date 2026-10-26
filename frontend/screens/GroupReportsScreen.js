@@ -1,3 +1,5 @@
+import ReportFilters from '../components/ReportFilters';
+import ProjectReportLink from '../components/ProjectReportLink';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +10,6 @@ import { colors } from '../constants/design';
 import { groupReportsByPlace } from '../utils/reportPhotos';
 import { canDownloadReport } from '../utils/reportAvailability';
 import { cleanReportName } from '../utils/reportName';
-import ReportDatePicker from '../components/ReportDatePicker';
 import { currentMonthRange, selectRangeDate } from '../utils/calendar';
 import { ReportDownloadFooter, ReportFileCard } from '../components/ReportFileCard';
 import { downloadCountText, useReportDownloads } from '../utils/useReportDownloads';
@@ -29,7 +30,7 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
   const [openFilter, setOpenFilter] = useState(null);
   // 폴더 안 카드 체크 (progressId). 폴더를 바꾸면 비운다
   const [checkedIds, setCheckedIds] = useState([]);
-  useEffect(() => { setCheckedIds([]); }, [selectedPlace, group.groupId]);
+  useEffect(() => { setCheckedIds([]); }, [group.groupId]);
   const downloadable = useMemo(() => reports.filter(item => item.progressId && canDownloadReport(item)), [reports]);
   const files = useReportDownloads(user.userId, downloadable);
   useEffect(() => { setMember(''); setDong(''); setSelectedPlace(null); setOpenFilter(null); }, [group.groupId]);
@@ -83,7 +84,7 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
     .sort((a, b) => Number(b.items.some((item) => dongName(item.adminDong) === selectedDongName)) -
       Number(a.items.some((item) => dongName(item.adminDong) === selectedDongName))), [visible, search, selectedDongName]);
   const selected = places.find((place) => place.key === selectedPlace);
-  const checkedItems = (selected?.items || []).filter(item => checkedIds.includes(item.progressId) && canDownloadReport(item));
+  const checkedItems = reports.filter(item => checkedIds.includes(item.progressId) && canDownloadReport(item));
   // 안드로이드는 그 자리에서 받는다. 그 밖의 기기는 기존 다운로드 화면
   const download = async (items) => {
     const saved = await files.download(items, {
@@ -103,40 +104,10 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
     const label = sameName.size > 1 ? `${name} (${report?.performedByLoginId || value})` : name;
     return value === String(user.userId) ? `나 · ${label}` : label;
   };
-  const filterField = (key, label, values, selected, setSelected) => (
-    <View style={[styles.filterColumn, openFilter === key && styles.filterColumnOpen]}>
-
-      <TouchableOpacity style={styles.filterButton} onPress={() => setOpenFilter(openFilter === key ? null : key)} accessibilityRole="button" accessibilityLabel={`${label} 선택`} accessibilityState={{ expanded: openFilter === key }}>
-        <Text style={styles.filterValue} numberOfLines={1}>{label} · {key === 'member' ? workerLabel(selected) : selected || '전체'}</Text>
-        <Ionicons name={openFilter === key ? 'chevron-up' : 'chevron-down'} size={17} color={colors.textSoft} />
-      </TouchableOpacity>
-      {openFilter === key && <View style={styles.filterOptions}>
-        <ScrollView nestedScrollEnabled style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
-          {['', ...values].map(value => <TouchableOpacity key={value || '__all__'} style={styles.filterOption} onPress={() => { setSelected(value); setSelectedPlace(null); setOpenFilter(null); }}>
-            <Text style={[styles.filterValue, selected === value && { color: colors.primary, fontWeight: '800' }]}>{key === 'member' ? workerLabel(value) : value || '전체'}</Text>
-            {selected === value && <Ionicons name="checkmark" size={16} color={colors.primary} />}
-          </TouchableOpacity>)}
-        </ScrollView>
-      </View>}
-    </View>
-  );
   return <View style={[styles.container, embedded && { marginTop: 0 }]}>
     {!embedded && <ScreenHeader title={selected ? selected.name : personalArchive ? '보고서 보관함' : '그룹 보고서 전체보기'} onBack={selected ? () => setSelectedPlace(null) : onBack} />}
     <ScrollView contentContainerStyle={styles.body} removeClippedSubviews={false} keyboardShouldPersistTaps="handled">
-      <View style={styles.filterPanel}>
-        <View style={styles.searchField}><Ionicons name="search" size={18} color={colors.primary} /><TextInput style={styles.searchInput} value={search} onChangeText={setSearch} placeholder="방문지 검색" placeholderTextColor={colors.textSoft} /></View>
-        <View style={styles.filtersRow}>{!personalArchive && filterField('member', '작업자', members, member, setMember)}{filterField('dong', '행정동', dongs, dong, setDong)}</View>
-      <View style={styles.dateRow}>
-        {['start', 'end'].map((side, index) => <React.Fragment key={side}>
-          {index > 0 && <Text style={styles.dateDash}>~</Text>}
-          <TouchableOpacity style={styles.dateButton} onPress={() => { setOpenFilter(null); setDateSide(side); }} accessibilityLabel={side === 'start' ? '시작일' : '종료일'}>
-            <Text style={styles.dateText}>{side === 'start' ? startDate || '시작일' : endDate || '종료일'}</Text>
-            <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-          </TouchableOpacity>
-        </React.Fragment>)}
-      </View>
-        {personalArchive && <TouchableOpacity style={styles.allDates} onPress={() => { setStartDate(''); setEndDate(''); setSelectedPlace(null); }}><Text style={{ color: colors.primary, fontSize: 12 }}>전체 기간</Text></TouchableOpacity>}
-      </View>
+      <ReportFilters key={group.groupId} search={search} onSearchChange={setSearch} worker={member} onWorkerChange={value=>{setMember(value);setSelectedPlace(null);}} workers={members.map(value=>({value,label:workerLabel(value)}))} dong={dong} onDongChange={value=>{setDong(value);setSelectedPlace(null);}} dongs={dongs} startDate={startDate} endDate={endDate} onDateChange={range=>{setStartDate(range.start);setEndDate(range.end);setSelectedPlace(null);}} showWorker={!personalArchive} showAllDates={personalArchive}/>
       {embedded && selected && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><TouchableOpacity style={{ minHeight: 44, justifyContent: 'center' }} onPress={() => setSelectedPlace(null)}><Ionicons name="arrow-back" size={22} color={colors.primary} /></TouchableOpacity><Text style={[styles.title, { flex: 1 }]}>{selected.name}</Text></View>}
       {loading ? <ActivityIndicator color={colors.primary} /> : error ? <Text style={styles.empty}>{error}</Text> : selected ?
         <View style={styles.dongGroup}>
@@ -155,22 +126,22 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
               <Text style={styles.meta}>{String(item.createdAt || '').slice(0, 16).replace('T', ' ')}</Text>
               {!!item.completedAt && <Text style={styles.meta}>조치 완료: {String(item.completedAt).replace('T', ' ').slice(0, 16)}</Text>}
               <Text style={styles.meta}>{statusLabel(item.progressStatus)} · {item.performedByName || '작업자 확인 불가'}{item.performedByDeparted ? ' (탈퇴한 사용자)' : ''}</Text>
+              {!!item.projects?.length && <Text style={styles.meta}>프로젝트 · {item.projects.map(p=>p.name).join(', ')}</Text>}
               <Text style={styles.meta}>담당자: {item.assigneeName || '담당자 확인 불가'}{item.assigneeDeparted ? ' (탈퇴)' : ''}</Text>
               {!ready && <Text style={styles.meta}>작업 전 보고서는 다운로드할 수 없습니다.</Text>}
             </ReportFileCard>;
           })}
         </View> : places.length ? places.map((place) => <TouchableOpacity key={place.key} style={styles.card} onPress={() => setSelectedPlace(place.key)}>
+          <TouchableOpacity accessibilityLabel={`${place.name} 보고서 전체 선택`} style={{padding:8}} onPress={()=>{const ids=place.items.filter(canDownloadReport).map(item=>item.progressId);setCheckedIds(old=>ids.every(id=>old.includes(id))?old.filter(id=>!ids.includes(id)):[...new Set([...old,...ids])]);}}><Ionicons name={place.items.filter(canDownloadReport).length>0 && place.items.filter(canDownloadReport).every(item=>checkedIds.includes(item.progressId))?'checkbox':'square-outline'} size={24} color={colors.primary}/></TouchableOpacity>
           <Ionicons name="folder-outline" size={22} color={colors.primary} />
           <View style={styles.cardBody}><Text style={styles.title}>{place.name}</Text><Text style={styles.meta}>{String(place.items[0]?.createdAt || '').slice(0, 10)}</Text></View>
           <Ionicons name="chevron-forward" size={20} color={colors.primary} />
         </TouchableOpacity>) : <Text style={styles.empty}>조건에 맞는 보고서가 없습니다.</Text>}
     </ScrollView>
-    {selected && <ReportDownloadFooter toast={files.toast} onOpenFolder={files.openFolder} count={checkedItems.length}
+    <ProjectReportLink userId={user.userId} groupId={group.groupId} personal={group.personal || group.personalWorkspace || group.workspaceType === 'PERSONAL'} progressIds={checkedItems.map(item=>item.progressId)} onLinked={project=>setReports(old=>old.map(item=>checkedIds.includes(item.progressId)?{...item,projects:[...(item.projects||[]).filter(p=>p.projectId!==project.projectId),{projectId:project.projectId,name:project.name}]}:item))} />
+    {(selected || checkedItems.length > 0) && <ReportDownloadFooter toast={files.toast} onOpenFolder={files.openFolder} count={checkedItems.length}
       hint={downloadCountText(checkedItems, files.stateOf)} busy={files.downloading} onDownload={() => download(checkedItems)} />}
-    <ReportDatePicker visible={!!dateSide} value={(dateSide === 'end' ? endDate : startDate) || currentMonthRange().start} title={dateSide === 'end' ? '종료일' : '시작일'} onClose={() => setDateSide(null)} onSelect={value => {
-      const range = selectRangeDate(startDate, endDate, dateSide, value);
-      setStartDate(range.start); setEndDate(range.end); setSelectedPlace(null);
-    }} />
+
   </View>;
 }
 

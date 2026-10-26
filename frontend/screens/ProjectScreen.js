@@ -1,3 +1,6 @@
+import ReportFilters from '../components/ReportFilters';
+import { currentMonthRange } from '../utils/calendar';
+import ProjectBrowser from '../components/ProjectBrowser';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -31,7 +34,8 @@ const sameId = (a, b) => a != null && b != null && String(a) === String(b);
 const dateText = (value) => (value ? String(value).slice(0, 10) : '');
 
 // ---------- 그룹 작업공간 "프로젝트" 탭 내용 (B①) ----------
-export function GroupProjectList({ user, group, onOpenProject }) {
+export function GroupProjectList({ user, group, onOpenProject, onChanged }) {
+  const [manage,setManage]=useState(false);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,8 +65,10 @@ export function GroupProjectList({ user, group, onOpenProject }) {
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
     >
+      <TouchableOpacity onPress={()=>setManage(true)} style={{padding:14,alignItems:'center'}}><Text style={{color:colors.primary,fontWeight:'700'}}>프로젝트 만들기</Text></TouchableOpacity>
+      <ProjectBrowser visible={manage} userId={user.userId} groupId={group.groupId} onRegistered={onChanged} onClose={()=>{setManage(false);load();}}/>
       {projects.length === 0 ? (
-        <EmptyState icon="folder-open-outline" title="프로젝트가 없어요" description="프로젝트는 PC 웹에서 리더가 만들 수 있어요." />
+        <EmptyState icon="folder-open-outline" title="프로젝트가 없어요" />
       ) : projects.map((project) => (
         <TouchableOpacity
           key={project.projectId}
@@ -87,20 +93,12 @@ export function GroupProjectList({ user, group, onOpenProject }) {
 }
 
 // ---------- 프로젝트 항목 + 담기 (B③) ----------
-const FILTERS = [
-  { key: 'year', label: '연도' },
-  { key: 'adminDong', label: '행정동' },
-  { key: 'authorId', label: '작업자' },
-  { key: 'category', label: '업무유형' },
-];
-
 export default function ProjectScreen({ user, projectId, initialProject, onBack, onOpenReport }) {
   const [project, setProject] = useState(initialProject || null);
   const [data, setData] = useState(null);
   const [reportCounts, setReportCounts] = useState({});
   const [finals, setFinals] = useState([]); // 앱에서는 확정 보고서만 보고 받는다 (D30)
-  const [filters, setFilters] = useState({});
-  const [mineOnly, setMineOnly] = useState(null); // null = 프로젝트 권한 확인 전
+  const [search,setSearch]=useState(''),[worker,setWorker]=useState(''),[dong,setDong]=useState(''),[dateRange,setDateRange]=useState(currentMonthRange);
   const [targetId, setTargetId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -111,7 +109,7 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
   const mounted = useRef(true);
 
   const userId = user?.userId;
-  const isLeader = Boolean(project?.isLeader);
+  const isLeader = Boolean(project?.canManage ?? project?.isLeader);
 
   useEffect(() => {
     mounted.current = true;
@@ -125,11 +123,9 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
       .then((value) => {
         if (!alive) return;
         setProject(value);
-        setMineOnly(!value?.isLeader); // D20: 멤버 기본 ON, 리더 기본 OFF
       })
       .catch((error) => {
         if (!alive) return;
-        setMineOnly(true);
         showAlert('프로젝트 조회 실패', error.message);
       });
     return () => { alive = false; };
@@ -155,11 +151,9 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
   }, [projectId, userId]);
 
   const loadItems = useCallback(async () => {
-    if (mineOnly === null) return;
     try {
       setLoading(true);
-      const query = { ...filters, authorId: mineOnly ? userId : filters.authorId };
-      const result = await fetchProjectItems(projectId, userId, query);
+      const result = await fetchProjectItems(projectId, userId);
       if (!mounted.current) return;
       setData(result);
       const drafts = result?.draftReports || [];
@@ -169,12 +163,17 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
     } finally {
       if (mounted.current) setLoading(false);
     }
-  }, [projectId, userId, filters, mineOnly]);
+  }, [projectId, userId]);
 
   useEffect(() => { loadItems(); }, [loadItems]);
   useEffect(() => { if (projectId && userId) loadReports(); }, [loadReports]);
 
-  const items = useMemo(() => (Array.isArray(data?.items) ? data.items : []), [data]);
+  const items = useMemo(() => (data?.items || []).filter(item => {
+    const day = dateText(item.completedAt);
+    return (!worker || String(item.authorId)===String(worker)) && (!dong || item.adminDong===dong)
+      && (!dateRange.start || day>=dateRange.start) && (!dateRange.end || day<=dateRange.end)
+      && (!search.trim() || [item.address,item.authorName].some(value=>String(value||'').toLowerCase().includes(search.trim().toLowerCase())));
+  }), [data,worker,dong,dateRange,search]);
   const drafts = data?.draftReports || [];
   const target = drafts.find((report) => sameId(report.reportId, targetId)) || null;
   const inTarget = (item) => Boolean(target) && (item.inReportIds || []).some((id) => sameId(id, target.reportId));
@@ -261,33 +260,10 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
     ]);
   };
 
-  const filterOptions = (key) => {
-    const source = data?.filters || {};
-    if (key === 'year') return (source.years || []).map((value) => ({ value, label: `${value}년` }));
-    if (key === 'adminDong') return (source.adminDongs || []).map((value) => ({ value, label: value }));
-    if (key === 'category') return (source.categories || []).map((value) => ({ value, label: value }));
-    if (key === 'authorId') return (source.authors || []).map((author) => ({ value: author.userId, label: author.name || `사용자 ${author.userId}` }));
-    return [];
-  };
-
-  const filterLabel = (key) => {
-    const value = filters[key];
-    if (key === 'authorId' && mineOnly) return '작업자';
-    if (value == null || value === '') return FILTERS.find((row) => row.key === key).label;
-    return filterOptions(key).find((option) => sameId(option.value, value))?.label || String(value);
-  };
-
-  const choose = (key, value) => {
-    setPicker(null);
-    if (key === 'report') { setTargetId(value); return; }
-    if (key === 'authorId' && value != null) setMineOnly(false);
-    setFilters((current) => ({ ...current, [key]: value }));
-  };
-
-  const pickerOptions = picker === 'report'
-    ? drafts.map((report) => ({ value: report.reportId, label: report.title }))
-    : picker ? [{ value: null, label: '전체' }, ...filterOptions(picker)] : [];
-  const pickerSelected = picker === 'report' ? targetId : picker ? filters[picker] ?? null : null;
+  const choose = (key,value) => { setPicker(null); if(key==='report')setTargetId(value); };
+  const pickerOptions = picker==='report' ? drafts.map(report=>({value:report.reportId,label:report.title})) : [];
+  const pickerSelected = targetId;
+  const workers=(data?.filters?.authors||[]).map(author=>({value:String(author.userId),label:author.name||`사용자 ${author.userId}`}));
 
   const renderItem = ({ item }) => {
     const done = inTarget(item);
@@ -327,15 +303,9 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
             <Text style={styles.bannerText} numberOfLines={1}>
               {`담는 중: ${target.title} · ${reportCounts[target.reportId] ?? 0}건`}
             </Text>
-            <Text style={styles.bannerHint}>작성 중인 보고서예요. 리더가 확정하면 아래 '확정 보고서'에서 보고 받을 수 있어요.</Text>
           </View>
         </View>
-      ) : (
-        <View style={[styles.banner, styles.bannerEmpty]}>
-          <Ionicons name="information-circle-outline" size={20} color={colors.textSoft} />
-          <Text style={styles.bannerEmptyText}>담을 초안 보고서가 없어요. 보고서는 PC 웹에서 리더가 만들 수 있어요.</Text>
-        </View>
-      )}
+      ) : null}
       {finals.length > 0 ? (
         <View style={styles.finals}>
           <Text style={styles.finalsTitle}>확정 보고서</Text>
@@ -357,26 +327,7 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
         </TouchableOpacity>
       ) : null}
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-        <TouchableOpacity
-          style={[styles.chip, mineOnly && styles.chipActive]}
-          onPress={() => {
-            setMineOnly((value) => !value);
-            setFilters((current) => ({ ...current, authorId: null }));
-          }}
-        >
-          <Text style={[styles.chipText, mineOnly && styles.chipTextActive]}>내 작업만</Text>
-        </TouchableOpacity>
-        {FILTERS.map(({ key }) => {
-          const active = filters[key] != null && filters[key] !== '' && !(key === 'authorId' && mineOnly);
-          return (
-            <TouchableOpacity key={key} style={[styles.chip, active && styles.chipActive]} onPress={() => setPicker(key)}>
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{filterLabel(key)}</Text>
-              <Ionicons name="chevron-down" size={13} color={active ? '#FFFFFF' : colors.textSoft} />
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <ReportFilters key={projectId} search={search} onSearchChange={setSearch} worker={worker} onWorkerChange={setWorker} workers={workers} dong={dong} onDongChange={setDong} dongs={data?.filters?.adminDongs||[]} startDate={dateRange.start} endDate={dateRange.end} onDateChange={setDateRange}/>
 
       {target && addable.length > 0 ? (
         <PrimaryButton title={`보이는 ${addable.length}건 모두 담기`} icon="add-circle-outline" onPress={addAll} disabled={adding} />
@@ -388,7 +339,6 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
     <View style={styles.root}>
       <ScreenHeader
         title={project?.name || '프로젝트'}
-        subtitle={project ? `완료 ${project.completedCount ?? 0}건` : undefined}
         onBack={onBack}
       />
       <FlatList
@@ -398,7 +348,7 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
         ListHeaderComponent={header}
         ListEmptyComponent={loading
           ? <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>
-          : <EmptyState icon="checkmark-done-outline" title="완료된 기록이 없어요" description={mineOnly ? '"내 작업만"을 끄면 팀 기록도 볼 수 있어요.' : '필터를 바꿔 보세요.'} />}
+          : <EmptyState icon="checkmark-done-outline" title="완료된 기록이 없어요"  />}
         refreshControl={<RefreshControl refreshing={false} onRefresh={() => { loadItems(); loadReports(); }} />}
         contentContainerStyle={styles.listBody}
       />
@@ -416,7 +366,7 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
         <Pressable style={styles.backdrop} onPress={() => setPicker(null)}>
           <Pressable style={styles.sheet}>
             <Text style={styles.sheetTitle}>
-              {picker === 'report' ? '담을 보고서' : FILTERS.find((row) => row.key === picker)?.label}
+              담을 보고서
             </Text>
             <ScrollView style={{ maxHeight: 360 }}>
               {pickerOptions.map((option) => {

@@ -1,3 +1,4 @@
+import ProjectPlacesPanel from '../components/ProjectPlacesPanel.jsx';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -664,7 +665,7 @@ export default function ProjectsDetailPage() {
     );
   if (loading && !project) return <div className="panel"><LoadingBlock /></div>;
 
-  const isLeader = Boolean(project.isLeader);
+  const isLeader = Boolean(project.canManage ?? project.isLeader);
   // 다른 그룹으로 바꾼 뒤 남은 화면이면 업무 연결은 숨긴다 (그룹 업무 조회 기준이 다름)
   const sameGroup = project.groupId === groupId;
 
@@ -690,6 +691,7 @@ export default function ProjectsDetailPage() {
         )}
       </div>
 
+      <ProjectPlacesPanel projectId={projectId} userId={user.userId} onChanged={onTasksChanged} />
       <ReportsPanel projectId={projectId} userId={user.userId} isLeader={isLeader} reloadKey={reloadKey} />
       <ItemsPanel projectId={projectId} userId={user.userId} isLeader={isLeader} reloadKey={reloadKey} />
       {isLeader && sameGroup && (

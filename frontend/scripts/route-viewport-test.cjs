@@ -41,8 +41,8 @@ babel.transformSync(source, { configFile: false, babelrc: false, parserOpts: { p
   plugins: [() => ({ visitor: { CallExpression(node) {
     if (node.node.callee.name === 'useEffect' && generate(node.node.arguments[0]).code.includes('const targetPath =')) viewportEffect = node.node.arguments[0];
   } } })] });
-let fitCount = 0;
-const viewport = { mapRef: { current: { fitToCoordinates: () => fitCount++ } },
+let fitCount = 0; const previewCommands = [];
+const viewport = { sendMapCommand(command) { previewCommands.push(command); }, previewDestination: null, previewDetailView: false, guideTarget: null, segmentFocusKeyRef: { current: null }, mapRef: { current: { fitToCoordinates: () => fitCount++ } },
   segmentFocusTimerRef: { current: null }, segmentFocusKeyRef: { current: null },
   isGuiding: true, previewRouteSegment: null, routeSegments: [], currentSegmentIndex: 0, roadPath: [],
   routeViewportPadding: { top: 400, bottom: 180 }, clearTimeout };
@@ -51,9 +51,10 @@ vm.runInContext(`(${generate(viewportEffect).code})()`, viewport);
 viewport.routeViewportPadding.top = 600;
 vm.runInContext(`(${generate(viewportEffect).code})()`, viewport);
 assert.equal(fitCount, 0, 'opening and closing visits during guidance must not zoom out to the full route');
+viewport.previewDestination = { lat: 35.1, lng: 129.1 };
 viewport.previewRouteSegment = { destinationKey: 'next', path: [{ lat: 35, lng: 129 }, { lat: 35.1, lng: 129.1 }] };
 vm.runInContext(`(${generate(viewportEffect).code})()`, viewport);
-assert.equal(fitCount, 1, 'browsing a different destination must still fit its preview');
+assert.ok(previewCommands.some(command => command.type === 'PREVIEW_CAMERA' && command.key), 'browsing a destination sends its dedicated preview camera request');
 
 // Group overview must fit its administrative district, even when a visit is far away.
 const groupSource = fs.readFileSync(path.join(__dirname, '../screens/WorkStatusScreen.js'), 'utf8');

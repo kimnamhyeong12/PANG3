@@ -1,3 +1,4 @@
+import { fetchProjects, linkReportsToProject } from '../api/projects.js';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -68,6 +69,7 @@ function ReportCard({ report, downloading, onDownload }) {
           {report.detailAddress}
         </div>
       )}
+      {!!report.projects?.length && <div className="report-meta">프로젝트 · {report.projects.map(p=>p.name).join(', ')}</div>}
       <div className="report-meta">
         {report.assigneeName} · {report.performedByName} · {formatDate(report.createdAt)}
       </div>
@@ -87,6 +89,9 @@ export default function ReportsPage() {
   const { user } = useAuth();
   const { groupId } = useGroup();
   const [reports, setReports] = useState([]);
+  const [projects,setProjects]=useState([]),[projectId,setProjectId]=useState(''),[selected,setSelected]=useState([]),[linking,setLinking]=useState(false),[linkMessage,setLinkMessage]=useState('');
+  useEffect(()=>{let active=true;setSelected([]);setProjectId('');setLinkMessage('');fetchProjects(groupId,user.userId).then(rows=>{if(active)setProjects(rows);}).catch(()=>{if(active)setProjects([]);});return()=>{active=false;};},[groupId,user.userId]);
+  const link=async()=>{setLinking(true);setDownloadError(null);try{await linkReportsToProject(projectId,user.userId,selected);setLinkMessage('프로젝트에 연결했습니다.');setSelected([]);setReloadKey(k=>k+1);}catch(e){setDownloadError(errorMessage(e));}finally{setLinking(false);}};
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -187,12 +192,12 @@ export default function ReportsPage() {
     content = (
       <div className="report-grid">
         {filtered.map((r) => (
-          <ReportCard
+          <div key={r.progressId}><label style={{display:'flex',gap:8,padding:8}}><input type="checkbox" disabled={linking} checked={selected.includes(r.progressId)} onChange={()=>setSelected(old=>old.includes(r.progressId)?old.filter(id=>id!==r.progressId):[...old,r.progressId])}/>프로젝트 연결 대상으로 선택</label><ReportCard
             key={r.progressId}
             report={r}
             downloading={downloadingId === r.progressId}
             onDownload={() => onDownload(r)}
-          />
+          /></div>
         ))}
       </div>
     );
@@ -202,6 +207,7 @@ export default function ReportsPage() {
       <h1 className="page-title">보고서 보관함</h1>
       <p className="page-desc">팀원이 현장에서 제출한 업무 보고서를 확인하고 내려받습니다.</p>
 
+      <div className="filter-bar"><select aria-label="연결할 프로젝트" className="input" value={projectId} onChange={e=>setProjectId(e.target.value)}><option value="">프로젝트 선택</option>{projects.filter(p=>p.status!=='ARCHIVED').map(p=><option key={p.projectId} value={p.projectId}>{p.name}</option>)}</select><button className="btn-primary" disabled={!selected.length||!projectId||linking} onClick={link}>프로젝트에 연결 ({selected.length})</button>{linkMessage&&<span role="status">{linkMessage}</span>}</div>
       <div className="filter-bar">
         <input
           className="input filter-search"

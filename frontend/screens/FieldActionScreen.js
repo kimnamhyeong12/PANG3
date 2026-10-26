@@ -325,7 +325,7 @@ export default function FieldActionScreen({
         initialFormRef.current = editSnapshot(base);
         const form = normalizeComments(await recoverPhotoPick(local || base));
         if (!active) return;
-        setStatus(location?.status === 'complete' && !location?.reportProgressId ? 'complete' : form.status);
+        setStatus(form.status);
         setLatitude(form.latitude); setLongitude(form.longitude); setLocationAddress(form.locationAddress);
         setPhotos(form.photos); setFieldMemo(form.fieldMemo); setMarkedMapUri(form.markedMapUri);
         setMainComment(form.mainComment || '');
@@ -341,7 +341,7 @@ export default function FieldActionScreen({
           if (!local) throw new Error();
           local = normalizeComments(await recoverPhotoPick(local));
           if (!active) return;
-          setStatus(location?.status === 'complete' && !location?.reportProgressId ? 'complete' : local.status);
+          setStatus(local.status);
           setLatitude(local.latitude); setLongitude(local.longitude); setLocationAddress(local.locationAddress);
           setPhotos(local.photos); setFieldMemo(local.fieldMemo); setMarkedMapUri(local.markedMapUri);
           setMainComment(local.mainComment || '');
@@ -1117,7 +1117,7 @@ export default function FieldActionScreen({
           <View style={styles.statusRow}>
             <TouchableOpacity
               style={[styles.statusBtn, status === 'pending' && styles.statusActive]}
-              disabled={location?.status === 'complete'}
+              disabled={saving}
               onPress={() => setStatus('pending')}
             >
               <Text style={[styles.statusText, status === 'pending' && styles.statusTextActive]}>
@@ -1127,7 +1127,7 @@ export default function FieldActionScreen({
 
             <TouchableOpacity
               style={[styles.statusBtn, status === 'working' && styles.statusActive]}
-              disabled={location?.status === 'complete'}
+              disabled={saving}
               onPress={() => setStatus('working')}
             >
               <Text style={[styles.statusText, status === 'working' && styles.statusTextActive]}>

@@ -1,3 +1,4 @@
+import { reportMarkerLayoutSource } from '../utils/mapMarkerLayout';
 import { workStatus } from '../constants/design';
 import { apiFetch as fetch } from '../utils/auth';
 import { Ionicons } from "@expo/vector-icons";
@@ -419,6 +420,30 @@ const buildKakaoMapHtml = (
 <script>
 (function () {
   var map = null;
+  var layoutVisitPins = (${reportMarkerLayoutSource});
+  var visitPinEntries = [];
+  function arrangeVisitPins() {
+    if (!map || !visitPinEntries.length || markerMoveCancel) return;
+    var box = document.getElementById('map');
+    var width = box.clientWidth, height = box.clientHeight;
+    if (width < 80 || height < 80) return;
+    var projection = map.getProjection();
+    var points = visitPinEntries.filter(function(e) { return !e.special; }).map(function(e) {
+      var point = projection.containerPointFromCoords(e.position);
+      return { n: e.index, x: point.x, y: point.y };
+    }).filter(function(p) { return p.x > -60 && p.x < width+60 && p.y > -60 && p.y < height+60; });
+    var byIndex = new Map(visitPinEntries.map(function(e) { return [e.index,e]; }));
+    layoutVisitPins(points,width,height).forEach(function(label) {
+      var e=byIndex.get(label.point.n);
+      var dx=label.moved ? label.x-label.point.x : 0;
+      var dy=label.moved ? label.y-label.point.y+18 : 0;
+      e.element.style.left=(dx-15)+'px'; e.element.style.top=(dy-38)+'px';
+      e.line.setAttribute('x2',String(dx)); e.line.setAttribute('y2',String(dy));
+      e.stroke.setAttribute('x2',String(dx)); e.stroke.setAttribute('y2',String(dy));
+      e.connector.style.display=label.moved?'block':'none';
+      e.dot.style.display=label.moved?'block':'none';
+    });
+  }
 
   var locationOverlays = [];
   var markerMoveCancel = null;
@@ -569,6 +594,7 @@ const buildKakaoMapHtml = (
     });
 
     locationOverlays = [];
+    visitPinEntries = [];
 
     if (selectedOverlay) {
       selectedOverlay.setMap(null);
@@ -965,16 +991,29 @@ const buildKakaoMapHtml = (
         } else if (data.emphasizeHighlighted) markerElement.style.opacity = '0.5';
         var markerZIndex = location.emphasized ? 10000 : location.isSelectedSearch ? 150 : location.highlighted ? 140 : 20 + index;
 
+        var pinRoot=document.createElement('div');
+        pinRoot.style.cssText='position:relative;width:0;height:0;overflow:visible';
+        markerElement.style.position='absolute'; markerElement.style.left='-15px'; markerElement.style.top='-38px';
+        var connector=document.createElementNS('http://www.w3.org/2000/svg','svg');
+        connector.setAttribute('width','1'); connector.setAttribute('height','1');
+        connector.style.cssText='position:absolute;overflow:visible;pointer-events:none;display:none';
+        var under=document.createElementNS('http://www.w3.org/2000/svg','line');
+        var line=document.createElementNS('http://www.w3.org/2000/svg','line');
+        [under,line].forEach(function(l,i){l.setAttribute('x1','0');l.setAttribute('y1','0');l.setAttribute('stroke',i?location.color:'#FFFFFF');l.setAttribute('stroke-width',i?'2':'5');connector.appendChild(l);});
+        var dot=document.createElement('span'); dot.style.cssText='display:none;position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;background:'+location.color+';box-shadow:0 0 0 2px white;pointer-events:none';
+        pinRoot.appendChild(connector); pinRoot.appendChild(dot); pinRoot.appendChild(markerElement);
         var overlay =
           new window.kakao.maps.CustomOverlay({
             position: position,
-            content: markerElement,
-            xAnchor: 0.5,
-            yAnchor: 1,
+            content: pinRoot,
+            xAnchor: 0,
+            yAnchor: 0,
             zIndex: markerZIndex
           });
 
         overlay.setMap(map);
+        visitPinEntries.push({ index:index, position:position, element:markerElement, connector:connector, dot:dot, line:line, stroke:under,
+          special: location.isReturnLocation || location.isSearchResult || location.isPublicFacility });
 
         locationOverlays.push(
           overlay
@@ -1006,6 +1045,7 @@ const buildKakaoMapHtml = (
               var dropped = overlay.getPosition();
               post({ type: 'MARKER_DRAG_END', index: index, id: location.id, latitude: dropped.getLat(), longitude: dropped.getLng() });
             } else if (!wasHolding && !didMove) post({ type: 'MARKER_PRESS', index: index });
+            if (cancelled || !didMove) arrangeVisitPins();
           }
           markerElement.addEventListener('pointerdown', function (event) {
             if (event.isPrimary === false || event.button > 0) return;
@@ -1023,6 +1063,7 @@ const buildKakaoMapHtml = (
             holdTimer = setTimeout(function () {
               if (!down || moved) return;
               holding = true;
+              markerElement.style.left='-15px'; markerElement.style.top='-38px'; connector.style.display='none'; dot.style.display='none';
               overlay.setZIndex(20000);
               markerElement.style.filter = 'drop-shadow(0 5px 5px #10285B66)';
             }, 450);
@@ -1055,6 +1096,7 @@ const buildKakaoMapHtml = (
       }
     );
 
+    arrangeVisitPins();
     /*
      * 지도 직접 선택 위치
      */
@@ -1509,6 +1551,7 @@ const buildKakaoMapHtml = (
         ${Number(initialLongitude)}
       );
 
+      window.kakao.maps.event.addListener(map, 'idle', arrangeVisitPins);
       var mapNode = document.getElementById('map');
       mapNode.addEventListener('pointerdown', cancelPreviewFocus, { passive: true });
       mapNode.addEventListener('touchstart', cancelPreviewFocus, { passive: true });
@@ -2828,6 +2871,7 @@ export default function KakaoMapWebView({
 
   useEffect(() => {
     if (!searchedPlace) {
+      setSelectedPos(null);
       return;
     }
 

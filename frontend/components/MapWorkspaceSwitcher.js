@@ -8,7 +8,7 @@ import { colors } from '../constants/design';
 const personal = group => Boolean(group?.personalWorkspace || group?.personal || group?.workspaceType === 'PERSONAL');
 const label = group => personal(group) || !group ? '개인 업무공간' : group.groupName;
 
-export default function MapWorkspaceSwitcher({ userId, activeGroup, onSelect, dropdown = false }) {
+export default function MapWorkspaceSwitcher({ userId, activeGroup, onSelect, dropdown = false, compact = false }) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const trigger = useRef(null);
@@ -46,10 +46,10 @@ export default function MapWorkspaceSwitcher({ userId, activeGroup, onSelect, dr
     finally { busy.current = false; setSwitching(false); }
   };
   return <>
-    <TouchableOpacity ref={trigger} collapsable={false} style={[styles.badge, dropdown && styles.dropdownBadge]} onPress={openSelector} disabled={!onSelect || !userId}
+    <TouchableOpacity ref={trigger} collapsable={false} style={[styles.badge, dropdown && styles.dropdownBadge, compact && { maxWidth: '100%', minHeight: 44, borderWidth: 0, paddingHorizontal: 4 }]} onPress={openSelector} disabled={!onSelect || !userId}
       accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel={`사용 중인 그룹: ${label(activeGroup)}. 그룹 전환`}>
       <Ionicons name={personal(activeGroup) || !activeGroup ? 'person-outline' : 'people-outline'} size={dropdown ? 17 : 12} color={colors.text} />
-      <Text style={[styles.name, dropdown && styles.dropdownName]} numberOfLines={1}>{label(activeGroup)}</Text>
+      <Text style={[styles.name, dropdown && styles.dropdownName, compact && { fontSize: 14 }]} numberOfLines={1}>{label(activeGroup)}</Text>
       <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={12} color={dropdown ? colors.text : colors.textSoft} />
     </TouchableOpacity>
     <Modal visible={open} transparent statusBarTranslucent={dropdown} animationType="fade" onRequestClose={() => { if (!busy.current) setOpen(false); }}>

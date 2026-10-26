@@ -5,6 +5,7 @@ import { ScreenHeader } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
 import { groupApi } from '../utils/groupApi';
 import { transferHistoryPage, mergeTransferHistory, compareTransferHistory } from '../utils/transferHistory';
+import ProjectBrowser from '../components/ProjectBrowser';
 import { colors } from '../constants/design';
 
 const dongName = (value) => String(value || '').trim().split(/\s+/).pop() || '';
@@ -34,6 +35,9 @@ export default function TransferScreen({
   initialRecipientName = '',
 }) {
   const [tasks, setTasks] = useState([]);
+  const [projectPicker, setProjectPicker] = useState(false);
+  const [projectFilter, setProjectFilter] = useState(null);
+  useEffect(() => { setProjectFilter(null); setSelectedTaskIds([]); }, [group?.groupId]);
   const [members, setMembers] = useState([]);
   const [requests, setRequests] = useState([]);
   const [historyHasMore, setHistoryHasMore] = useState(false);
@@ -94,8 +98,10 @@ export default function TransferScreen({
   ), [tasks, user?.userId, pendingTaskIds]);
 
   const groupedMine = useMemo(() => {
+    const filtered = mine.filter(task => !projectFilter || (task.projectIds || []).some(id => String(id) === String(projectFilter.projectId)));
+    if (projectFilter) return filtered.length ? [{ dong: projectFilter.name, rows: filtered, project: true }] : [];
     const grouped = new Map();
-    mine.forEach((task) => {
+    filtered.forEach((task) => {
       const dong = dongName(task.adminDong || task.admin_dong) || '행정동 미확인';
       if (!grouped.has(dong)) grouped.set(dong, []);
       grouped.get(dong).push(task);
@@ -103,7 +109,7 @@ export default function TransferScreen({
     return Array.from(grouped.entries())
       .map(([dong, rows]) => ({ dong, rows }))
       .sort((a, b) => a.dong.localeCompare(b.dong, 'ko'));
-  }, [mine]);
+  }, [mine, projectFilter]);
 
   const recipient = members.find((member) => Number(member.userId) === Number(recipientId));
   const recipientName = recipient?.name || recipient?.loginId || initialRecipientName || '';
@@ -190,6 +196,7 @@ export default function TransferScreen({
   };
 
   return <View style={styles.root}>
+    <ProjectBrowser visible={projectPicker} userId={user.userId} groupId={group.groupId} selectOnly includeAll selectedId={projectFilter?.projectId} onClose={()=>setProjectPicker(false)} onSelect={p=>{setProjectFilter(p);setSelectedTaskIds([]);setProjectPicker(false);}}/>
     <ScreenHeader title={requestsOnly ? '받은 요청' : recipientName ? `${recipientName}에게 업무 이관` : '업무 이관'} onBack={onBack} />
     {loading ? <ActivityIndicator style={{ marginTop: 32 }} color={colors.primary} /> :
       <ScrollView contentContainerStyle={styles.body}>
@@ -213,21 +220,22 @@ export default function TransferScreen({
             </View>
           </View>
 
-          <Text style={styles.title}>이관할 방문지</Text>
+          <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}><Text style={styles.title}>이관할 방문지</Text>
+          <TouchableOpacity style={{padding:12}} onPress={()=>setProjectPicker(true)}><Text style={{color:colors.primary}}>{projectFilter?.name || '프로젝트 전체'} ▾</Text></TouchableOpacity></View>
 
           {groupedMine.length === 0 ? <Text style={styles.empty}>이관할 수 있는 본인 담당 방문지가 없습니다.</Text> : groupedMine.map((groupRow) => {
             const groupIds = groupRow.rows.map(taskIdOf).filter(Number.isFinite);
             const allSelected = groupIds.length > 0 && groupIds.every((id) => selectedTaskIds.includes(id));
             return <View key={groupRow.dong} style={styles.dongCard}>
-              <TouchableOpacity style={styles.dongHeader} onPress={() => toggleDong(groupRow.rows)}>
+              <TouchableOpacity accessibilityRole="checkbox" accessibilityLabel={groupRow.project ? '프로젝트 방문지 전체 선택' : `${groupRow.dong} 전체 선택`} accessibilityState={{checked:allSelected}} style={styles.dongHeader} onPress={() => toggleDong(groupRow.rows)}>
                 <Ionicons name={allSelected ? 'checkbox' : 'square-outline'} size={22} color={colors.primary} />
-                <Text style={styles.dongTitle}>{groupRow.dong}</Text>
+                <Text style={styles.dongTitle}>{groupRow.project ? (allSelected ? '전체 해제' : '전체 선택') : groupRow.dong}</Text>
                 <Text style={styles.dongCount}>{groupRow.rows.length}건</Text>
               </TouchableOpacity>
               {groupRow.rows.map((task) => {
                 const id = taskIdOf(task);
                 const checked = selectedTaskIds.includes(id);
-                return <TouchableOpacity key={id} style={styles.taskRow} onPress={() => toggleTask(task)}>
+                return <TouchableOpacity key={id} accessibilityRole="checkbox" accessibilityLabel={task.detailAddress || task.roadAddress || `방문지 #${id}`} accessibilityState={{checked}} style={styles.taskRow} onPress={() => toggleTask(task)}>
                   <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={20} color={checked ? colors.primary : colors.textFaint} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.taskTitle}>{task.detailAddress || task.roadAddress || `방문지 #${id}`}</Text>

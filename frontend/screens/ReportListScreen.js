@@ -192,6 +192,7 @@ export default function ReportListScreen({
         </View>
         <View style={styles.cardInfo}>
           <Text style={styles.itemTitle} numberOfLines={2}>{title}</Text>
+          {!!reportOf(loc)?.projects?.length && <Text style={styles.date}>프로젝트 · {reportOf(loc).projects.map(p=>p.name).join(', ')}</Text>}
           <View style={styles.meta}>
             {!!formatShortDate(getWorkDateKey(loc)) && <Text style={styles.date}>{formatShortDate(getWorkDateKey(loc))}</Text>}
             <Text style={[styles.state, { color: tone.ink }]}>{getStatusLabel(loc.status)}</Text>

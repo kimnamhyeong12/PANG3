@@ -28,16 +28,16 @@ function loadExpo(relative, dependencies = {}) {
   await assert.rejects(convertFormDataAsync(legacy), /Unsupported FormDataPart implementation/);
 
   const screen = fs.readFileSync(path.join(root, 'screens/FieldActionScreen.js'), 'utf8');
-  const appendSource = screen.match(/const appendImage = \(name, uri\) => \{([\s\S]*?)\n      \};/)[1];
+  const appendSource = screen.match(/const appendImage = async \(name, uri\) => \{([\s\S]*?)\n      \};/)[1];
   class DeviceFile {
     constructor(uri) { this.name = uri.split('/').pop(); this.type = 'image/jpeg'; }
     async bytes() { return new TextEncoder().encode(`image:${this.name}`); }
   }
   const form = new Form();
   form.append('taskId', '123'); form.append('fieldMemo', '현장 기록');
-  const appendImage = new Function('form', 'File', `return (name, uri) => {${appendSource}}`)(form, DeviceFile);
-  for (const stage of ['before', 'during', 'after']) appendImage('fieldPhotos', `file:///${stage}.jpg`);
-  appendImage('mapImage', 'file:///map.jpg');
+  const appendImage = new Function('form', 'File', 'ImageManipulator', `return async (name, uri) => {${appendSource}}`)(form, DeviceFile, { manipulateAsync: async uri => ({ uri }), SaveFormat: { JPEG: 'jpeg' } });
+  for (const stage of ['before', 'during', 'after']) await appendImage('fieldPhotos', `file:///${stage}.jpg`);
+  await appendImage('mapImage', 'file:///map.jpg');
   const { body } = await convertFormDataAsync(form, 'test-boundary');
   const multipart = new TextDecoder().decode(body);
   assert.equal((multipart.match(/name="fieldPhotos"/g) || []).length, 3);

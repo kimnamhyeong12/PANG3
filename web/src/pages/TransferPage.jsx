@@ -135,7 +135,7 @@ export default function TransferPage() {
       <div className="page-head">
         <div>
           <h1 className="page-title">업무 이관</h1>
-          <p className="page-desc">행정동 단위로 내 담당 업무를 다른 팀원에게 이관 요청하고, 받은 요청을 처리합니다.</p>
+          <p className="page-desc">행정동·프로젝트별로 내 담당 업무를 다른 팀원에게 이관 요청하고, 받은 요청을 처리합니다.</p>
         </div>
         <button type="button" className="btn-primary btn-inline" onClick={() => setModalOpen(true)}>
           <IconPlus size={16} />새 이관 요청

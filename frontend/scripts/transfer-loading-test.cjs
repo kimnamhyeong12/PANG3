@@ -29,5 +29,16 @@ function callback(file, name) {
   await load(require.resolve('../screens/TransferScreen.js'), 'load')();
   assert.equal(writes.setMembers.length, 2, 'transfer picker must load teammates independently of history');
   assert.equal(writes.setTasks[0].taskId, 5); assert.equal(writes.setLoading, false);
+  const visits=[{id:1,adminDong:'다대동',projectIds:[9]},{id:2,adminDong:'장림동',projectIds:[9]},{id:3,adminDong:'다대동',projectIds:[10]}];
+  const groupVisits=new Function('mine','projectFilter','dongName',`return (${callback(require.resolve('../screens/TransferScreen.js'),'groupedMine')})();`);
+  const projectRows=groupVisits(visits,{projectId:9,name:'공원'},value=>value);
+  assert.equal(projectRows.length,1,'one project spans administrative districts in one list');
+  assert.deepEqual(projectRows[0].rows.map(row=>row.id),[1,2]);assert.equal(projectRows[0].project,true);
+  assert.equal(groupVisits(visits,null,value=>value).length,2,'general work keeps administrative grouping');
+  const ast=ts.createSourceFile('transfer.jsx',fs.readFileSync(require.resolve('../screens/TransferScreen.js'),'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
+  let toggle;function walk(node){if(ts.isVariableDeclaration(node)&&node.name.getText(ast)==='toggleDong')toggle=node.initializer.getText(ast);ts.forEachChild(node,walk);}walk(ast);
+  let selection=[3];const toggleAll=()=>new Function('taskIdOf','selectedTaskIds','setSelectedTaskIds',`return (${toggle});`)(row=>row.id,selection,update=>{selection=update(selection);});
+  toggleAll()(projectRows[0].rows);assert.deepEqual(selection,[3,1,2]);
+  toggleAll()(projectRows[0].rows);assert.deepEqual(selection,[3],'select all toggles only the displayed project');
   console.log('Transfer loading regression checks passed: unavailable history cannot hide teammates or visits');
 })().catch(error => { console.error(error); process.exitCode = 1; });

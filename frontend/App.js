@@ -1062,7 +1062,7 @@ function AppContent() {
                 rememberAvailableGroup(group);
                 selectActiveGroup(group);
                 setGroupWorkspaceTab('dashboard');
-                go('groupWorkspace');
+                go('groupHome', { replace: true });
               }}
             />
           )}

@@ -206,3 +206,7 @@ export function saveBlob(blob, fileName) {
 export function safeFileName(value) {
   return String(value || '보고서').replace(/[\\/:*?"<>|\s]+/g, '_').replace(/_+/g, '_').slice(0, 80);
 }
+
+export const fetchProjectPlaces = projectId => api.get(`/api/projects/${projectId}/places`);
+export const registerProjectPlaces = (projectId, userId, placeIds) => api.post(`/api/projects/${projectId}/places/register`, { userId, placeIds });
+export const linkReportsToProject = (projectId, userId, progressIds) => api.post(`/api/projects/${projectId}/link-reports`, { userId, progressIds });

@@ -126,7 +126,7 @@ export function placeLocation(place) {
 }
 export function isRegisteredPlace(place, locations) {
   const target = placeLocation(place);
-  return locations.some(item => { const distance = distanceMeters(target, item); return distance != null && distance < 15 &&
+  return locations.some(item => { if (['complete','completed','done'].includes(String(item.status ?? item.taskStatus ?? '').toLowerCase())) return false; const distance = distanceMeters(target, item); return distance != null && distance < 15 &&
     (item.detailAddress === target.detailAddress || Boolean(target.roadAddress && item.roadAddress === target.roadAddress));
   });
 }

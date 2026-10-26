@@ -25,9 +25,9 @@ export function PlaceRow({ place, query, onPress, onAdd, registered }) {
         {place.distanceValue != null && <Text style={s.address}>{place.distanceValue < 1000 ? `${Math.round(place.distanceValue)}m` : `${(place.distanceValue / 1000).toFixed(1)}km`}</Text>}
       </View>
     </TouchableOpacity>
-    {onAdd && <TouchableOpacity style={[s.add, registered && { backgroundColor: '#EDF1F5' }]} disabled={registered} onPress={onAdd} accessibilityLabel={registered ? '이미 추가된 방문지' : `${place.place_name} 방문지 추가`}>
+    {onAdd && <TouchableOpacity style={[s.add, registered && { backgroundColor: '#EDF1F5' }]} onPress={onAdd} accessibilityLabel={registered ? '진행 중인 장소에 새 업무 추가' : `${place.place_name} 방문지 추가`}>
       <Ionicons name={registered ? 'checkmark' : 'add-circle-outline'} color={registered ? '#607080' : '#2477F3'} size={22} />
-      <Text style={{ color: registered ? '#607080' : '#2477F3', fontSize: 12, fontWeight: '700' }}>{registered ? '추가됨' : '추가'}</Text>
+      <Text style={{ color: registered ? '#607080' : '#2477F3', fontSize: 12, fontWeight: '700' }}>{registered ? '새 업무' : '추가'}</Text>
     </TouchableOpacity>}
   </View>;
 }

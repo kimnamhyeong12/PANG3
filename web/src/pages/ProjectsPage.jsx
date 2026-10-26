@@ -95,7 +95,7 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false);
 
   const personal = Boolean(currentGroup?.personal);
-  const isLeader = currentGroup?.role === 'LEADER';
+  const isLeader = Boolean(currentGroup) && !personal;
 
   const load = useCallback(() => {
     if (personal) {

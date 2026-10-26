@@ -130,3 +130,10 @@ export async function addSavedProgressToReport(reportId, userId, progressId) {
     return { ok: false, message: error?.message || '알 수 없는 오류' };
   }
 }
+
+// Shared project destinations and repeated task registration.
+export const createProject = (groupId, userId, name) => groupApi(`/api/groups/${groupId}/projects`, { method: 'POST', body: JSON.stringify({ userId, name }) });
+export const updateProject = (projectId, userId, patch) => groupApi(`/api/projects/${projectId}`, { method: 'PATCH', body: JSON.stringify({ userId, ...patch }) });
+export const fetchProjectPlaces = projectId => groupApi(`/api/projects/${projectId}/places`);
+export const registerProjectPlaces = (projectId, userId, placeIds, allowActive = false) => groupApi(`/api/projects/${projectId}/places/register`, { method: 'POST', body: JSON.stringify({ userId, placeIds, allowActive }) });
+export const linkReportsToProject = (projectId, userId, progressIds) => groupApi(`/api/projects/${projectId}/link-reports`, { method: 'POST', body: JSON.stringify({ userId, progressIds }) });
