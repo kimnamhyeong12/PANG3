@@ -24,6 +24,37 @@ public class KakaoWalkingClient {
     }
     KakaoWalkingClient(RestTemplate http) { this.http = http; }
 
+    /** Up to six directed legs, in caller-specified order; this never optimizes the order. */
+    public List<Double> durations(List<Map<String,Object>> points, String key) {
+        if (points.size() < 2 || points.size() > 7) throw new IllegalArgumentException("Invalid walking batch");
+        if (key == null || key.isBlank()) throw failure("카카오 도보 REST API 키가 설정되지 않았습니다.");
+        var start = points.get(0); var end = points.get(points.size()-1);
+        String url = "https://dapi.kakao.com/v2/routing/walk?start_x=" + start.get("lng") + "&start_y=" + start.get("lat")
+                + "&end_x=" + end.get("lng") + "&end_y=" + end.get("lat");
+        if (points.size() > 2) {
+            url += "&via_x=" + points.subList(1,points.size()-1).stream().map(p -> p.get("lng").toString()).collect(java.util.stream.Collectors.joining(","))
+                + "&via_y=" + points.subList(1,points.size()-1).stream().map(p -> p.get("lat").toString()).collect(java.util.stream.Collectors.joining(","));
+        }
+        url += "&input_coord=WGS84&output_coord=WGS84&route_mode=" + ROUTE_MODE;
+        HttpHeaders headers = new HttpHeaders(); headers.set("Authorization", "KakaoAK " + key);
+        Map<String,Object> body = http.exchange(url, HttpMethod.GET, new HttpEntity<Void>(headers),
+                new ParameterizedTypeReference<Map<String,Object>>() {}).getBody();
+        if (body == null || !"OK".equals(body.get("status"))) throw failure("도보 구간을 조회하지 못했습니다.");
+        Map<?,?> route = object(body.get("route")); List<?> legs = array(route.get("legs"));
+        if (legs.size() != points.size()-1) throw failure("도보 구간 응답이 일치하지 않습니다.");
+        double total = number(object(route.get("properties")).get("totalTime"));
+        List<Double> result = new ArrayList<>();
+        for (Object leg : legs) {
+            var props = object(object(leg).get("properties"));
+            double seconds = props.containsKey("time") ? number(props.get("time")) : legs.size()==1 ? total : Double.NaN;
+            if (!Double.isFinite(seconds) || seconds < 0) throw failure("도보 구간 시간이 올바르지 않습니다.");
+            result.add(seconds);
+        }
+        if (!Double.isFinite(total) || total < 0 || Math.abs(result.stream().mapToDouble(Double::doubleValue).sum()-total)>1)
+            throw failure("도보 구간 합계가 일치하지 않습니다.");
+        return result;
+    }
+
     public Map<String, Object> route(double startLat, double startLng, double endLat, double endLng, String key) {
         if (key == null || key.isBlank()) throw failure("카카오 도보 REST API 키가 설정되지 않았습니다.");
         validate(startLat, startLng); validate(endLat, endLng);

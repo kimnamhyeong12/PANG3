@@ -42,13 +42,9 @@ class VisitOrderServiceTest {
         var server=org.springframework.test.web.client.MockRestServiceServer.bindTo(http).ignoreExpectOrder(true).build();
         double[][] times={{0,10,1},{10,0,10},{10,1,0}};
         var mapper=new com.fasterxml.jackson.databind.ObjectMapper();
-        server.expect(org.springframework.test.web.client.ExpectedCount.times(4),org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(org.hamcrest.Matchers.startsWith("https://dapi.kakao.com/v2/routing/walk?")))
+        server.expect(org.springframework.test.web.client.ExpectedCount.times(2),org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(org.hamcrest.Matchers.startsWith("https://dapi.kakao.com/v2/routing/walk?")))
           .andRespond(request->{
-            Map<String,String> query=new HashMap<>();for(String pair:request.getURI().getQuery().split("&")){String[] parts=pair.split("=");query.put(parts[0],parts[1]);}
-            int from=(int)Math.round((Double.parseDouble(query.get("start_x"))-129)*1000), to=(int)Math.round((Double.parseDouble(query.get("end_x"))-129)*1000);
-            var body=Map.of("status","OK","route",Map.of("properties",Map.of("totalDistance",100,"totalTime",times[from][to]),"legs",List.of(Map.of("steps",List.of(Map.of("path",Map.of("points",List.of(List.of(129,35),List.of(129.001,35)))))))));
-            var response=new org.springframework.mock.http.client.MockClientHttpResponse(mapper.writeValueAsBytes(body),org.springframework.http.HttpStatus.OK);
-            response.getHeaders().setContentType(org.springframework.http.MediaType.APPLICATION_JSON);return response;
+            return walkingBatchResponse(request,(from,to)->times[from][to]);
           });
         Map<String,Object> start=Map.of("lat",35,"lng",129),a=Map.of("id",1,"lat",35,"lng",129.001),b=Map.of("id",2,"lat",35,"lng",129.002);
         try {var result=service.recommend(start,List.of(a,b),null,null,"walk","synthetic");assertEquals(List.of(b,a),result.get("optimizedLocations"));assertEquals("roadDuration",result.get("basis"));
@@ -63,7 +59,7 @@ class VisitOrderServiceTest {
         var body="{\"status\":\"OK\",\"route\":{\"properties\":{\"totalDistance\":100,\"totalTime\":10},\"legs\":[{\"steps\":[{\"path\":{\"points\":[[129,35],[129.001,35]]}}]}]}}";
         var calls=new java.util.concurrent.atomic.AtomicInteger();
         server.expect(org.springframework.test.web.client.ExpectedCount.manyTimes(),org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(org.hamcrest.Matchers.startsWith("https://dapi.kakao.com/v2/routing/walk?")))
-          .andRespond(request->{calls.incrementAndGet();return org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess(body,org.springframework.http.MediaType.APPLICATION_JSON).createResponse(request);});
+          .andRespond(request->{calls.incrementAndGet();return walkingBatchResponse(request,(from,to)->10);});
         List<Map<String,Object>> visits=new ArrayList<>();for(int i=1;i<=20;i++)visits.add(Map.of("id",i,"lat",35,"lng",129+i*0.001));
         try {var result=service.recommend(Map.of("lat",35,"lng",129),visits,null,null,"walk","synthetic");
           assertEquals("roadDuration",result.get("basis"));assertEquals(20,((List<?>)result.get("optimizedLocations")).size());assertTrue(calls.get()>=20 && calls.get()<=147,"20 visits stay below the shared provider request budget");server.verify();
@@ -78,11 +74,27 @@ class VisitOrderServiceTest {
         var calls=new java.util.concurrent.atomic.AtomicInteger();
         var body="{\"status\":\"OK\",\"route\":{\"properties\":{\"totalDistance\":100,\"totalTime\":10},\"legs\":[{\"steps\":[{\"path\":{\"points\":[[129,35],[129.001,35]]}}]}]}}";
         server.expect(org.springframework.test.web.client.ExpectedCount.manyTimes(),org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(org.hamcrest.Matchers.startsWith("https://dapi.kakao.com/v2/routing/walk?")))
-          .andRespond(request->{calls.incrementAndGet();return org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess(body,org.springframework.http.MediaType.APPLICATION_JSON).createResponse(request);});
+          .andRespond(request->{calls.incrementAndGet();return walkingBatchResponse(request,(from,to)->10);});
         List<Map<String,Object>> visits=new ArrayList<>();for(int i=1;i<=20;i++)visits.add(Map.of("id",i,"lat",35,"lng",i%2==0?129.001:129.002));
         try {var result=service.recommend(Map.of("lat",35,"lng",129),visits,null,null,"walk","synthetic");
           assertEquals("roadDuration",result.get("basis"));assertEquals(20,((List<?>)result.get("optimizedLocations")).size());assertTrue(calls.get()<=4,"same directed legs are cached/shared, not requested for every task");server.verify();
         } finally {service.stop();}
+    }
+    static org.springframework.http.client.ClientHttpResponse walkingBatchResponse(org.springframework.http.HttpRequest request,
+            java.util.function.ToDoubleBiFunction<Integer,Integer> seconds) throws java.io.IOException {
+        Map<String,String> query=new HashMap<>();for(String pair:request.getURI().getQuery().split("&")){String[] parts=pair.split("=",2);query.put(parts[0],parts[1]);}
+        List<Double> xs=new ArrayList<>();xs.add(Double.parseDouble(query.get("start_x")));
+        if(query.containsKey("via_x"))for(String x:query.get("via_x").split(","))xs.add(Double.parseDouble(x));
+        xs.add(Double.parseDouble(query.get("end_x")));
+        List<Map<String,Object>> legs=new ArrayList<>();double total=0;
+        for(int i=0;i<xs.size()-1;i++) {
+            int from=(int)Math.round((xs.get(i)-129)*1000),to=(int)Math.round((xs.get(i+1)-129)*1000);
+            double value=seconds.applyAsDouble(from,to);total+=value;
+            legs.add(Map.of("properties",Map.of("time",value),"steps",List.of(Map.of("path",Map.of("points",List.of(List.of(129,35),List.of(129.001,35)))))));
+        }
+        var body=Map.of("status","OK","route",Map.of("properties",Map.of("totalDistance",100,"totalTime",total),"legs",legs));
+        var response=new org.springframework.mock.http.client.MockClientHttpResponse(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(body),org.springframework.http.HttpStatus.OK);
+        response.getHeaders().setContentType(org.springframework.http.MediaType.APPLICATION_JSON);return response;
     }
     @Test void returnChangesOrderAndUserChoiceStaysFirst() {
         // Open route favours A->B. B->home is expensive, so the closed route is B->A.

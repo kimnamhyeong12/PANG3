@@ -27,7 +27,10 @@ public class RouteRequestGuard {
         catch (Exception error) { throw invalid("경로 입력을 확인해 주세요."); }
         if (serialized.length() > 262144) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "경로 입력이 너무 큽니다.");
         validate(kind, json.valueToTree(input));
-        String key = userId + ":" + kind + ":" + AuthSessionService.hash(serialized + ":" + Objects.toString(walkingKey, ""));
+        var inputTree=json.valueToTree(input);
+        String guidanceDay = kind.equals("order") && (!inputTree.hasNonNull("guidanceStart") || inputTree.path("guidanceStart").asBoolean(false))
+                ? java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).toString() : "";
+        String key = userId + ":" + kind + ":" + AuthSessionService.hash(serialized + ":" + Objects.toString(walkingKey, "") + ":" + guidanceDay);
         CompletableFuture<Map<String, Object>> flight;
         boolean owner = false;
         synchronized (this) {

@@ -1,0 +1,27 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const url = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
+const read = name => fs.readFileSync(path.join(__dirname, '../utils', name), 'utf8');
+(async () => {
+  const route = url(read('routeSession.js'));
+  const order = url(read('visitOrder.js').replace("'./routeSession'", JSON.stringify(route)));
+  const source = read('recommendationReuse.js').replace("'./routeSession'", JSON.stringify(route)).replace("'./visitOrder'", JSON.stringify(order));
+  const { pendingCoordinates, onlyRemovedVisits, stableVisitOrder } = await import(url(source));
+  const rows = [3, 1, 2, 4].map((id, index) => ({ id, lat: 35, lng: 129 + id / 1000, markerNumber: index + 1, status: 'pending' }));
+  const before = pendingCoordinates(rows);
+  const completed = rows.map(row => row.id === 3 ? { ...row, status: 'complete' } : row);
+  assert.equal(onlyRemovedVisits(before, pendingCoordinates(completed)), true);
+  const ordered = stableVisitOrder([...completed].reverse());
+  assert.deepEqual(ordered.map(row => row.id), [1, 2, 4, 3]);
+  assert.deepEqual(ordered.map(row => row.markerNumber), [1, 2, 3, null]);
+  assert.equal(onlyRemovedVisits(pendingCoordinates(completed), before), false, 'undo must solve using the preserved legs');
+  assert.equal(onlyRemovedVisits(before, before), false);
+  assert.equal(onlyRemovedVisits(before, pendingCoordinates([...rows, { id: 5, lat: 35, lng: 129.005 }])), false);
+  const moved = rows.filter(row => row.id !== 4).map(row => row.id === 2 ? { ...row, lat: 35.1 } : row);
+  assert.equal(onlyRemovedVisits(before, pendingCoordinates(moved)), false, 'removal plus coordinate change still needs new legs');
+  assert.deepEqual(stableVisitOrder([...rows, { id: 5, lat: 35, lng: 129.005 }]).map(row => row.id), [3, 1, 2, 4, 5], 'new stop appends while the road recommendation is pending');
+  assert.equal(stableVisitOrder(rows, '2')[0].id, 2, 'user-selected guidance stays first');
+  assert.equal(Object.keys(pendingCoordinates([{ ...rows[0], id: 7 }, rows[0]])).length, 2, 'same coordinate tasks remain distinct');
+  console.log('Recommendation reuse: completion, undo, movement, stable numbering and pinned destination passed');
+})().catch(error => { console.error(error); process.exitCode = 1; });

@@ -46,6 +46,7 @@ import { isRegisteredPlace, placeLocation, searchViewportPlaces } from '../utils
 import { remainingRouteProgress, routeCompletion, routeTrafficRail } from '../utils/routeProgress';
 import { locationKey } from '../utils/routeSession';
 import { hasVisitCoordinates, visitDistance, numberVisitOrder, promoteVisit, recommendVisitOrder, visitSetKey } from '../utils/visitOrder';
+import { onlyRemovedVisits, pendingCoordinates, stableVisitOrder } from '../utils/recommendationReuse';
 // 엑셀,csv 데이터 업로드
 import BulkUploadModal from '../components/BulkUploadModal';
 import PhotoUploadScreen from './PhotoUploadScreen';
@@ -1161,6 +1162,9 @@ function NormalMapScreen({
   const [recommendationBasis, setRecommendationBasis] = useState('distance');
   const [recommendationBusy, setRecommendationBusy] = useState(false);
   const [recommendationReadyKey, setRecommendationReadyKey] = useState('');
+  const [guidanceRecommendationToken, setGuidanceRecommendationToken] = useState(0);
+  const sentGuidanceRecommendation = useRef(0);
+  const previousRecommendationInput = useRef(null);
   const [nextAfterCompletion, setNextAfterCompletion] = useState(null);
   const recommendationReturn = includeReturn ? returnDisplayMarker : null;
   const returnOrderKey = recommendationReturn ? `${recommendationReturn.lat}:${recommendationReturn.lng}` : '';
@@ -1179,6 +1183,8 @@ function NormalMapScreen({
   useEffect(() => {
     workspaceScopeRef.current = scopeKey;
     orderSetRef.current = null;
+    previousRecommendationInput.current = null;
+    sentGuidanceRecommendation.current = 0;
     previewRequestRef.current += 1;
     guideRequestRef.current += 1;
     setPreview(null);
@@ -1198,45 +1204,55 @@ function NormalMapScreen({
 
   useEffect(() => {
     if (!isActive || !locationReady) return;
-    const pinnedKey = isGuiding ? activeSegment?.destinationKey : null;
-    const recommendationKey = `${scopeKey}:${membershipKey}:${returnOrderKey}:${transportMode}:${pinnedKey || ''}`;
+    const manualFirst = manualOrderMembership.current === membershipKey
+      ? (locations || []).find(row => !isCompleted(row) && row.markerNumber === 1) : null;
+    const pinnedKey = isGuiding ? activeSegment?.destinationKey : manualFirst ? locationKey(manualFirst) : null;
+    const recommendationKey = `${scopeKey}:${membershipKey}:${returnOrderKey}:${transportMode}:${pinnedKey || ''}:${isGuiding ? guidanceRecommendationToken : 0}`;
     if (orderSetRef.current === recommendationKey) return;
-    if (manualOrderMembership.current === membershipKey && !isGuiding) {
+    orderSetRef.current = recommendationKey;
+    const inputKey = `${scopeKey}:${returnOrderKey}:${transportMode}`;
+    const coordinates = pendingCoordinates(locations || []);
+    const previous = previousRecommendationInput.current;
+    const guidanceStart = Boolean(isGuiding && guidanceRecommendationToken && sentGuidanceRecommendation.current !== guidanceRecommendationToken);
+    previousRecommendationInput.current = { key: inputKey, coordinates };
+    const pending = (locations || []).filter(row => !isCompleted(row));
+    if (!guidanceStart && (pending.length <= 1 || (previous?.key === inputKey && onlyRemovedVisits(previous.coordinates, coordinates)))) {
+      setLocations?.(rows => stableVisitOrder(Array.isArray(rows) ? rows : locations || [], pinnedKey));
       setRecommendationBusy(false); setRecommendationReadyKey(recommendationKey); return;
     }
-    orderSetRef.current = recommendationKey;
     let active = true;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 35000);
-    setRecommendationBasis('distance');
     setRecommendationReadyKey('');
     setRecommendationBusy(true);
-    setLocations?.((previous) => recommendVisitOrder(
-      Array.isArray(previous) ? previous : locations || [], currentLocation, pinnedKey, recommendationReturn
-    ));
-    const pending = (locations || []).filter(row => !isCompleted(row));
+    setLocations?.((previous) => {
+      const rows = Array.isArray(previous) ? previous : locations || [];
+      return rows.some(row => !isCompleted(row) && Number(row.markerNumber) > 0)
+        ? stableVisitOrder(rows, pinnedKey) : recommendVisitOrder(rows, currentLocation, pinnedKey, recommendationReturn);
+    });
     if (!pending.length) { clearTimeout(timer); setRecommendationBusy(false); setRecommendationReadyKey(recommendationKey); return; }
-    fetch(`${API_BASE_URL}/api/routes/order`, {
+    const requestTimer = setTimeout(() => { fetch(`${API_BASE_URL}/api/routes/order`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...(transportMode === 'walk' ? { 'X-Kakao-Walk-Key': KAKAO_REST_API_KEY || '' } : {}) }, signal: controller.signal,
       body: JSON.stringify({ currentLocation, locations: pending, returnLocation: recommendationReturn,
-        pinnedKey, transportMode }),
+        pinnedKey, transportMode, cacheScope: scopeKey, guidanceStart }),
     }).then(async response => {
       if (!response.ok) throw new Error('추천 순서를 불러오지 못했습니다.');
       const result = await response.json();
       if (!active || orderSetRef.current !== recommendationKey || !Array.isArray(result.optimizedLocations)) return;
+      if (guidanceStart && result.basis !== 'distance') sentGuidanceRecommendation.current = guidanceRecommendationToken;
       const keys = result.optimizedLocations.map(locationKey);
       if (keys.length !== pending.length || new Set(keys).size !== pending.length ||
           pending.some(row => !keys.includes(locationKey(row)))) return;
-      setLocations?.(previous => {
+      if (result.basis === 'roadDuration') setLocations?.(previous => {
         const rows = Array.isArray(previous) ? previous : locations || [];
         const byKey = new Map(rows.map(row => [locationKey(row), row]));
         return numberVisitOrder([...keys.map(key => byKey.get(key)).filter(Boolean), ...rows.filter(isCompleted)]);
       });
       setRecommendationBasis(result.basis === 'roadDuration' ? 'roadDuration' : 'distance');
     }).catch(() => { /* The visible distance recommendation remains available. */ })
-      .finally(() => { clearTimeout(timer); if (active) { setRecommendationBusy(false); setRecommendationReadyKey(recommendationKey); } });
-    return () => { active = false; clearTimeout(timer); controller.abort(); orderSetRef.current = null; };
-  }, [isActive, membershipKey, locationReady, scopeKey, returnOrderKey, transportMode, isGuiding, activeSegment?.destinationKey]);
+      .finally(() => { clearTimeout(timer); if (active) { setRecommendationBusy(false); setRecommendationReadyKey(recommendationKey); } }); }, 200);
+    return () => { active = false; clearTimeout(requestTimer); clearTimeout(timer); controller.abort(); orderSetRef.current = null; };
+  }, [isActive, membershipKey, locationReady, scopeKey, returnOrderKey, transportMode, isGuiding, activeSegment?.destinationKey, guidanceRecommendationToken]);
 
   const clearGuidance = () => {
     if (isGuiding) endRouteSession();
@@ -1372,7 +1388,7 @@ function NormalMapScreen({
   useEffect(() => {
     if (!nextAfterCompletion || !isActive || isGuiding || recommendationBusy) return;
     if (nextAfterCompletion.scope !== scopeKey) { setNextAfterCompletion(null); return; }
-    const expectedKey = `${scopeKey}:${membershipKey}:${returnOrderKey}:${transportMode}:`;
+    const expectedKey = `${scopeKey}:${membershipKey}:${returnOrderKey}:${transportMode}::0`;
     if (recommendationReadyKey !== expectedKey) return;
     setNextAfterCompletion(null);
     const next = nextVisit(nextAfterCompletion.excluded);
@@ -1437,6 +1453,7 @@ function NormalMapScreen({
       resumedRouteRef.current = `${scopeKey}:${routeResumeToken}:${targetKey}`;
       setOptimized(true);
       beginRouteSession();
+      setGuidanceRecommendationToken(value => value + 1);
       setIsGuiding(true);
       previewRequestRef.current += 1;
       setPreview(null);
@@ -1486,6 +1503,7 @@ function NormalMapScreen({
     resumedRouteRef.current = key;
     // Task removal stopped the old SDK/notification, but did not end the user's
     // destination. Begin a fresh native session before rebuilding that route.
+    setGuidanceRecommendationToken(value => value + 1);
     beginRouteSession();
     if (activeSegment.mode === 'car') {
       if (!isKakaoNavigationAvailable()) { clearGuidance(); return; }

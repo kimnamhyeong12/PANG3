@@ -33,7 +33,7 @@ class ReleaseAuthIntegrationTest {
     @Import({SecurityConfig.class, CorsConfig.class, SecurityExceptionHandler.class, ApiExceptionHandler.class,
         AuthController.class, AccountEmailController.class, UserController.class, FileController.class,
         GroupController.class, GroupReportController.class, LocationController.class, TaskController.class,
-        NotificationController.class, TaskProgressController.class, AuthService.class, AuthSessionService.class,
+        NotificationController.class, TaskProgressController.class, AuthService.class, AuthSessionService.class, VisitDurationCache.class,
         AccountEmailService.class, GroupService.class, TaskService.class, TaskProgressService.class, TaskTransferService.class,
         SupportInquiryController.class, SupportInquiryService.class,
         SocialLoginController.class, SocialLoginService.class, SocialAccountService.class, SocialVerificationService.class,

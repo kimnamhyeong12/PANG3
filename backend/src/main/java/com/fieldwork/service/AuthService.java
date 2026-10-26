@@ -22,6 +22,7 @@ public class AuthService {
     private final GroupInvitationRepository groupInvitationRepository;
     @org.springframework.beans.factory.annotation.Autowired private SocialVerificationService socialVerification;
     @org.springframework.beans.factory.annotation.Autowired private com.fieldwork.repository.SocialIdentityRepository socialIdentities;
+    @org.springframework.beans.factory.annotation.Autowired private VisitDurationCache visitDurationCache;
 
     public AuthService(
             UserRepository userRepository,
@@ -108,6 +109,7 @@ public class AuthService {
         groupService.leaveAllGroupsForDeletedUser(user);
         socialIdentities.deleteByUser_UserId(user.getUserId());
         socialVerification.revoke(user.getUserId());
+        visitDurationCache.clearUser(user.getUserId());
         groupInvitationRepository.findByInviterAndStatus(user, "PENDING")
                 .forEach(invitation -> invitation.setStatus("REJECTED"));
         groupInvitationRepository.findByInviteeAndStatus(user, "PENDING")
