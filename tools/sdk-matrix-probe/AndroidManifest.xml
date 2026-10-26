@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.pang3.dasunprobe">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
+  <application android:label="Dasun SDK probe" android:hasCode="true" />
+  <instrumentation android:name="com.pang3.dasunprobe.Probe" android:targetPackage="com.pang3.fieldworkhelper" android:label="Read-only Dasun route comparison" />
+  <instrumentation android:name="com.pang3.dasunprobe.Benchmark" android:targetPackage="com.pang3.fieldworkhelper" android:label="Read-only route matrix benchmark" />
+</manifest>

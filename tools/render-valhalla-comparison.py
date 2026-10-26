@@ -1,0 +1,93 @@
+"""Write local-engine comparison report and an optional route geometry illustration."""
+import json
+import math
+from pathlib import Path
+
+ROOT=Path(__file__).resolve().parents[1];OUT=ROOT/'tmp/valhalla-comparison'
+raw=json.loads((OUT/'comparison.json').read_text(encoding='utf-8'))
+orders=json.loads((OUT/'order-comparison.json').read_text())
+examples=json.loads((OUT/'route-examples.json').read_text(encoding='utf-8'))
+
+def hms(seconds):
+    h,s=divmod(round(seconds),3600);mi,s=divmod(s,60)
+    return f'{h}시간 {mi:02d}분 {s:02d}초' if h else f'{mi}분 {s:02d}초'
+
+try:
+    from PIL import Image,ImageDraw,ImageFont
+    row=examples['walk:7>14'];im=Image.new('RGB',(1000,690),'white');draw=ImageDraw.Draw(im)
+    font=ImageFont.truetype('C:/Windows/Fonts/malgun.ttf',21)
+    small=ImageFont.truetype('C:/Windows/Fonts/malgun.ttf',17)
+    draw.text((26,20),row['start']+' → '+row['end'],font=font,fill='#0f172a')
+    draw.text((26,57),f'카카오: {row["kakao_meters"]:.0f}m / {hms(row["kakao_seconds"])}',font=small,fill='#b45309')
+    draw.text((500,57),f'Valhalla: {row["valhalla_meters"]:.0f}m / {hms(row["valhalla_seconds"])}',font=small,fill='#2563eb')
+    points=row['kakao_path']+row['valhalla_path'];factor=math.cos(math.radians(points[0][1]))
+    xmin,xmax=min(p[0]*factor for p in points),max(p[0]*factor for p in points)
+    ymin,ymax=min(p[1] for p in points),max(p[1] for p in points)
+    scale=min(850/(xmax-xmin),470/(ymax-ymin))
+    def xy(p):return 60+(p[0]*factor-xmin)*scale,115+(ymax-p[1])*scale
+    for field,color in [('kakao_path','#f59e0b'),('valhalla_path','#2563eb')]:draw.line([xy(p) for p in row[field]],fill=color,width=4)
+    start=xy(row['valhalla_path'][0]);end=xy(row['valhalla_path'][-1])
+    for p,color,label in [(start,'#16a34a','출발'),(end,'#dc2626','도착')]:
+        x,y=p;draw.ellipse((x-6,y-6,x+6,y+6),fill=color);draw.text((x+8,y-10),label,font=small,fill=color)
+    draw.text((26,628),'배경지도 없는 경로 모양 비교. 어느 길이 실제 통행 가능한지는 현장 검증 전.',font=small,fill='#64748b')
+    im.save(OUT/'walking-outlier.png')
+except ImportError:
+    pass
+
+lines=['# 사하구 Valhalla 로컬 실행 및 카카오 비교','',
+ '2026-10-26. 이 컴퓨터에서 실제 실행했다. 운영 서버·앱의 공급자나 추천 로직은 변경하지 않았다.','',
+ '## 실행 구성','',
+ '- 공식 pyvalhalla 3.9.1 Windows wheel을 프로젝트 임시 폴더에 설치했다. Docker/WSL을 시작하거나 설정을 바꾸지 않았다.',
+ '- Geofabrik 한국 OSM PBF(290,021,981 bytes)를 내려받아 로컬 도로 그래프와 행정구역 DB를 만들었다. 사하구 경계 밖의 우회가 잘리지 않도록 한국 전체 자료를 사용했다.',
+ '- 타일 생성 로그상 약 149초, 병렬도 2로 완료됐다. 이 수치는 다운로드·설치 시간을 제외한다.',
+ '- 차량 auto, 도보 pedestrian 기본 프로파일. 한국의 실시간 교통·과거 교통·외부 고도 타일·시간대 DB는 추가 구성하지 않았다.',
+ '- Valhalla 기본 도보 속도는 5.1km/h다. 카카오의 시간 예측/기본 옵션과 동일한 모델이라고 가정하지 않는다.',
+ '- 기존과 같은 사하구 공원 관련 실제 장소 20곳 및 고정 출발점. 각 모드 400개 방향 구간을 로컬 Actor.route로 조회했다. 두 모드 모두 400/400 성공했다.',
+ '- 경로 성공은 실제로 합법적이고 안전한 길임을 검증했다는 뜻이 아니다. 도로/보행로의 누락과 현장 통행 가능성은 별도로 확인해야 한다.','',
+ '## 구간별 예상 시간 차이','',
+ '카카오 저장 관측값과 비교한 중앙값이다. 차이를 실제 이동시간 오차 또는 정확도라고 부르지 않는다. 차량 카카오 자료는 실시간 교통을 포함한 과거 관측이므로 Valhalla와 동일 시각 교통 조건 비교도 아니다.','',
+ '| 모드 | 성공 | 카카오 대비 Valhalla 시간 비율 중앙값 | 절대 백분율 차이 중앙값 | 로컬 경로 계산 중앙값 |','|---|---:|---:|---:|---:|']
+for mode,label in [('car','차량'),('walk','도보')]:
+    r=raw['summary'][mode]
+    lines.append(f'| {label} | {r["success"]}/{r["total"]} | {r["median_time_ratio"]*100:.1f}% | {r["median_absolute_percentage_difference"]:.1f}% | {r["local_runtime_median_ms"]:.2f}ms |')
+lines += ['', '## 추천 순서 비교','',
+ '각 엔진의 시간 행렬에서 CP-SAT로 순서를 구했다. 아래 Valhalla 순서도 모두 OPTIMAL이었다. 이후 **Valhalla가 고른 순서를 카카오의 같은 행렬로 다시 평가**했다. 서로 다른 엔진의 예측 시간 크기를 직접 비교하는 대신 순서 선택의 차이를 본 것이다.','',
+ '| 방문지 | 모드 | 카카오 행렬 최적 순서의 시간 | Valhalla 순서를 카카오로 평가 | 증가량 |','|---|---|---:|---:|---:|']
+for r in orders:
+    lines.append(f'| {r["visits"]}곳 | {"차량" if r["mode"]=="car" else "도보"} | {hms(r["kakao_optimum_seconds"])} | {hms(r["same_order_kakao_seconds"])} | +{hms(r["extra_kakao_seconds"])} / +{r["extra_kakao_pct"]:.2f}% |')
+lines += ['',
+ '5곳은 두 엔진의 순서가 같은 카카오 최적 비용을 얻었다. 20곳은 카카오를 기준으로 차량 약 6.41%, 도보 약 6.71% 더 걸리는 순서를 Valhalla가 골랐다. 이 한 표본으로 모든 사하구 업무의 품질을 보장하지 않는다. 카카오 자체가 실제 현장의 정답이라고 증명한 것도 아니다.','',
+ '## 실제 경로 모양/거리 표본','',
+ '기본 네 구간과 시간 차이가 가장 컸던 구간을 모드별로 골랐다. 무작위 대표 표본은 아니며 특이 사례를 포함한다. 이 부분에만 카카오 차량 개별 경로 5회, 도보 BROAD_FIRST 5회와 SHORTEST 진단 1회를 새로 조회했다. 응답과 그림을 저장해 재실행 시 다시 호출하지 않는다.','',
+ '| 모드 | 출발 → 도착 | 카카오 거리 | Valhalla 거리 | 카카오 시간 | Valhalla 시간 |','|---|---|---:|---:|---:|---:|']
+for key,r in examples.items():
+    if 'kakao_path' not in r:continue
+    lines.append(f'| {"차량" if r["mode"]=="car" else "도보"} | {r["start"]} → {r["end"]} | {r["kakao_meters"]:.0f}m | {r["valhalla_meters"]:.0f}m | {hms(r["kakao_seconds"])} | {hms(r["valhalla_seconds"])} |')
+lines += ['',
+ '- 거리 자체는 비슷한데 시간이 크게 다른 구간이 있다. 이 경우 속도/교통/신호/경로 비용 모델 차이를 먼저 의심할 수 있지만 이 실험만으로 원인을 확정하지 않는다.',
+ '- 도보 이상 구간(샛별어린이공원→희망어린이공원)은 카카오 3,461m·5,518초, Valhalla 1,146m·810초로 실제 경로가 크게 달랐다. 카카오 SHORTEST도 3,448m·5,512초라 넓은 길 우선 옵션만으로 차이가 설명되지는 않았다.',
+ '- 위 구간의 OSM 통행로와 카카오 우회 중 어느 쪽이 현장에서 타당한지는 검증하지 않았다. 데이터 연결성·접근점·통행 제한·보행 접근을 확인할 사례다.',
+ '- 속도 상수를 전체 구간에 똑같이 곱하면 절대 시간은 달라져도 최적 방문 순서는 바뀌지 않는다. 구간마다 다른 왜곡은 일률 보정만으로 해결되지 않는다.','',
+ '![경로 차이 예시](../../tmp/valhalla-comparison/walking-outlier.png)','',
+ '## 국내 도로 자료를 먼저 쓰지 않은 이유와 현재 확인 범위','',
+ 'Valhalla+OSM은 입력 형식과 가져오기 도구가 맞춰져 있어 빠르게 로컬 경로를 시험할 수 있다는 이유로 먼저 선택했다. 국내 데이터에 일방통행이 없다고 확인해서 제외한 것이 아니다. 국내 자료를 충분히 검토하기 전에 최선의 선택처럼 설명한 것은 부정확했다.','',
+ '- [ITS 표준노드링크](https://www.its.go.kr/nodelink/nodelinkStatus?service=inquiryNodelink): 국내 도로 연결 관계의 중요한 후보. 사하구 세부 통행 규칙·골목·보행 연결을 실제 파일로 비교하지는 않았다.',
+ '- [KTDB 교통수요분석 네트워크](https://www.ktdb.go.kr/www/contents.do?key=25): 도로망 구축 기준이 편도 1차로 이상 포장도로임을 확인했다. 해당 분석용 자료를 골목·보행 내비게이션망과 동일시하지 않는다.',
+ '- [국토지리정보원](https://www.ngii.go.kr/): 도로가 포함된 국내 지도 자료가 있다. 지도 도형이 있다는 사실과 즉시 라우팅 가능한 연결/통행 규칙이 있다는 사실은 구분해야 한다.',
+ '- 국산/해외 경로 엔진 여부와 도로 데이터의 출처는 별개다. 국내 자료를 그래프로 가공해 자체 탐색기에 넣을 수 있으나 Valhalla 입력으로 자동 호환된다고 가정하지 않는다.',
+ '- 이번 비교는 Valhalla+OSM의 실측이다. 국내 공공 도로망을 적용한 엔진과의 비교를 끝냈다는 뜻은 아니다.','',
+ '## LKH와 학습 모델을 실행하지 않았던 이유','',
+ '- LKH/LKH-3는 방문 순서 개선을 위한 탐색 알고리즘이며 학습 모델이 아니다. [저자 대학 연구 포털](https://forskning.ruc.dk/en/publications/an-extension-of-the-lin-kernighan-helsgaun-tsp-solver-for-constra/)이 학술·비상업 이용 조건을 명시한 배포본을 이 앱의 실험에 사용하지 않았다. 별도의 적절한 이용 조건을 확보하면 비교 후보가 될 수 있다.',
+ '- 신경망/강화학습은 별도 계열이다. 우리 방향성 도로 시간 행렬에 맞는 학습 모델/가중치와 검증 자료를 확보하지 않아 실행 결과를 만들지 않았다.',
+ '- Valhalla는 구간별 경로/시간을 계산하고 LKH는 그 값으로 방문 순서를 고르는 역할이라 서로 대체 관계가 아니다.','',
+ '## 판단','',
+ '로컬 경로 엔진 운영은 기술적으로 가능하고 조회 속도도 충분히 빨랐다. 그러나 기본 설정을 카카오와 동일한 예상 시간/추천 품질로 취급할 수 없다. 현재는 곧바로 대체 배포할 근거보다, 시간 모델 보정과 크게 갈린 보행 구간의 현장/지도 검증이 필요한 단계다.','',
+ '## 재현 파일','',
+ '- `tools/setup-local-valhalla.py`: 다운로드와 한국 그래프 구축. 완료 표식이 있으면 반복 구축하지 않는다.',
+ '- `tools/compare-valhalla-kakao.py`: 외부 API 없이 저장된 카카오 값과 로컬 800구간 비교.',
+ '- `tools/analyze-valhalla-comparison.py`: 순서 최적화와 카카오 기준 재평가.',
+ '- `tools/probe-valhalla-route-shapes.py`: 대표 경로와 진단 조회. 응답을 캐시한다.',
+ '- `tmp/valhalla-comparison/comparison.json`, `order-comparison.json`, `route-examples.json`, `walking-outlier.png`, `*.svg`: 원시 결과와 비교 그림.',
+ '- [Valhalla 공식 문서](https://valhalla.github.io/valhalla/), [도보 속도/통행 옵션](https://valhalla.github.io/valhalla/api/route/api-reference/), [공식 Python 패키지](https://pypi.org/project/pyvalhalla/)',
+ '- [한국 OSM 추출 자료](https://download.geofabrik.de/asia/south-korea.html). OSM 데이터 이용 시 출처/라이선스 표기 의무가 있으며 실제 배포 시 반영해야 한다.','']
+dest=ROOT/'docs/research/VALHALLA_SAHA_COMPARISON_2026-10-26.md';dest.write_text('\n'.join(lines),encoding='utf-8');print(str(dest))

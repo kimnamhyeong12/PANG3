@@ -1,0 +1,90 @@
+"""Contract price targets, not a claim about any supplier's actual offer."""
+import json
+from pathlib import Path
+ROOT=Path(__file__).resolve().parents[1]
+base=json.loads((ROOT/'tmp/route-comparison/subscription-economics.json').read_text())
+prices=(4900,9900);users=800000;rows=[]
+for c in base['cases']:
+ calls=(c['proposed_calls']+c['extra_origin_refresh_calls'])*22
+ for p in prices:
+  receipts=p/1.1*.85
+  rows.append(dict(mode=c['mode'],visits=c['visits'],price=p,monthly_calls=calls,assumed_receipts=receipts,all_receipts_break_even_rate=receipts/calls,target_api_share=.3,target_rate=receipts*.3/calls))
+discount_cases=[]
+for rate in (20,15,10,5,3,2):
+ cost=616*rate
+ discount_cases.append(dict(assumed_effective_rate=rate,per_user_month_cost=cost,total_month_cost=cost*users,remaining_4900=4900/1.1*.85-cost,remaining_9900=9900/1.1*.85-cost))
+import importlib.util
+spec=importlib.util.spec_from_file_location('packing',ROOT/'tools/plan-walking-batches.py')
+packing=importlib.util.module_from_spec(spec);spec.loader.exec_module(packing)
+button=[]
+for n in (5,10,20):
+ for mode in ('car','walk'):
+  c=next(c for c in base['cases'] if c['visits']==n and c['mode']==mode)
+  if mode=='car':count=n+1;seed=None;rate=20
+  else:
+   count,seed=min((len(packing.pack(n,s)),s) for s in range(50));rate=10
+   paths=packing.pack(n,seed)
+   covered=[(a,b) for path in paths for a,b in zip(path,path[1:])]
+   assert len(covered)==n*n and len(set(covered))==n*n
+  cost=count*rate;monthly=cost*22;refresh_calls=c['extra_origin_refresh_calls']
+  button.append(dict(mode=mode,visits=n,one_press_calls=count,packing_seed=seed,daily_won=cost,monthly_won_per_user=monthly,total_monthly_won=monthly*users,automatic_calls=c['proposed_calls'],automatic_daily_won=c['proposed_daily_won'],saving_vs_automatic_pct=(1-count/c['proposed_calls'])*100,with_origin_refresh_calls=count+refresh_calls,with_origin_refresh_monthly_won=(cost+refresh_calls*rate)*22))
+data=dict(date='2026-10-26',status='hypothetical price targets; no contract quote obtained',users=users,assumptions=dict(active_days=22,vat_in_price=.1,fee_on_ex_vat_receipts=.15,api_budget_fraction=.3),targets=rows,vehicle_ten_stop_scenarios=discount_cases,optimization_button=button)
+(ROOT/'tmp/route-comparison/bulk-contract-targets.json').write_text(json.dumps(data,indent=2))
+lines=['# 카카오 대량 계약 공개 조사 및 구독료별 목표 단가 (2026-10-26)','',
+'## 조사 결론','',
+'카카오모빌리티 공식 가격표에는 다중 목적지의 월 유료 30만 건 초과 시 볼륨 할인을 별도 문의하도록 안내돼 있다. 그러나 할인율, 초과 구간별 단가, 최소 보장 사용량, 최소 계약액, 기간별 약정 할인표는 공개된 확인 자료에서 찾지 못했다. 대량 계약이 있으면 몇 % 싸진다고 확정할 근거는 확보하지 못했다.','',
+'공개 자료와 담당자 답변을 확인했지만 실명 고객의 실제 요청 수·계약 단가가 함께 공개돼 검증 가능한 길찾기 API 계약 사례는 찾지 못했다. 이것은 그런 계약 사례가 세상에 전혀 없다는 주장이 아니다.','',
+'## 확인한 1차 출처','',
+'1. [카카오모빌리티 공식 가격표](https://developers.kakaomobility.com/price/): 자동차 8원(월 유료 100만 건 이하), 다중 경유지 16원(50만 건 이하), 다중 목적지 20원(30만 건 이하), 해당 구간 초과 시 볼륨 할인 개별 문의. 다중 출발지 초과 단가는 미기재. 현재 공개 문의 주소는 api.partners@kakaomobility.com.',
+'2. [2026-08-26 SDK 종량제 볼륨 할인 문의](https://devtalk.kakao.com/t/sdk/151369): 이용자가 DAU 약 3만 명 규모와 할인 기준을 질문했고 담당자는 이메일 개별 문의를 안내했다. 답변에는 할인율이나 단가가 없다. SDK 문의 사례이므로 REST API 계약 단가의 증거로 쓰지 않는다.',
+'3. [2026-10-18 유료 구독 앱 계약·요금 문의](https://devtalk.kakao.com/t/knsdk-id-1601020/152214): 테스트 사용자 약 40명, 출시 초기 수백 명 예정인 앱이 계약 및 요금을 질문했다. 담당자는 api.partners@kakaomobility.com로 문의하도록 안내했으며 실제 계약 가격은 공개되지 않았다. 이것도 SDK 사례다.',
+'4. [제휴 전용 차량 Matrix API](https://developers.kakaomobility.com/affiliate/navi-api/matrix.html): 출발지·목적지 각각 최대 200개를 한 요청에 지정 가능하다. 사전 제휴 계약 필요. 가격과 과금 단위는 문서에 없으므로 HTTP 1회를 기존 20원 1건과 동일시할 수 없다.',
+'5. [도보 공식 단가](https://developers.kakao.com/docs/ko/getting-started/quota): 공개 초과 단가 10원. 차량 볼륨 할인 안내가 이 도보 상품에 동일하게 적용된다고 확인한 자료는 없다. 도보 제휴 상품과 함께 별도 견적이 필요하다.',
+'6. [운영 정책 제5조 20항](https://developers.kakao.com/terms/ko/site-policies): 캐시 목적과 최신 데이터 유지에 관한 제한이 있다. 앞서 제안한 차량 24시간·도보 7일은 카카오가 승인한 기간이 아니라 우리 설계 초안이므로 계약에서 허용 저장·재사용 기간을 함께 확인해야 한다.','',
+'## 계산 전제','',
+'재사용 수정안을 적용한 순차 등록 + 완료 후 매번 새 현재 위치 행을 채우는 예산을 사용했다. 월 22일, 하루 1세트다. 새 현재 위치 행이 기존 구간과 일치해 재사용되면 실제 호출은 더 적다. 추가 안내·상세 경로·검색·서버·사진·AI 등은 여전히 별도다.','',
+'결제액은 VAT 10% 포함, 세금 제외 금액에 결제/플랫폼 수수료 15%를 공제한다고 가정했다. 실제 과세/수수료를 확정한 것이 아니다. 4,900원 실수취 가정 3,786.36원, 9,900원 실수취 가정 7,650원이다.','',
+'모든 종류의 요청을 합친 월 총 API 청구액을 요청 수로 나눈 실효 평균 단가를 사용한다. 다중 목적지·출발지·도보·Matrix별 계약 단가가 실제로 같다는 뜻은 아니다. 최소 월정액이 있다면 그것도 총 청구액에 포함해야 한다.','',
+'API만 손익분기인 단가는 실수취액을 전부 추천 API에 쓰는 경계로 실제 사업성을 뜻하지 않는다. 별도로 실수취액의 30%를 추천 API에 배분하는 목표를 정했다. 30%는 우리 예산 목표이지 검증된 업계 표준이 아니다.','',
+'## 구독료별 목표 단가','',
+'|모드|하루 등록 수|월 요청 예산|4,900원 API만 손익분기|9,900원 API만 손익분기|4,900원 API 30% 목표|9,900원 API 30% 목표|',
+'|---|---:|---:|---:|---:|---:|---:|']
+for c in base['cases']:
+ a=next(r for r in rows if r['mode']==c['mode'] and r['visits']==c['visits'] and r['price']==4900)
+ b=next(r for r in rows if r['mode']==c['mode'] and r['visits']==c['visits'] and r['price']==9900)
+ lines.append(f"|{'차량' if c['mode']=='car' else '도보'}|{c['visits']}|{a['monthly_calls']}|{a['all_receipts_break_even_rate']:.2f}원|{b['all_receipts_break_even_rate']:.2f}원|{a['target_rate']:.2f}원|{b['target_rate']:.2f}원|")
+lines+=['','## 차량 10곳·월 22일·현재 위치 갱신 포함: 단가 민감도','',
+'아래 20/15/10/5/3/2원은 모두 비교 가정이다. 카카오의 실제 할인표가 아니며 할인 가능성을 추정한 표도 아니다.','',
+'|가정 실효 단가|1인 월 추천 API|80만 명 월 추천 API|4,900원에서 남는 금액/인|9,900원에서 남는 금액/인|',
+'|---:|---:|---:|---:|---:|']
+for r in discount_cases:lines.append(f"|{r['assumed_effective_rate']}원|{r['per_user_month_cost']:,}원|{r['total_month_cost']/1e8:.2f}억원|{r['remaining_4900']:,.0f}원|{r['remaining_9900']:,.0f}원|")
+lines+=['','남는 금액에서 추천 외 경로/안내/지도/검색과 서버·DB·저장·AI·지원·인건비·마케팅·환불 등을 더 지출해야 한다. 80만 명의 확보 자체를 예측한 것도 아니며 매출을 이익으로 취급하지 않는다.','',
+'## 판단','',
+'- 월 4,900원: 차량 10곳+갱신 시나리오에서는 6.15원 아래여야 추천 API만 겨우 충당한다. 다른 비용을 위한 30% 예산 목표를 적용하면 1.84원 이하가 필요하다. 3원일 때는 추천 API 이후 약 1,938원이 남는 계산이지만 실제 전체 비용을 충당하는지는 아직 모른다.',
+'- 월 9,900원: 같은 차량 조건에서 12.42원 아래면 추천 API만 충당한다. 30% 예산 목표는 3.73원 이하. 5원일 때 1인 API 3,080원, 수수료/세금 가정 후 약 4,570원이 남는다. 따라서 그 단가를 실제로 받을 수 있다면 사업 검토의 여지가 생긴다.',
+'- 도보 10곳+갱신 조건에서는 4,900원 요금의 30% 예산 목표가 1.52원, 9,900원은 3.07원이다. 같은 구간의 7일 재사용이 계약상 허용되고 실제로 적중하면 비용은 줄지만 아직 이를 기본 원가에 가산하지 않는다.',
+'- 가입자 80만 명을 장래 목표로 두는 것과 보장 사용량으로 계약하는 것은 다르다. 실제 초기 1천/1만/10만/80만 활성 사용자별 견적과 증설 조건을 나눠 비교하는 것이 적절하다.',
+'- 결론은 대량 계약 시 두 가격 모두 조건부 검토 가능하지만, 확보한 공개 자료만으로 할인이 충분하다고 확정할 수 없다는 것이다.','',
+'## 견적 요청에 포함할 구체 조건','',
+'- 초기 활성 1천/1만/10만 명과 장래 80만 명을 별도로 표시. 가입자 수와 일일 활성 사용자 수 분리.',
+'- 차량 10곳 기준 등록만 19회/일, 위치 갱신 포함 모델 28회/일. 80만 명·22일이면 각각 월 3억3,440만/4억9,280만 요청이다. 갱신 포함 요청의 종류는 목적지 19회/일 + 출발지 9회/일이므로 월 각각 3억3,440만/1억5,840만 요청이다.',
+'- 다중 출발지/목적지 각각의 단가, 구간별 할인 방식(전체 물량 적용/초과분 적용), 월정액·최소 보장액·초과 단가·약정·해지 조건.',
+'- 제휴 차량 Matrix와 도보 다중 출발지/목적지 상품 견적. 요청당인지 출발지×목적지 쌍당인지, 배치 크기에 따른 단가/차감 방식.',
+'- 동일 업무 내 구간 캐시, 차량 다음 날 갱신, 도보 장기 재사용의 허용 범위 및 갱신 의무. 사용자 간 캐시 공유 가능 여부.',
+'- 상세 경로/길안내 SDK 별도 요금과 유료 구독 서비스 이용 조건, 분당·초당 제한, SLA, VAT 포함 여부.',
+'- 상기 월 예상량은 매일 새 방문지로 가정한 예산이다. 반복 구간 적중률과 실활성률이 낮아질 때 최소 약정 부담이 생기는지 확인.',
+'', '공식 문의 주소는 현재 가격 페이지의 api.partners@kakaomobility.com이다. 이메일이나 문의 글을 발송하지 않았으며 견적을 받은 상태가 아니다.','']
+lines+=['## 최적화 버튼을 추가할 때의 비용','',
+'등록 중에는 추천 API를 호출하지 않고 5/10/20곳을 모두 등록한 뒤 처음 버튼을 한 번 누르는 조건이다. 출발점 고정·복귀 없음·빈 캐시·실패 없음·전체 실제 구간 수집 기준이다. 상세 경로 안내는 별도다. 버튼 없이 재사용하는 수정안과 비교하며, 비효율적인 현재 코드만 상대 기준으로 삼지 않는다.','',
+'차량은 한 출발점에서 나머지 목적지들을 조회하는 다중 목적지 요청 N+1회다. 도보는 50개 seed의 기존 배치 생성기에서 선택한 계획으로 5/10/20곳 6/20/72회다. 5·20곳 묶음 전체 행렬은 앞선 실호출 연구에서 확인했지만 10곳 20회는 요청 배치만 검증한 계산값이다.','',
+'|모드|등록 수|자동추천 수정안 호출|버튼 최초 1회 호출|버튼 원/세트|버튼 1인 원/월22일|80만 명 억원/월|자동추천 대비 호출 감소|','|---|---:|---:|---:|---:|---:|---:|---:|']
+for r in button:lines.append(f"|{'차량' if r['mode']=='car' else '도보'}|{r['visits']}|{r['automatic_calls']}|{r['one_press_calls']}|{r['daily_won']:,}|{r['monthly_won_per_user']:,}|{r['total_monthly_won']/1e8:.2f}|{r['saving_vs_automatic_pct']:.1f}%|")
+lines+=['','- 동일한 목록·출발점·옵션과 유효한 저장값으로 버튼을 다시 누르면 계산만 하므로 추가 API 0회다. 명시적인 최신 교통 갱신은 별도 호출이다. 버튼을 눌렀다는 이유로 캐시를 지우지 않는다.',
+'- 한 번 계산한 뒤 새 방문지를 추가하면 기존 구간을 유지하고 새 구간만 채운다. 차량은 기본 2회이며, 도보는 새 구간 배치량에 따른다. 최초 전체 수집 횟수를 매번 곱하면 안 된다.',
+'- 완료는 번호를 당기거나 저장된 구간을 사용하는 것으로 처리한다. 실제 새 현재 위치 행까지 매번 채우는 예산을 추가하면 버튼 방식도 차량 5/10/20곳 하루 10/20/40회, 도보 하루 10/32/112회다. 1인 월22일 비용은 차량 4,400/8,800/17,600원, 도보 2,200/7,040/24,640원이다. 이 추가 갱신은 버튼 자체의 필수 비용이 아니라 위치 갱신 정책의 비용이다.',
+'- 차량 10곳 버튼 1회+새 출발점 갱신 예산은 월 440회다. 위 수수료·세금 가정 및 추천API 30% 예산 목표에서 목표 평균 단가는 4,900원 요금 2.58원, 9,900원 요금 5.22원이다. 등록만 보면 242회여서 각각 4.69원/9.48원이다. 실제 안내/다른 원가는 별도다.',
+'- 버튼으로 도보를 한꺼번에 수집해도 절감폭이 작은 이유는 수정 자동추천이 이미 동일 구간을 재사용하고 최대 6구간씩 묶기 때문이다. 실제 이동시간 N²개를 확보하는 정보량 자체는 같고 배치를 채우는 효율만 조금 달라진다.','']
+(ROOT/'docs/research/KAKAO_BULK_CONTRACT_FEASIBILITY_2026-10-26.md').write_text('\n'.join(lines),encoding='utf-8')
+assert next(r for r in rows if r['mode']=='car' and r['visits']==10 and r['price']==9900)['monthly_calls']==616
+print('Verified targets and wrote report. Ten-stop targets:')
+print(json.dumps([r for r in rows if r['visits']==10],indent=2))

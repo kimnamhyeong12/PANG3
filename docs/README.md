@@ -66,6 +66,8 @@
 
 ## 발표 준비 참고자료
 
+- [코드 기준 발표 기능 전체 목록](research/PANG3_PRESENTATION_FEATURE_INVENTORY_2026-10-22.md): 앱·웹·서버·보고서 기능과 설정 필요·비활성·미연결 항목. 발표 기능 선택용.
+- [FairDay 7·8번 내용 후보](research/PANG3_FAIRDAY_SECTIONS_7_8_2026-10-22.md): 현재 개발·검증 현황과 다음 단계의 근거·발표 문장.
 - [FairDay 발표 사례 조사](research/PANG3_FAIRDAY_PRESENTATION_RESEARCH_2026-10-20.md): 유사 프로젝트의 실제 발표 PDF, 시연 구성, 전달 방식과 PANG3 적용 제안. PPT 제작 전 참고용.
 - [발표 참고자료 목록](research/PRESENTATION_REFERENCE_INDEX.md): 원문 링크, 추천 페이지·영상 구간, 로컬 보관 자료와 확인 범위.
 
