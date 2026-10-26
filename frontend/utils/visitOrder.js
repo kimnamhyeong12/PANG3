@@ -67,6 +67,7 @@ export function recommendVisitOrder(rows, start, pinnedKey = null, returnLocatio
 export function promoteVisit(rows, key) {
   const target = rows.find((row) => locationKey(row) === key && !isVisitComplete(row));
   if (!target) return rows;
+  // Provisional display only; the server optimizes the remaining visits using cached durations.
   return numberVisitOrder([target, ...rows.filter((row) => row !== target && !isVisitComplete(row)), ...rows.filter(isVisitComplete)]);
 }
 

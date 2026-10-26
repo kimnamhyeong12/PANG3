@@ -26,7 +26,8 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(classes = ReleaseAuthIntegrationTest.TestConfig.class, properties = "spring.config.location=classpath:/auth-test.properties")
+@SpringBootTest(classes = ReleaseAuthIntegrationTest.TestConfig.class, properties = {
+    "spring.config.location=classpath:/auth-test.properties", "fieldwork.upload.base-dir=target/test-uploads"})
 @AutoConfigureMockMvc(print = org.springframework.boot.test.autoconfigure.web.servlet.MockMvcPrint.NONE)
 class ReleaseAuthIntegrationTest {
     @Configuration @EnableAutoConfiguration @EntityScan("com.fieldwork.entity") @EnableJpaRepositories("com.fieldwork.repository")
@@ -37,6 +38,7 @@ class ReleaseAuthIntegrationTest {
         AccountEmailService.class, GroupService.class, TaskService.class, TaskProgressService.class, TaskTransferService.class,
         SupportInquiryController.class, SupportInquiryService.class,
         SocialLoginController.class, SocialLoginService.class, SocialAccountService.class, SocialVerificationService.class,
+        PhotoLocationController.class, PhotoLocationService.class,
         FileStorageService.class, FieldworkProperties.class, UploadSecurityConfig.class})
     static class TestConfig {
         @Bean PushNotificationService push() { return mock(PushNotificationService.class); }
@@ -141,6 +143,29 @@ class ReleaseAuthIntegrationTest {
         mvc.perform(postJson("/api/support/inquiries",body).header("Authorization",bearer(auth)))
             .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.message").isNotEmpty());
         verify(mail).send(any(SimpleMailMessage.class));
+    }
+
+    @Test void photoVisitWithoutDistrictIsAssignedVisibleAndTransferable() throws Exception {
+        User a = user(), b = user(); WorkGroup group = group(a, b);
+        var bytes = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_RGB), "png", bytes);
+        var photo = new org.springframework.mock.web.MockMultipartFile("photo", "photo.png", "image/png", bytes.toByteArray());
+        JsonNode created = json.readTree(mvc.perform(multipart("/api/locations/photos").file(photo)
+            .param("createdByUserId", a.getUserId().toString()).param("groupId", group.getGroupId().toString())
+            .param("name", "사진으로 등록한 방문지").param("lat", "35.1").param("lng", "129.0")
+            .header("Authorization", bearer(login(a))))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        Long taskId = created.get("taskId").longValue();
+        Task saved = tasks.findById(taskId).orElseThrow();
+        assertNull(saved.getAdminDong());
+        assertEquals(a.getUserId(), saved.getCurrentAssignee().getUserId());
+        assertEquals(a.getUserId(), assignments.findByTaskOrderByAssignedAtAsc(saved).get(0).getAssignee().getUserId());
+        mvc.perform(get("/api/locations/group/" + group.getGroupId()).param("userId", a.getUserId().toString())
+            .header("Authorization", bearer(login(a)))).andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].taskId").value(taskId)).andExpect(jsonPath("$[0].assigneeUserId").value(a.getUserId()));
+        Map<String, Object> request = transfers.create(group.getGroupId(), a.getUserId(), b.getUserId(), List.of(taskId), null, null, null);
+        transfers.respond(group.getGroupId(), ((Number) request.get("id")).longValue(), b.getUserId(), true);
+        assertEquals(b.getUserId(), tasks.findById(taskId).orElseThrow().getCurrentAssignee().getUserId());
     }
 
     @Test void acceptedTransferUpdatesPersonalMapAndCurrentReportOwner() throws Exception {

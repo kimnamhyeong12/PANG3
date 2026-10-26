@@ -387,8 +387,8 @@ export default function GroupWorkspaceScreen({
               <View style={styles.areaList}>
                 {transferRows.map((item, index) => {
                   const isMe = Number(item.userId) === Number(user?.userId);
-                  const dongText = item.dongs.length
-                    ? item.dongs.join(', ')
+                  const dongText = item.taskCount
+                    ? `${item.dongs.join(', ') || '행정동 미확인'} · ${item.taskCount}곳`
                     : '담당 방문지 없음';
 
                   return (

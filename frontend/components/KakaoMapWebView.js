@@ -497,7 +497,9 @@ const buildKakaoMapHtml = (
       previewCameraKey = data.key;
       previewCameraInteracted = false;
     }
-    if (previewCameraInteracted) return;
+    // A taller visit list must not refit the same route into a tiny map area.
+    // New previews and explicit overview/detail changes have a new camera key.
+    if (!changed || previewCameraInteracted) return;
     if (data.detail) {
       if (changed) moveToPosition(data.destination.lat, data.destination.lng, 2);
     } else fitCoordinates(data.coordinates, data.padding);

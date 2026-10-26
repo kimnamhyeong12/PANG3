@@ -36,6 +36,25 @@ assert.deepEqual(boundsCall.slice(1), [391, 40, 96, 40]);
 assert.equal(boundsCall[0].points.length, 2);
 console.log('Route viewport checks passed: measured margins reach Kakao setBounds');
 
+// Exercise the embedded camera handler: expanding the visit list changes padding,
+// but only a new preview or an explicit detail/overview action may fit again.
+let previewFits = 0, detailMoves = 0;
+const cameraContext = { previewCameraKey: null, previewCameraInteracted: false,
+  cancelPreviewFocus() { cameraContext.previewCameraInteracted = true; },
+  fitCoordinates() { previewFits++; }, moveToPosition() { detailMoves++; } };
+vm.createContext(cameraContext);
+const cameraStart = source.indexOf('  function updatePreviewCamera(');
+vm.runInContext(source.slice(cameraStart, source.indexOf('\n  /*', cameraStart)), cameraContext);
+const camera = { key: 'visit:car:false', coordinates, padding, destination: { lat: 35.1, lng: 129.1 }, detail: false };
+cameraContext.updatePreviewCamera(camera);
+cameraContext.updatePreviewCamera({ ...camera, padding: { ...padding, top: 720 } });
+cameraContext.updatePreviewCamera(camera);
+assert.equal(previewFits, 1, 'opening and closing the visit list must preserve preview zoom');
+cameraContext.updatePreviewCamera({ ...camera, key: 'visit:car:true', detail: true });
+assert.equal(detailMoves, 1, 'explicit destination zoom still works');
+cameraContext.updatePreviewCamera({ ...camera, key: 'next:car:false' });
+assert.equal(previewFits, 2, 'a new preview still fits its route');
+
 let viewportEffect;
 babel.transformSync(source, { configFile: false, babelrc: false, parserOpts: { plugins: ['jsx'] },
   plugins: [() => ({ visitor: { CallExpression(node) {

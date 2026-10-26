@@ -40,5 +40,23 @@ function callback(file, name) {
   let selection=[3];const toggleAll=()=>new Function('taskIdOf','selectedTaskIds','setSelectedTaskIds',`return (${toggle});`)(row=>row.id,selection,update=>{selection=update(selection);});
   toggleAll()(projectRows[0].rows);assert.deepEqual(selection,[3,1,2]);
   toggleAll()(projectRows[0].rows);assert.deepEqual(selection,[3],'select all toggles only the displayed project');
+  const workspaceFile = require.resolve('../screens/GroupWorkspaceScreen.js');
+  const workspaceAst = ts.createSourceFile(workspaceFile, fs.readFileSync(workspaceFile, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX);
+  let memberRows, summary;
+  function readWorkspace(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === 'buildMemberTransferRows') memberRows = node.getText(workspaceAst);
+    if (ts.isVariableDeclaration(node) && node.name.getText(workspaceAst) === 'dongText') summary = node.initializer.getText(workspaceAst);
+    ts.forEachChild(node, readWorkspace);
+  }
+  readWorkspace(workspaceAst);
+  const buildRows = new Function('shortDong', `${memberRows}; return buildMemberTransferRows;`)(value => String(value || '').trim().split(/\s+/).pop());
+  const photoVisits = [{ id: 41, assigneeUserId: 10, status: 'pending', adminDong: null },
+    { id: 42, assigneeUserId: 20, status: 'complete' }];
+  const summaries = buildRows(members, photoVisits).map(item => new Function('item', `return ${summary};`)(item));
+  assert.equal(summaries[0], '행정동 미확인 · 1곳', 'a photo visit without district metadata must still appear as assigned');
+  assert.equal(summaries[1], '담당 방문지 없음');
+  const unknownDistrict = groupVisits(photoVisits.slice(0, 1), null, value => String(value || ''));
+  assert.equal(unknownDistrict[0].dong, '행정동 미확인');
+  assert.equal(unknownDistrict[0].rows[0].id, 41, 'unknown district visits stay selectable for transfer');
   console.log('Transfer loading regression checks passed: unavailable history cannot hide teammates or visits');
 })().catch(error => { console.error(error); process.exitCode = 1; });

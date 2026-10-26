@@ -14,7 +14,7 @@ const path = require('node:path');
   const recommended = recommendVisitOrder(rows, start);
   assert.deepEqual(recommended.map(row => row.id), [1, 2, 3, 4, 5]);
   const committed = promoteVisit(recommended, '3');
-  assert.deepEqual(committed.map(row => row.id), [3, 1, 2, 4, 5]);
+  assert.deepEqual(committed.map(row => row.id), [3, 1, 2, 4, 5], 'only the selected first stop is fixed before the duration-based response');
   assert.deepEqual(committed.map(row => row.markerNumber), [1, 2, 3, 4, 5]);
   assert.equal(visitSetKey(committed), visitSetKey(recommended), 'preview/commit order does not trigger a new recommendation');
   assert.deepEqual(rows.map(row => row.markerNumber), Array(5).fill(undefined), 'input server rows are not mutated');

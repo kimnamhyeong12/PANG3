@@ -37,6 +37,9 @@ class VisitDurationReuseTest {
         final ObjectMapper json=new ObjectMapper();
         final MockRestServiceServer carServer,walkServer;
         Fixture(VisitDurationCache cache) {
+            this(cache, (from, to) -> 100 * from + to + 1);
+        }
+        Fixture(VisitDurationCache cache, java.util.function.IntBinaryOperator duration) {
             service=new VisitOrderService(cache);ReflectionTestUtils.setField(service,"key","synthetic");
             carServer=MockRestServiceServer.bindTo((RestTemplate)ReflectionTestUtils.getField(service,"client")).ignoreExpectOrder(true).build();
             Object walking=ReflectionTestUtils.getField(service,"walkingClient");
@@ -50,13 +53,13 @@ class VisitDurationReuseTest {
                 for(var variable:input.get(incoming?"origins":"destinations")) {
                     int other=(int)Math.round((variable.get("x").asDouble()-129)*1000);
                     int from=incoming?other:fixed,to=incoming?fixed:other;queried.add(from+">"+to);
-                    routes.add(Map.of("key",variable.get("key").asText(),"result_code",0,"summary",Map.of("duration",100*from+to+1)));
+                    routes.add(Map.of("key",variable.get("key").asText(),"result_code",0,"summary",Map.of("duration",duration.applyAsInt(from,to))));
                 }
                 if(incoming&&failIncoming.get())routes.clear();
                 return response(Map.of("routes",routes));
             });
             walkServer.expect(ExpectedCount.manyTimes(),r->{}).andRespond(request->{
-                walk.incrementAndGet();return VisitOrderServiceTest.walkingBatchResponse(request,(a,b)->100*a+b+1);
+                walk.incrementAndGet();return VisitOrderServiceTest.walkingBatchResponse(request,(a,b)->duration.applyAsInt(a,b));
             });
         }
         ClientHttpResponse response(Object body)throws java.io.IOException {
@@ -67,6 +70,25 @@ class VisitDurationReuseTest {
             return service.recommend(origin,visits,null,null,mode,"synthetic",7L,"workspace",guide);
         }
         public void close(){if(car.get()>0)carServer.verify();if(walk.get()>0)walkServer.verify();service.stop();}
+    }
+    @Test void selectedFirstStopReoptimizesFromCachedDurationsWithoutProviderCalls() {
+        Time time = new Time(); var cache = new VisitDurationCache(null, time);
+        try (var f = new Fixture(cache, (from, to) -> to == from + 1 || (from == 6 && to == 1) ? 1 : 1000)) {
+            var stops = visits(6);
+            var initial = f.recommend(point(0), stops, "car", false);
+            assertEquals(List.of("1", "2", "3", "4", "5", "6"), orderIds(initial));
+            int collectedCalls = f.car.get();
+            for (boolean guidanceStart : List.of(false, true)) {
+                var selected = f.service.recommend(point(0), stops, null, "5", "car", "synthetic", 7L, "workspace", guidanceStart);
+                assertEquals("roadDuration", selected.get("basis"));
+                assertEquals(List.of("5", "6", "1", "2", "3", "4"), orderIds(selected));
+                assertEquals(collectedCalls, f.car.get(), "changing the first stop reuses every observed duration");
+            }
+        }
+    }
+    @SuppressWarnings("unchecked")
+    private static List<String> orderIds(Map<String,Object> result) {
+        return ((List<Map<String,Object>>)result.get("optimizedLocations")).stream().map(row -> row.get("id").toString()).toList();
     }
     @Test void slowSequentialRegistrationKeepsAllOldDirectedLegs() {
         Time time=new Time();var cache=new VisitDurationCache(null,time);

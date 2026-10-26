@@ -171,6 +171,7 @@ function NormalMapScreen({
   const [mapHeight, setMapHeight] = useState(600);
   const screenInsets = useSafeAreaInsets();
   const [topOverlayBottom, setTopOverlayBottom] = useState(0);
+  const [publicCategoryAnchor, setPublicCategoryAnchor] = useState({ x: 85, width: 0 });
   const [visitStripHeight, setVisitStripHeight] = useState(52);
   const [bottomOverlayHeight, setBottomOverlayHeight] = useState(0);
   const [pendingOverlayHeight, setPendingOverlayHeight] = useState(0);
@@ -846,6 +847,7 @@ function NormalMapScreen({
 
   const resetAddModes = () => {
     setResultsMode(false); setSearchOpen(false);
+    setVisitListOpen(false);
     setPendingOpen(false);
     setCoordSheetOpen(false);
     setSearchedPlace(null);
@@ -1169,6 +1171,10 @@ function NormalMapScreen({
   const recommendationReturn = includeReturn ? returnDisplayMarker : null;
   const returnOrderKey = recommendationReturn ? `${recommendationReturn.lat}:${recommendationReturn.lng}` : '';
   const locationReady = hasVisitCoordinates(currentLocation);
+  const manualFirst = manualOrderMembership.current === membershipKey
+    ? (locations || []).find(row => !isCompleted(row) && row.markerNumber === 1) : null;
+  const recommendationPinnedKey = isGuiding && activeSegment?.destinationKey
+    ? activeSegment.destinationKey : manualFirst ? locationKey(manualFirst) : null;
   const liveVisitsRef = useRef(allVisits);
   liveVisitsRef.current = allVisits;
   const resumedRouteRef = useRef(null);
@@ -1204,19 +1210,18 @@ function NormalMapScreen({
 
   useEffect(() => {
     if (!isActive || !locationReady) return;
-    const manualFirst = manualOrderMembership.current === membershipKey
-      ? (locations || []).find(row => !isCompleted(row) && row.markerNumber === 1) : null;
-    const pinnedKey = isGuiding ? activeSegment?.destinationKey : manualFirst ? locationKey(manualFirst) : null;
-    const recommendationKey = `${scopeKey}:${membershipKey}:${returnOrderKey}:${transportMode}:${pinnedKey || ''}:${isGuiding ? guidanceRecommendationToken : 0}`;
+    const pinnedKey = recommendationPinnedKey;
+    const recommendationKey = `${scopeKey}:${membershipKey}:${returnOrderKey}:${transportMode}:${pinnedKey || ''}:${guidanceRecommendationToken}`;
     if (orderSetRef.current === recommendationKey) return;
     orderSetRef.current = recommendationKey;
     const inputKey = `${scopeKey}:${returnOrderKey}:${transportMode}`;
     const coordinates = pendingCoordinates(locations || []);
     const previous = previousRecommendationInput.current;
-    const guidanceStart = Boolean(isGuiding && guidanceRecommendationToken && sentGuidanceRecommendation.current !== guidanceRecommendationToken);
+    const guidanceStart = Boolean(guidanceRecommendationToken && sentGuidanceRecommendation.current !== guidanceRecommendationToken);
     previousRecommendationInput.current = { key: inputKey, coordinates };
     const pending = (locations || []).filter(row => !isCompleted(row));
-    if (!guidanceStart && (pending.length <= 1 || (previous?.key === inputKey && onlyRemovedVisits(previous.coordinates, coordinates)))) {
+    if (!guidanceStart && (pending.length <= 1 ||
+        (previous?.key === inputKey && onlyRemovedVisits(previous.coordinates, coordinates)))) {
       setLocations?.(rows => stableVisitOrder(Array.isArray(rows) ? rows : locations || [], pinnedKey));
       setRecommendationBusy(false); setRecommendationReadyKey(recommendationKey); return;
     }
@@ -1242,7 +1247,7 @@ function NormalMapScreen({
       if (guidanceStart && result.basis !== 'distance') sentGuidanceRecommendation.current = guidanceRecommendationToken;
       const keys = result.optimizedLocations.map(locationKey);
       if (keys.length !== pending.length || new Set(keys).size !== pending.length ||
-          pending.some(row => !keys.includes(locationKey(row)))) return;
+          pending.some(row => !keys.includes(locationKey(row))) || (pinnedKey && keys[0] !== pinnedKey)) return;
       if (result.basis === 'roadDuration') setLocations?.(previous => {
         const rows = Array.isArray(previous) ? previous : locations || [];
         const byKey = new Map(rows.map(row => [locationKey(row), row]));
@@ -1252,7 +1257,9 @@ function NormalMapScreen({
     }).catch(() => { /* The visible distance recommendation remains available. */ })
       .finally(() => { clearTimeout(timer); if (active) { setRecommendationBusy(false); setRecommendationReadyKey(recommendationKey); } }); }, 200);
     return () => { active = false; clearTimeout(requestTimer); clearTimeout(timer); controller.abort(); orderSetRef.current = null; };
-  }, [isActive, membershipKey, locationReady, scopeKey, returnOrderKey, transportMode, isGuiding, activeSegment?.destinationKey, guidanceRecommendationToken]);
+    // Ending guidance leaves the selected first stop and this request intact.
+    // Membership, selected stop, mode or workspace changes still cancel stale work.
+  }, [isActive, membershipKey, locationReady, scopeKey, returnOrderKey, transportMode, recommendationPinnedKey, guidanceRecommendationToken]);
 
   const clearGuidance = () => {
     if (isGuiding) endRouteSession();
@@ -1388,12 +1395,12 @@ function NormalMapScreen({
   useEffect(() => {
     if (!nextAfterCompletion || !isActive || isGuiding || recommendationBusy) return;
     if (nextAfterCompletion.scope !== scopeKey) { setNextAfterCompletion(null); return; }
-    const expectedKey = `${scopeKey}:${membershipKey}:${returnOrderKey}:${transportMode}::0`;
+    const expectedKey = `${scopeKey}:${membershipKey}:${returnOrderKey}:${transportMode}::${guidanceRecommendationToken}`;
     if (recommendationReadyKey !== expectedKey) return;
     setNextAfterCompletion(null);
     const next = nextVisit(nextAfterCompletion.excluded);
     if (next && !preview) previewVisit(next);
-  }, [nextAfterCompletion, isActive, isGuiding, recommendationBusy, recommendationReadyKey, scopeKey, membershipKey, returnOrderKey, transportMode, markers, preview]);
+  }, [nextAfterCompletion, isActive, isGuiding, recommendationBusy, recommendationReadyKey, scopeKey, membershipKey, returnOrderKey, transportMode, guidanceRecommendationToken, markers, preview]);
 
   const handleStartGuidance = async (explicitTarget = null, requestedMode = null) => {
     const target = hasVisitCoordinates(explicitTarget) ? explicitTarget : cardTarget;
@@ -1802,7 +1809,7 @@ function NormalMapScreen({
         {(!isGuiding || preview) && <View style={styles.searchControlRow}>
           {showMapBack && <TouchableOpacity style={[styles.smallTopButton, { minWidth: 44, minHeight: 44 }]} accessibilityLabel="뒤로가기" onPress={() => { if (!consumeScreenBack()) onBack?.(); }}><Ionicons name="arrow-back" size={22} color="#2477F3" /></TouchableOpacity>}
           {publicFacilityMode && <TouchableOpacity
-            style={styles.smallTopButton}
+            style={[styles.smallTopButton, styles.publicRegionButton]}
             onPress={() => { setPublicCategoryOpen(false); dongOpen ? setDongOpen(false) : loadDongs(); }}
             accessibilityRole="button"
             accessibilityLabel="공공시설물 조회 지역 선택"
@@ -1810,10 +1817,11 @@ function NormalMapScreen({
             <Ionicons name="map-outline" size={13} color="#2477F3" />
             <Text style={styles.smallTopText}>{selectedDongName || '행정동'}</Text>
           </TouchableOpacity>}
-          <View style={styles.searchBox}>
-            <TouchableOpacity style={{ flex: 1, height: 44 }} disabled={publicFacilityMode || resultsMode}
-              onPress={() => { resetAddModes(); openSearch(); }}
-              accessibilityRole="button" accessibilityLabel="주소 또는 장소 검색" accessible={!publicFacilityMode && !resultsMode}>
+          <View style={styles.searchBox}
+            onLayout={event => { const { x, width } = event.nativeEvent.layout; setPublicCategoryAnchor({ x, width }); }}>
+            <TouchableOpacity style={{ flex: 1, height: 44 }} disabled={resultsMode}
+              onPress={() => { if (publicFacilityMode) { if (!selectedDong) loadDongs(); else setPublicCategoryOpen(value => !value); } else { resetAddModes(); openSearch(); } }}
+              accessibilityRole="button" accessibilityLabel={publicFacilityMode ? '공공시설물 카테고리 선택' : '주소 또는 장소 검색'} accessible={!resultsMode}>
               <View pointerEvents="none" style={{ flex: 1 }}>
                 <TextInput style={styles.searchInput} value={publicFacilityMode ? (PUBLIC_FACILITY_CATEGORIES.find(item => item.key === publicCategory)?.label || '') : resultsMode ? resultQuery : ''} placeholder={publicFacilityMode ? '공공시설물 카테고리 선택' : '주소 또는 장소 검색'} placeholderTextColor="#9AA6B2" editable={false} accessible={publicFacilityMode || resultsMode} />
               </View>
@@ -1827,7 +1835,7 @@ function NormalMapScreen({
           </TouchableOpacity>}
         </View>}
         {publicFacilityMode && selectedDong && publicCategoryOpen && !dongOpen && (
-          <View style={styles.publicCategoryBox}>
+          <View style={[styles.publicCategoryBox, { marginLeft: publicCategoryAnchor.x, width: publicCategoryAnchor.width || undefined }]}>
             <View style={styles.publicCategoryHeader}>
               <View>
                 <Text style={styles.publicCategoryTitle}>공공시설물 선택</Text>
@@ -1937,7 +1945,7 @@ function NormalMapScreen({
 
 
       </View>}
-      {mapSelectMode && <View style={[styles.selectionHint, { top: screenInsets.top + 124 }]} pointerEvents="none"><Text style={styles.selectionHintText}>지도를 움직여 위치를 선택하세요</Text></View>}
+      {mapSelectMode && <View style={[styles.selectionHint, { top: (topOverlayBottom || screenInsets.top + 180) + 8 }]} pointerEvents="none"><Text style={styles.selectionHintText}>지도를 움직여 위치를 선택하세요</Text></View>}
       {!resultsMode && !publicFacilityMode && !mapSelectMode && !searchedPlace && !coordSheetOpen && cardTarget && (
         <View style={styles.destinationCard}
           onLayout={event => setBottomOverlayHeight(event.nativeEvent.layout.height)}>
@@ -2452,7 +2460,8 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
 
-  compactCloseButton: { width: 32, minWidth: 32, height: 32, paddingHorizontal: 0, borderRadius: 9, alignSelf: 'center' },
+  compactCloseButton: { width: 52, minWidth: 52, height: 52, paddingHorizontal: 0, borderRadius: 11, alignSelf: 'center', shadowOpacity: 0, elevation: 0 },
+  publicRegionButton: { height: 52, shadowOpacity: 0, elevation: 0 },
   smallTopButton: {
     height: 46,
     minWidth: 78,
@@ -2956,10 +2965,7 @@ const styles = StyleSheet.create({
   },
 
   publicCategoryBox: {
-    position: 'absolute',
-    top: 74,
-    left: 16,
-    right: 110,
+    alignSelf: 'flex-start',
     zIndex: 65,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
