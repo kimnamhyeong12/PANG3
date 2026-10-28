@@ -102,7 +102,7 @@ public class FileStorageService {
         return extension;
     }
 
-    private byte[] sanitize(byte[] bytes) throws IOException {
+    byte[] sanitize(byte[] bytes) throws IOException {
         try (var input = javax.imageio.ImageIO.createImageInputStream(new java.io.ByteArrayInputStream(bytes))) {
             var readers = javax.imageio.ImageIO.getImageReaders(input);
             if (!readers.hasNext()) throw invalid("정상적인 사진 파일을 선택해 주세요.");

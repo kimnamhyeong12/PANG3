@@ -29,7 +29,7 @@ function MenuLink({ to, label, Icon }) {
 }
 
 export default function Sidebar() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   return (
@@ -39,6 +39,8 @@ export default function Sidebar() {
           <MenuLink key={item.to} {...item} />
         ))}
         <div className="sidebar-divider" />
+        {['ADMIN', 'SUPPORT_AGENT'].includes(user?.role) && <MenuLink to="/admin/support" label="고객센터 문의함" Icon={IconReport} />}
+        {['ADMIN', 'FACILITY_REVIEWER'].includes(user?.role) && <MenuLink to="/admin/facilities" label="시설물 등록 신청함" Icon={IconReport} />}
         <MenuLink to="/settings" label="설정" Icon={IconSettings} />
         <button
           type="button"

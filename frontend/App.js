@@ -5,6 +5,7 @@ import {
   AppState,
   BackHandler,
   Keyboard,
+  Linking,
   Platform,
   StatusBar,
   StyleSheet,
@@ -26,6 +27,8 @@ import DownloadScreen from './screens/DownloadScreen';
 import FieldActionScreen from './screens/FieldActionScreen';
 import GroupCreateScreen from './screens/GroupCreateScreen';
 import GroupInvitationsScreen from './screens/GroupInvitationsScreen';
+import GroupInviteDialog from './components/GroupInviteDialog';
+import { groupInviteToken } from './utils/groupInviteLinks';
 import GroupReportsScreen from './screens/GroupReportsScreen';
 import GroupScreen from './screens/GroupScreen';
 import GroupSettingsScreen from './screens/GroupSettingsScreen';
@@ -159,6 +162,14 @@ function AppContent() {
   }, [calendarDayKey]);
   const [mapSearchVisible, setMapSearchVisible] = useState(false);
   const [user, setUser] = useState(null);
+  const [inviteToken, setInviteToken] = useState(null);
+  useEffect(() => {
+    let active = true;
+    const receive = url => { const token = groupInviteToken(url); if (active && token) setInviteToken(token); };
+    Linking.getInitialURL().then(receive).catch(() => {});
+    const subscription = Linking.addEventListener('url', event => receive(event.url));
+    return () => { active = false; subscription.remove(); };
+  }, []);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [actionType, setActionType] = useState(null);
 
@@ -1553,6 +1564,7 @@ function AppContent() {
             />
           )}
 
+        {user && inviteToken && <GroupInviteDialog key={`${user.userId}:${inviteToken}`} user={user} token={inviteToken} onClose={() => setInviteToken(null)} onJoined={async () => { await refreshAvailableGroups(); setInviteToken(null); go('groupHome'); }} />}
         <CustomAlertHost />
       </View>
     </SafeAreaView>

@@ -2,6 +2,9 @@ package com.fieldwork.service;
 
 import com.fieldwork.entity.User;
 import com.fieldwork.repository.UserRepository;
+import com.fieldwork.repository.SupportInquiryRepository;
+import com.fieldwork.entity.SupportInquiry;
+import org.springframework.context.ApplicationEventPublisher;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,12 +22,19 @@ class SupportInquiryServiceTest {
     JavaMailSender sender;
     ObjectProvider<JavaMailSender> provider;
     SupportInquiryService support;
+    SupportInquiryRepository inquiries;
+    ApplicationEventPublisher events;
+    SupportAttachmentService files;
     @BeforeEach @SuppressWarnings("unchecked") void setup() {
         users=mock(UserRepository.class); sender=mock(JavaMailSender.class); provider=mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(sender);
         User user=new User(); user.setLoginId("tester"); user.setRole("USER");
         when(users.findById(10L)).thenReturn(Optional.of(user));
-        support=new SupportInquiryService(users,provider,"pang3.apps@gmail.com");
+        inquiries=mock(SupportInquiryRepository.class); events=mock(ApplicationEventPublisher.class);
+        when(inquiries.saveAndFlush(any())).thenAnswer(call -> { SupportInquiry i=call.getArgument(0); i.id=100L; return i; });
+        files=mock(SupportAttachmentService.class);
+        support=new SupportInquiryService(users,inquiries,provider,events,files,"pang3.apps@gmail.com");
+        doAnswer(call -> { support.notifyOperator(call.getArgument(0)); return null; }).when(events).publishEvent(any(SupportInquiryService.MailNotification.class));
     }
     void send() { support.send(10L,"reply@example.test","Help","Question details","1.0.0","android"); }
     @Test void sendsOnlyToSupportAndSetsReplyAddressWithoutImpersonatingTheUser() {
@@ -34,16 +44,19 @@ class SupportInquiryServiceTest {
         assertEquals("reply@example.test",message.getValue().getReplyTo());
         assertTrue(message.getValue().getText().contains("tester"));
         assertTrue(message.getValue().getText().contains("Question details"));
+        assertEquals("[핀워크 문의] Help", message.getValue().getSubject());
+        assertTrue(message.getValue().getText().contains("답변 이메일: reply@example.test"));
     }
-    @Test void missingMailConfigurationNeverReportsSuccess() {
-        support=new SupportInquiryService(users,provider,"");
-        assertEquals(503,assertThrows(ResponseStatusException.class,this::send).getStatusCode().value());
+    @Test void missingMailConfigurationStillAcceptsTheStoredInquiry() {
+        support=new SupportInquiryService(users,inquiries,provider,events,files,"");
+        assertDoesNotThrow(this::send);
+        verify(inquiries).saveAndFlush(any());
         verifyNoInteractions(sender);
     }
-    @Test void smtpFailureNeverReportsSuccess() {
+    @Test void smtpFailureDoesNotLoseTheStoredInquiry() {
         doThrow(new MailSendException("provider failure")).when(sender).send(any(SimpleMailMessage.class));
-        var failure=assertThrows(ResponseStatusException.class,this::send);
-        assertEquals(503,failure.getStatusCode().value()); assertFalse(failure.getReason().contains("provider failure"));
+        assertDoesNotThrow(this::send);
+        verify(inquiries).saveAndFlush(any());
     }
     @Test void rejectsInvalidEmailHeaderInjectionAndOversizedContents() {
         assertEquals(400,assertThrows(ResponseStatusException.class,()->support.send(10L,"not-email","Help","Body","1","android")).getStatusCode().value());

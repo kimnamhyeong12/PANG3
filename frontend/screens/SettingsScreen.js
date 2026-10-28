@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Linking, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader, PrimaryButton } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
 import { apiFetch } from '../utils/auth';
 import { API_BASE_URL } from '../utils/api';
 import { colors } from '../constants/design';
 import { useScreenBackHandler } from '../utils/screenBack';
-import SupportInquiryForm from '../components/SupportInquiryForm';
+import SupportInquiryPanel from '../components/SupportInquiryPanel';
 import CustomerSupportContent from '../components/CustomerSupportContent';
 import AppInfoContent from '../components/AppInfoContent';
 import AccountManagementScreen from './AccountManagementScreen';
@@ -77,20 +78,25 @@ export default function SettingsScreen({ user, onBack, onUpdatedUser, onLogout, 
       </View>
     </View>
   </Modal>
-  <Modal visible={!!detail} statusBarTranslucent animationType="slide" onRequestClose={closeDetail}>
+  <Modal visible={!!detail} statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={closeDetail}>
+    <SafeAreaProvider>
+    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScreenHeader title={detail === 'notice' ? '공지사항' : detail === 'version' ? '앱 정보' : detail === 'licenses' ? '오픈소스 라이선스' : detail === 'inquiry' ? '문의하기' : '고객센터'} onBack={closeDetail} />
-      <ScrollView key={detail} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
+      <ScrollView key={detail} style={styles.detailScroll} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
         {detail === 'notice' ? <Text style={styles.help}>등록된 공지사항이 없습니다.</Text>
-          : detail === 'inquiry' ? <SupportInquiryForm user={user} onBusyChange={setSupportSending} onSubmitted={() => setDetail('support')} />
+          : detail === 'inquiry' ? <SupportInquiryPanel key={user.userId} user={user} onBusyChange={setSupportSending} />
           : detail === 'version' || detail === 'licenses' ? <AppInfoContent key={detail} page={detail} onLicenses={() => setDetail('licenses')} />
           : <CustomerSupportContent onInquiry={() => setDetail('inquiry')} />}
       </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
+    </SafeAreaProvider>
   </Modal>
   </View>;
 }
 const styles = StyleSheet.create({
+  detailScroll: { flex: 1 },
   sectionLabel: { fontSize: 12, color: colors.textSoft, marginBottom: -12 },
   container: { flex: 1, backgroundColor: colors.background, marginTop: 0 }, body: {   paddingBottom: 30, padding: 20, gap: 20, },
   rootBody: {paddingTop: 16, },

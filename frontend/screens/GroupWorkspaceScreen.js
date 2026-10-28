@@ -16,6 +16,7 @@ import { formatTransferTime } from './TransferScreen';
 import { CardTitle, PrimaryButton, ScreenHeader } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
 import { colors, shadow } from '../constants/design';
+import GroupInviteLinkButton from '../components/GroupInviteLinkButton';
 import { groupApi } from '../utils/groupApi';
 import { transferHistoryPage, mergeTransferHistory, compareTransferHistory } from '../utils/transferHistory';
 import GroupLeaveButton from '../components/GroupLeaveButton';
@@ -296,6 +297,7 @@ export default function GroupWorkspaceScreen({
               onAction={() => setInviteOpen((value) => !value)}
             />
 
+            <GroupInviteLinkButton key={group.groupId} groupId={group.groupId} groupName={group.groupName || group.name} />
             {inviteOpen ? <View style={styles.inviteBox}>
               <TextInput
                 style={styles.inviteInput}

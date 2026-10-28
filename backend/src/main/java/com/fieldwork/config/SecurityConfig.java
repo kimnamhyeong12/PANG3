@@ -35,6 +35,7 @@ public class SecurityConfig {
                 }))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/join/*").permitAll()
                 // Global reference-data maintenance is performed offline, never by an app account.
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/aeds/import", "/api/aeds/update-administrative-areas",
                         "/api/bus-stops/import", "/api/bus-stops/update-administrative-areas").denyAll()

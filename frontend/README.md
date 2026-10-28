@@ -24,8 +24,8 @@ Android/iOS 빌드 구성은 app.json, app.config.js, eas.json 및 ANDROID_BUILD
 ## 고객센터와 앱 정보
 
 - 설정의 서비스 안내에는 공지사항, 고객센터와 앱 정보를 표시한다. 공지사항은 등록된 내용이 없는 빈 목록으로 유지한다. 미확정 정책 문서는 표시하지 않으며 출시용 약관·개인정보 문서 준비는 별도 작업이다.
-- FAQ 문구는 `components/CustomerSupportContent.js`에서 관리한다. 문의 유형은 기존 문의 API의 본문에 포함하므로 서버 변경 없이 운영 메일에서 확인할 수 있다.
-- 문의 메일은 기존 `/api/support/inquiries`를 이용한다. 배포 서버에는 `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `FIELDWORK_AUTH_MAIL_FROM` 설정이 필요하다. 실제 메일 수신 여부는 해당 환경에서 확인해야 한다.
+- FAQ 문구는 `components/CustomerSupportContent.js`에서 관리한다. 문의 접수·본인 내역·앱 답변·첨부파일은 새 문의함 서버 API를 함께 배포해야 한다. 문의 유형은 `category` 필드로 보낸다. 자세한 구성은 `docs/features/SUPPORT_INBOX.md`를 참고한다.
+- 문의 접수는 `/api/support/inquiries`에 JSON 또는 첨부가 포함된 multipart로 보낸다. DB 저장이 완료되면 운영 메일 알림을 보낸다. 메일 알림에는 `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `FIELDWORK_AUTH_MAIL_FROM` 설정이 필요하다.
 - 스토어 등록 후 `app.json`의 `expo.extra.playStoreUrl`과 `expo.extra.appStoreUrl`에 실제 스토어 주소를 넣으면 앱 정보에 업데이트 확인 버튼이 표시된다. 주소가 없으면 배포 준비 안내를 표시한다.
 - JavaScript 패키지 고지는 `node scripts/generate-open-source-licenses.cjs`로 설치된 운영 의존성에서 생성한다. 의존성 변경 후 다시 실행한다. 네이티브 SDK의 별도 고지는 출시 전에 확인해야 한다.
 - 캐시 삭제는 제공하지 않는다. 미전송 사진·작성 중인 기록·다운로드한 보고서를 삭제하는 동작도 추가하지 않는다.

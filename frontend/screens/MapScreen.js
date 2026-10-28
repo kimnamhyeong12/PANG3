@@ -51,6 +51,7 @@ import { onlyRemovedVisits, pendingCoordinates, stableVisitOrder } from '../util
 // 엑셀,csv 데이터 업로드
 import BulkUploadModal from '../components/BulkUploadModal';
 import PhotoUploadScreen from './PhotoUploadScreen';
+import FacilityApplicationScreen from './FacilityApplicationScreen';
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
 const EMPTY_MARKERS = [];
@@ -281,6 +282,14 @@ function NormalMapScreen({
   const [publicFacilityMode, setPublicFacilityMode] = useState(false);
   const [publicSheetOpen, setPublicSheetOpen] = useState(true);
   const [publicCategoryOpen, setPublicCategoryOpen] = useState(false);
+  const [facilityApplicationOpen, setFacilityApplicationOpen] = useState(false);
+  const [publicCategories, setPublicCategories] = useState(PUBLIC_FACILITY_CATEGORIES);
+  useEffect(() => {
+    if (!publicFacilityMode) return undefined;
+    let active = true;
+    fetch(`${API_BASE_URL}/api/public-data/categories`).then(response => response.ok ? response.json() : null).then(data => { if (active && Array.isArray(data) && data.length) setPublicCategories(data); }).catch(() => {});
+    return () => { active = false; };
+  }, [publicFacilityMode, facilityApplicationOpen]);
   const [publicCategory, setPublicCategory] = useState('');
   const [publicItems, setPublicItems] = useState([]);
   const [publicSelectedIds, setPublicSelectedIds] = useState([]);
@@ -447,14 +456,14 @@ function NormalMapScreen({
   const trafficRail = useMemo(() => routeTrafficRail(activeSegment?.trafficSections), [activeSegment?.trafficSections]);
   const routeVisibleKey = preview?.segment ? preview.targetKey : (!preview && isGuiding ? activeSegment?.destinationKey : null);
   const publicDisplayItems = useMemo(() => {
-    const categoryInfo = PUBLIC_FACILITY_CATEGORIES.find((entry) => entry.key === publicCategory);
+    const categoryInfo = publicCategories.find((entry) => entry.key === publicCategory);
     return publicItems.map((item) => ({
       ...item,
       isPublicFacility: true,
-      markerLabel: categoryInfo?.shortLabel === 'AED' ? 'AED' : 'B',
+      markerLabel: publicCategory === 'aed' ? 'AED' : publicCategory === 'bus' ? 'B' : (categoryInfo?.shortLabel || '시설').slice(0, 2),
       markerColor: publicSelectedIds.includes(item.id) ? '#0CA678' : '#2477F3',
     }));
-  }, [publicItems, publicSelectedIds, publicCategory]);
+  }, [publicItems, publicSelectedIds, publicCategory, publicCategories]);
   const showReturnMarker = Boolean(returnDisplayMarker && (preview?.targetKey === locationKey(returnDisplayMarker)
     || (isGuiding && activeSegment?.destinationKey === locationKey(returnDisplayMarker))));
   const displayLocations = useMemo(() => [...activeDisplayMarkers, ...completedDisplayMarkers,
@@ -1811,7 +1820,7 @@ function NormalMapScreen({
         </View>
         {publicFacilityMode ? <PublicFacilityControls
           regionLabel={selectedDongName}
-          categoryLabel={PUBLIC_FACILITY_CATEGORIES.find(item => item.key === publicCategory)?.label || ''}
+          categoryLabel={publicCategories.find(item => item.key === publicCategory)?.label || ''}
           expanded={publicCategoryOpen && !dongOpen}
           onRegionPress={() => { setPublicCategoryOpen(false); dongOpen ? setDongOpen(false) : loadDongs(); }}
           onCategoryPress={() => { if (!selectedDong) loadDongs(); else setPublicCategoryOpen(value => !value); }}
@@ -1912,7 +1921,8 @@ function NormalMapScreen({
             top: topOverlayFrame.y + searchControlFrame.y + publicCategoryAnchor.y + publicCategoryAnchor.height + 6,
             width: publicCategoryAnchor.width || undefined,
           }]}>
-            {PUBLIC_FACILITY_CATEGORIES.map((item, index) => (
+            <ScrollView style={{ maxHeight: 280 }} keyboardShouldPersistTaps="handled">
+            {publicCategories.map((item, index) => (
               <TouchableOpacity
                 key={item.key}
                 style={[styles.publicCategoryItem, index === 0 && { borderTopWidth: 0 }]}
@@ -1930,8 +1940,13 @@ function NormalMapScreen({
                 ) : null}
               </TouchableOpacity>
             ))}
+            </ScrollView>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="공공시설물 등록 신청" style={styles.publicCategoryItem} onPress={() => { setPublicCategoryOpen(false); setFacilityApplicationOpen(true); }}>
+              <Ionicons name="add-circle-outline" size={19} color={colors.primary} /><Text style={styles.publicCategoryItemText}>공공시설물 등록 신청</Text>
+            </TouchableOpacity>
           </View>
         )}
+        {facilityApplicationOpen && <FacilityApplicationScreen key={user.userId} user={user} onClose={() => setFacilityApplicationOpen(false)} />}
 
       {mapSelectMode && <View style={[styles.selectionHint, { top: (topOverlayBottom || screenInsets.top + 180) + 8 }]} pointerEvents="none"><Text style={styles.selectionHintText}>지도를 움직여 위치를 선택하세요</Text></View>}
       {!resultsMode && !publicFacilityMode && !mapSelectMode && !searchedPlace && !coordSheetOpen && cardTarget && (
@@ -2134,7 +2149,7 @@ function NormalMapScreen({
               <Text style={styles.publicFacilityActionTitle}>
                 {publicLoading
                   ? '공공시설물을 불러오는 중...'
-                  : `${PUBLIC_FACILITY_CATEGORIES.find((item) => item.key === publicCategory)?.label || '공공시설물'} ${publicItems.length}곳`}
+                  : `${publicCategories.find((item) => item.key === publicCategory)?.label || '공공시설물'} ${publicItems.length}곳`}
               </Text>
               <TouchableOpacity accessibilityRole="button" accessibilityLabel={allPublicSelected ? '공공시설물 전체 해제' : '공공시설물 전체 선택'}
                 disabled={publicLoading || publicSaving || !publicItems.length}

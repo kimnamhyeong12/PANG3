@@ -1,4 +1,4 @@
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
 import { useGroup } from './context/GroupContext.jsx';
 import AppLayout from './components/layout/AppLayout.jsx';
@@ -18,12 +18,16 @@ import ProjectsDetailPage from './pages/ProjectsDetailPage.jsx';
 import ReportEditorPage from './pages/ReportEditorPage.jsx';
 import ProjectsProgressEditPage from './pages/ProjectsProgressEditPage.jsx';
 import AccountRecoveryPage from './pages/AccountRecoveryPage.jsx';
+import SupportAdminPage from './pages/SupportAdminPage.jsx';
+import FacilityReviewPage from './pages/FacilityReviewPage.jsx';
+import GroupJoinPage from './pages/GroupJoinPage.jsx';
 
 function RequireAuth() {
   const { user, loading, error, restore } = useAuth();
+  const location = useLocation();
   if (loading) return <LoadingScreen label="로그인을 확인하고 있습니다…" />;
   if (error) return <div style={{ padding: 32 }}><p>{error}</p><button onClick={restore}>다시 연결하기</button></div>;
-  return user ? <Outlet /> : <Navigate to="/login" replace />;
+  return user ? <Outlet /> : <Navigate to="/login" replace state={{ from: location.pathname }} />;
 }
 
 function RequireGroup() {
@@ -40,11 +44,15 @@ function RequireGroup() {
 export default function App() {
   return (
     <Routes>
+      <Route path="/join/:token" element={<GroupJoinPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<AccountRecoveryPage mode="forgot" />} />
       <Route path="/reset-password" element={<AccountRecoveryPage mode="reset" />} />
       <Route path="/verify-email" element={<AccountRecoveryPage mode="verify" />} />
       <Route element={<RequireAuth />}>
+        <Route path="/admin" element={<Navigate to="/admin/support" replace />} />
+        <Route path="/admin/support" element={<SupportAdminPage />} />
+        <Route path="/admin/facilities" element={<FacilityReviewPage />} />
         <Route path="/groups/select" element={<GroupSelectPage />} />
         <Route element={<RequireGroup />}>
           <Route element={<AppLayout />}>

@@ -16,17 +16,19 @@ public class PublicDataService {
     private final AedService aedService;
     private final BusStopRepository busStopRepository;
     private final AedRepository aedRepository;
+    private final FacilityRegistryService registry;
 
     public PublicDataService(
             BusStopService busStopService,
             AedService aedService,
             BusStopRepository busStopRepository,
-            AedRepository aedRepository
+            AedRepository aedRepository, FacilityRegistryService registry
     ) {
         this.busStopService = busStopService;
         this.aedService = aedService;
         this.busStopRepository = busStopRepository;
         this.aedRepository = aedRepository;
+        this.registry = registry;
     }
 
     public List<PublicDataItem> getPublicData(
@@ -37,13 +39,14 @@ public class PublicDataService {
             String adminDong
     ) {
         if (hasText(sido) && hasText(sigungu) && hasText(adminDong)) {
-            return switch (category) {
+            var official = switch (category) {
                 case "bus" -> getBusStopsFromDb(sido, sigungu, adminDong);
                 case "aed" -> getAedsFromDb(sido, sigungu, adminDong);
-                default -> throw new IllegalArgumentException(
-                        "지원하지 않는 공공데이터 카테고리입니다: " + category
-                );
+                default -> java.util.List.<PublicDataItem>of();
             };
+            var result = new java.util.ArrayList<PublicDataItem>(official);
+            result.addAll(registry.registered(category, sido, sigungu, adminDong));
+            return result;
         }
 
         if (!hasText(admCode)) {

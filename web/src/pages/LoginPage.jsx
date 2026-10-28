@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { isServerDown } from '../api/client.js';
 import { IconLogo } from '../components/Icons.jsx';
@@ -7,12 +7,15 @@ import { IconLogo } from '../components/Icons.jsx';
 export default function LoginPage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from || '';
+  const destination = from === '/admin/support' || from === '/admin' ? '/admin/support' : from === '/admin/facilities' || /^\/join\/[A-Za-z0-9_-]{43}$/.test(from) ? from : '/dashboard';
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) return <Navigate to={destination} replace />;
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -20,7 +23,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(loginId.trim(), password);
-      navigate('/dashboard', { replace: true });
+      navigate(destination, { replace: true });
     } catch (err) {
       // 백엔드가 없는 아이디에 500을 주는 경우가 있어 400/500 모두 로그인 실패로 취급
       if (isServerDown(err)) {

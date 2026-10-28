@@ -31,7 +31,7 @@ async function settle() { for (let i = 0; i < 10; i++) await Promise.resolve(); 
   faq.nodes().find(n => n.type === 'TextInput').props.onChangeText('없는검색어123'); faq.render(); assert.ok(faq.text().includes('검색 결과가 없어요'));
   faq.nodes().find(n => n.type === 'Button').props.onPress(); assert.equal(inquiries, 1);
   faq.nodes().find(n => n.type === 'TextInput').props.onChangeText(''); faq.render();
-  faq.nodes().find(n => n.type === 'TouchableOpacity' && n.props.children.some(c => c?.props?.children?.includes('보고서'))).props.onPress(); faq.render();
+  faq.nodes().find(n => n.type === 'TextInput').props.onChangeText('다운로드'); faq.render();
   assert.ok(faq.text().includes('보고서를 다운로드할 수 없어요')); assert.ok(!faq.text().includes('길안내가 시작되지 않아요'));
   let listener, removed = false, openCount = 0, allowed = false;
   const read = async () => ({ granted: allowed, status: allowed ? 'granted' : 'denied' });
