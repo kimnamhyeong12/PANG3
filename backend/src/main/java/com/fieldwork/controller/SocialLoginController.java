@@ -3,6 +3,10 @@ package com.fieldwork.controller;
 import com.fieldwork.security.CurrentUser;
 import com.fieldwork.service.SocialAccountService;
 import com.fieldwork.service.SocialLoginService;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import java.util.Map;
@@ -10,6 +14,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth/social")
 public class SocialLoginController {
+    private static final String CALLBACK_PAGE = loadCallbackPage();
     private final SocialLoginService social;
     private final SocialAccountService accounts;
     public SocialLoginController(SocialLoginService social, SocialAccountService accounts) { this.social = social; this.accounts = accounts; }
@@ -27,7 +32,14 @@ public class SocialLoginController {
         social.callback(provider, state, code, error);
         return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store").header("Referrer-Policy", "no-referrer")
                 .header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
-                .body("<!doctype html><html lang='ko'><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>로그인 확인</title><body style='font-family:sans-serif;padding:40px;text-align:center'><h2>인증 요청을 처리했습니다</h2><p>앱으로 돌아가 결과를 확인해 주세요.</p><a href='pang3://auth/social'>앱으로 돌아가기</a></body></html>");
+                .body(CALLBACK_PAGE);
+    }
+    private static String loadCallbackPage() {
+        try (var stream = new ClassPathResource("templates/social-auth-result.html").getInputStream()) {
+            return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException error) {
+            throw new UncheckedIOException("소셜 인증 안내 화면을 불러오지 못했습니다.", error);
+        }
     }
     private ResponseEntity<Map<String, Object>> result(Map<String, Object> body) { return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store").body(body); }
 }

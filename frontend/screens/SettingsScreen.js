@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Linking, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Constants from 'expo-constants';
 import { ScreenHeader, PrimaryButton } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
 import { apiFetch } from '../utils/auth';
@@ -9,13 +8,13 @@ import { API_BASE_URL } from '../utils/api';
 import { colors } from '../constants/design';
 import { useScreenBackHandler } from '../utils/screenBack';
 import SupportInquiryForm from '../components/SupportInquiryForm';
+import CustomerSupportContent from '../components/CustomerSupportContent';
+import AppInfoContent from '../components/AppInfoContent';
 import AccountManagementScreen from './AccountManagementScreen';
 import SocialAuthButtons from '../components/SocialAuthButtons';
 import { checkNotificationPermission, requestNotificationPermission, getTaskNotificationPreference, setTaskNotificationPreference } from '../services/notificationService';
 
 export { REGIONS, DISTRICTS_BY_REGION } from '../utils/workRegion';
-
-const SUPPORT_EMAIL = 'pang3.apps@gmail.com';
 
 export default function SettingsScreen({ user, onBack, onUpdatedUser, onLogout, onDeleteAccount }) {
   const [supportSending, setSupportSending] = useState(false);
@@ -49,6 +48,7 @@ export default function SettingsScreen({ user, onBack, onUpdatedUser, onLogout, 
   };
   if (credential) return <AccountManagementScreen user={user} credential={credential} onBack={() => setCredential('')} onUpdatedUser={onUpdatedUser} onLogout={onLogout} />;
   const row = (icon, title, onPress, danger = false) => <TouchableOpacity style={styles.row} onPress={onPress}><Ionicons name={icon} size={21} color={danger ? colors.danger : colors.primary} /><Text style={[styles.rowText, danger && { color: colors.danger }]}>{title}</Text><Ionicons name="chevron-forward" size={17} color={colors.textFaint} /></TouchableOpacity>;
+  const closeDetail = () => { if (!supportSending) setDetail(detail === 'inquiry' ? 'support' : detail === 'licenses' ? 'version' : null); };
   const closeGate = () => { if (!busy) { setGate(false); setPassword(''); } };
   return <View style={styles.container}><ScreenHeader root title="설정" onBack={onBack} /><ScrollView contentContainerStyle={[styles.body, styles.rootBody]}>
     <View style={styles.profile}><View style={styles.avatar}><Text style={styles.avatarText}>{String(user.name || user.loginId).slice(0, 1)}</Text></View><View style={{ flex: 1 }}><Text style={styles.name}>{user.name || user.loginId}</Text><Text style={styles.id}>@{user.loginId}</Text></View><TouchableOpacity style={styles.manage} onPress={() => setGate(true)}><Text style={styles.manageText}>관리</Text></TouchableOpacity></View>
@@ -57,7 +57,7 @@ export default function SettingsScreen({ user, onBack, onUpdatedUser, onLogout, 
     <Text style={styles.sectionLabel}>알림</Text>
     <View style={styles.card}><View style={styles.row}><Ionicons name="notifications-outline" size={21} color={colors.primary} /><Text style={styles.rowText}>업무 알림</Text>{enabled === null ? <View style={{ width: 52, height: 32 }} accessibilityLabel="알림 설정 불러오는 중" /> : <Switch value={enabled} disabled={notificationBusy} onValueChange={toggleNotifications} thumbColor={colors.primary} trackColor={{ true: '#B9D9FF', false: '#DFE8F4' }} />}</View></View>
     <Text style={styles.sectionLabel}>서비스 안내</Text>
-    <View style={styles.card}>{row('megaphone-outline', '공지사항', () => setDetail('notice'))}{row('help-circle-outline', '고객센터 / 운영정책', () => setDetail('support'))}{row('information-circle-outline', '앱 관리', () => setDetail('version'))}</View>
+    <View style={styles.card}>{row('megaphone-outline', '공지사항', () => setDetail('notice'))}{row('help-circle-outline', '고객센터', () => setDetail('support'))}{row('information-circle-outline', '앱 정보', () => setDetail('version'))}</View>
     <View style={styles.card}>{row('log-out-outline', '로그아웃', () => showAlert('로그아웃', '현재 계정에서 로그아웃할까요?', [{ text: '취소' }, { text: '로그아웃', onPress: onLogout }]))}{row('person-remove-outline', '계정 탈퇴', () => setDeleteOpen(true), true)}</View>
   </ScrollView>
   <Modal visible={gate || deleteOpen} transparent animationType="fade" onRequestClose={() => { if (!busy) { closeGate(); setDeleteOpen(false); setDeletePassword(''); } }}>
@@ -77,11 +77,20 @@ export default function SettingsScreen({ user, onBack, onUpdatedUser, onLogout, 
       </View>
     </View>
   </Modal>
-  <Modal visible={!!detail} statusBarTranslucent animationType="slide" onRequestClose={() => { if (!supportSending) setDetail(detail === 'inquiry' ? 'support' : null); }}><KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScreenHeader title={detail === 'notice' ? '공지사항' : detail === 'version' ? '앱 관리' : detail === 'inquiry' ? '문의하기' : '고객센터 / 운영정책'} onBack={() => { if (!supportSending) setDetail(detail === 'inquiry' ? 'support' : null); }} /><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>{detail === 'inquiry' ? <SupportInquiryForm user={user} onBusyChange={setSupportSending} onSubmitted={() => setDetail('support')} /> : detail === 'notice' ? <Text style={styles.help}>등록된 공지사항이 없습니다.</Text> : detail === 'version' ? <View style={styles.card}><Text style={styles.rowText}>버전 정보</Text><Text style={styles.help}>{Constants.expoConfig?.version || '확인할 수 없음'}</Text></View> : <><View style={styles.card}>{row('mail-outline', '문의하기', () => setDetail('inquiry'))}<Text selectable style={styles.supportEmail}>{SUPPORT_EMAIL}</Text></View><View style={styles.card}><Text style={styles.rowText}>운영정책</Text><Text style={styles.help}>운영정책 안내 준비 중</Text></View></>}</ScrollView></KeyboardAvoidingView></Modal>
+  <Modal visible={!!detail} statusBarTranslucent animationType="slide" onRequestClose={closeDetail}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScreenHeader title={detail === 'notice' ? '공지사항' : detail === 'version' ? '앱 정보' : detail === 'licenses' ? '오픈소스 라이선스' : detail === 'inquiry' ? '문의하기' : '고객센터'} onBack={closeDetail} />
+      <ScrollView key={detail} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
+        {detail === 'notice' ? <Text style={styles.help}>등록된 공지사항이 없습니다.</Text>
+          : detail === 'inquiry' ? <SupportInquiryForm user={user} onBusyChange={setSupportSending} onSubmitted={() => setDetail('support')} />
+          : detail === 'version' || detail === 'licenses' ? <AppInfoContent key={detail} page={detail} onLicenses={() => setDetail('licenses')} />
+          : <CustomerSupportContent onInquiry={() => setDetail('inquiry')} />}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  </Modal>
   </View>;
 }
 const styles = StyleSheet.create({
-  supportEmail: { color: colors.textSoft, fontSize: 13, paddingBottom: 14 },
   sectionLabel: { fontSize: 12, color: colors.textSoft, marginBottom: -12 },
   container: { flex: 1, backgroundColor: colors.background, marginTop: 0 }, body: {   paddingBottom: 30, padding: 20, gap: 20, },
   rootBody: {paddingTop: 16, },

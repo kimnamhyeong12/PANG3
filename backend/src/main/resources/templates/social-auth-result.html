@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="referrer" content="no-referrer">
+  <title>앱에서 계속하기 · 워크핀</title>
+  <style>
+    /* Figma 38:1250 / 38:520; shared with frontend/constants/design.js. */
+    :root {
+      --primary: #2477F3;
+      --primary-dark: #1551A6;
+      --primary-soft: #E8F2FF;
+      --text: #10285B;
+      --muted: #607195;
+      --line: #DCE7F5;
+      --surface-muted: #F4F8FF;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100svh;
+      background: var(--surface-muted);
+      color: var(--text);
+      font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+    }
+    .page {
+      min-height: 100vh;
+      min-height: 100svh;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: max(28px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-mark {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--primary);
+      box-shadow: 0 0 0 5px var(--primary-soft);
+      margin: 5px;
+    }
+    .brand-name { font-size: 20px; line-height: 30px; font-weight: 900; letter-spacing: -.7px; }
+    main { flex: 1; display: flex; align-items: center; padding: 56px 0; }
+    .content { width: 100%; }
+    .symbol {
+      width: 88px;
+      height: 88px;
+      margin-bottom: 32px;
+      border-radius: 28px;
+      background: var(--primary-soft);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .return-arrow {
+      width: 34px;
+      height: 28px;
+      border: 4px solid var(--primary);
+      border-left: 0;
+      border-bottom-right-radius: 12px;
+      border-top-right-radius: 12px;
+      position: relative;
+    }
+    .return-arrow::before {
+      content: "";
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      left: -2px;
+      top: -9px;
+      border-left: 4px solid var(--primary);
+      border-bottom: 4px solid var(--primary);
+      transform: rotate(45deg);
+    }
+    h1 { margin: 0; font-size: 28px; line-height: 1.45; letter-spacing: -1.2px; font-weight: 900; }
+    .description { margin: 12px 0 32px; font-size: 15px; line-height: 1.8; color: var(--muted); }
+    .primary-button {
+      display: flex;
+      min-height: 52px;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 20px;
+      border-radius: var(--radius);
+      background: var(--primary);
+      color: #fff;
+      font-size: 14px;
+      line-height: 22px;
+      font-weight: 700;
+      text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .primary-button:hover { background: var(--primary-dark); }
+    .primary-button:active { transform: translateY(1px); }
+    .primary-button:focus-visible { outline: 3px solid var(--text); outline-offset: 4px; }
+    .button-arrow { font-size: 20px; line-height: 20px; }
+    @media (min-width: 640px) {
+      body { display: grid; place-items: center; padding: 40px 24px; }
+      .page { min-height: 660px; width: 100%; padding: 32px; border: 1px solid var(--line); border-radius: 24px; }
+      main { padding: 48px 0; }
+    }
+    @media (max-width: 350px) { .page { padding-left: 20px; padding-right: 20px; } h1 { font-size: 26px; } }
+    @media (prefers-reduced-motion: reduce) { .primary-button:active { transform: none; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="brand" aria-label="워크핀">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">워크핀</span>
+    </header>
+    <main>
+      <section class="content" aria-labelledby="page-title">
+        <div class="symbol" aria-hidden="true"><span class="return-arrow"></span></div>
+        <h1 id="page-title">인증 요청을 처리했어요</h1>
+        <p class="description">앱에서 결과를 확인해 주세요.</p>
+        <a class="primary-button" href="pang3://auth/social">워크핀 앱으로 이동<span class="button-arrow" aria-hidden="true">→</span></a>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
