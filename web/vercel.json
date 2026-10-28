@@ -1,5 +1,15 @@
 {
+  "headers": [
+    {
+      "source": "/api/auth/social/:path*",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    }
+  ],
   "rewrites": [
+    {
+      "source": "/api/auth/social/:path*",
+      "destination": "https://3-37-233-96.sslip.io/api/auth/social/:path*"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
