@@ -61,7 +61,7 @@ public class SupportInquiryService {
         if (title.indexOf('\r') >= 0 || title.indexOf('\n') >= 0) throw invalid("제목은 한 줄로 입력해 주세요.");
         String body = text(content, 5000, "문의 내용");
         String type = category == null || category.isBlank() ? "기타" : text(category, 30, "문의 유형");
-        if (!java.util.List.of("이용 방법", "오류 신고", "계정", "결제·환불", "기타").contains(type)) throw invalid("문의 유형을 확인해 주세요.");
+        if (!java.util.List.of("이용 방법", "오류 신고", "계정", "결제·환불", "대량 데이터 등록 요청", "기타").contains(type)) throw invalid("문의 유형을 확인해 주세요.");
         if (!allow(userId, System.currentTimeMillis()))
             throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "문의가 많습니다. 잠시 후 다시 시도해 주세요.");
         SupportInquiry inquiry = new SupportInquiry();

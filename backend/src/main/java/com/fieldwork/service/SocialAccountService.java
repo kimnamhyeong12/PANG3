@@ -42,6 +42,7 @@ public class SocialAccountService {
         } else {
             user = new User(); user.setLoginId("social-" + UUID.randomUUID());
             user.setPassword(encoder.encode(UUID.randomUUID().toString())); user.setPasswordLoginEnabled(false);
+            user.setSocialProfilePending(true);
             String displayName = name == null || name.isBlank() ? "현장 작업자" : name.trim();
             user.setName(displayName.substring(0, Math.min(50, displayName.length()))); user.setRole("USER");
             user = users.saveAndFlush(user);
@@ -52,4 +53,31 @@ public class SocialAccountService {
     }
     @Transactional(readOnly = true)
     public List<String> providers(Long userId) { return identities.findByUser_UserId(userId).stream().map(SocialIdentity::getProvider).toList(); }
+
+    public record ProfileInput(String name, String workSido, String workSigungu, String workplaceAddress, Double workplaceLat, Double workplaceLng) {}
+
+    @Transactional
+    public java.util.Map<String, Object> completeProfile(Long userId, ProfileInput input) {
+        User user = users.findProfileForUpdate(userId).orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+        if ("DELETED".equals(user.getRole())) throw new IllegalArgumentException("탈퇴한 계정입니다.");
+        // Retries after a lost success response cannot overwrite a completed account.
+        if (!user.isSocialProfilePending()) return AuthSessionService.userInfo(user);
+        if (user.isPasswordLoginEnabled() || identities.findByUser_UserId(userId).isEmpty())
+            throw new IllegalArgumentException("소셜 가입 정보를 확인해 주세요.");
+        if (input == null || input.name() == null || input.name().isBlank() || input.name().trim().length() > 50 || input.name().indexOf('\0') >= 0)
+            throw new IllegalArgumentException("이름은 1~50자로 입력해 주세요.");
+        WorkRegion.validateOptional(input.workSido(), input.workSigungu());
+        boolean hasWorkplace = input.workplaceAddress() != null && !input.workplaceAddress().isBlank()
+            || input.workplaceLat() != null || input.workplaceLng() != null;
+        if (hasWorkplace) Workplace.validate(input.workplaceAddress(), input.workplaceLat(), input.workplaceLng());
+        user.setName(input.name().trim());
+        user.setWorkSido(input.workSido() == null || input.workSido().isBlank() ? null : input.workSido().trim());
+        user.setWorkSigungu(user.getWorkSido() == null ? null : WorkRegion.normalizeSigungu(input.workSido(), input.workSigungu()));
+        user.setWorkplaceAddress(hasWorkplace ? input.workplaceAddress().trim() : null);
+        user.setWorkplaceLat(hasWorkplace ? input.workplaceLat() : null);
+        user.setWorkplaceLng(hasWorkplace ? input.workplaceLng() : null);
+        user.setSocialProfilePending(false);
+        users.saveAndFlush(user);
+        return AuthSessionService.userInfo(user);
+    }
 }

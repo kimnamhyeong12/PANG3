@@ -83,5 +83,18 @@ function form(email='reply@example.test') {
   const parts=files.calls.at(-1)[1].body.parts;assert.equal(parts.find(p=>p[0]==='files')[1].uri,'file:///screen.png');
   assert.equal(JSON.parse(parts.find(p=>p[0]==='inquiry')[1]).replyEmail,'tester@gmail.com');
   assert.equal(files.find('TouchableOpacity','첨부파일 삭제 screen.png'),undefined,'success clears attachment selection');
+  const bulk=form('bulk@example.test');
+  bulk.find('TouchableOpacity','문의 유형 선택').props.onPress();bulk.render();
+  bulk.find('TouchableOpacity','대량 데이터 등록 요청').props.onPress();bulk.render();
+  bulk.setPicker(async options=>{assert.ok(options.type.includes('text/csv'));assert.ok(options.type.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'));return {canceled:false,assets:[{name:'시설물.xlsx',uri:'file:///facilities.xlsx',size:2048},{name:'시설물.csv',uri:'file:///facilities.csv',size:1024}]};});
+  await bulk.find('TouchableOpacity','문의 파일 첨부').props.onPress();bulk.render();
+  assert.ok(bulk.find('TouchableOpacity','첨부파일 삭제 시설물.xlsx'));assert.ok(bulk.find('TouchableOpacity','첨부파일 삭제 시설물.csv'));
+  bulk.input('문의 제목','시설물 대량 등록');bulk.input('문의 내용','자료 확인 부탁드립니다.');bulk.find('TouchableOpacity','개인정보 수집·이용 동의').props.onPress();bulk.render();
+  await bulk.find('Button').props.onPress();bulk.render();
+  const bulkParts=bulk.calls.at(-1)[1].body.parts;
+  assert.equal(JSON.parse(bulkParts.find(p=>p[0]==='inquiry')[1]).category,'대량 데이터 등록 요청');
+  assert.deepEqual(Array.from(bulkParts.filter(p=>p[0]==='files'),p=>p[1].type),['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','text/csv']);
+  const invalid=form();invalid.setPicker(async()=>({canceled:false,assets:[{name:'data.xlsm',uri:'file:///data.xlsm',size:200}]}));
+  await invalid.find('TouchableOpacity','문의 파일 첨부').props.onPress();invalid.render();assert.ok(invalid.errorText().includes('XLSX, CSV'));
   console.log('In-app support checks passed: dropdowns, split email/paste/custom domains, validation, retained drafts, idempotent retries and duplicate-submit protection');
 })().catch(error=>{console.error(error);process.exitCode=1;});

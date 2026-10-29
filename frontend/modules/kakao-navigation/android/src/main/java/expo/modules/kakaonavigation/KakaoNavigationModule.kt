@@ -8,6 +8,10 @@ class KakaoNavigationModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("KakaoNavigation")
 
+    AsyncFunction("readFacilityOriginalPhoto") { uri: String ->
+      FacilityOriginalPhoto.read(requireNotNull(appContext.reactContext), uri)
+    }
+
     AsyncFunction("saveReportToDownloads") { uri: String, filename: String ->
       ReportDownloads.save(requireNotNull(appContext.reactContext), uri, filename)
     }

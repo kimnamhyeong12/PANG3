@@ -12,6 +12,14 @@
 
 ## 배포 반영
 
+### 2026-10-29 신규 소셜 가입 정보 확인
+
+- `backend/sql/2026-10-29-social-signup-profile.sql`을 적용하고 새 서버와 앱 코드를 함께 반영한다. 기존 계정은 `social_profile_pending=false`로 유지된다. 소셜 로그인을 기존 계정에 연결하는 경우도 추가 가입 화면을 표시하지 않는다.
+- 새 소셜 계정을 만들 때만 `socialProfilePending=true`를 저장하고 로그인·세션 복원 응답에 포함한다. 앱은 이 상태에서 이름 확인·수정, 선택적인 근무지역·근무지를 표시한다. 로컬 아이디나 비밀번호를 추가로 요구하지 않는다.
+- `POST /api/auth/social/complete-profile`은 인증된 본인 계정만 수정한다. 서버가 이름·지역·근무지 좌표를 검증한 뒤 가입 정보 확인을 완료한다. 중복 성공 요청은 이미 저장된 정보를 덮어쓰지 않는다.
+- 저장을 완료하지 않고 종료했다면 다음 로그인 때 다시 이어서 입력한다. 완료한 회원과 기존 회원은 바로 지도로 이동한다. 앱에서 가입 확인을 마치기 전에는 일반 작업공간을 열지 않는다.
+- 코드 검증: `node frontend/scripts/social-signup-test.cjs`, `node frontend/scripts/session-client-test.cjs`, 백엔드 `SocialLoginServiceTest` 및 `ReleaseAuthIntegrationTest`. 실제 공급자 계정 인증과 화면 동작 확인은 사용자가 진행한다.
+
 1. `web/vercel.json`이 Vercel 프로젝트의 Root Directory 설정에 맞게 적용되는지 확인하고 웹을 재배포한다.
 2. 서버 담당자는 기존 비밀 저장소/환경변수에 아래 이름을 등록하고 실행 컨테이너에 반영한다. 예시 파일 자체는 자동으로 읽히지 않는다.
 

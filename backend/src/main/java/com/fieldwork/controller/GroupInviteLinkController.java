@@ -14,6 +14,6 @@ public class GroupInviteLinkController {
     @GetMapping(value="/join/{token:[A-Za-z0-9_-]{43}}",produces=MediaType.TEXT_HTML_VALUE)
     public ResponseEntity<String> landing(@PathVariable String token){
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).header("Referrer-Policy","no-referrer").header("Content-Security-Policy","default-src 'none'; style-src 'unsafe-inline'")
-            .body("<!doctype html><html lang='ko'><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>핀워크 그룹 초대</title><body style='font-family:sans-serif;padding:32px;line-height:1.8'><h1>핀워크 그룹 초대</h1><p>앱에서 로그인한 뒤 그룹을 확인하고 참여해 주세요.</p><a href='pang3://join?token="+token+"'>핀워크 앱에서 열기</a><p>앱이 없다면 먼저 핀워크를 설치해 주세요.</p></body></html>");
+            .body("<!doctype html><html lang='ko'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>핀워크 그룹 초대</title><meta property='og:site_name' content='핀워크'><meta property='og:title' content='핀워크 그룹 초대'><meta property='og:description' content='앱에서 로그인한 뒤 그룹을 확인하고 참여해 주세요.'></head><body style='font-family:sans-serif;padding:32px;line-height:1.8'><h1>핀워크 그룹 초대</h1><p>앱에서 로그인한 뒤 그룹을 확인하고 참여해 주세요.</p><a href='pang3://join?token="+token+"'>핀워크 앱에서 열기</a><p>앱이 없다면 먼저 핀워크를 설치해 주세요.</p></body></html>");
     }
 }

@@ -118,6 +118,7 @@ public class AuthSessionService {
         result.put("name", user.getName()); result.put("role", user.getRole());
         result.put("email", user.getEmail());
         result.put("passwordLoginEnabled", user.isPasswordLoginEnabled());
+        result.put("socialProfilePending", user.isSocialProfilePending());
         result.put("workSido", user.getWorkSido()); result.put("workSigungu", user.getWorkSigungu());
         result.put("workplaceAddress", user.getWorkplaceAddress());
         result.put("workplaceLat", user.getWorkplaceLat()); result.put("workplaceLng", user.getWorkplaceLng());

@@ -17,7 +17,7 @@ public class FacilityRegistryService {
     public record Input(String name,String kind,String address,String detailLocation,String confirmedDate,String description,String requestKey,Boolean consent){}
     public record Review(String status,String note,Long version,String categoryName,String name,String address,Double lat,Double lng,String sido,String sigungu,String adminDong){}
     public record Item(Long id,String name,String kind,String status,Instant createdAt){}
-    public record Detail(Long id,String name,String kind,String address,String detailLocation,LocalDate confirmedDate,String description,double photoLat,double photoLng,String status,String reviewNote,Instant reviewedAt,long version){}
+    public record Detail(Long id,String name,String kind,String address,String detailLocation,LocalDate confirmedDate,String description,double photoLat,double photoLng,String status,String reviewNote,Instant reviewedAt,long version,boolean hasScreenshot){}
     public record Rows(List<Item> items,int page,boolean hasMore){}
     public record Category(String key,String label,String shortLabel,String icon){}
     private User user(Long id){return users.findById(id).filter(u->!"DELETED".equals(u.getRole())).orElseThrow(()->err(401,"다시 로그인해 주세요."));}
@@ -27,17 +27,18 @@ public class FacilityRegistryService {
         if(input==null)throw err(400,"신청 내용을 확인해 주세요.");
         User u=user(userId);String key=text(input.requestKey(),80,"요청 번호");var existing=applications.findByUser_UserIdAndRequestKey(userId,key);if(existing.isPresent())return existing.get().id;
         if(!Boolean.TRUE.equals(input.consent()))throw err(400,"사진과 촬영 위치정보 수집·이용에 동의해 주세요.");
-        String name=text(input.name(),100,"시설물 이름"),kind=text(input.kind(),40,"시설 종류"),location=text(input.detailLocation(),300,"상세 위치");
+        String name=text(input.name(),100,"시설물 이름"),kind=text(input.kind(),40,"시설 종류"),location=Objects.toString(input.detailLocation(),"").trim();
+        if(location.length()>300||location.indexOf('\0')>=0)throw err(400,"상세 위치는 300자 이내로 입력해 주세요.");
         LocalDate date;try{date=LocalDate.parse(input.confirmedDate());}catch(Exception e){throw err(400,"확인 날짜를 선택해 주세요.");}
         if(date.isAfter(LocalDate.now(ZoneId.of("Asia/Seoul"))))throw err(400,"확인 날짜는 오늘 이후일 수 없습니다.");
         if(input.description()!=null&&input.description().length()>3000||input.address()!=null&&input.address().length()>300)throw err(400,"추가 설명 또는 주소가 너무 깁니다.");
-        // Both files must pass validation before anything is written.
-        var original=evidence.original(photo);byte[] map=evidence.screenshot(screenshot);
+        // Validate the original and any legacy screenshot before writing evidence.
+        var original=evidence.original(photo);byte[] map=screenshot==null?null:evidence.screenshot(screenshot);
         FacilityApplication a=new FacilityApplication();a.user=u;a.requestKey=key;a.name=name;a.kind=kind;a.address=input.address();a.detailLocation=location;a.confirmedDate=date;a.description=input.description();a.photoLat=original.lat();a.photoLng=original.lng();
-        a.consentedAt=Instant.now();applications.save(a);a.photoKey=evidence.save(userId,original.image());a.screenshotKey=evidence.save(userId,map);return a.id;
+        a.consentedAt=Instant.now();applications.save(a);a.photoKey=evidence.save(userId,original.image());if(map!=null)a.screenshotKey=evidence.save(userId,map);return a.id;
     }
     private FacilityApplication own(Long id,Long userId){return applications.findByIdAndUser_UserId(id,userId).orElseThrow(()->err(404,"신청을 찾을 수 없습니다."));}
-    private Detail detail(FacilityApplication a){return new Detail(a.id,a.name,a.kind,a.address,a.detailLocation,a.confirmedDate,a.description,a.photoLat,a.photoLng,a.status,a.reviewNote,a.reviewedAt,a.version);}
+    private Detail detail(FacilityApplication a){return new Detail(a.id,a.name,a.kind,a.address,a.detailLocation,a.confirmedDate,a.description,a.photoLat,a.photoLng,a.status,a.reviewNote,a.reviewedAt,a.version,a.screenshotKey!=null);}
     public Rows list(Long userId,boolean admin,int page){if(page<0||page>10000)throw err(400,"페이지를 확인해 주세요.");if(admin)reviewer(userId);var request=PageRequest.of(page,20,Sort.by(Sort.Direction.DESC,"createdAt","id"));var rows=admin?applications.findAll(request):applications.findByUser_UserId(userId,request);return new Rows(rows.stream().map(a->new Item(a.id,a.name,a.kind,a.status,a.createdAt)).toList(),page,rows.hasNext());}
     public Detail read(Long userId,Long id,boolean admin){if(admin)reviewer(userId);return detail(admin?applications.findById(id).orElseThrow(()->err(404,"신청을 찾을 수 없습니다.")):own(id,userId));}
     public java.nio.file.Path image(Long userId,Long id,String kind,boolean admin){if(admin)reviewer(userId);FacilityApplication a=admin?applications.findById(id).orElseThrow(()->err(404,"신청을 찾을 수 없습니다.")):own(id,userId);if(!List.of("photo","screenshot").contains(kind))throw err(404,"사진을 찾을 수 없습니다.");return evidence.read(kind.equals("photo")?a.photoKey:a.screenshotKey);}

@@ -8,7 +8,7 @@ import { showAlert } from './CustomAlert';
 import { groupApi } from '../utils/groupApi';
 import { colors } from '../constants/design';
 
-const INQUIRY_TYPES = ['이용 방법', '오류 신고', '계정', '결제·환불', '기타'];
+const INQUIRY_TYPES = ['이용 방법', '오류 신고', '계정', '결제·환불', '대량 데이터 등록 요청', '기타'];
 const EMAIL_DOMAINS = ['naver.com', 'gmail.com', 'daum.net', 'hanmail.net', 'nate.com', 'outlook.com', 'icloud.com'];
 const PRIVACY_NOTICE_VERSION = 'support-2026-10-29-v1';
 const MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024;
@@ -74,13 +74,13 @@ export default function SupportInquiryForm({ user, onSubmitted, onBusyChange }) 
     if (attachments.length >= 5) { setError('첨부파일은 최대 5개까지 등록할 수 있어요.'); return; }
     picking.current = true; setChoosingFiles(true); onBusyChange?.(true); setError('');
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: ['image/jpeg', 'image/png', 'application/pdf'], multiple: true, copyToCacheDirectory: true });
+      const result = await DocumentPicker.getDocumentAsync({ type: ['image/jpeg', 'image/png', 'application/pdf', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/csv', 'text/comma-separated-values', 'application/csv', 'application/vnd.ms-excel', 'text/plain'], multiple: true, copyToCacheDirectory: true });
       if (result.canceled) return;
       const selected = (result.assets || []).map(file => ({ ...file, size: file.size ?? file.file?.size,
-        mimeType: /\.pdf$/i.test(file.name) ? 'application/pdf' : /\.png$/i.test(file.name) ? 'image/png' : 'image/jpeg' }));
+        mimeType: /\.xlsx$/i.test(file.name) ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : /\.csv$/i.test(file.name) ? 'text/csv' : /\.pdf$/i.test(file.name) ? 'application/pdf' : /\.png$/i.test(file.name) ? 'image/png' : 'image/jpeg' }));
       const merged = [...attachments];
       for (const file of selected) {
-        if (!/\.(jpe?g|png|pdf)$/i.test(file.name)) throw new Error('JPG, PNG, PDF 파일만 첨부할 수 있어요.');
+        if (!/\.(jpe?g|png|pdf|xlsx|csv)$/i.test(file.name)) throw new Error('JPG, PNG, PDF, XLSX, CSV 파일만 첨부할 수 있어요.');
         if (!Number.isFinite(file.size) || file.size <= 0) throw new Error('크기를 확인할 수 없거나 비어 있는 파일은 첨부할 수 없어요.');
         if (file.size > MAX_SINGLE_FILE_BYTES) throw new Error('파일 하나는 최대 15MB까지 첨부할 수 있어요.');
         if (!merged.some(item => item.uri === file.uri || item.name === file.name && item.size === file.size && item.lastModified === file.lastModified)) merged.push(file);
@@ -137,8 +137,8 @@ export default function SupportInquiryForm({ user, onSubmitted, onBusyChange }) 
     <View style={styles.field}>
       <Text style={styles.label}>파일 첨부</Text>
       <TouchableOpacity accessibilityRole="button" accessibilityLabel="문의 파일 첨부" disabled={sending || choosingFiles || attachments.length >= 5} onPress={chooseFiles} style={styles.select}><Ionicons name="add" size={21} color={colors.primary} /><Text style={styles.selectText}>{choosingFiles ? '파일 선택 중…' : '파일 첨부'}</Text><Ionicons name="attach" size={21} color={colors.textSoft} /></TouchableOpacity>
-      {attachments.map((file, index) => <View key={`${file.uri}-${index}`} style={styles.attachmentRow}><Ionicons name={file.mimeType === 'application/pdf' ? 'document-text-outline' : 'image-outline'} size={20} color={colors.primary} /><View style={styles.attachmentName}><Text numberOfLines={2} style={styles.attachmentText}>{file.name}</Text><Text style={styles.attachmentSize}>{(file.size / 1024 / 1024).toFixed(1)}MB</Text></View><TouchableOpacity accessibilityRole="button" accessibilityLabel={`첨부파일 삭제 ${file.name}`} disabled={sending || choosingFiles} onPress={() => setAttachments(current => current.filter((_, position) => position !== index))} style={styles.close}><Ionicons name="close" size={20} color={colors.textSoft} /></TouchableOpacity></View>)}
-      <View style={styles.attachmentSummary}><Text style={styles.attachmentHint}>JPG·PNG·PDF 최대 5개{ '\n' }파일당 15MB, 합계 30MB</Text><Text style={styles.attachmentSize}>{(attachmentBytes / 1024 / 1024).toFixed(1)}MB / 30MB</Text></View>
+      {attachments.map((file, index) => <View key={`${file.uri}-${index}`} style={styles.attachmentRow}><Ionicons name={file.mimeType.startsWith('image/') ? 'image-outline' : 'document-text-outline'} size={20} color={colors.primary} /><View style={styles.attachmentName}><Text numberOfLines={2} style={styles.attachmentText}>{file.name}</Text><Text style={styles.attachmentSize}>{(file.size / 1024 / 1024).toFixed(1)}MB</Text></View><TouchableOpacity accessibilityRole="button" accessibilityLabel={`첨부파일 삭제 ${file.name}`} disabled={sending || choosingFiles} onPress={() => setAttachments(current => current.filter((_, position) => position !== index))} style={styles.close}><Ionicons name="close" size={20} color={colors.textSoft} /></TouchableOpacity></View>)}
+      <View style={styles.attachmentSummary}><Text style={styles.attachmentHint}>JPG·PNG·PDF·XLSX·CSV 최대 5개{ '\n' }파일당 15MB, 합계 30MB</Text><Text style={styles.attachmentSize}>{(attachmentBytes / 1024 / 1024).toFixed(1)}MB / 30MB</Text></View>
     </View>
     <View style={styles.privacySection}>
       <View style={styles.consentRow}>

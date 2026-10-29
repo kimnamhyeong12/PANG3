@@ -12,7 +12,7 @@ public class FacilityApplicationController {
     public FacilityApplicationController(FacilityRegistryService registry,ObjectMapper json){this.registry=registry;this.json=json;}
     @GetMapping("/api/public-data/categories") public Object categories(){return registry.categories();}
     @PostMapping(value="/api/facility-applications",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Object submit(@RequestPart("application") String payload,@RequestPart("photo") MultipartFile photo,@RequestPart("screenshot") MultipartFile screenshot){
+    public Object submit(@RequestPart("application") String payload,@RequestPart("photo") MultipartFile photo,@RequestPart(value="screenshot",required=false) MultipartFile screenshot){
         FacilityRegistryService.Input input;
         try { input=json.readValue(payload,FacilityRegistryService.Input.class); }
         catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST,"신청 내용을 확인해 주세요.");}

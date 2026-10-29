@@ -16,6 +16,7 @@ android {
 }
 
 dependencies {
+  implementation 'androidx.exifinterface:exifinterface:1.4.1'
   implementation 'com.kakao.maps.open:android:2.15.2'
   implementation 'androidx.appcompat:appcompat:1.7.1'
   implementation 'androidx.constraintlayout:constraintlayout:2.2.1'

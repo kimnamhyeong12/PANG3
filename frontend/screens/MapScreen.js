@@ -1823,7 +1823,7 @@ function NormalMapScreen({
           categoryLabel={publicCategories.find(item => item.key === publicCategory)?.label || ''}
           expanded={publicCategoryOpen && !dongOpen}
           onRegionPress={() => { setPublicCategoryOpen(false); dongOpen ? setDongOpen(false) : loadDongs(); }}
-          onCategoryPress={() => { if (!selectedDong) loadDongs(); else setPublicCategoryOpen(value => !value); }}
+          onCategoryPress={() => { setDongOpen(false); setPublicCategoryOpen(value => !value); }}
           onClose={() => { resetAddModes(); setDongOpen(false); }}
           onBack={showMapBack ? () => { if (!consumeScreenBack()) onBack?.(); } : undefined}
           onLayout={event => { const { x, y } = event.nativeEvent.layout; setSearchControlFrame({ x, y }); }}
@@ -1915,7 +1915,7 @@ function NormalMapScreen({
 
 
       </View>}
-        {publicFacilityMode && selectedDong && publicCategoryOpen && !dongOpen && (
+        {publicFacilityMode && publicCategoryOpen && !dongOpen && (
           <View accessibilityLabel="공공시설물 카테고리 목록" style={[styles.publicCategoryBox, {
             left: topOverlayFrame.x + searchControlFrame.x + publicCategoryAnchor.x,
             top: topOverlayFrame.y + searchControlFrame.y + publicCategoryAnchor.y + publicCategoryAnchor.height + 6,
@@ -2137,7 +2137,7 @@ function NormalMapScreen({
           accessibilityRole="button"
           accessibilityLabel="공공시설물 목록 펼치기"
         >
-          <Text style={styles.publicFacilityCollapsedText}>공공시설물 {publicItems.length}곳 보기</Text>
+          <Text style={styles.publicFacilityCollapsedText}>{selectedDong?`공공시설물 ${publicItems.length}곳 보기`:'조회할 행정동 선택'}</Text>
         </TouchableOpacity>
       )}
 
@@ -2147,7 +2147,9 @@ function NormalMapScreen({
             <View style={styles.publicFacilityHandle} />
             <View style={styles.publicFacilityHeader}>
               <Text style={styles.publicFacilityActionTitle}>
-                {publicLoading
+                {!selectedDong
+                  ? publicCategories.find(item => item.key === publicCategory)?.label || '공공시설물'
+                  : publicLoading
                   ? '공공시설물을 불러오는 중...'
                   : `${publicCategories.find((item) => item.key === publicCategory)?.label || '공공시설물'} ${publicItems.length}곳`}
               </Text>
@@ -2160,7 +2162,9 @@ function NormalMapScreen({
             </View>
           </View>
           <ScrollView style={styles.publicFacilityList} nestedScrollEnabled>
-            {publicLoading ? (
+            {!selectedDong ? (
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="시설물을 조회할 행정동 선택" onPress={()=>loadDongs()}><Text style={styles.publicFacilityEmpty}>시설물을 조회하려면 행정동을 선택해 주세요.</Text></TouchableOpacity>
+            ) : publicLoading ? (
               <Text style={styles.publicFacilityEmpty}>시설물을 불러오는 중...</Text>
             ) : publicItems.length ? publicItems.map((item) => {
               const selected = publicSelectedIds.includes(item.id);
@@ -2286,7 +2290,7 @@ function NormalMapScreen({
         items={[
           ...(registrationDraft ? [{ label: '작성 이어하기', icon: 'create-outline', onPress: () => { sheetY.setValue(0); setSearchedPlace(registrationDraft.place); setPlaceName(registrationDraft.name); setTask(registrationDraft.task); } }] : []),
           { label: '지도 선택', icon: 'map-outline', onPress: () => { resetAddModes(); setDirectCenter(null); setCenterAddress(''); setLocationSettingMode(true); setCoordinateText({ lat: '', lng: '' }); setCoordinateRequest(null); setMapSelectMode(true); } },
-          { label: '공공시설물', icon: 'business-outline', onPress: () => { resetAddModes(); setFocusRequest(old => ({ coordinates: [], token: old.token + 1 })); setPublicFacilityMode(true); setPublicSheetOpen(true); setKeyword(''); setPublicCategory(''); setPublicItems([]); setPublicSelectedIds([]); setPublicCategoryOpen(false); loadDongs(); } },
+          { label: '공공시설물', icon: 'business-outline', onPress: () => { resetAddModes(); setFocusRequest(old => ({ coordinates: [], token: old.token + 1 })); setPublicFacilityMode(true); setPublicSheetOpen(true); setKeyword(''); setPublicCategory(''); setPublicItems([]); setPublicSelectedIds([]); setPublicCategoryOpen(false); } },
           { label: '프로젝트', icon: 'folder-outline', onPress: () => { setProjectSelectOnly(false); setProjectOpen(true); } },
           { label: '엑셀 등록', icon: 'grid-outline', onPress: () => setBulkUploadOpen(true) },
           { label: '사진 등록', icon: 'image-outline', onPress: () => setPhotoUploadOpen(true) },

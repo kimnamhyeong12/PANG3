@@ -87,14 +87,31 @@ class ReleaseAuthIntegrationTest {
     org.springframework.mock.web.MockMultipartFile facilityPayload(String key) throws Exception {
         return new org.springframework.mock.web.MockMultipartFile("application","","application/json",json.writeValueAsBytes(Map.of("name","현장 시설","kind","테스트 시설","detailLocation","건물 입구 오른쪽","address","부산광역시 사하구","confirmedDate",java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).toString(),"requestKey",key,"consent",true)));
     }
-    @Test void facilityApplicationRequiresGpsAndBothEvidenceAndApprovalPublishesOnlyReviewedData() throws Exception {
+    @Test void facilityDetailLocationIsOptionalButStillLengthLimited() throws Exception {
+        User owner=user();
+        var photo=new org.springframework.mock.web.MockMultipartFile("photo","facility.jpg","image/jpeg",gpsPhoto());
+        var image=new java.io.ByteArrayOutputStream();javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(2,2,java.awt.image.BufferedImage.TYPE_INT_RGB),"png",image);
+        var screenshot=new org.springframework.mock.web.MockMultipartFile("screenshot","map.png","image/png",image.toByteArray());
+        for(String location:new String[]{null,"","   "," 건물 뒤편 "}) {
+            var input=new FacilityRegistryService.Input("현장 시설","소화전","부산광역시 사하구",location,java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).toString(),"",UUID.randomUUID().toString(),true);
+            Long id=facilityRegistry.submit(owner.getUserId(),input,photo,null);
+            assertEquals(location==null?"":location.trim(),facilityRegistry.read(owner.getUserId(),id,false).detailLocation());
+        }
+        var invalid=new FacilityRegistryService.Input("현장 시설","소화전","부산광역시 사하구","가".repeat(301),java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).toString(),"",UUID.randomUUID().toString(),true);
+        assertThrows(org.springframework.web.server.ResponseStatusException.class,()->facilityRegistry.submit(owner.getUserId(),invalid,photo,screenshot));
+    }
+    @Test void facilityApplicationRequiresGpsAndApprovalPublishesOnlyReviewedData() throws Exception {
         User owner=user(), reviewer=user();reviewer.setRole("FACILITY_REVIEWER");users.saveAndFlush(reviewer);
         JsonNode auth=login(owner), admin=login(reviewer), other=login(user());
         var photo=new org.springframework.mock.web.MockMultipartFile("photo","facility.jpg","image/jpeg",gpsPhoto());
         var image=new java.io.ByteArrayOutputStream();javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(2,2,java.awt.image.BufferedImage.TYPE_INT_RGB),"png",image);
         var screenshot=new org.springframework.mock.web.MockMultipartFile("screenshot","map.png","image/png",image.toByteArray());
+        var photoOnlyPayload=facilityPayload(UUID.randomUUID().toString());
+        Long photoOnlyId=json.readTree(mvc.perform(multipart("/api/facility-applications").file(photoOnlyPayload).file(photo).header("Authorization",bearer(auth))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+        mvc.perform(get("/api/facility-applications/"+photoOnlyId).header("Authorization",bearer(auth))).andExpect(status().isOk()).andExpect(jsonPath("$.hasScreenshot").value(false));
+        mvc.perform(get("/api/facility-applications/"+photoOnlyId+"/evidence/screenshot").header("Authorization",bearer(auth))).andExpect(status().isNotFound());
         var payload=facilityPayload(UUID.randomUUID().toString());
-        mvc.perform(multipart("/api/facility-applications").file(payload).file(photo).header("Authorization",bearer(auth))).andExpect(status().isBadRequest());
+        mvc.perform(multipart("/api/facility-applications").file(payload).file(screenshot).header("Authorization",bearer(auth))).andExpect(status().isBadRequest());
         mvc.perform(multipart("/api/facility-applications").file(payload).file(screenshot).file(new org.springframework.mock.web.MockMultipartFile("photo","plain.png","image/png",image.toByteArray())).header("Authorization",bearer(auth))).andExpect(status().isBadRequest());
         Long id=json.readTree(mvc.perform(multipart("/api/facility-applications").file(payload).file(photo).file(screenshot).header("Authorization",bearer(auth))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("id").asLong();
         mvc.perform(get("/api/facility-applications/"+id).header("Authorization",bearer(auth))).andExpect(status().isOk()).andExpect(jsonPath("$.photoLat").value(35.1)).andExpect(jsonPath("$.status").value("PENDING"));
@@ -134,6 +151,56 @@ class ReleaseAuthIntegrationTest {
         mvc.perform(postJson("/api/group-invite-links/"+expired+"/join",Map.of()).header("Authorization",bearer(b))).andExpect(status().isGone());
     }
     String ip;
+    @Test void firstSocialSignupNeedsProfileUntilCompletedThenFutureLoginsSkipIt() throws Exception {
+        for(String provider:List.of("google","kakao")) {
+            String subject=UUID.randomUUID().toString();
+            Long id=socialAccounts.resolve(provider,subject,"소셜 이름",null,false);
+            Map<String,Object> auth=sessionService.issue(id);
+            assertEquals(true,auth.get("socialProfilePending"));
+            assertEquals("소셜 이름",auth.get("name"));
+            assertEquals(id,socialAccounts.resolve(provider,subject,"다시 받은 이름",null,false));
+            assertTrue(users.findById(id).orElseThrow().isSocialProfilePending());
+            String authorization="Bearer "+auth.get("accessToken");
+            mvc.perform(postJson("/api/auth/social/complete-profile",Map.of("name","확인한 이름","workSido","부산광역시","workSigungu","사하구",
+                    "workplaceAddress","부산광역시 사하구","workplaceLat",35.1,"workplaceLng",129.0)).header("Authorization",authorization))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.socialProfilePending").value(false))
+                .andExpect(jsonPath("$.name").value("확인한 이름")).andExpect(jsonPath("$.workSigungu").value("사하구"))
+                .andExpect(jsonPath("$.workplaceLat").value(35.1));
+            assertEquals(false,sessionService.refresh((String)auth.get("refreshToken")).get("socialProfilePending"));
+            assertEquals(id,socialAccounts.resolve(provider,subject,"소셜 이름",null,false));
+            Map<String,Object> next=sessionService.issue(id);
+            assertEquals(false,next.get("socialProfilePending"));assertEquals("확인한 이름",next.get("name"));
+            mvc.perform(postJson("/api/auth/social/complete-profile",Map.of("name","중복 요청 이름")).header("Authorization","Bearer "+next.get("accessToken")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("확인한 이름"));
+        }
+    }
+
+    @Test void socialSignupProfileValidatesInputAndOnlyUpdatesTheAuthenticatedPendingAccount() throws Exception {
+        Long id=socialAccounts.resolve("google",UUID.randomUUID().toString(),"처음 이름",null,false);
+        Map<String,Object> auth=sessionService.issue(id);String authorization="Bearer "+auth.get("accessToken");
+        mvc.perform(postJson("/api/auth/social/complete-profile",Map.of("name","이름"))).andExpect(status().isUnauthorized());
+        for(var body:List.of(Map.of("name","  "),Map.of("name","이름","workSido","부산광역시"),Map.of("name","이름","workplaceAddress","주소")))
+            mvc.perform(postJson("/api/auth/social/complete-profile",body).header("Authorization",authorization)).andExpect(status().isBadRequest());
+        assertTrue(users.findById(id).orElseThrow().isSocialProfilePending());
+        User other=user();JsonNode otherAuth=login(other);
+        mvc.perform(postJson("/api/auth/social/complete-profile",Map.of("userId",id,"name","다른 사람 이름")).header("Authorization",bearer(otherAuth)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.userId").value(other.getUserId())).andExpect(jsonPath("$.name").value(other.getName()));
+        assertEquals("처음 이름",users.findById(id).orElseThrow().getName());
+        mvc.perform(postJson("/api/auth/social/complete-profile",Map.of("name"," 이름만 확인 ")).header("Authorization",authorization))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("이름만 확인")).andExpect(jsonPath("$.socialProfilePending").value(false));
+    }
+
+    @Test void existingMembersAndExplicitSocialLinksDoNotStartSocialSignupAgain() throws Exception {
+        User existing=user();
+        assertFalse(existing.isSocialProfilePending());
+        String subject=UUID.randomUUID().toString();
+        socialAccounts.resolve("kakao",subject,"카카오 이름",existing.getUserId(),false);
+        assertEquals(false,sessionService.issue(existing.getUserId()).get("socialProfilePending"));
+        Long legacyId=socialAccounts.resolve("google",UUID.randomUUID().toString(),"기존 소셜 회원",null,false);
+        User legacy=users.findById(legacyId).orElseThrow();legacy.setSocialProfilePending(false);users.saveAndFlush(legacy);
+        assertEquals(false,sessionService.issue(legacyId).get("socialProfilePending"));
+    }
+
     @Test void socialOnlyAccountCanManageProfileAndDeleteWithoutALocalPassword() throws Exception {
         Long id = socialAccounts.resolve("kakao", UUID.randomUUID().toString(), "소셜 작업자", null, false);
         User account = users.findById(id).orElseThrow();
@@ -307,6 +374,34 @@ class ReleaseAuthIntegrationTest {
         mvc.perform(get("/api/support/inquiries/"+id).header("Authorization",bearer(auth))).andExpect(jsonPath("$.attachments.length()").value(1));
     }
 
+    @Test void bulkDataInquiryPreservesExcelAndCsvAttachmentsAndTheirAccessControls() throws Exception {
+        User owner=user(); JsonNode auth=login(owner), other=login(user()), operator=login(agent());
+        var bytes=new java.io.ByteArrayOutputStream();
+        try(var zip=new java.util.zip.ZipOutputStream(bytes)) {
+            for(String name:List.of("[Content_Types].xml","xl/workbook.xml","xl/worksheets/sheet1.xml")) {
+                zip.putNextEntry(new java.util.zip.ZipEntry(name));zip.write("<document/>".getBytes());zip.closeEntry();
+            }
+        }
+        byte[] excel=bytes.toByteArray(), csv="이름,주소\r\n소화전,부산광역시\r\n".getBytes(java.nio.charset.Charset.forName("MS949"));
+        var payload=new org.springframework.mock.web.MockMultipartFile("inquiry","","application/json",json.writeValueAsBytes(Map.of("replyEmail","reply@example.test","subject","시설물 대량 등록","message","엑셀과 CSV 확인 부탁드립니다.","category","대량 데이터 등록 요청")));
+        Long id=json.readTree(mvc.perform(multipart("/api/support/inquiries").file(payload)
+            .file(new org.springframework.mock.web.MockMultipartFile("files","시설물.xlsx","application/octet-stream",excel))
+            .file(new org.springframework.mock.web.MockMultipartFile("files","시설물.csv","application/octet-stream",csv))
+            .header("Authorization",bearer(auth))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("inquiryId").asLong();
+        JsonNode detail=json.readTree(mvc.perform(get("/api/support/inquiries/"+id).header("Authorization",bearer(auth)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.category").value("대량 데이터 등록 요청"))
+            .andExpect(jsonPath("$.attachments.length()").value(2)).andReturn().getResponse().getContentAsString());
+        for(JsonNode attachment:detail.get("attachments")) {
+            boolean xlsx=attachment.get("name").asText().endsWith(".xlsx");
+            String own="/api/support/inquiries/"+id+"/attachments/"+attachment.get("id").asLong();
+            mvc.perform(get(own).header("Authorization",bearer(auth))).andExpect(status().isOk())
+                .andExpect(content().bytes(xlsx?excel:csv)).andExpect(content().contentType(xlsx?"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":"text/csv"))
+                .andExpect(header().string("X-Content-Type-Options","nosniff"));
+            mvc.perform(get(own).header("Authorization",bearer(other))).andExpect(status().isNotFound());
+            mvc.perform(get("/api/admin/support/inquiries/"+id+"/attachments/"+attachment.get("id").asLong()).header("Authorization",bearer(operator))).andExpect(status().isOk());
+        }
+    }
+
     @Test void invalidOrTooManySupportAttachmentsRollBackTheWholeInquiry() throws Exception {
         User owner=user(); JsonNode auth=login(owner);
         long before=supportInquiries.count();
@@ -321,6 +416,11 @@ class ReleaseAuthIntegrationTest {
         var pdf=new org.springframework.mock.web.MockMultipartFile("files","file.pdf","application/pdf","not a pdf".getBytes());
         mvc.perform(multipart("/api/support/inquiries").file(payload).file(pdf).header("Authorization",bearer(auth))).andExpect(status().isBadRequest());
         assertEquals(before,supportInquiries.count());
+        for(var data:List.of(new org.springframework.mock.web.MockMultipartFile("files","fake.xlsx","application/octet-stream","PK invalid zip".getBytes()),
+                new org.springframework.mock.web.MockMultipartFile("files","fake.csv","text/csv",new byte[]{0,1,2,3}))) {
+            mvc.perform(multipart("/api/support/inquiries").file(payload).file(data).header("Authorization",bearer(auth))).andExpect(status().isBadRequest());
+            assertEquals(before,supportInquiries.count());
+        }
     }
 
     @Test void photoVisitWithoutDistrictIsAssignedVisibleAndTransferable() throws Exception {

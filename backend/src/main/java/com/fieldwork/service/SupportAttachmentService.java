@@ -39,7 +39,7 @@ public class SupportAttachmentService {
             total += file.getSize();
             if (total > MAX_TOTAL) throw invalid("첨부파일의 합계는 최대 30MB입니다.");
             String name = Objects.toString(file.getOriginalFilename(), "").toLowerCase(Locale.ROOT);
-            if (!name.matches(".+\\.(jpg|jpeg|png|pdf)$")) throw invalid("JPG, PNG, PDF 파일만 첨부할 수 있습니다.");
+            if (!name.matches(".+\\.(jpg|jpeg|png|pdf|xlsx|csv)$")) throw invalid("JPG, PNG, PDF, XLSX, CSV 파일만 첨부할 수 있습니다.");
         }
     }
     public void save(SupportInquiry inquiry, List<MultipartFile> files) {
@@ -63,18 +63,24 @@ public class SupportAttachmentService {
                     String name = file.getOriginalFilename().replaceAll("[\\\\/\\p{Cntrl}]", "_");
                     if (name.length() > 150) name = name.substring(name.length() - 150);
                     boolean pdf = name.toLowerCase(Locale.ROOT).endsWith(".pdf");
+                    boolean xlsx = name.toLowerCase(Locale.ROOT).endsWith(".xlsx");
+                    boolean csv = name.toLowerCase(Locale.ROOT).endsWith(".csv");
+                    String extension = pdf ? ".pdf" : xlsx ? ".xlsx" : csv ? ".csv" : ".jpg";
+                    String contentType = pdf ? "application/pdf" : xlsx ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : csv ? "text/csv" : "image/jpeg";
                     byte[] data;
                     try (var input = file.getInputStream()) { data = input.readNBytes(Math.toIntExact(MAX_FILE) + 1); }
                     if (data.length > MAX_FILE) throw invalid("파일 하나의 크기는 최대 15MB입니다.");
                     if (pdf) {
                         if (data.length < 5 || !new String(data, 0, 5, java.nio.charset.StandardCharsets.US_ASCII).equals("%PDF-")) throw invalid("정상적인 PDF 파일을 선택해 주세요.");
+                    } else if (xlsx) { SupportDataFileValidator.xlsx(data);
+                    } else if (csv) { SupportDataFileValidator.csv(data);
                     } else { data = images.sanitize(data); name = name.replaceFirst("(?i)\\.(png|jpeg|jpg)$", ".jpg"); }
                     checkQuota(directory, data.length);
-                    String key = inquiry.user.getUserId() + "/" + UUID.randomUUID() + (pdf ? ".pdf" : ".jpg");
+                    String key = inquiry.user.getUserId() + "/" + UUID.randomUUID() + extension;
                     Path target = root.resolve(key);
                     try (var output = Files.newOutputStream(target, StandardOpenOption.CREATE_NEW)) { written.add(target); output.write(data); }
                     SupportAttachment attachment = new SupportAttachment(); attachment.inquiry = inquiry;
-                    attachment.name = name; attachment.contentType = pdf ? "application/pdf" : "image/jpeg"; attachment.size = data.length; attachment.storageKey = key;
+                    attachment.name = name; attachment.contentType = contentType; attachment.size = data.length; attachment.storageKey = key;
                     inquiry.attachments.add(attachments.save(attachment));
                 }
             }
@@ -101,7 +107,7 @@ public class SupportAttachmentService {
         var attachment = attachments.findByIdAndInquiry_Id(attachmentId, inquiryId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "첨부파일을 찾을 수 없습니다."));
         try {
-            if (!attachment.storageKey.matches("[0-9]+/[a-f0-9-]+\\.(jpg|pdf)")) throw new IOException();
+            if (!attachment.storageKey.matches("[0-9]+/[a-f0-9-]+\\.(jpg|pdf|xlsx|csv)")) throw new IOException();
             Path path = root.resolve(attachment.storageKey);
             if (!path.toRealPath().startsWith(root.toRealPath()) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException();
             return new Download(attachment.name, attachment.contentType, Files.size(path), path);

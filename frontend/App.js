@@ -40,6 +40,7 @@ import LoginScreen from './screens/LoginScreen';
 import MapScreen from './screens/MapScreen';
 import PersonalWorkspaceScreen from './screens/PersonalWorkspaceScreen';
 import RegisterScreen from './screens/RegisterScreen';
+import SocialSignupScreen from './screens/SocialSignupScreen';
 import ReportListScreen from './screens/ReportListScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import TransferScreen from './screens/TransferScreen';
@@ -107,6 +108,7 @@ function AppContent() {
   useEffect(() => { exitConfirmation.current.reset(); }, [screen, groupHomeTab]);
   useEffect(() => { if (!['groupWorkspace', 'download', 'fieldAction', 'reportPreview'].includes(screen)) setGroupWorkspaceBehind(false); }, [screen]);
   const [authLoading, setAuthLoading] = useState(true);
+  const [pendingSocialUser, setPendingSocialUser] = useState(null);
   const [authError, setAuthError] = useState('');
   const [mapRecordReturn, setMapRecordReturn] = useState(null);
   const [reportSelections, setReportSelections] = useState({});
@@ -559,7 +561,7 @@ function AppContent() {
       'hardwareBackPress',
       () => {
         // 보고서 작성 화면은 자체 이탈 확인이 변경 내용을 보호한다.
-        if (screen === 'fieldAction') {
+        if (screen === 'fieldAction' || screen === 'socialProfile') {
           return false;
         }
 
@@ -856,6 +858,7 @@ function AppContent() {
   }, [refreshGroupAssignments]);
 
   const resetLoggedOut = () => {
+    setPendingSocialUser(null);
     if (currentRouteRef.current?.isGuiding || teamSessionRef.current?.isGuiding) endRouteSession();
     stopRouteNotification();
 
@@ -902,6 +905,15 @@ function AppContent() {
 
   const handleLogin = (loginUser) => {
     setWorkspaceReady(false);
+    if (loginUser.socialProfilePending === true) {
+      setPendingSocialUser(loginUser);
+      setUser(null);
+      setActiveGroup(null);
+      historyRef.current = [];
+      go('socialProfile', { replace: true });
+      return;
+    }
+    setPendingSocialUser(null);
     loadedWorkspaceKeyRef.current = null;
     workspaceLoadIdRef.current++;
     teamLoadedKeyRef.current = null;
@@ -998,6 +1010,11 @@ function AppContent() {
       <Text>{authLoading ? '로그인을 확인하고 있습니다…' : authError}</Text>
       {!!authError && <TouchableOpacity onPress={restoreLogin}><Text style={{ color: colors.primary }}>다시 연결하기</Text></TouchableOpacity>}
     </View>
+    <CustomAlertHost />
+  </SafeAreaView></SafeAreaProvider>;
+  if (pendingSocialUser) return <SafeAreaProvider><SafeAreaView style={styles.safe} edges={['bottom']}>
+    <StatusBar barStyle="dark-content" />
+    <SocialSignupScreen key={pendingSocialUser.userId} user={pendingSocialUser} onComplete={handleLogin} onCancel={handleLogout} />
     <CustomAlertHost />
   </SafeAreaView></SafeAreaProvider>;
   return (

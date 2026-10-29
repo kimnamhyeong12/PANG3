@@ -20,6 +20,13 @@ public class SocialLoginController {
     public SocialLoginController(SocialLoginService social, SocialAccountService accounts) { this.social = social; this.accounts = accounts; }
     @GetMapping("/providers") public Map<String, Boolean> providers() { return social.providers(); }
     @GetMapping("/identities") public java.util.List<String> identities() { return accounts.providers(CurrentUser.id()); }
+    @PostMapping("/complete-profile") public ResponseEntity<Map<String, Object>> completeProfile(@RequestBody SocialAccountService.ProfileInput body) {
+        return result(accounts.completeProfile(CurrentUser.id(), body));
+    }
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> invalidProfile(IllegalArgumentException error) {
+        return ResponseEntity.badRequest().header(HttpHeaders.CACHE_CONTROL, "no-store").body(Map.of("message", error.getMessage()));
+    }
     @PostMapping("/{provider}/start") public ResponseEntity<Map<String, Object>> start(@PathVariable String provider) { return result(social.start(provider, null, false)); }
     @PostMapping("/{provider}/link") public ResponseEntity<Map<String, Object>> link(@PathVariable String provider) { return result(social.start(provider, CurrentUser.id(), false)); }
     @PostMapping("/{provider}/verify") public ResponseEntity<Map<String, Object>> verify(@PathVariable String provider) { return result(social.start(provider, CurrentUser.id(), true)); }

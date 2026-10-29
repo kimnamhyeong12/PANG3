@@ -21,6 +21,11 @@ public class User {
     public boolean isPasswordLoginEnabled() { return !Boolean.FALSE.equals(passwordLoginEnabled); }
     public void setPasswordLoginEnabled(boolean value) { passwordLoginEnabled = value; }
 
+    @Column(name = "social_profile_pending", nullable = false, columnDefinition = "boolean default false")
+    private boolean socialProfilePending = false;
+    public boolean isSocialProfilePending() { return socialProfilePending; }
+    public void setSocialProfilePending(boolean value) { socialProfilePending = value; }
+
     private String name;
 
     private String role;

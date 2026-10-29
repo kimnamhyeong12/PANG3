@@ -1,19 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Keyboard,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import WorkStatusScreen from './WorkStatusScreen';
 import { formatTransferTime } from './TransferScreen';
-import { CardTitle, PrimaryButton, ScreenHeader } from '../components/ui';
+import { CardTitle, ScreenHeader } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
 import { colors, shadow } from '../constants/design';
 import GroupInviteLinkButton from '../components/GroupInviteLinkButton';
@@ -93,42 +91,6 @@ export default function GroupWorkspaceScreen({
   const [respondingRequestId, setRespondingRequestId] = useState(null);
   const [teamAlerts, setTeamAlerts] = useState(true);
   const [activityAlerts, setActivityAlerts] = useState(true);
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteId, setInviteId] = useState('');
-  const [inviting, setInviting] = useState(false);
-
-  useEffect(() => {
-    setInviteOpen(false);
-    setInviteId('');
-  }, [group?.groupId]);
-
-  useEffect(() => {
-    if (tab !== 'settings') {
-      setInviteOpen(false);
-      setInviteId('');
-      Keyboard.dismiss();
-    }
-  }, [tab]);
-
-  const invite = async () => {
-    const loginId = inviteId.trim();
-    if (!loginId || inviting) return;
-    try {
-      setInviting(true);
-      await groupApi(`/api/groups/${group.groupId}/invitations`, {
-        method: 'POST',
-        body: JSON.stringify({ inviterUserId: user.userId, inviteeLoginId: loginId }),
-      });
-      showAlert('초대 완료', `${loginId} 사용자에게 초대를 보냈습니다.`);
-      setInviteId('');
-      setInviteOpen(false);
-    } catch (error) {
-      showAlert('초대 실패', error.message || '초대를 보내지 못했습니다. 다시 시도해 주세요.');
-    } finally {
-      setInviting(false);
-    }
-  };
-
   useEffect(() => {
     setDetail(group || null);
   }, [group]);
@@ -293,28 +255,9 @@ export default function GroupWorkspaceScreen({
               icon="people-outline"
               title="팀원 관리"
               suffix={`(${members.length}명)`}
-              actionLabel="팀원 추가"
-              onAction={() => setInviteOpen((value) => !value)}
             />
 
             <GroupInviteLinkButton key={group.groupId} groupId={group.groupId} groupName={group.groupName || group.name} />
-            {inviteOpen ? <View style={styles.inviteBox}>
-              <TextInput
-                style={styles.inviteInput}
-                value={inviteId}
-                onChangeText={setInviteId}
-                placeholder="상대방의 로그인 아이디"
-                placeholderTextColor={colors.textFaint}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoFocus
-                editable={!inviting}
-                returnKeyType="send"
-                onSubmitEditing={invite}
-              />
-              <PrimaryButton title={inviting ? '전송 중' : '초대'} onPress={invite} disabled={!inviteId.trim() || inviting} style={styles.inviteButton} />
-            </View> : null}
-
             {loadingSettings && members.length === 0 ? (
               <View style={styles.loadingBox}>
                 <ActivityIndicator color={colors.primary} />
@@ -509,9 +452,6 @@ const styles = StyleSheet.create({
   segmentTextActive: { color: colors.primaryDark, fontWeight: '900' },
   historyMore: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   historyMoreText: { color: colors.text, fontSize: 12, fontWeight: '700' },
-  inviteBox: { marginTop: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  inviteInput: { flex: 1, minWidth: 0, height: 44, borderWidth: 1, borderColor: colors.line, borderRadius: 12, paddingHorizontal: 12, color: colors.text, backgroundColor: colors.background },
-  inviteButton: { width: 68, minHeight: 44, paddingVertical: 0, paddingHorizontal: 8, borderRadius: 12 },
   root: { flex: 1, backgroundColor: colors.background, marginTop: 0 },
   tabs: {
     flexDirection: 'row',
