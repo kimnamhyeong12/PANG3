@@ -71,14 +71,22 @@ jobs:
             set -eu
             cd /home/ubuntu/PANG3
             test "$(git branch --show-current)" = "main"
-            case "$(git status --porcelain --untracked-files=all)" in
-              ""|"?? report_latest.hwpx") ;;
-              *)
-                echo "Server checkout has other local changes; leaving it untouched"
-                git status --short
-                exit 1
-                ;;
-            esac
+            # Preserve the server's npm-generated lockfile without discarding other edits.
+            unexpected_changes="$(git status --porcelain --untracked-files=all | sed '/^ M web\/package-lock.json$/d; /^?? report_latest.hwpx$/d')"
+            if [ -n "$unexpected_changes" ]; then
+              echo "Server checkout has other local changes; leaving it untouched"
+              git status --short
+              exit 1
+            fi
+            if ! git diff --quiet -- web/package-lock.json; then
+              backup_dir="/home/ubuntu/deploy-backups/${{ github.run_id }}-${{ github.run_attempt }}"
+              mkdir -p "$backup_dir"
+              chmod 700 "$backup_dir"
+              cp web/package-lock.json "$backup_dir/web-package-lock.json"
+              git diff --binary -- web/package-lock.json > "$backup_dir/web-package-lock.patch"
+              git restore -- web/package-lock.json
+              echo "Server web lockfile backed up to $backup_dir before deployment"
+            fi
             git fetch origin main
             if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
               git branch "deploy-backup-${{ github.run_id }}" HEAD
