@@ -39,6 +39,7 @@ public class FileController {
 
         FileSystemResource resource = new FileSystemResource(file);
         return ResponseEntity.ok()
+                .cacheControl(org.springframework.http.CacheControl.noStore())
                 .contentType(
                         fileName.toLowerCase(java.util.Locale.ROOT).endsWith(".png") ? MediaType.IMAGE_PNG : MediaType.IMAGE_JPEG)
                 .body(resource);

@@ -2,13 +2,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const babel = require('@babel/core');
+const ts = require('typescript');
 
 const read = (file) => fs.readFileSync(path.join(__dirname, file), 'utf8');
-const transpile = (file) => babel.transformSync(read(file), {
-  filename: path.join(__dirname, file), configFile: false, babelrc: false,
-  presets: ['babel-preset-expo'], plugins: ['@babel/plugin-transform-modules-commonjs'],
-}).code;
+const transpile = (file) => ts.transpileModule(read(file), {
+  fileName: file.replace(/\.js$/, '.jsx'), compilerOptions: {
+    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
+    jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
+  },
+}).outputText;
 
 (async () => {
   // 1. projectApi: 경로·쿼리·응답 정규화
@@ -20,6 +22,7 @@ const transpile = (file) => babel.transformSync(read(file), {
     require: (name) => {
       if (name.endsWith('/groupApi')) return { groupApi: async (p, options = {}) => { calls.push({ path: p, ...options }); if (nextResult) { const r = nextResult; nextResult = null; if (r instanceof Error) throw r; return r; } return p.includes('prepare') ? { downloadUrl: '/api/x/download?userId=7', fileName: 'a.hwpx' } : {}; } };
       if (name.endsWith('/auth')) return { apiFetch: async () => ({ ok: true, status: 200, text: async () => '<html></html>' }) };
+      if (name.endsWith('/localReports')) return { generateLocalReportHtml: async (kind, id) => { calls.push({ localHtml: kind, id }); return '<html></html>'; } };
       if (name.endsWith('/api')) return { API_BASE_URL: 'https://api.test', resolveApiUrl: (p) => `https://api.test${p}` };
       if (name.startsWith('@babel/runtime/')) return require(name);
       throw Error(`Unexpected import ${name}`);
@@ -30,7 +33,7 @@ const transpile = (file) => babel.transformSync(read(file), {
   assert.equal(api.projectPaths.projects(3, 7), '/api/groups/3/projects?userId=7');
   assert.equal(api.projectPaths.items(5, 7, { year: 2026, adminDong: '역삼1동', authorId: null, category: '' }),
     `/api/projects/5/items?userId=7&year=2026&adminDong=${encodeURIComponent('역삼1동')}`);
-  assert.equal(api.projectPaths.reportHtml(9, 7), '/api/compiled-reports/9/html?userId=7');
+  assert.equal(api.projectPaths.reportHtmlData(9), '/api/local-reports/compiled/9/html-data');
 
   await api.addReportItems(9, 7, [1, 2]);
   assert.deepEqual(calls.at(-1), { path: '/api/compiled-reports/9/items', method: 'POST', body: JSON.stringify({ userId: 7, progressIds: [1, 2] }) });
@@ -40,6 +43,9 @@ const transpile = (file) => babel.transformSync(read(file), {
   assert.equal(calls.at(-1).path, '/api/compiled-reports/9/hwpx/prepare?userId=7');
   assert.equal(prepared.downloadUrl, 'https://api.test/api/x/download?userId=7');
   assert.equal(await api.fetchCompiledReportHtml(9, 7), '<html></html>');
+  assert.deepEqual(calls.at(-1), { localHtml: 'compiled', id: 9 });
+  assert.equal(await api.fetchProgressReportHtml(11), '<html></html>');
+  assert.deepEqual(calls.at(-1), { localHtml: 'progress', id: 11 });
 
   assert.equal(api.addedCount({ added: [1, 2] }), 2);
   assert.equal(api.addedCount({ added: 3 }), 3);

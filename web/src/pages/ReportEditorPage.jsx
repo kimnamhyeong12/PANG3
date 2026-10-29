@@ -391,7 +391,7 @@ export default function ReportEditorPage() {
     run(async () => {
       const { blob, fileName } = await downloadCompiledHwpx(reportId, userId);
       saveBlob(blob, fileName);
-    }, 'HWPX 파일을 만들지 못했습니다. 서버의 보고서 생성 환경(파이썬)을 확인해 주세요.');
+    }, '이 기기에서 HWPX 파일을 만들지 못했습니다. 다시 시도해 주세요.');
 
   const finalize = () => {
     if (!window.confirm('보고서를 확정할까요?\n확정하면 내용이 고정되어 더 이상 수정할 수 없습니다. 고치려면 "수정하기"로 새 버전을 만들어야 합니다.')) return;

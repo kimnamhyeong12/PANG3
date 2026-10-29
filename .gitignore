@@ -36,6 +36,10 @@ backend/src/main/resources/application-local-backup.yml
 # OS
 .DS_Store
 ai/__pycache__/
+backend/src/main/resources/static/report-runtime/vendor/
+backend/src/main/resources/static/report-runtime/python.zip
+backend/src/main/resources/static/report-runtime/report-marker-layout.js
+backend/src/main/resources/static/report-runtime/report-map-plan.js
 
 # Local verification photos; never publish user or test uploads.
 backend/ai/uploads/

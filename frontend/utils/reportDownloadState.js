@@ -4,7 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { File } from 'expo-file-system';
 import { saveReportToDownloads, openReportDownloadsFolder, reportDownloadExists } from '../modules/kakao-navigation';
-import { apiFetch, downloadProtectedFile } from './auth';
+import { apiFetch } from './auth';
+import { generateLocalReport } from './localReports';
 import { API_BASE_URL } from './api';
 import { prepareIndividualReport } from './reportFiles';
 import { cleanReportName } from './reportName';
@@ -33,7 +34,7 @@ export async function downloadStateOf(userId, report) {
 /** 안드로이드: 받아서 다운로드/외근도우미 폴더에 저장하고 기록한다. */
 export async function downloadReportToFolder(userId, report) {
   const file = await prepareIndividualReport({ progressId: report.progressId, userId, baseUrl: API_BASE_URL,
-    fetchReport: apiFetch, download: downloadProtectedFile });
+    fetchReport: apiFetch, generate: generateLocalReport });
   const savedUri = await saveReportToDownloads(file.uri, file.filename);
   const record = { name: reportFileLabel(report), filename: file.filename, uri: file.uri, savedUri,
     revision: file.revision || report.revision, downloaded: true, saved: true };

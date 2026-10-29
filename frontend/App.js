@@ -18,6 +18,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { apiFetch as fetch, session, subscribeAuthExpired } from './utils/auth';
 
 import AppErrorBoundary from './components/AppErrorBoundary';
+import LocalReportHost from './components/LocalReportHost';
 import { CustomAlertHost, showAlert } from './components/CustomAlert';
 import { colors } from './constants/design';
 import { endRouteSession, wasRouteSessionEnded } from './modules/kakao-navigation';
@@ -1565,6 +1566,7 @@ function AppContent() {
           )}
 
         {user && inviteToken && <GroupInviteDialog key={`${user.userId}:${inviteToken}`} user={user} token={inviteToken} onClose={() => setInviteToken(null)} onJoined={async () => { await refreshAvailableGroups(); setInviteToken(null); go('groupHome'); }} />}
+        {user && <LocalReportHost key={user.userId} />}
         <CustomAlertHost />
       </View>
     </SafeAreaView>

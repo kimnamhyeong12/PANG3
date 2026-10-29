@@ -18,7 +18,7 @@ public CorsConfigurationSource corsConfigurationSource(
     config.setAllowedOrigins(allowed); config.setAllowCredentials(true);
     config.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
     config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Auth-Client", "X-Kakao-Walk-Key"));
-    config.setExposedHeaders(List.of("Content-Disposition"));
+    config.setExposedHeaders(List.of("Content-Disposition", "X-Map-Attribution"));
     var source = new UrlBasedCorsConfigurationSource(); source.registerCorsConfiguration("/**", config); return source;
 }
 

@@ -12,21 +12,24 @@ from datetime import date
 from pathlib import Path
 from uuid import uuid4
 
-from dotenv import load_dotenv
-from google import genai
 from PIL import Image, ImageOps
-from pillow_heif import register_heif_opener
 from hwpx import HwpxDocument
 from hwpx_images import fix_hwpx_images
 
 
-register_heif_opener()
+CLIENT_RUNTIME = os.environ.get("FIELDWORK_CLIENT_RUNTIME") == "1"
+if not CLIENT_RUNTIME:
+    from dotenv import load_dotenv
+    from google import genai
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
 
 AI_DIR = Path(__file__).resolve().parent
-load_dotenv(AI_DIR / ".env")
+if not CLIENT_RUNTIME:
+    load_dotenv(AI_DIR / ".env")
 
 API_KEY = os.environ.get("GEMINI_API_KEY")
-client = genai.Client(api_key=API_KEY) if API_KEY else None
+client = genai.Client(api_key=API_KEY) if API_KEY and not CLIENT_RUNTIME else None
 
 RESULT_PREFIX = "@@AI_RESULT@@"
 

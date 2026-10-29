@@ -66,7 +66,7 @@ export function isServerDown(error) {
 
 // 파일 다운로드: Blob으로 받는다 (실패 시 ApiError)
 async function download(path) {
-  const res = await webSession.fetch(new URL(BASE_URL + path, window.location.origin));
+  const res = await webSession.fetch(new URL(BASE_URL + path, window.location.origin), { cache: 'no-store' });
   if (!res.ok) {
     let data = null;
     try {

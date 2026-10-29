@@ -1,5 +1,14 @@
 # Build context is the repository root. See .github/workflows/deploy.yml.
 
+FROM python:3.11-slim-bookworm AS report-runtime
+WORKDIR /source
+COPY tools/build_report_runtime.py tools/build_report_runtime.py
+COPY ai/app.py ai/compiled_report.py ai/hwpx_images.py ai/
+COPY ai/templates/template.hwpx ai/templates/template.hwpx
+COPY backend/src/main/resources/report-marker-layout.js backend/src/main/resources/report-marker-layout.js
+COPY frontend/utils/reportMapPlan.js frontend/utils/reportMapPlan.js
+RUN python tools/build_report_runtime.py
+
 # 1) Spring Boot build
 FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /build/backend
@@ -8,6 +17,7 @@ COPY backend/pom.xml ./pom.xml
 RUN mvn -B dependency:go-offline
 
 COPY backend/src ./src
+COPY --from=report-runtime /source/backend/src/main/resources/static/report-runtime/ ./src/main/resources/static/report-runtime/
 RUN mvn -B clean package -DskipTests
 
 # 2) Runtime: Java + Python AI engine in the SAME container.

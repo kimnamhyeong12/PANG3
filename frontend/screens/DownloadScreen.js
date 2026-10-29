@@ -1,4 +1,5 @@
-import { apiFetch, downloadProtectedFile } from '../utils/auth';
+import { apiFetch } from '../utils/auth';
+import { generateLocalReport } from '../utils/localReports';
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { saveReportToDownloads, openReportDownloadsFolder, reportDownloadExists } from '../modules/kakao-navigation';
@@ -91,7 +92,7 @@ export default function DownloadScreen({ onBack, downloadInfo }) {
     if (cached?.uri && new File(cached.uri).exists) return cached;
     if (mounted.current) setActiveId(id);
     const file = await prepareIndividualReport({ progressId: id, userId: downloadInfo.userId,
-      baseUrl: API_BASE_URL, fetchReport: apiFetch, download: downloadProtectedFile });
+      baseUrl: API_BASE_URL, fetchReport: apiFetch, generate: generateLocalReport });
     update(id, { ...file, error: '' });
     return file;
   };

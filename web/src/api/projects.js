@@ -1,5 +1,6 @@
 import { api, ApiError, isGarbledMessage } from './client.js';
 import { webSession } from './session.js';
+import { generateLocalReport, generateLocalReportHtml } from './localReports.js';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -119,16 +120,14 @@ export function removeReportItem(reportId, progressId, userId) {
   return del(`${reportPath(reportId)}/items/${progressId}`, { userId });
 }
 
-// text/html → 문자열 (api.get은 JSON 전용이라 Blob으로 받는다)
+// 서버 JSON과 사진으로 이 브라우저에서 HTML을 만든다.
 export async function fetchCompiledReportHtml(reportId, userId) {
-  const blob = await api.download(`${reportPath(reportId)}/html?userId=${encodeURIComponent(userId)}`);
-  return blob.text();
+  return generateLocalReportHtml('compiled', reportId);
 }
 
 // 건별 보고서 HTML (통합 보고서와 같은 지도+카드 양식, 한 건)
 export async function fetchProgressReportHtml(progressId) {
-  const blob = await api.download(`/api/progress-reports/${progressId}/html`);
-  return blob.text();
+  return generateLocalReportHtml('progress', progressId);
 }
 
 export function finalizeCompiledReport(reportId, userId) {
@@ -145,11 +144,9 @@ export function fetchReportVersions(reportId, userId) {
   return api.get(`${reportPath(reportId)}/versions`, { userId });
 }
 
-// prepare → { key, fileName, downloadUrl } 후 Blob 다운로드
+// 서버에서 자료·사진을 읽고 이 브라우저의 Python worker에서 HWPX 생성.
 export async function downloadCompiledHwpx(reportId, userId) {
-  const prepared = await api.post(`${reportPath(reportId)}/hwpx/prepare`, undefined, { userId });
-  const blob = await api.download(prepared.downloadUrl);
-  return { blob, fileName: prepared.fileName || `compiled_report_${reportId}.hwpx` };
+  return generateLocalReport('compiled', reportId);
 }
 
 // ---------- 보고서 보관함 건별 편집 (D23) ----------
@@ -164,10 +161,9 @@ export function updateProgressReport(progressId, patch) {
   return api.patch(`/api/progress-reports/${progressId}`, patch);
 }
 
-// 건별 HWPX: 수정하면 기존 파일이 지워지므로 prepare(없으면 생성) 후 받는다
+// 건별 HWPX도 서버 생성 파일 없이 이 브라우저에서 생성한다.
 export async function downloadProgressHwpx(progressId, userId) {
-  await api.post(`/api/task-progress/${progressId}/report/prepare`, undefined, { userId });
-  return api.download(`/api/task-progress/${progressId}/report/download`);
+  return (await generateLocalReport('progress', progressId)).blob;
 }
 
 // 인증이 필요한 /api/files 사진 → Blob

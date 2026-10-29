@@ -248,6 +248,22 @@ public class TaskProgressService {
         return progress.getProgressId() == null || latest == null || latest.getProgressId().equals(progress.getProgressId());
     }
 
+    /** Read-only input for device-side generation. Never starts Python or creates a report file. */
+    @Transactional(readOnly = true)
+    public Map<String, Object> clientReport(Long progressId, Long userId) {
+        TaskProgress progress = getById(progressId);
+        validateReader(progress.getTask(), userId);
+        validateDownloadable(progress);
+        Map<String, Object> response = toResponseMap(progress, progress.getTask());
+        Map<String, Object> payload = aiReportService.buildPayload(progress.getTask(), progress);
+        payload.remove("output_dir");
+        payload.put("map_image", response.get("locationMapImage"));
+        payload.put("field_photos", response.get("fieldPhotos"));
+        response.remove("reportFilePath");
+        response.put("payload", payload);
+        return response;
+    }
+
     public Map<String, Object> prepareReport(Long progressId, Long userId) {
         Prepared snapshot = transactions.execute(status -> {
             TaskProgress progress = getById(progressId);

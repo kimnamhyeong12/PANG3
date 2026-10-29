@@ -1,6 +1,6 @@
 import { groupApi } from './groupApi';
-import { apiFetch } from './auth';
-import { API_BASE_URL, resolveApiUrl } from './api';
+import { resolveApiUrl } from './api';
+import { generateLocalReportHtml } from './localReports';
 
 // 프로젝트·통합 보고서 API (백엔드 ProjectController / CompiledReportController)
 export function buildQuery(params = {}) {
@@ -20,7 +20,7 @@ export const projectPaths = {
   reportItems: (reportId) => `/api/compiled-reports/${reportId}/items`,
   reportItem: (reportId, progressId, userId) => `/api/compiled-reports/${reportId}/items/${progressId}${buildQuery({ userId })}`,
   report: (reportId, userId) => `/api/compiled-reports/${reportId}${buildQuery({ userId })}`,
-  reportHtml: (reportId, userId) => `/api/compiled-reports/${reportId}/html${buildQuery({ userId })}`,
+  reportHtmlData: (reportId) => `/api/local-reports/compiled/${reportId}/html-data`,
   taskContext: (taskId, userId) => `/api/tasks/${taskId}/project-context${buildQuery({ userId })}`,
   hwpxPrepare: (reportId, userId) => `/api/compiled-reports/${reportId}/hwpx/prepare${buildQuery({ userId })}`,
 };
@@ -48,27 +48,13 @@ export const removeReportItem = (reportId, progressId, userId) => groupApi(proje
 
 export const fetchCompiledReport = (reportId, userId) => groupApi(projectPaths.report(reportId, userId));
 
-export async function fetchCompiledReportHtml(reportId, userId) {
-  return fetchReportHtml(`${API_BASE_URL}${projectPaths.reportHtml(reportId, userId)}`);
+export async function fetchCompiledReportHtml(reportId, userId, options) {
+  return generateLocalReportHtml('compiled', reportId, options);
 }
 
 // 건별 보고서 미리보기: 통합 보고서와 같은 지도+카드 양식, 한 건
-export async function fetchProgressReportHtml(progressId) {
-  return fetchReportHtml(`${API_BASE_URL}/api/progress-reports/${progressId}/html`);
-}
-
-async function fetchReportHtml(url) {
-  if (!API_BASE_URL) throw new Error('API_BASE_URL이 설정되어 있지 않습니다.');
-  const response = await apiFetch(url);
-  const text = await response.text();
-  if (!response.ok) {
-    let message = `보고서를 불러오지 못했습니다. (오류 ${response.status})`;
-    try { const data = JSON.parse(text); if (data?.message) message = data.message; } catch { /* HTML 아님 */ }
-    const error = new Error(message);
-    error.status = response.status;
-    throw error;
-  }
-  return text;
+export async function fetchProgressReportHtml(progressId, options) {
+  return generateLocalReportHtml('progress', progressId, options);
 }
 
 // → { key, fileName, downloadUrl(상대 경로) }

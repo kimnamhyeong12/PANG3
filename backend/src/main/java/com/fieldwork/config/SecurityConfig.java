@@ -10,6 +10,18 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration
 public class SecurityConfig {
 
+    /** This public, data-free engine is embedded by the web client and the mobile WebView. */
+    @Bean
+    @org.springframework.core.annotation.Order(1)
+    public SecurityFilterChain reportRuntimeChain(HttpSecurity http) throws Exception {
+        http.securityMatcher("/report-runtime/**")
+            .csrf(csrf -> csrf.disable())
+            .sessionManagement(session -> session.sessionCreationPolicy(org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
+            .headers(headers -> headers.frameOptions(frame -> frame.disable()))
+            .authorizeHttpRequests(auth -> auth.requestMatchers(org.springframework.http.HttpMethod.GET, "/report-runtime/**").permitAll().anyRequest().denyAll());
+        return http.build();
+    }
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -36,6 +48,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/join/*").permitAll()
+                // Public runtime/code only. Photos and report data stay behind authenticated /api routes.
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/report-runtime/**").permitAll()
                 // Global reference-data maintenance is performed offline, never by an app account.
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/aeds/import", "/api/aeds/update-administrative-areas",
                         "/api/bus-stops/import", "/api/bus-stops/update-administrative-areas").denyAll()

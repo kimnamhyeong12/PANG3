@@ -26,6 +26,7 @@
 ## 개발·기능 참고
 
 - [로컬 실행](development/LOCAL_RELEASE_RUN.md).
+- [PC·휴대폰에서 HWPX·HTML 생성](development/LOCAL_REPORT_GENERATION.md): 서버 사진을 불러와 기기에서 파일 생성, 빌드·검증 방법.
 - [프로젝트·통합 보고서 (풀 받은 뒤 할 일·DB 자동 적용)](features/PROJECT_REPORT_2026-10-22.md).
 - [근무지역 선택](features/WORK_REGION_SELECTION.md).
 - [업무 이관 Push 설정](features/TRANSFER_PUSH_SETUP.md).

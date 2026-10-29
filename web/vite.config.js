@@ -10,6 +10,7 @@ export default defineConfig({
     fs: { allow: [fileURLToPath(new URL('.', import.meta.url)), fileURLToPath(new URL('../backend/src/main/resources', import.meta.url))] },
     proxy: {
       '/api': 'http://localhost:8081',
+      '/report-runtime': 'http://localhost:8081',
     },
   },
 });

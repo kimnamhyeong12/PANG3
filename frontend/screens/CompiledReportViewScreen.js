@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Sharing from 'expo-sharing';
@@ -6,9 +6,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { EmptyState, ScreenHeader, SecondaryButton } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
 import { colors, radius } from '../constants/design';
-import { downloadProtectedFile } from '../utils/auth';
+import { generateLocalReport } from '../utils/localReports';
 import { openReportDownloadsFolder, saveReportToDownloads } from '../modules/kakao-navigation';
-import { fetchCompiledReportHtml, fetchProgressReportHtml, injectKakaoKey, prepareCompiledHwpx } from '../utils/projectApi';
+import { fetchCompiledReportHtml, fetchProgressReportHtml, injectKakaoKey } from '../utils/projectApi';
 
 // D15: 기존 KakaoMapWebView와 같은 키·baseUrl로 보고서 지도 표시
 const KAKAO_KEY = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY || '';
@@ -31,28 +31,35 @@ export default function CompiledReportViewScreen({ user, reportId, progressId, t
   const [html, setHtml] = useState(null);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
+  const loading = useRef(null);
 
   const load = useCallback(async () => {
     if ((!reportId && !progressId) || !user?.userId) return;
+    loading.current?.abort();
+    const controller = new AbortController();
+    loading.current = controller;
     try {
       setError(null);
       setHtml(null);
-      const text = progressId ? await fetchProgressReportHtml(progressId) : await fetchCompiledReportHtml(reportId, user.userId);
+      const options = { signal: controller.signal };
+      const text = progressId ? await fetchProgressReportHtml(progressId, options) : await fetchCompiledReportHtml(reportId, user.userId, options);
+      if (controller.signal.aborted) return;
       setHtml(injectKakaoKey(text, KAKAO_KEY));
     } catch (loadError) {
+      if (controller.signal.aborted) return;
       setError(loadError.message || '보고서를 불러오지 못했습니다.');
     }
   }, [reportId, progressId, user?.userId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); return () => loading.current?.abort(); }, [load]);
 
   const downloadHwpx = async () => {
     if (downloading) return;
     try {
       setDownloading(true);
-      const prepared = await prepareCompiledHwpx(reportId, user.userId);
+      const prepared = await generateLocalReport('compiled', reportId);
       const fileName = prepared.fileName || `${safeFileName(title)}.hwpx`;
-      const uri = await downloadProtectedFile(prepared.downloadUrl, fileName);
+      const uri = prepared.uri;
       if (Platform.OS === 'android') {
         // 건별 보고서 받기와 같이: Download/외근도우미 에 저장 → 폴더 열기
         // (파일을 바로 열면 hwp+zip 을 등록한 다른 앱(통신사 PASS 등)이 뜨는 폰이 있었다)
