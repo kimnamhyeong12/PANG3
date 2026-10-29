@@ -507,20 +507,21 @@ function AppContent() {
     }
   };
 
+  const pollSharedWorkspace = Boolean(activeGroup && !isPersonalGroup(activeGroup));
   useEffect(() => {
     if (!user?.userId) return;
     const subscription = AppState.addEventListener('change', (state) => {
       exitConfirmation.current.reset();
       if (state === 'active') {
         setCalendarDayKey(getLocalDateKey());
-        loadWorkspaceLocations();
+        if (['main', 'mapDirect'].includes(screenRef.current)) loadWorkspaceLocations();
       }
     });
-    const timer = setInterval(() => {
+    const timer = pollSharedWorkspace ? setInterval(() => {
       if (AppState.currentState === 'active' && ['main', 'mapDirect'].includes(screenRef.current)) loadWorkspaceLocations();
-    }, 30000);
+    }, 30000) : null;
     return () => { subscription.remove(); clearInterval(timer); };
-  }, [user?.userId, loadWorkspaceLocations]);
+  }, [user?.userId, loadWorkspaceLocations, pollSharedWorkspace]);
 
   useEffect(() => {
     loadWorkspaceLocations();
@@ -600,6 +601,7 @@ function AppContent() {
           ? data
           : []
       );
+      return Array.isArray(data) ? data : [];
     } catch (error) {
       console.log(
         '그룹 담당자 조회 실패:',
@@ -607,6 +609,7 @@ function AppContent() {
       );
 
       setGroupAssignments([]);
+      return null;
     }
   }, [
     activeGroup?.groupId,
@@ -638,7 +641,7 @@ function AppContent() {
     ]);
   }, []);
 
-  const loadTeamLocations = useCallback(async (group = activeGroup) => {
+  const loadTeamLocations = useCallback(async (group = activeGroup, sharedAssignments = null) => {
     const requestId = ++teamLoadIdRef.current;
     if (!group?.groupId || !user?.userId) {
       setTeamLocations([]);
@@ -669,12 +672,10 @@ function AppContent() {
     };
 
     try {
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/locations/group/${group.groupId}?userId=${user.userId}`
-      );
-      const text = await response.text();
-      if (!response.ok) throw new Error(text || '팀 방문지 조회 실패');
-      const data = JSON.parse(text);
+      const data = sharedAssignments
+        ? await sharedAssignments
+        : await groupApi(`/api/locations/group/${group.groupId}?userId=${user.userId}`);
+      if (!Array.isArray(data)) throw new Error('팀 방문지 조회 실패');
       const rows = (Array.isArray(data) ? data : []).map((row) => ({
         ...row, id: row.id ?? row.taskId ?? row.task_id,
         status: row.status ?? row.taskStatus ?? row.task_status ?? 'pending',
@@ -704,11 +705,12 @@ function AppContent() {
   }, [teamLocations, teamRouteSegments, teamCurrentSegmentIndex, teamOptimized, teamIsGuiding, teamRouteResumeToken, workspaceReady, workspaceCacheKey, user?.userId, activeGroup?.groupId, calendarDayKey]);
 
   const refreshCurrentWorkspace = useCallback(async () => {
+    const assignments = refreshGroupAssignments();
     await Promise.all([
-      refreshGroupAssignments(),
+      assignments,
       loadWorkspaceLocations(),
       activeGroup && !isPersonalGroup(activeGroup)
-        ? loadTeamLocations(activeGroup)
+        ? loadTeamLocations(activeGroup, assignments)
         : Promise.resolve(),
     ]);
   }, [activeGroup, loadTeamLocations, loadWorkspaceLocations, refreshGroupAssignments]);

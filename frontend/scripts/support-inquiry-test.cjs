@@ -15,6 +15,7 @@ function form(email='reply@example.test') {
     if(name==='react-native')return {Keyboard:{dismiss(){}},Modal:'Modal',ScrollView:'ScrollView',Platform:{OS:'android'},StyleSheet:{create:s=>s},Text:'Text',TextInput:'TextInput',TouchableOpacity:'TouchableOpacity',View:'View'};
     if(name==='@expo/vector-icons')return {Ionicons:'Icon'};
     if(name==='expo-constants')return {expoConfig:{version:'1.0.0'}};
+    if(name==='../utils/uploadFile')return {createUploadFile:file=>({name:file.name,type:file.type,bytes:async()=>new Uint8Array([1,2,3])})};
     if(name==='expo-document-picker')return {getDocumentAsync:options=>chooseFiles(options)};
     if(name==='./ui')return {PrimaryButton:'Button'};
     if(name==='./CustomAlert')return {showAlert:(...args)=>alerts.push(args)};
@@ -80,7 +81,7 @@ function form(email='reply@example.test') {
   await files.find('TouchableOpacity','문의 파일 첨부').props.onPress();files.render();assert.ok(files.errorText().includes('15MB'));assert.ok(files.find('TouchableOpacity','첨부파일 삭제 screen.png'),'invalid selection retains previous files');
   files.input('문의 제목','With attachment');files.input('문의 내용','Screenshot');files.find('TouchableOpacity','개인정보 수집·이용 동의').props.onPress();files.render();
   await files.find('Button').props.onPress();files.render();
-  const parts=files.calls.at(-1)[1].body.parts;assert.equal(parts.find(p=>p[0]==='files')[1].uri,'file:///screen.png');
+  const parts=files.calls.at(-1)[1].body.parts;assert.equal(parts.find(p=>p[0]==='files')[1].name,'screen.png');assert.equal(typeof parts.find(p=>p[0]==='files')[1].bytes,'function');
   assert.equal(JSON.parse(parts.find(p=>p[0]==='inquiry')[1]).replyEmail,'tester@gmail.com');
   assert.equal(files.find('TouchableOpacity','첨부파일 삭제 screen.png'),undefined,'success clears attachment selection');
   const bulk=form('bulk@example.test');

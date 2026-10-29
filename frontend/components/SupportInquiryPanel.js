@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AppState, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import SupportInquiryForm from './SupportInquiryForm';
@@ -47,10 +47,6 @@ export default function SupportInquiryPanel({ user, onBusyChange }) {
     }).finally(() => { if (active && id === request.current) setLoading(false); });
     return () => { active = false; };
   }, [tab, user.userId, selected, page, revision]);
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', state => { if (state === 'active' && tab === 'history') { setPage(0); setRevision(value => value + 1); } });
-    return () => subscription.remove();
-  }, [tab]);
   const refresh = () => { setPage(0); setRevision(value => value + 1); };
   const changeTab = next => { if (!sending) { setTab(next); setSelected(null); setDetail(null); setError(''); if (next === 'history') refresh(); } };
   return <View style={styles.content}>

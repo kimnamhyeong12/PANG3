@@ -7,6 +7,7 @@ import { PrimaryButton } from './ui';
 import { showAlert } from './CustomAlert';
 import { groupApi } from '../utils/groupApi';
 import { colors } from '../constants/design';
+import { createUploadFile } from '../utils/uploadFile';
 
 const INQUIRY_TYPES = ['이용 방법', '오류 신고', '계정', '결제·환불', '대량 데이터 등록 요청', '기타'];
 const EMAIL_DOMAINS = ['naver.com', 'gmail.com', 'daum.net', 'hanmail.net', 'nate.com', 'outlook.com', 'icloud.com'];
@@ -55,7 +56,7 @@ export default function SupportInquiryForm({ user, onSubmitted, onBusyChange }) 
       let body = JSON.stringify(payload);
       if (attachments.length) {
         body = new FormData(); body.append('inquiry', JSON.stringify(payload));
-        attachments.forEach(file => body.append('files', Platform.OS === 'web' ? file.file : { uri: file.uri, name: file.name, type: file.mimeType }));
+        attachments.forEach(file => body.append('files', Platform.OS === 'web' ? file.file : createUploadFile({ uri: file.uri, name: file.name, type: file.mimeType })));
       }
       const result = await groupApi('/api/support/inquiries', { method: 'POST', body });
       setSubject(''); setMessage(''); setConsent(false); setAttachments([]); request.current = null;

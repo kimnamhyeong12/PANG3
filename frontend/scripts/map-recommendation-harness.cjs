@@ -66,6 +66,8 @@ function createScreen({ nativeNavigation = false, nativeWalking = false, taskRem
       if (name.includes('ManeuverGuideCard')) return { __esModule: true, default: 'ManeuverCard' };
       if (name.includes('RegistrationFab')) return { __esModule: true, default: 'RegistrationFab' };
       if (name.includes('PhotoUploadScreen')) return { __esModule: true, default: 'PhotoUpload' };
+      if (name.includes('ProjectBrowser')) return { __esModule: true, default: 'ProjectBrowser' };
+      if (name.includes('FacilityApplicationScreen')) return { __esModule: true, default: 'FacilityApplication' };
       if (name.includes('kakao-navigation')) return { KakaoNavigationView: 'Navigation', KakaoWalkingMapView: 'WalkingMap', isWalkingMapAvailable: () => nativeWalking, isKakaoNavigationAvailable: () => nativeNavigation,
         beginRouteSession() { taskRemoved = false; calls.push(['begin-route']); },
         endRouteSession() { calls.push(['end-route']); }, wasRouteTaskRemoved: () => taskRemoved,

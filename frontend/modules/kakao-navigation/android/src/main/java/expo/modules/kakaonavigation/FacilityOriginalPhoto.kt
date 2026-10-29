@@ -62,7 +62,7 @@ object FacilityOriginalPhoto {
         "exif" to mapOf("GPSLatitude" to kotlin.math.abs(lat), "GPSLatitudeRef" to if (lat < 0) "S" else "N",
           "GPSLongitude" to kotlin.math.abs(lng), "GPSLongitudeRef" to if (lng < 0) "W" else "E"))
     }
-    if (tooLarge) throw IllegalArgumentException("사진 한 장은 최대 15MB까지 첨부할 수 있습니다.")
+    if (tooLarge) throw IllegalArgumentException("15MB 이하의 사진을 선택해 주세요.")
     if (!readable) throw IllegalArgumentException("선택한 원본 사진을 읽지 못했습니다. 파일이 휴대폰에 저장되어 있는지 확인해 주세요.")
     throw IllegalArgumentException("선택한 파일에서 촬영 위치를 확인하지 못했습니다. 위치정보가 있는 JPG·PNG 원본 사진을 선택해 주세요.")
   }

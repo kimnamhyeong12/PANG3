@@ -67,7 +67,7 @@ export default function SettingsScreen({ user, onBack, onUpdatedUser, onLogout, 
       <View style={styles.sheet}>
         <Text style={styles.sheetTitle}>{deleteOpen ? '계정 탈퇴' : '본인 확인'}</Text>
         <Text style={styles.help}>{deleteOpen ? '탈퇴하면 로그인할 수 없습니다. 그룹 보고서는 탈퇴한 사용자 기록으로 남습니다.' : '비밀번호 또는 연결된 소셜 계정으로 인증해 주세요.'}</Text>
-        {user.passwordLoginEnabled !== false && <TextInput style={styles.input} value={deleteOpen ? deletePassword : password} onChangeText={deleteOpen ? setDeletePassword : setPassword} secureTextEntry editable={!busy} placeholder="현재 비밀번호" />}
+        {user.passwordLoginEnabled !== false && <TextInput style={styles.input} placeholderTextColor={colors.textSoft} value={deleteOpen ? deletePassword : password} onChangeText={deleteOpen ? setDeletePassword : setPassword} secureTextEntry editable={!busy} placeholder="현재 비밀번호" />}
         <SocialAuthButtons mode="verify" disabled={busy} onVerified={token => {
           if (deleteOpen) setDeletePassword(token);
           else { setCredential(token); setPassword(''); setGate(false); }

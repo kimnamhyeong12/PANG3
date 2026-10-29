@@ -475,6 +475,8 @@ function NormalMapScreen({
   const displayOnlyLocations = [...mapOnlyMarkers, ...publicDisplayItems, ...searchPins];
   const publicViewCoordinates = useMemo(() => publicFacilityMode && selectedDong
     ? facilityViewCoordinates(selectedDong, publicItems) : [], [publicFacilityMode, selectedDong, publicItems]);
+  const publicBoundary = useMemo(() => publicFacilityMode && selectedDong
+    ? { type: 'FeatureCollection', features: [selectedDong] } : null, [publicFacilityMode, selectedDong]);
 
   useEffect(() => {
     setPanelOpen?.(false);
@@ -1608,8 +1610,10 @@ function NormalMapScreen({
             ? (cardTarget ? bottomOverlayHeight : 0) + pendingOverlayHeight + (preview ? 28 : 52) : 40, left: preview ? 24 : 40, right: preview ? 24 : 40 }}
         highlightedLocationKey={resultsMode ? selectedSearchPinId : cardTarget ? locationKey(cardTarget) : null}
         focusCoordinates={publicFacilityMode ? publicViewCoordinates : focusRequest.coordinates}
+        boundaries={publicBoundary}
+        fitBoundaries={false}
         focusToken={focusRequest.token}
-        focusPadding={resultsMode ? { top: 120, bottom: mapHeight * 0.53, left: 40, right: 40 } : { top: 160, bottom: 140, left: 40, right: 40 }}
+        focusPadding={publicFacilityMode ? { top: 64, bottom: 64, left: 24, right: 24 } : resultsMode ? { top: 120, bottom: mapHeight * 0.53, left: 40, right: 40 } : { top: 160, bottom: 140, left: 40, right: 40 }}
         roadPath={isGuiding ? roadPath : []}
         routeSegments={activeSegment ? routeSegments : EMPTY_MARKERS}
         currentSegmentIndex={0}

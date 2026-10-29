@@ -23,10 +23,12 @@ export async function readFacilityOriginalPhoto(uri) {
       '선택한 파일에서 촬영 위치를 확인하지 못했습니다. 위치정보가 있는 JPG·PNG 원본 사진을 선택해 주세요.',
       '선택한 원본 사진을 읽지 못했습니다. 파일이 휴대폰에 저장되어 있는지 확인해 주세요.',
       '사진 한 장은 최대 15MB까지 첨부할 수 있습니다.',
+      '15MB 이하의 사진을 선택해 주세요.',
       '휴대폰 파일 선택창에서 원본 사진을 선택해 주세요.',
     ];
     const message = String(failure?.message || '');
-    throw new Error(notices.find(notice => message.includes(notice)) || '사진을 불러오지 못했습니다. 원본 사진을 다시 선택해 주세요.');
+    const notice = notices.find(notice => message.includes(notice));
+    throw new Error(notice === '사진 한 장은 최대 15MB까지 첨부할 수 있습니다.' ? '15MB 이하의 사진을 선택해 주세요.' : notice || '사진을 불러오지 못했습니다. 원본 사진을 다시 선택해 주세요.');
   }
 }
 

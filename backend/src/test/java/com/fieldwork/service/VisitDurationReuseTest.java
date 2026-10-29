@@ -90,6 +90,26 @@ class VisitDurationReuseTest {
     private static List<String> orderIds(Map<String,Object> result) {
         return ((List<Map<String,Object>>)result.get("optimizedLocations")).stream().map(row -> row.get("id").toString()).toList();
     }
+    @Test void nineWalkingStopsUseEighteenRequestsThenReuseTheMatrix() {
+        try (var f = new Fixture(new VisitDurationCache())) {
+            var stops = visits(9);
+            assertEquals("roadDuration", f.recommend(point(0), stops, "walk", false).get("basis"));
+            assertEquals(18, f.walk.get(), "81 directed walking legs are packed into eighteen requests");
+            assertEquals(0, f.car.get());
+            f.recommend(point(0), stops, "walk", false);
+            assertEquals(18, f.walk.get(), "unchanged recommendation reuses the observed walking times");
+        }
+    }
+    @Test void tenStopsTogetherUseElevenCarRequestsThenReuseTheMatrix() {
+        try (var f = new Fixture(new VisitDurationCache())) {
+            var stops = visits(10);
+            assertEquals("roadDuration", f.recommend(point(0), stops, "car", false).get("basis"));
+            assertEquals(11, f.car.get(), "ten stops plus the current origin are collected in eleven batches");
+            assertEquals(100, f.queried.size(), "100 directed legs are bundled, not 100 HTTP requests");
+            f.recommend(point(0), stops, "car", false);
+            assertEquals(11, f.car.get(), "an unchanged refresh consumes no additional upstream requests");
+        }
+    }
     @Test void slowSequentialRegistrationKeepsAllOldDirectedLegs() {
         Time time=new Time();var cache=new VisitDurationCache(null,time);
         try(var f=new Fixture(cache)) {

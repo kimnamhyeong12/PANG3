@@ -28,6 +28,7 @@ function screen() {
     '../utils/photoPermissions':{requestPhotoPermissions:async()=>({pickerAllowed:true})},'../utils/photoMetadata':{resolvePhotoMetadata:async asset=>noGps?{error:'GPS 없음'}:{...asset,lat:35.1,lng:129.2}},
     '../utils/photoRegistration':{photoAddress:async()=> '부산광역시 사하구'},'../utils/reportLocationMap':{getInteractiveMapHtml:()=>'<html></html>'},'../utils/completionDay':{koreaDayKey:()=> '2026-10-29'},
     '../utils/groupApi':{groupApi:async(path,options)=>{calls.push({path,options});if(path==='/api/public-data/categories')return [{key:'aed',label:'심폐제세동기'},{key:'bus',label:'버스정류장'},{key:'facility-1',label:'공중화장실'}];return path.includes('?')?{items:[],hasMore:false}:{id:1};}},
+    '../utils/uploadFile':load('../utils/uploadFile.js',{'expo-file-system':{File:class{constructor(uri){this.uri=uri;}async bytes(){return new Uint8Array([255,216,255]);}}}}),
     '../utils/auth':{apiFetch:()=>{},downloadProtectedFile:async()=> 'file:///image.jpg'},'../utils/api':{API_BASE_URL:'https://example.test'},'../constants/design':{colors:{textSoft:'#607195',danger:'#E34D59'}}
   };
   const Component=load('../screens/FacilityApplicationScreen.js',deps).default;
@@ -40,7 +41,7 @@ function screen() {
 }
 (async()=>{
   const app=screen();
-  const photoHint=app.nodes().find(n=>n.type==='Text'&&n.props.children?.includes('촬영 위치정보가 포함된 JPG·PNG 원본 사진을 선택해 주세요.'));
+  const photoHint=app.nodes().find(n=>n.type==='Text'&&n.props.children?.includes('촬영 위치정보가 포함된 15MB 이하의 JPG·PNG 원본 사진을 선택해 주세요.'));
   assert.equal(photoHint.props.style.color,'#607195','photo hint always uses the normal gray color');
   const consent=()=>app.nodes().find(n=>n.props?.accessibilityRole==='checkbox');
   assert.equal(consent().props.accessibilityState.checked,false);
@@ -70,7 +71,7 @@ function screen() {
     app.nodes().find(n=>n.props?.accessibilityRole==='checkbox').props.onPress();app.render();
     await app.button('등록 신청').props.onPress();await app.settle();
     const submitted=app.calls.find(call=>call.options?.method==='POST');assert.ok(submitted);
-    assert.equal(submitted.path,'/api/facility-applications');assert.equal(submitted.options.body.parts.length,2);
+    assert.equal(submitted.path,'/api/facility-applications');assert.equal(submitted.options.body.parts.length,2);assert.equal(typeof submitted.options.body.parts[1][1].bytes,'function','photo uses an Expo File-readable part');
     const application=JSON.parse(submitted.options.body.parts[0][1]);assert.equal(application.name,'공원 소화전');assert.equal(application.kind,'소화전');assert.equal(application.detailLocation,'','optional location can be empty');assert.equal(application.consent,true);assert.ok(!('photoLat' in application),'server must derive GPS from original bytes');
     assert.ok(app.calls.some(call=>call.path?.includes('?page=0')),'submission opens own history');
     const bad=screen();bad.noGps();await bad.button('시설물 원본 사진 선택').props.onPress();await bad.settle();assert.ok(!bad.button('원본 목록에서 다시 선택'),'no empty gallery fallback');assert.ok(bad.text().includes('위치정보가 있는 원본 사진을 선택해 주세요.'));assert.ok(!bad.nodes().some(n=>n.type==='WebView'));

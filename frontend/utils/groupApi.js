@@ -26,10 +26,15 @@ export async function groupApi(path, options = {}) {
   }
 
   if (!response.ok) {
+    const fallback = response.status === 413
+      ? '서버의 업로드 용량 제한으로 파일을 전송하지 못했습니다.'
+      : `요청 실패 (${response.status})`;
+    const plainMessage = typeof data === 'string' && !/<\s*(?:!doctype|html|head|body)\b/i.test(data)
+      ? data.trim().slice(0, 300) : '';
     const message =
       (data && typeof data === 'object' && data.message) ||
-      (typeof data === 'string' && data) ||
-      `요청 실패 (${response.status})`;
+      (response.status !== 413 && plainMessage) ||
+      fallback;
     const error = new Error(message);
     error.status = response.status;
     throw error;

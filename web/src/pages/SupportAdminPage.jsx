@@ -18,11 +18,6 @@ export default function SupportAdminPage() {
   const refresh = useCallback(() => setRevision(value => value + 1), []);
   useEffect(() => {
     if (!agent) return undefined;
-    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 30000);
-    return () => window.clearInterval(timer);
-  }, [agent, refresh]);
-  useEffect(() => {
-    if (!agent) return undefined;
     let active = true; setLoading(true); setListError('');
     api.get('/api/admin/support/inquiries', { page, status: status || undefined }).then(result => {
       if (!active) return;

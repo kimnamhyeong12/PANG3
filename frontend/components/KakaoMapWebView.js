@@ -690,8 +690,8 @@ const buildKakaoMapHtml = (
     });
   }
 
-  function finishBoundaryData() {
-    if (boundaryHasCoordinates && boundaryAllBounds) {
+  function finishBoundaryData(fit) {
+    if (fit !== false && boundaryHasCoordinates && boundaryAllBounds) {
       map.setBounds(boundaryAllBounds, 28, 28, 28, 28);
     }
     post({ type: "BOUNDARIES_RENDERED", count: renderedBoundaryCount });
@@ -1369,7 +1369,7 @@ const buildKakaoMapHtml = (
     }
 
     if (commandData.type === "BOUNDARIES_FINISH") {
-      finishBoundaryData();
+      finishBoundaryData(commandData.fit);
       return;
     }
 
@@ -1683,6 +1683,7 @@ export default function KakaoMapWebView({
   locations = [],
   displayOnlyLocations = EMPTY_DISPLAY_LOCATIONS,
   boundaries = null,
+  fitBoundaries = true,
   roadPath = [],
   panelOpen = true,
   setPanelOpen,
@@ -3419,7 +3420,7 @@ export default function KakaoMapWebView({
     }
 
     if (boundaryChunksRef.current.length === 0) {
-      sendMapCommand({ type: "BOUNDARIES_FINISH" });
+      sendMapCommand({ type: "BOUNDARIES_FINISH", fit: fitBoundaries });
       return;
     }
 
@@ -3429,7 +3430,7 @@ export default function KakaoMapWebView({
       chunkIndex: 0,
       data: { type: "FeatureCollection", features: boundaryChunksRef.current[0] },
     });
-  }, [boundaries]);
+  }, [boundaries, fitBoundaries]);
 
   /*
    * ===============================
@@ -3641,7 +3642,7 @@ export default function KakaoMapWebView({
               data: { type: "FeatureCollection", features: nextChunk },
             });
           } else {
-            sendMapCommand({ type: "BOUNDARIES_FINISH" });
+            sendMapCommand({ type: "BOUNDARIES_FINISH", fit: fitBoundaries });
           }
         }
       } catch (error) {
