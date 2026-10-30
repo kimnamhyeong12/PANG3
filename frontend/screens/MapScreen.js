@@ -158,6 +158,8 @@ function NormalMapScreen({
   setPanelOpen,
   routeResumeToken = 0,
   recordReturn,
+  webNavigationRequest,
+  onWebNavigationHandled,
   pendingWork = [],
   onAddWork,
   onUpdatedUser,
@@ -1445,7 +1447,7 @@ function NormalMapScreen({
         if (request !== guideRequestRef.current || scope !== workspaceScopeRef.current) return;
       }
       let result;
-      if (mode === 'car' && preview?.segment && preview.mode === mode) {
+      if (mode === 'car' && preview?.segment && preview.mode === mode && preview.targetKey === targetKey) {
         const origin = preview.segment.previewOrigin;
         const movedMeters = origin ? Math.hypot((Number(currentLocation.lat) - origin.lat) * 111000,
           (Number(currentLocation.lng) - origin.lng) * 111000 * Math.cos(origin.lat * Math.PI / 180)) : 0;
@@ -1481,12 +1483,45 @@ function NormalMapScreen({
       if (mode === 'car' && Platform.OS === 'android' && isKakaoNavigationAvailable()) {
         setKakaoDestination({ previewId: result.segment.sdkPreviewId, destinationKey: targetKey });
       } else setKakaoDestination(null);
+      return true;
     } catch (error) {
       if (request === guideRequestRef.current) showAlert('안내 시작 실패', '경로를 불러오지 못했습니다. 다시 시도해 주세요.');
+      return false;
     } finally {
       if (request === guideRequestRef.current) setSegmentChanging(false);
     }
   };
+
+  const webHandoffAttempt = useRef(null);
+  const [webHandoffRetry, setWebHandoffRetry] = useState(0);
+  useEffect(() => {
+    const request = webNavigationRequest;
+    if (!request || !isActive || !currentLocation || Number(request.groupId) !== Number(activeGroup?.groupId)
+      || webHandoffAttempt.current === request.requestId) return;
+    const target = markers.find(row => locationKey(row) === String(request.taskId));
+    if (!target) {
+      const pending = pendingWork.find(row => locationKey(row) === String(request.taskId));
+      if (pending && onAddWork) {
+        webHandoffAttempt.current = request.requestId;
+        Promise.resolve(onAddWork([pending])).then(ok => {
+          webHandoffAttempt.current = null;
+          if (ok === false) onWebNavigationHandled?.(request.requestId);
+          else setWebHandoffRetry(value => value + 1);
+        }).catch(error => { showAlert('웹 안내 연동 실패', error.message);onWebNavigationHandled?.(request.requestId); });
+      }
+      return;
+    }
+    webHandoffAttempt.current = request.requestId;
+    if (Date.parse(request.expiresAt) <= Date.now()) { onWebNavigationHandled?.(request.requestId); return; }
+    handleStartGuidance(target, request.mode).then(async started => {
+      if (started) {
+        try {
+          await fetch(`${API_BASE_URL}/api/navigation-handoffs/${request.requestId}/acknowledge`, { method: 'POST' });
+        } catch {}
+      }
+      onWebNavigationHandled?.(request.requestId);
+    });
+  }, [webNavigationRequest?.requestId, isActive, currentLocation, markers, pendingWork, activeGroup?.groupId, webHandoffRetry]);
 
   const handleStopGuidance = () => {
     clearGuidance();

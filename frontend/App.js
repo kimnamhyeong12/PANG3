@@ -166,6 +166,8 @@ function AppContent() {
   const [mapSearchVisible, setMapSearchVisible] = useState(false);
   const [user, setUser] = useState(null);
   const [inviteToken, setInviteToken] = useState(null);
+  const [webNavigationRequest, setWebNavigationRequest] = useState(null);
+  const navigationHandoffSeen = useRef(null);
   useEffect(() => {
     let active = true;
     const receive = url => { const token = groupInviteToken(url); if (active && token) setInviteToken(token); };
@@ -714,6 +716,36 @@ function AppContent() {
         : Promise.resolve(),
     ]);
   }, [activeGroup, loadTeamLocations, loadWorkspaceLocations, refreshGroupAssignments]);
+
+  // The web queues only an authenticated user's own destination. The app resolves
+  // the workspace and starts the existing SDK flow after its location is ready.
+  useEffect(() => {
+    if (!user?.userId || !workspaceReady) return;
+    let active = true, checking = false;
+    const check = async () => {
+      if (checking || AppState.currentState !== 'active') return;
+      checking = true;
+      try {
+        const request = await groupApi('/api/navigation-handoffs/pending');
+        if (!active || !request?.pending || request.requestId === navigationHandoffSeen.current) return;
+        const groups = await groupApi(`/api/groups/user/${user.userId}`);
+        if (!active) return;
+        const group = groups.find(g => Number(g.groupId) === Number(request.groupId));
+        if (!group) return;
+        navigationHandoffSeen.current = request.requestId;
+        setWebNavigationRequest(request);
+        go('mapDirect');
+        await selectActiveGroup(group);
+      } catch (error) {
+        // Offline and older servers leave the app's existing navigation intact.
+      } finally { checking = false; }
+    };
+    check();
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') check(); });
+    const link = Linking.addEventListener('url', event => { if (event.url?.startsWith('pang3://navigation')) check(); });
+    const timer = setInterval(check, 15000);
+    return () => { active = false; clearInterval(timer); subscription.remove(); link.remove(); };
+  }, [user?.userId, workspaceReady, selectActiveGroup]);
 
   useEffect(() => {
     if (screen === 'main' && user?.userId) {
@@ -1436,6 +1468,8 @@ function AppContent() {
               persistNormalMap
               routeResumeToken={routeResumeToken}
               recordReturn={mapRecordReturn?.workspace === workspaceCacheKey() && mapRecordReturn?.day === calendarDayKey ? mapRecordReturn : null}
+              webNavigationRequest={webNavigationRequest}
+              onWebNavigationHandled={requestId => setWebNavigationRequest(previous => previous?.requestId === requestId ? null : previous)}
               pendingWork={pendingWork}
               onAddWork={addWorkToMap}
               onUpdatedUser={setUser}

@@ -1,3 +1,4 @@
+import { getSharedNotificationPreferences, updateSharedNotificationPreferences } from '../services/notificationService';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -91,6 +92,8 @@ export default function GroupWorkspaceScreen({
   const [respondingRequestId, setRespondingRequestId] = useState(null);
   const [teamAlerts, setTeamAlerts] = useState(true);
   const [activityAlerts, setActivityAlerts] = useState(true);
+  useEffect(()=>{let active=true;getSharedNotificationPreferences().then(p=>{if(active){setTeamAlerts(p.teamAlerts);setActivityAlerts(p.activityAlerts);}}).catch(()=>{});return()=>{active=false;};},[user?.userId,tab]);
+  const saveAlertPreference=async (key,value)=>{try{const p=await updateSharedNotificationPreferences({[key]:value});setTeamAlerts(p.teamAlerts);setActivityAlerts(p.activityAlerts);}catch(e){showAlert('알림 설정 실패',e.message);}};
   useEffect(() => {
     setDetail(group || null);
   }, [group]);
@@ -400,13 +403,13 @@ export default function GroupWorkspaceScreen({
               icon="notifications-outline"
               title="팀 알림 받기"
               value={teamAlerts}
-              onValueChange={setTeamAlerts}
+              onValueChange={value=>saveAlertPreference('teamAlerts',value)}
             />
             <SettingSwitchRow
               icon="people-outline"
               title="팀원 활동 알림"
               value={activityAlerts}
-              onValueChange={setActivityAlerts}
+              onValueChange={value=>saveAlertPreference('activityAlerts',value)}
               last
             />
           </View>

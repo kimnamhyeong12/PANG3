@@ -7,9 +7,9 @@ export const STATUS = {
 };
 
 export const STATUS_LABEL = {
-  [STATUS.PENDING]: '미처리',
-  [STATUS.WORKING]: '진행중',
-  [STATUS.COMPLETE]: '완료',
+  [STATUS.PENDING]: '작업 전',
+  [STATUS.WORKING]: '작업 중',
+  [STATUS.COMPLETE]: '작업 후',
 };
 
 export function normalizeStatus(task) {

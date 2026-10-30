@@ -62,11 +62,14 @@ jobs:
 
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@master
+        env:
+          VITE_KAKAO_MAP_KEY: ${{ vars.VITE_KAKAO_MAP_KEY }}
         with:
           host: ${{ steps.get-ip.outputs.ip }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           command_timeout: 30m
+          envs: VITE_KAKAO_MAP_KEY
           script: |
             set -eu
             cd /home/ubuntu/PANG3
@@ -104,6 +107,12 @@ jobs:
               sleep 10
             done
             docker compose up -d
+            # Nginx serves the web checkout's dist directory. Rebuild it on every
+            # main deployment alongside the API so the browser gets this commit.
+            cd web
+            npm ci --no-audit --no-fund
+            npm run build
+            cd ..
             docker image prune -f
 
       

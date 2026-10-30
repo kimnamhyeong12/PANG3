@@ -12,7 +12,8 @@ import TransferPage from './pages/TransferPage.jsx';
 import MapPage from './pages/MapPage.jsx';
 import ReportsPage from './pages/ReportsPage.jsx';
 import PublicDataPage from './pages/PublicDataPage.jsx';
-import SettingsPage from './pages/SettingsPage.jsx';
+import SettingsPage from './pages/AccountSettingsPage.jsx';
+import GroupsPage from './pages/GroupsPage.jsx';
 import ProjectsPage from './pages/ProjectsPage.jsx';
 import ProjectsDetailPage from './pages/ProjectsDetailPage.jsx';
 import ReportEditorPage from './pages/ReportEditorPage.jsx';
@@ -51,16 +52,19 @@ export default function App() {
       <Route path="/verify-email" element={<AccountRecoveryPage mode="verify" />} />
       <Route element={<RequireAuth />}>
         <Route path="/admin" element={<Navigate to="/admin/support" replace />} />
-        <Route path="/admin/support" element={<SupportAdminPage />} />
-        <Route path="/admin/facilities" element={<FacilityReviewPage />} />
+        <Route element={<AppLayout />}>
+          <Route path="/admin/support" element={<SupportAdminPage />} />
+          <Route path="/admin/facilities" element={<FacilityReviewPage />} />
+        </Route>
         <Route path="/groups/select" element={<GroupSelectPage />} />
         <Route element={<RequireGroup />}>
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/groups" element={<GroupsPage />} />
             <Route path="/transfers" element={<TransferPage />} />
             <Route path="/map" element={<MapPage />} />
             <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/public-data" element={<PublicDataPage />} />
+            <Route path="/public-data" element={<Navigate to="/map?add=public" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/projects/:projectId" element={<ProjectsDetailPage />} />

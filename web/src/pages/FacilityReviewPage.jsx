@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api, errorMessage } from '../api/client.js';
 import '../styles/support.css';
 const STATUS={PENDING:'접수',REVIEWING:'검토 중',NEEDS_INFO:'보완 요청',APPROVED:'승인',REJECTED:'반려'};
 function Evidence({id,kind,title}){const [url,setUrl]=useState(null),[error,setError]=useState('');useEffect(()=>{let active=true,created;setUrl(null);setError('');api.download(`/api/admin/facility-applications/${id}/evidence/${kind}`).then(blob=>{if(active){created=URL.createObjectURL(blob);setUrl(created);}}).catch(()=>{if(active)setError('사진을 불러오지 못했습니다.');});return()=>{active=false;if(created)URL.revokeObjectURL(created);};},[id,kind]);return <figure style={{margin:0}}><figcaption style={{marginBottom:10,fontWeight:700}}>{title}</figcaption>{url?<a href={url} target="_blank" rel="noreferrer"><img src={url} alt={title} style={{width:'100%',maxHeight:340,objectFit:'contain',background:'var(--bg)'}} /></a>:<p>{error||'사진을 불러오는 중…'}</p>}</figure>;}
 export default function FacilityReviewPage(){
+ const [params]=useSearchParams();
  const {user,logout}=useAuth(),allowed=['ADMIN','FACILITY_REVIEWER'].includes(user?.role);
  const [items,setItems]=useState([]),[selected,setSelected]=useState(null),[detail,setDetail]=useState(null),[form,setForm]=useState({}),[page,setPage]=useState(0),[more,setMore]=useState(false),[revision,setRevision]=useState(0),[error,setError]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(false);const lock=useRef(false);
  useEffect(()=>{if(!allowed)return;let active=true;setLoading(true);setError('');api.get('/api/admin/facility-applications',{page}).then(data=>{if(active){setItems(data.items);setMore(data.hasMore);}}).catch(failure=>{if(active)setError(errorMessage(failure,'신청 목록 조회 실패'));}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[allowed,page,revision,user?.userId]);
  useEffect(()=>{if(!allowed||!selected)return;let active=true;setDetail(null);setError('');api.get(`/api/admin/facility-applications/${selected}`).then(data=>{if(active){setDetail(data);setForm({status:'REVIEWING',note:'',name:data.name,categoryName:data.kind,address:data.address||'',lat:String(data.photoLat),lng:String(data.photoLng),sido:'',sigungu:'',adminDong:''});}}).catch(failure=>{if(active)setError(errorMessage(failure,'신청 조회 실패'));});return()=>{active=false;};},[allowed,selected,revision,user?.userId]);
+ useEffect(()=>{setSelected(params.get('application')||null);},[params]);
  const change=(key,value)=>setForm(current=>({...current,[key]:value}));
  const save=async event=>{event.preventDefault();if(lock.current||!detail)return;lock.current=true;setBusy(true);setError('');try{await api.post(`/api/admin/facility-applications/${detail.id}/review`,{...form,lat:form.lat.trim()?Number(form.lat):null,lng:form.lng.trim()?Number(form.lng):null,version:detail.version});setRevision(v=>v+1);}catch(failure){setError(errorMessage(failure,'검토 결과를 저장하지 못했습니다.'));}finally{lock.current=false;setBusy(false);}};
  if(!allowed)return <main className="support-denied"><h1>공공시설물 검토 권한이 필요합니다.</h1><Link to="/dashboard">서비스로 돌아가기</Link></main>;

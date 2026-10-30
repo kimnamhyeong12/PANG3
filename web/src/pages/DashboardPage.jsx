@@ -11,6 +11,7 @@ import ErrorBlock from '../components/ErrorBlock.jsx';
 import { SkeletonLine, SkeletonTable } from '../components/Loading.jsx';
 import { errorMessage } from '../api/client.js';
 import { IconBell, IconMap, IconPlus, IconReport } from '../components/Icons.jsx';
+import LiveNotifications from '../components/RecentNotifications.jsx';
 
 function StatCard({ label, value, tone, loading }) {
   return (
@@ -69,48 +70,6 @@ function TaskTable({ tasks, loading, error, onRetry }) {
   );
 }
 
-function QuickActions() {
-  const navigate = useNavigate();
-  const actions = [
-    // 업무 등록 UI는 지도 화면에서 구현 예정
-    { label: '새 업무 등록', Icon: IconPlus, to: '/map' },
-    { label: '지도에서 보기', Icon: IconMap, to: '/map' },
-    { label: '보고서 보관함', Icon: IconReport, to: '/reports' },
-  ];
-  return (
-    <section className="panel">
-      <div className="panel-header">
-        <h2 className="panel-title">빠른 작업</h2>
-      </div>
-      <div className="quick-actions">
-        {actions.map(({ label, Icon, to }) => (
-          <button key={label} type="button" className="quick-action" onClick={() => navigate(to)}>
-            <span className="quick-action-icon">
-              <Icon size={18} />
-            </span>
-            {label}
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function RecentNotifications() {
-  // 알림 목록 조회 API가 아직 없어 자리만 둔다
-  return (
-    <section className="panel">
-      <div className="panel-header">
-        <h2 className="panel-title">최근 알림</h2>
-      </div>
-      <div className="panel-empty">
-        <IconBell size={22} />
-        <span>준비 중입니다.</span>
-      </div>
-    </section>
-  );
-}
-
 export default function DashboardPage() {
   const { user } = useAuth();
   const { groupId, currentGroup } = useGroup();
@@ -162,17 +121,16 @@ export default function DashboardPage() {
       </p>
 
       <div className="stat-grid">
-        <StatCard label="전체 업무" value={error ? null : stats.total} tone="text" loading={loading} />
-        <StatCard label="진행중" value={error ? null : stats.working} tone="amber" loading={loading} />
-        <StatCard label="완료" value={error ? null : stats.complete} tone="green" loading={loading} />
-        <StatCard label="미처리" value={error ? null : stats.pending} tone="red" loading={loading} />
+        <StatCard label="전체 방문지" value={error ? null : stats.total} tone="text" loading={loading} />
+        <StatCard label="작업 중" value={error ? null : stats.working} tone="amber" loading={loading} />
+        <StatCard label="작업 후" value={error ? null : stats.complete} tone="green" loading={loading} />
+        <StatCard label="작업 전" value={error ? null : stats.pending} tone="red" loading={loading} />
       </div>
 
       <div className="dashboard-columns">
         <TaskTable tasks={tasks} loading={loading} error={error} onRetry={() => setReloadKey((k) => k + 1)} />
         <div className="dashboard-side">
-          <QuickActions />
-          <RecentNotifications />
+          <LiveNotifications />
         </div>
       </div>
     </>

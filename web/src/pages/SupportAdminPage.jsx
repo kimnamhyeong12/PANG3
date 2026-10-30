@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api, errorMessage } from '../api/client.js';
 import '../styles/support.css';
 
 const formatDate = value => value ? new Date(value).toLocaleString('ko-KR') : '';
 export default function SupportAdminPage() {
+  const [params] = useSearchParams();
   const { user, logout } = useAuth();
   const agent = ['ADMIN', 'SUPPORT_AGENT'].includes(user?.role);
   const [status, setStatus] = useState('WAITING'), [page, setPage] = useState(0), [revision, setRevision] = useState(0);
@@ -15,6 +16,7 @@ export default function SupportAdminPage() {
   const [downloadingId, setDownloadingId] = useState(null);
   const [answer, setAnswer] = useState(''), [error, setError] = useState(''), [notice, setNotice] = useState(''), [sending, setSending] = useState(false);
   const submitting = useRef(false), detailRequest = useRef(0);
+  useEffect(() => { setSelected(params.get('inquiry') || null); }, [params]);
   const refresh = useCallback(() => setRevision(value => value + 1), []);
   useEffect(() => {
     if (!agent) return undefined;

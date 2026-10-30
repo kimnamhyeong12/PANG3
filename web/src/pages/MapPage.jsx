@@ -1,298 +1,135 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useGroup } from '../context/GroupContext.jsx';
 import { fetchGroupTasks } from '../api/tasks.js';
-import { fetchAedsByDong, fetchRegionBoundaries, fetchBusStopsByDong, fetchByDongs } from '../api/publicData.js';
-import { loadKakaoMaps } from '../lib/kakaoLoader.js';
-import { normalizeStatus } from '../utils/taskStatus.js';
+import { fetchRegionBoundaries } from '../api/publicData.js';
+import { api } from '../api/client.js';
 import MapCanvas from '../components/map/MapCanvas.jsx';
-import { STATUS_COLOR } from '../components/map/markerImages.js';
-import ErrorBlock from '../components/ErrorBlock.jsx';
-import { SkeletonTable, Spinner } from '../components/Loading.jsx';
-import { errorMessage } from '../api/client.js';
-
-const LOADING = Symbol('loading');
-
-
-const LAYERS = [
-  { key: 'tasks', label: '현장 업무' },
-  { key: 'bus', label: '버스정류장' },
-  { key: 'aed', label: 'AED' },
-  { key: 'boundary', label: '행정동 경계' },
-];
-
-const hasCoords = (item) => Number.isFinite(item?.lat) && Number.isFinite(item?.lng);
-
-const inBounds = (item, b) =>
-  item.lat >= b.south && item.lat <= b.north && item.lng >= b.west && item.lng <= b.east;
-
-function geocode(query) {
-  return loadKakaoMaps().then(
-    (kakao) =>
-      new Promise((resolve) => {
-        const { Status } = kakao.maps.services;
-        new kakao.maps.services.Geocoder().addressSearch(query, (result, status) => {
-          if (status === Status.OK && result.length > 0) {
-            resolve({ lat: Number(result[0].y), lng: Number(result[0].x), label: result[0].address_name });
-            return;
-          }
-          // 주소로 못 찾으면 장소명 검색
-          new kakao.maps.services.Places().keywordSearch(query, (places, placeStatus) => {
-            if (placeStatus === Status.OK && places.length > 0) {
-              resolve({ lat: Number(places[0].y), lng: Number(places[0].x), label: places[0].place_name });
-            } else {
-              resolve(null);
-            }
-          });
-        });
-      })
-  );
-}
-
-function useLayerData(enabled, admCodes, fetcher, idKey) {
-  const [state, setState] = useState({ items: [], loading: false, error: null, loadedFor: null });
-  const key = admCodes.join(',');
-
-  useEffect(() => {
-    if (!enabled || !key || state.loadedFor === key) return undefined;
-    let cancelled = false;
-    setState((s) => ({ ...s, loading: true, error: null }));
-    fetchByDongs(admCodes, fetcher, idKey).then(({ items, failedCount }) => {
-      if (cancelled) return;
-      setState({
-        items,
-        loading: false,
-        error: failedCount > 0 ? `${failedCount}개 행정동을 불러오지 못했습니다.` : null,
-        loadedFor: key,
-      });
-    });
-    return () => {
-      cancelled = true;
-    };
-    // admCodes는 key로 대표됨
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, key, fetcher, idKey, state.loadedFor]);
-
-  // 실패한 행정동이 있으면 다시 불러오기
-  const retry = useCallback(() => setState((s) => ({ ...s, loadedFor: null })), []);
-  return { ...state, retry };
-}
-
+import MapRegistration from '../components/map/MapRegistration.jsx';
+import PlacePicker from '../components/PlacePicker.jsx';
+import Modal from '../components/Modal.jsx';
+import { normalizeStatus, STATUS } from '../utils/taskStatus.js';
+import { personalGroup } from './GroupsPage.jsx';
+import FacilityApplications from '../components/map/FacilityApplications.jsx';
 export default function MapPage() {
-  const { user } = useAuth();
-  const { groupId, currentGroup } = useGroup();
-  const [layers, setLayers] = useState({ tasks: true, bus: false, aed: false, boundary: true });
-
-  // 응답이 어느 그룹/지역 것인지 함께 저장한다. 그룹 전환 직후 렌더에서 이전 그룹 데이터가
-  // 새 지도에 쓰이지 않도록(새 지도가 이전 그룹 업무 기준으로 화면을 맞추던 문제) 현재 값과 다르면 '로딩 중'으로 본다.
-  const [taskData, setTaskData] = useState({ groupId: null, list: [] });
-  const [tasksFetching, setTasksFetching] = useState(true);
-  const [tasksError, setTasksError] = useState(null);
-
-  const [boundaryData, setBoundaryData] = useState({ admCode: null, data: null });
-  const [boundaryError, setBoundaryError] = useState(null);
-  const [tasksReloadKey, setTasksReloadKey] = useState(0);
-  const [boundaryReloadKey, setBoundaryReloadKey] = useState(0);
-
-  const [viewBounds, setViewBounds] = useState(null);
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
-
-  const [query, setQuery] = useState('');
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState(null);
-  const [searchResult, setSearchResult] = useState(null);
-
-  const personal = currentGroup?.personal || currentGroup?.personalWorkspace || currentGroup?.workspaceType === 'PERSONAL';
-  const regionSido = personal ? user?.workSido || currentGroup?.regionSido : currentGroup?.regionSido;
-  const regionSigungu = personal ? user?.workSigungu || currentGroup?.regionSigungu : currentGroup?.regionSigungu;
-  const legacyCode = currentGroup?.regionAdmCode;
-  const admCode = [regionSido, regionSigungu, legacyCode].join('|');
-
+  const {
+      user
+    } = useAuth(),
+    {
+      groupId,
+      currentGroup
+    } = useGroup();
+  const [params, setParams] = useSearchParams();
+  const [data, setData] = useState({
+      groupId: null,
+      tasks: []
+    }),
+    [boundaries, setBoundaries] = useState(null),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState(''),
+    [reload, setReload] = useState(0);
+  const [scope, setScope] = useState('mine'),
+    [selected, setSelected] = useState(null),
+    [registration, setRegistration] = useState(params.get('add') === 'public' ? 'public' : null),
+    [point, setPoint] = useState(null),
+    [search, setSearch] = useState(false),
+    [searchResult, setSearchResult] = useState(null),
+    [mode, setMode] = useState('car'),
+    [sending, setSending] = useState(false),
+    [handoff, setHandoff] = useState(null),
+    [layerOpen, setLayerOpen] = useState(false),
+    [showBoundary, setShowBoundary] = useState(true);
+  const personal = personalGroup(currentGroup);
   useEffect(() => {
-    let cancelled = false;
-    setTasksFetching(true);
-    setTasksError(null);
-    setSelectedTaskId(null);
-    fetchGroupTasks(groupId, user.userId)
-      .then(
-        (list) =>
-          !cancelled && setTaskData({ groupId, list: (list ?? []).map((t) => ({ ...t, _status: normalizeStatus(t) })) })
-      )
-      .catch((e) => {
-        if (cancelled) return;
-        setTaskData({ groupId, list: [] });
-        setTasksError(errorMessage(e, '업무 목록을 불러오지 못했습니다.'));
-      })
-      .finally(() => !cancelled && setTasksFetching(false));
+    let active = true;
+    setLoading(true);
+    setError('');
+    setSelected(null);
+    setHandoff(null);
+    setPoint(null);
+    setSearchResult(null);
+    setBoundaries(null);
+    fetchGroupTasks(groupId, user.userId).then(tasks => {
+      if (active) setData({
+        groupId,
+        tasks: (tasks || []).map(t => ({
+          ...t,
+          _status: normalizeStatus(t)
+        }))
+      });
+    }).catch(e => {
+      if (active) setError(e.message);
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    fetchRegionBoundaries(personal ? user.workSido : currentGroup?.regionSido, personal ? user.workSigungu : currentGroup?.regionSigungu, currentGroup?.regionAdmCode).then(b => {
+      if (active) setBoundaries(b);
+    }).catch(() => {});
     return () => {
-      cancelled = true;
+      active = false;
     };
-  }, [groupId, user.userId, tasksReloadKey]);
-
+  }, [groupId, user.userId, user.workSido, user.workSigungu, currentGroup?.regionSido, currentGroup?.regionSigungu, currentGroup?.regionAdmCode, personal, reload]);
   useEffect(() => {
-    let cancelled = false;
-    setBoundaryError(null);
-    fetchRegionBoundaries(regionSido, regionSigungu, legacyCode)
-      .then((data) => !cancelled && setBoundaryData({ admCode, data }))
-      .catch((e) => !cancelled && setBoundaryError(errorMessage(e, '행정동 경계를 불러오지 못했습니다.')));
-    return () => {
-      cancelled = true;
+    setRegistration(params.get('add')==='public'?'public':null);
+  }, [groupId]);
+  useEffect(() => {
+    let active=true,fetching=false;
+    const refresh=async()=>{
+      if(fetching||document.visibilityState==='hidden')return;
+      fetching=true;
+      try{const rows=await fetchGroupTasks(groupId,user.userId);if(active)setData({groupId,tasks:(rows||[]).map(t=>({...t,_status:normalizeStatus(t)}))});}catch{}finally{fetching=false;}
     };
-  }, [admCode, regionSido, regionSigungu, legacyCode, boundaryReloadKey]);
-
-  const tasks = taskData.groupId === groupId ? taskData.list : [];
-  const tasksLoading = tasksFetching || taskData.groupId !== groupId;
-  const boundaries = boundaryData.admCode === admCode ? boundaryData.data : null;
-
-  const dongCodes = useMemo(
-    () => (boundaries?.features ?? []).map((f) => f.properties?.adm_cd).filter(Boolean),
-    [boundaries]
-  );
-
-  const bus = useLayerData(layers.bus, dongCodes, fetchBusStopsByDong, 'busStopId');
-  const aed = useLayerData(layers.aed, dongCodes, fetchAedsByDong, 'aedId');
-
-  const locatedTasks = useMemo(() => tasks.filter(hasCoords), [tasks]);
-  const visibleTasks = useMemo(
-    () => (viewBounds ? locatedTasks.filter((t) => inBounds(t, viewBounds)) : locatedTasks),
-    [locatedTasks, viewBounds]
-  );
-  const missingCoords = tasks.length - locatedTasks.length;
-
-  const onBoundsChange = useCallback((b) => setViewBounds(b), []);
-
-  const onSearch = async (e) => {
-    e.preventDefault();
-    const q = query.trim();
-    if (!q) return;
-    setSearching(true);
-    setSearchError(null);
+    const timer=setInterval(refresh,15000);window.addEventListener('focus',refresh);
+    return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',refresh);};
+  },[groupId,user.userId]);
+  const tasks = data.groupId === groupId ? data.tasks : [];
+  const visible = scope === 'mine' ? tasks.filter(t => Number(t.assigneeUserId) === Number(user.userId)) : tasks;
+  const target = visible.find(t => t.taskId === selected);
+  useEffect(() => {
+    setSelected(null);
+  }, [scope]);
+  async function startGuidance() {
+    setSending(true);
+    setError('');
     try {
-      const result = await geocode(q);
-      if (result) setSearchResult(result);
-      else setSearchError('검색 결과가 없습니다.');
-    } catch (err) {
-      setSearchError(errorMessage(err, '주소 검색에 실패했습니다.'));
+      const request = await api.post('/api/navigation-handoffs', {
+        groupId,
+        taskId: target.taskId,
+        mode
+      });
+      setHandoff(request);
+    } catch (e) {
+      setError(e.message);
     } finally {
-      setSearching(false);
+      setSending(false);
     }
-  };
-
-  const layerStatus = {
-    tasks: tasksLoading ? LOADING : tasksError ? '오류' : `${locatedTasks.length}`,
-    bus: bus.loading ? LOADING : layers.bus && bus.loadedFor ? `${bus.items.length}` : '',
-    aed: aed.loading ? LOADING : layers.aed && aed.loadedFor ? `${aed.items.length}` : '',
-    boundary: boundaryError ? '오류' : boundaries ? `${dongCodes.length}` : LOADING,
-  };
-  const layerErrors = [
-    tasksError && { key: 'tasks', message: tasksError, retry: () => setTasksReloadKey((k) => k + 1) },
-    boundaryError && { key: 'boundary', message: boundaryError, retry: () => setBoundaryReloadKey((k) => k + 1) },
-    bus.error && { key: 'bus', message: `버스정류장: ${bus.error}`, retry: bus.retry },
-    aed.error && { key: 'aed', message: `AED: ${aed.error}`, retry: aed.retry },
-  ].filter(Boolean);
-
-  return (
-    <div className="map-page">
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">지도 조회</h1>
-          <p className="page-desc">{currentGroup?.groupName} 팀의 현장 업무와 공공데이터를 지도에서 확인합니다.</p>
-        </div>
-        <form className="map-search" onSubmit={onSearch}>
-          <input
-            className="input"
-            placeholder="주소 또는 장소 검색"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <button type="submit" className="btn-primary btn-inline" disabled={searching}>
-            {searching ? '검색 중…' : '검색'}
-          </button>
-        </form>
-      </div>
-      {searchError && <p className="form-error">{searchError}</p>}
-      {layerErrors.map((err) => (
-        <ErrorBlock key={err.key} message={err.message} onRetry={err.retry} />
-      ))}
-
-      <div className="map-layout">
-        <aside className="map-side">
-          <section className="panel">
-            <div className="panel-header">
-              <h2 className="panel-title">레이어</h2>
-            </div>
-            <div className="layer-list">
-              {LAYERS.map(({ key, label }) => (
-                <label key={key} className="layer-toggle">
-                  <input
-                    type="checkbox"
-                    checked={layers[key]}
-                    onChange={(e) => setLayers((prev) => ({ ...prev, [key]: e.target.checked }))}
-                  />
-                  <span className="layer-label">{label}</span>
-                  {layerStatus[key] === LOADING ? (
-                    <Spinner size={12} />
-                  ) : (
-                    layerStatus[key] && <span className="layer-count">{layerStatus[key]}</span>
-                  )}
-                </label>
-              ))}
-            </div>
-          </section>
-
-          <section className="panel map-task-panel">
-            <div className="panel-header">
-              <h2 className="panel-title">표시 중인 업무</h2>
-              <span className="panel-count">{layers.tasks ? `${visibleTasks.length}건` : '숨김'}</span>
-            </div>
-            {!layers.tasks ? (
-              <div className="table-empty">현장 업무 레이어가 꺼져 있습니다.</div>
-            ) : tasksLoading ? (
-              <SkeletonTable rows={5} columns={1} />
-            ) : visibleTasks.length === 0 ? (
-              <div className="table-empty">현재 지도 영역에 업무가 없습니다.</div>
-            ) : (
-              <ul className="map-task-list">
-                {visibleTasks.map((task) => (
-                  <li key={task.taskId}>
-                    <button
-                      type="button"
-                      className={`map-task-item${task.taskId === selectedTaskId ? ' active' : ''}`}
-                      onClick={() => setSelectedTaskId(task.taskId)}
-                    >
-                      <span className="status-dot" style={{ background: STATUS_COLOR[task._status] }} />
-                      <span className="map-task-text">
-                        <span className="map-task-title">{task.detailAddress || task.taskCategory || '업무'}</span>
-                        <span className="map-task-sub">
-                          {task.roadAddress || '주소 정보 없음'} · {task.assigneeName || '담당자 없음'}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {layers.tasks && missingCoords > 0 && (
-              <div className="map-task-note">좌표가 없는 업무 {missingCoords}건은 지도에 표시되지 않습니다.</div>
-            )}
-          </section>
-        </aside>
-
-        {/* 그룹이 바뀌면 지도를 새로 만들어 새 그룹 업무 기준으로 다시 화면을 맞춘다 */}
-        <MapCanvas
-          key={groupId}
-          tasks={tasks}
-          busStops={bus.items}
-          aeds={aed.items}
-          boundaries={boundaries}
-          layers={layers}
-          selectedTaskId={selectedTaskId}
-          onSelectTask={setSelectedTaskId}
-          onBoundsChange={onBoundsChange}
-          searchResult={searchResult}
-          dataReady={!tasksLoading && (boundaries != null || boundaryError != null)}
-        />
-      </div>
-    </div>
-  );
+  }
+  return <div className="map-page map-workspace"><h1 className="page-title">지도</h1>{error && <p role="alert" className="form-error">{error}</p>}<div className="map-workspace-layout"><aside className="map-workspace-side"><section className="panel padded"><h2>방문지 등록</h2><button className="btn-secondary full-width" onClick={() => setSearch(true)}>주소 또는 장소 검색</button><div className="registration-methods">{[['pick', '지도 선택'], ['public', '공공시설물'], ['project', '프로젝트'], ['excel', '엑셀 등록'], ['photo', '사진 등록'], ['workplace', '근무지']].map(([key, label]) => <button className="btn-secondary" key={key} onClick={() => {
+              setPoint(null);
+              setRegistration(key);
+            }}>{label}</button>)}</div>{registration === 'pick' && <p role="status">지도에서 등록할 위치를 선택하세요.</p>}</section><section className="panel map-task-panel"><div className="panel-header"><h2 className="panel-title">방문지 목록</h2><span className="panel-count">{visible.length}곳</span></div>{loading ? <p className="table-empty">불러오는 중…</p> : !visible.length ? <p className="table-empty">등록된 방문지가 없습니다.</p> : <ul className="map-task-list">{visible.map(t => <li key={t.taskId}><button className={`map-task-item${selected === t.taskId ? ' active' : ''}`} onClick={() => setSelected(t.taskId)}><span className="map-task-text"><strong>{t.detailAddress || t.roadAddress || '방문지'}</strong><span className="map-task-sub">{t.roadAddress} · {t.assigneeName}</span></span></button></li>)}</ul>}</section></aside>
+    <MapCanvas key={groupId} tasks={visible} busStops={[]} aeds={[]} boundaries={boundaries} layers={{
+        tasks: true,
+        boundary: showBoundary
+      }} selectedTaskId={selected} onSelectTask={setSelected} searchResult={point || searchResult} dataReady={!loading} onPickLocation={registration === 'pick' ? p => {
+        setPoint(p);
+        setRegistration('manual');
+      } : undefined}>
+      <div className="map-scope-control segmented" aria-label="방문지 담당 선택"><button className={scope === 'mine' ? 'active' : ''} onClick={() => setScope('mine')}>내 담당</button>{!personal && <button className={scope === 'all' ? 'active' : ''} onClick={() => setScope('all')}>팀 전체</button>}</div><div className="map-display-control"><button className="btn-secondary" aria-expanded={layerOpen} onClick={() => setLayerOpen(v => !v)}>지도 표시</button>{layerOpen && <label className="panel padded"><input type="checkbox" checked={showBoundary} onChange={e => setShowBoundary(e.target.checked)} /> 행정동 경계</label>}</div>
+      {target && Number(target.assigneeUserId) === Number(user.userId) && target._status !== STATUS.COMPLETE && <div className="map-guidance-control"><select className="input" aria-label="안내 방식" value={mode} onChange={e => setMode(e.target.value)}><option value="car">차량 안내</option><option value="walk">도보 안내</option></select><button className="btn-primary btn-inline" disabled={sending} onClick={startGuidance}>{sending ? '연동 중…' : '안내 시작'}</button></div>}
+    </MapCanvas></div>{params.get('application') && <FacilityApplications initialId={params.get('application')} onClose={() => setParams({})} />} {search && <PlacePicker onClose={() => setSearch(false)} onPick={p => {
+      setSearch(false);
+      setPoint(p);
+      setSearchResult(p);
+      setRegistration('manual');
+    }} />}{registration && registration !== 'pick' && <MapRegistration key={`${groupId}:${registration}`} method={registration} point={point} groupId={groupId} user={user} boundaries={boundaries} onClose={() => {
+      setRegistration(null);
+      setPoint(null);
+      setParams({});
+    }} onSaved={() => {
+      setRegistration(null);
+      setPoint(null);
+      setReload(v => v + 1);
+    }} />}{handoff && <Modal title="앱 안내 연동" onClose={() => setHandoff(null)}><p>앱에 연동되었습니다. 같은 계정의 핀워크 앱을 열어주세요.</p><p>{mode === 'car' ? '차량' : '도보'} 안내 요청은 10분 동안 유효합니다.</p><a className="btn-primary btn-inline" href="pang3://navigation">이 기기에서 앱 열기</a></Modal>}</div>;
 }

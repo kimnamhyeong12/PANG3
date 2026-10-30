@@ -69,14 +69,14 @@ function InviteModal({ groupId, user, onClose, onInvited }) {
             onChange={(e) => setLoginId(e.target.value)}
             autoFocus
           />
-          <span className="field-hint">초대받은 사용자가 앱에서 수락하면 팀원으로 추가됩니다.</span>
+          <span className="field-hint">초대받은 사용자가 앱 또는 웹의 초대 목록에서 수락하면 팀원으로 추가됩니다.</span>
         </div>
       </form>
     </Modal>
   );
 }
 
-function MembersSection({ groupId, user }) {
+export function MembersSection({ groupId, user }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -166,7 +166,7 @@ function MembersSection({ groupId, user }) {
   );
 }
 
-function RegionSection({ groupId, group, user, onSaved }) {
+export function RegionSection({ groupId, group, user, onSaved }) {
   const initialSido = SIDO_LIST.find((s) => s.name === group?.regionSido);
   const [sidoCode, setSidoCode] = useState(initialSido?.code || '');
   const [sigunguList, setSigunguList] = useState([]);

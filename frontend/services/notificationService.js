@@ -12,12 +12,32 @@ const TASK_CHANNEL_ID = 'task';
 const ROUTE_CHANNEL_ID = 'route';
 let routeNotificationVersion = 0;
 let taskAlertsEnabled = true;
+export async function getSharedNotificationPreferences() {
+  const response=await fetch(`${API_BASE_URL}/api/notifications/preferences`);
+  if(!response.ok)throw new Error('알림 설정을 불러오지 못했습니다.');
+  return response.json();
+}
+export async function updateSharedNotificationPreferences(patch) {
+  const response=await fetch(`${API_BASE_URL}/api/notifications/preferences`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)});
+  if(!response.ok)throw new Error('알림 설정을 저장하지 못했습니다.');
+  return response.json();
+}
 export async function getTaskNotificationPreference(userOrId) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/notifications/preferences`);
+    if (response.ok) {
+      const value = await response.json(); taskAlertsEnabled = value.taskAlerts !== false;
+      await AsyncStorage.setItem(`pang3.task-alerts.${getUserId(userOrId)}`, taskAlertsEnabled ? 'on' : 'off');
+      return taskAlertsEnabled;
+    }
+  } catch {}
   const value = await AsyncStorage.getItem(`pang3.task-alerts.${getUserId(userOrId)}`);
   taskAlertsEnabled = value !== 'off';
   return taskAlertsEnabled;
 }
 export async function setTaskNotificationPreference(userOrId, enabled) {
+  const response = await fetch(`${API_BASE_URL}/api/notifications/preferences`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskAlerts: enabled }) });
+  if (!response.ok && response.status !== 404) throw new Error('알림 설정을 저장하지 못했습니다.');
   await AsyncStorage.setItem(`pang3.task-alerts.${getUserId(userOrId)}`, enabled ? 'on' : 'off');
   taskAlertsEnabled = enabled;
   if (enabled) await syncPushTokenForUser(userOrId);

@@ -36,6 +36,10 @@ public class PushNotificationService {
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private com.fieldwork.repository.NotificationPreferenceRepository preferences;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private com.fieldwork.repository.WorkGroupRepository notificationGroups;
 
     public PushNotificationService(
             PushTokenRepository pushTokenRepository,
@@ -157,6 +161,15 @@ public class PushNotificationService {
         }
 
         try {
+            var preference=preferences==null?java.util.Optional.<com.fieldwork.entity.NotificationPreference>empty():preferences.findById(userId);
+            if(preference.isPresent()){
+                var p=preference.get();if(!p.taskAlerts)return;
+                Object group=data==null?null:data.get("groupId");
+                boolean team=group instanceof Number id&&notificationGroups!=null&&notificationGroups.findById(id.longValue()).map(g->!g.isPersonal()).orElse(false);
+                if(team&&!p.teamAlerts)return;
+                String type=data==null?"":java.util.Objects.toString(data.get("type"),"");
+                if(team&&!p.activityAlerts&&List.of(TYPE_ASSIGNEE_CHANGED,TYPE_PRIORITY_CHANGED).contains(type))return;
+            }
             User user = userRepository.findById(userId).orElse(null);
             if (user == null) {
                 return;

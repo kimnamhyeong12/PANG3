@@ -26,6 +26,7 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (loginId, password) => {
     const result = await webSession.login(loginId, password);
     const nextUser = {
+      ...result,
       userId: result.userId,
       loginId: result.loginId,
       name: result.name,
@@ -43,7 +44,7 @@ export function AuthProvider({ children }) {
     webSession.logout().catch(() => {});
   }, []);
 
-  const value = useMemo(() => ({ user, login, logout, loading, error, restore }), [user, login, logout, loading, error, restore]);
+  const value = useMemo(() => ({ user, login, logout, loading, error, restore, updateUser: (next) => setUser(previous => ({ ...previous, ...next })) }), [user, login, logout, loading, error, restore]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

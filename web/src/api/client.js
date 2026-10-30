@@ -85,6 +85,7 @@ async function download(path) {
 
 export const api = {
   download,
+  delete: (path, body) => request('DELETE', path, { body }),
   get: (path, params) => request('GET', path, { params }),
   post: (path, body, params) => request('POST', path, { body, params }),
   patch: (path, body, params) => request('PATCH', path, { body, params }),

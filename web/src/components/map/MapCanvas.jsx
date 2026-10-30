@@ -55,6 +55,8 @@ export default function MapCanvas({
   onBoundsChange,
   searchResult,
   dataReady,
+  onPickLocation,
+  children,
 }) {
   const containerRef = useRef(null);
   const kakaoRef = useRef(null);
@@ -66,11 +68,11 @@ export default function MapCanvas({
   const busMarkersRef = useRef([]);
   const aedMarkersRef = useRef([]);
   const searchMarkerRef = useRef(null);
-  const handlersRef = useRef({ onSelectTask, onBoundsChange });
+  const handlersRef = useRef({ onSelectTask, onBoundsChange, onPickLocation });
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
-  handlersRef.current = { onSelectTask, onBoundsChange };
+  handlersRef.current = { onSelectTask, onBoundsChange, onPickLocation };
 
   // 지도 생성 (1회)
   useEffect(() => {
@@ -87,7 +89,10 @@ export default function MapCanvas({
         kakao.maps.event.addListener(map, 'idle', () => {
           handlersRef.current.onBoundsChange?.(boundsToPlain(map.getBounds()));
         });
-        kakao.maps.event.addListener(map, 'click', () => handlersRef.current.onSelectTask?.(null));
+        kakao.maps.event.addListener(map, 'click', (event) => {
+          if (handlersRef.current.onPickLocation) handlersRef.current.onPickLocation({lat:event.latLng.getLat(),lng:event.latLng.getLng()});
+          else handlersRef.current.onSelectTask?.(null);
+        });
         setReady(true);
       })
       .catch((e) => !cancelled && setLoadError(e.message));
@@ -317,6 +322,7 @@ export default function MapCanvas({
 
   return (
     <div className="map-canvas">
+      {children}
       <div ref={containerRef} className="map-container" />
       {loadError && <div className="map-error">{loadError}</div>}
       {!ready && !loadError && (

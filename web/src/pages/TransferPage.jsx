@@ -8,6 +8,7 @@ import { IconPlus } from '../components/Icons.jsx';
 import ErrorBlock from '../components/ErrorBlock.jsx';
 import { SkeletonTable } from '../components/Loading.jsx';
 import { errorMessage } from '../api/client.js';
+import { useSearchParams } from 'react-router-dom';
 
 const STATUS_VIEW = {
   [TRANSFER_STATUS.PENDING]: { label: '대기', tone: 'amber' },
@@ -23,7 +24,7 @@ function TransferStatusPill({ status }) {
 function TransferItem({ item, canRespond, busy, onRespond }) {
   const area = [item.sigungu, item.adminDong].filter(Boolean).join(' ') || '-';
   return (
-    <li className="transfer-item">
+    <li className="transfer-item" id={`transfer-${item.id}`}>
       <div className="transfer-main">
         <div className="transfer-people">
           <span>{item.senderName}</span>
@@ -53,8 +54,10 @@ function TransferItem({ item, canRespond, busy, onRespond }) {
 }
 
 export default function TransferPage() {
+  const [params] = useSearchParams();
   const { user } = useAuth();
-  const { groupId } = useGroup();
+  const { groupId, currentGroup } = useGroup();
+  const personal=Boolean(currentGroup?.personal||currentGroup?.personalWorkspace||currentGroup?.workspaceType==='PERSONAL');
   const [transfers, setTransfers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -67,6 +70,7 @@ export default function TransferPage() {
   const requestSeq = useRef(0);
   const load = useCallback(async () => {
     const seq = ++requestSeq.current;
+    if(personal){setTransfers([]);setLoading(false);setError(null);return;}
     setLoading(true);
     setError(null);
     try {
@@ -79,10 +83,11 @@ export default function TransferPage() {
     } finally {
       if (seq === requestSeq.current) setLoading(false);
     }
-  }, [groupId, user.userId]);
+  }, [groupId, user.userId, personal]);
 
   useEffect(() => {
     setActionError(null);
+    setModalOpen(false);
     load();
   }, [load]);
 
@@ -90,6 +95,11 @@ export default function TransferPage() {
   const sent = useMemo(() => transfers.filter((t) => t.senderUserId === user.userId), [transfers, user.userId]);
   const pendingReceived = received.filter((t) => t.status === TRANSFER_STATUS.PENDING).length;
   const list = tab === 'received' ? received : sent;
+  useEffect(() => {
+    const id=params.get('request');const request=transfers.find(t=>String(t.id)===id);
+    if(request)setTab(Number(request.recipientUserId)===Number(user.userId)?'received':'sent');
+  },[params,transfers,user.userId]);
+  useEffect(()=>{if(!loading&&params.get('request'))document.getElementById(`transfer-${params.get('request')}`)?.scrollIntoView({block:'center'});},[tab,loading,params]);
 
   const onRespond = async (item, accept) => {
     const message = accept
@@ -135,14 +145,14 @@ export default function TransferPage() {
       <div className="page-head">
         <div>
           <h1 className="page-title">업무 이관</h1>
-          <p className="page-desc">행정동·프로젝트별로 내 담당 업무를 다른 팀원에게 이관 요청하고, 받은 요청을 처리합니다.</p>
         </div>
-        <button type="button" className="btn-primary btn-inline" onClick={() => setModalOpen(true)}>
+        <button type="button" className="btn-primary btn-inline" disabled={personal} onClick={() => setModalOpen(true)}>
           <IconPlus size={16} />새 이관 요청
         </button>
       </div>
 
       <section className="panel">
+        {personal&&<p className="panel-notice">팀 그룹을 선택하면 업무를 이관할 수 있습니다.</p>}
         <div className="tabs">
           <button
             type="button"

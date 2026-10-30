@@ -204,8 +204,7 @@ export default function ReportsPage() {
 
   return (
     <>
-      <h1 className="page-title">보고서 보관함</h1>
-      <p className="page-desc">팀원이 현장에서 제출한 업무 보고서를 확인하고 내려받습니다.</p>
+      <h1 className="page-title">보고서</h1>
 
       <div className="filter-bar"><select aria-label="연결할 프로젝트" className="input" value={projectId} onChange={e=>setProjectId(e.target.value)}><option value="">프로젝트 선택</option>{projects.filter(p=>p.status!=='ARCHIVED').map(p=><option key={p.projectId} value={p.projectId}>{p.name}</option>)}</select><button className="btn-primary" disabled={!selected.length||!projectId||linking} onClick={link}>프로젝트에 연결 ({selected.length})</button>{linkMessage&&<span role="status">{linkMessage}</span>}</div>
       <div className="filter-bar">

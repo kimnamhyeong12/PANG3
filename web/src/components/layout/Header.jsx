@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useGroup } from '../../context/GroupContext.jsx';
 import { IconBell, IconChevronDown, IconLogo } from '../Icons.jsx';
 import { groupDisplayName } from '../../utils/groupDisplay.js';
+import { useNavigate } from 'react-router-dom';
 
 function GroupSwitcher() {
   const { groups, groupId, currentGroup, setGroupId } = useGroup();
@@ -54,6 +55,7 @@ function GroupSwitcher() {
 
 export default function Header() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   // User 엔티티/로그인 응답에 부서 필드가 없어 근무 지역(workSido workSigungu)을 보조 정보로 표시
   const subText = [user?.workSido, user?.workSigungu].filter(Boolean).join(' ');
 
@@ -63,12 +65,12 @@ export default function Header() {
         <div className="header-logo">
           <IconLogo size={18} />
         </div>
-        <span className="header-title">외근도우미</span>
-        <span className="badge badge-navy">관리자</span>
+        <span className="header-title">핀워크</span>
+        {user?.role === 'ADMIN' && <span className="badge badge-navy">관리자</span>}
         <GroupSwitcher />
       </div>
       <div className="header-right">
-        <button type="button" className="icon-button" aria-label="알림">
+        <button type="button" className="icon-button" aria-label="알림" onClick={() => navigate('/dashboard#notifications')}>
           <IconBell size={20} />
         </button>
         <div className="header-divider" />
