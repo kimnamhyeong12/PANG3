@@ -17,13 +17,13 @@ export const STATUS_COLOR = {
 
 const svgUrl = (svg) => `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 
-function pinSvg(color, selected) {
-  const stroke = selected ? COLORS.navy : '#FFFFFF';
+function pinSvg(color, selected, number, ownerColor) {
+  const stroke = selected ? COLORS.navy : /^#[a-f\d]{6}$/i.test(ownerColor||'') ? ownerColor : '#FFFFFF';
   const strokeWidth = selected ? 3 : 2;
   return svgUrl(
     `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">` +
       `<path d="M14 1C7 1 1.5 6.4 1.5 13.2 1.5 22.5 14 35 14 35s12.5-12.5 12.5-21.8C26.5 6.4 21 1 14 1z" fill="${color}" stroke="${stroke}" stroke-width="${strokeWidth}"/>` +
-      `<circle cx="14" cy="13" r="4.5" fill="#FFFFFF"/></svg>`
+      (Number.isInteger(number) ? `<circle cx="14" cy="13" r="8" fill="#FFFFFF"/><text x="14" y="16.5" text-anchor="middle" font-family="sans-serif" font-weight="700" font-size="10" fill="#1A2233">${number}</text></svg>` : `<circle cx="14" cy="13" r="4.5" fill="#FFFFFF"/></svg>`)
   );
 }
 
@@ -34,11 +34,11 @@ function cached(key, create) {
   return cache.get(key);
 }
 
-export function taskMarkerImage(kakao, status, selected = false) {
-  return cached(`task-${status}-${selected}`, () => {
+export function taskMarkerImage(kakao, status, selected = false, number, ownerColor) {
+  return cached(`task-${status}-${selected}-${number||''}-${ownerColor||''}`, () => {
     const size = selected ? new kakao.maps.Size(34, 44) : new kakao.maps.Size(28, 36);
     const offset = selected ? new kakao.maps.Point(17, 44) : new kakao.maps.Point(14, 36);
-    return new kakao.maps.MarkerImage(pinSvg(STATUS_COLOR[status], selected), size, { offset });
+    return new kakao.maps.MarkerImage(pinSvg(STATUS_COLOR[status], selected, number, ownerColor), size, { offset });
   });
 }
 

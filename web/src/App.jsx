@@ -14,6 +14,7 @@ import ReportsPage from './pages/ReportsPage.jsx';
 import PublicDataPage from './pages/PublicDataPage.jsx';
 import SettingsPage from './pages/AccountSettingsPage.jsx';
 import GroupsPage from './pages/GroupsPage.jsx';
+import GroupStatusPage from './pages/GroupStatusPage.jsx';
 import ProjectsPage from './pages/ProjectsPage.jsx';
 import ProjectsDetailPage from './pages/ProjectsDetailPage.jsx';
 import ReportEditorPage from './pages/ReportEditorPage.jsx';
@@ -61,6 +62,7 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/groups" element={<GroupsPage />} />
+            <Route path="/groups/status" element={<GroupStatusPage />} />
             <Route path="/transfers" element={<TransferPage />} />
             <Route path="/map" element={<MapPage />} />
             <Route path="/reports" element={<ReportsPage />} />

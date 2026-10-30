@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import IdentityDialog from '../components/IdentityDialog.jsx';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -10,6 +11,7 @@ import WorkRegionFields from '../components/WorkRegionFields.jsx';
 import { serializeWorkRegion, isWorkRegionComplete } from '../lib/workRegion.js';
 export const personalGroup = g => Boolean(g?.personal || g?.personalWorkspace || g?.workspaceType === 'PERSONAL');
 export default function GroupsPage() {
+  const navigate=useNavigate();
   const {
     user
   } = useAuth();
@@ -73,7 +75,7 @@ export default function GroupsPage() {
             });
             await Promise.all([reload(), loadInvites()]);
             setNotice(action === 'accept' ? '그룹에 참여했습니다.' : '초대를 거절했습니다.');
-          })}>{action === 'accept' ? '수락' : '거절'}</button>)}</div></div>)}</section> : <section className="panel padded"><h2>그룹 목록</h2>{groups.map(g => <div className="group-row" key={g.groupId}><div><strong>{groupDisplayName(g)}</strong><p className="text-soft">{personalGroup(g) ? '개인 업무공간' : `${g.memberCount || 1}명 · ${g.regionSigungu || '활동지역 미설정'}`}</p></div><div className="action-row">{g.groupId === groupId ? <span className="pill pill-navy">사용 중</span> : <button className="btn-secondary" onClick={() => setGroupId(g.groupId)}>선택</button>}{!personalGroup(g) && <button className="btn-secondary" disabled={busy} onClick={() => open(g)}>그룹 관리</button>}</div></div>)}</section>}
+          })}>{action === 'accept' ? '수락' : '거절'}</button>)}</div></div>)}</section> : <section className="panel padded"><h2>그룹 목록</h2>{groups.map(g => <div className="group-row" key={g.groupId}><div><strong>{groupDisplayName(g)}</strong><p className="text-soft">{personalGroup(g) ? '개인 업무공간' : `${g.memberCount || 1}명 · ${g.regionSigungu || '활동지역 미설정'}`}</p></div><div className="action-row">{g.groupId === groupId ? <span className="pill pill-navy">사용 중</span> : <button className="btn-secondary" onClick={() => setGroupId(g.groupId)}>선택</button>}<button className="btn-secondary" onClick={()=>{setGroupId(g.groupId);navigate('/groups/status');}}>업무현황</button>{!personalGroup(g) && <button className="btn-secondary" disabled={busy} onClick={() => open(g)}>그룹 관리</button>}</div></div>)}</section>}
     {selected && <><div className="page-head section-gap"><h2>{selected.groupName}</h2><button className="btn-secondary" onClick={() => setSelected(null)}>닫기</button></div><MembersSection key={selected.groupId} groupId={selected.groupId} user={user} /><RegionSection groupId={selected.groupId} group={selected} user={user} onSaved={async () => {
         await reload();
         await open(selected);

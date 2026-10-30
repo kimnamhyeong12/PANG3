@@ -10,7 +10,7 @@ export default function AppLayout() {
       <Header />
       <div className="app-body">
         <Sidebar />
-        <main className="app-main">
+        <main className={`app-main${pathname === '/map' || pathname === '/groups/status' ? ' app-main-map' : ''}`}>
           {(pathname.startsWith('/reports') || pathname.startsWith('/projects')) && <ReportNavigation />}
           <Outlet />
         </main>

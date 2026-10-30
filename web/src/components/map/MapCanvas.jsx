@@ -56,6 +56,11 @@ export default function MapCanvas({
   searchResult,
   dataReady,
   onPickLocation,
+  showTaskInfo = true,
+  currentPosition,
+  locateToken = 0,
+  ownerColors,
+  showLegend = false,
   children,
 }) {
   const containerRef = useRef(null);
@@ -68,6 +73,7 @@ export default function MapCanvas({
   const busMarkersRef = useRef([]);
   const aedMarkersRef = useRef([]);
   const searchMarkerRef = useRef(null);
+  const lastLocateRef = useRef(0);
   const handlersRef = useRef({ onSelectTask, onBoundsChange, onPickLocation });
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState(null);
@@ -176,7 +182,7 @@ export default function MapCanvas({
     tasks.filter(hasCoords).forEach((task) => {
       const marker = new kakao.maps.Marker({
         position: new kakao.maps.LatLng(task.lat, task.lng),
-        image: taskMarkerImage(kakao, task._status),
+        image: taskMarkerImage(kakao, task._status, false, task.markerNumber, ownerColors?.[task.assigneeUserId]),
         title: task.detailAddress ?? task.roadAddress ?? '',
         clickable: true,
         zIndex: 3,
@@ -189,7 +195,7 @@ export default function MapCanvas({
       markers.forEach(({ marker }) => marker.setMap(null));
       taskMarkersRef.current = new Map();
     };
-  }, [ready, tasks]);
+  }, [ready, tasks, ownerColors]);
 
   useEffect(() => {
     if (!ready) return;
@@ -231,8 +237,13 @@ export default function MapCanvas({
     if (!entry || !layers.tasks) return undefined;
 
     const { marker, task } = entry;
-    marker.setImage(taskMarkerImage(kakao, task._status, true));
+    marker.setImage(taskMarkerImage(kakao, task._status, true, task.markerNumber, ownerColors?.[task.assigneeUserId]));
     marker.setZIndex(10);
+    mapRef.current.panTo(marker.getPosition());
+    if (!showTaskInfo) return () => {
+      marker.setImage(taskMarkerImage(kakao, task._status, false, task.markerNumber, ownerColors?.[task.assigneeUserId]));
+      marker.setZIndex(3);
+    };
 
     const content = document.createElement('div');
     content.className = 'map-info';
@@ -255,10 +266,25 @@ export default function MapCanvas({
     return () => {
       overlay.setMap(null);
       infoOverlayRef.current = null;
-      marker.setImage(taskMarkerImage(kakao, task._status, false));
+      marker.setImage(taskMarkerImage(kakao, task._status, false, task.markerNumber, ownerColors?.[task.assigneeUserId]));
       marker.setZIndex(3);
     };
-  }, [ready, selectedTaskId, tasks, layers.tasks]);
+  }, [ready, selectedTaskId, tasks, layers.tasks, showTaskInfo, ownerColors]);
+
+  useEffect(() => {
+    if(!ready||!currentPosition)return;
+    const kakao=kakaoRef.current;
+    const position=new kakao.maps.LatLng(currentPosition.lat,currentPosition.lng);
+    const dot=document.createElement('div');dot.className='current-location-dot';dot.setAttribute('aria-label','현재 위치');
+    const marker=new kakao.maps.CustomOverlay({position,content:dot,xAnchor:.5,yAnchor:.5,zIndex:15});marker.setMap(mapRef.current);
+    const accuracy=new kakao.maps.Circle({center:position,radius:Math.min(Math.max(currentPosition.accuracy||15,5),300),strokeWeight:1,strokeColor:'#2F6FED',strokeOpacity:.3,fillColor:'#2F6FED',fillOpacity:.08});accuracy.setMap(mapRef.current);
+    return()=>{marker.setMap(null);accuracy.setMap(null);};
+  },[ready,currentPosition]);
+  useEffect(()=>{
+    if(!ready||!currentPosition||!locateToken||lastLocateRef.current===locateToken)return;
+    lastLocateRef.current=locateToken;
+    mapRef.current.setCenter(new kakaoRef.current.maps.LatLng(currentPosition.lat,currentPosition.lng));mapRef.current.setLevel(4);
+  },[ready,currentPosition,locateToken]);
 
   // 버스정류장
   useEffect(() => {
@@ -342,7 +368,7 @@ export default function MapCanvas({
             </button>
           </div>
 
-          <div className="map-legend">
+          <div className="map-legend" style={{display:showLegend?undefined:'none'}}>
             <div className="map-legend-title">범례</div>
             {[STATUS.PENDING, STATUS.WORKING, STATUS.COMPLETE].map((s) => (
               <div key={s} className="map-legend-row">
