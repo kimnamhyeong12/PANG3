@@ -111,7 +111,23 @@ jobs:
               sleep 10
             done
             docker compose up -d
+            # A started container is not necessarily ready to serve API requests.
+            api_ready=0
+            for attempt in $(seq 1 60); do
+              if curl --fail --silent --max-time 3 http://127.0.0.1:8080/api/auth/social/providers >/dev/null; then
+                api_ready=1
+                break
+              fi
+              sleep 3
+            done
+            if [ "$api_ready" != 1 ]; then
+              echo "API did not become ready; web publication stopped"
+              docker compose ps
+              exit 1
+            fi
             bash infra/scripts/deploy-web.sh
+            curl --fail --silent --show-error --max-time 15 https://pinwork.co.kr/api/auth/social/providers >/dev/null
+            curl --fail --silent --show-error --max-time 15 https://pinwork.co.kr/ >/dev/null
             docker image prune -f
 
       
