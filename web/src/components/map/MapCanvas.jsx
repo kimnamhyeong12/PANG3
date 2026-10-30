@@ -56,6 +56,7 @@ export default function MapCanvas({
   searchResult,
   dataReady,
   onPickLocation,
+  onCenterChange,
   showTaskInfo = true,
   currentPosition,
   locateToken = 0,
@@ -74,11 +75,11 @@ export default function MapCanvas({
   const aedMarkersRef = useRef([]);
   const searchMarkerRef = useRef(null);
   const lastLocateRef = useRef(0);
-  const handlersRef = useRef({ onSelectTask, onBoundsChange, onPickLocation });
+  const handlersRef = useRef({ onSelectTask, onBoundsChange, onPickLocation, onCenterChange });
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
-  handlersRef.current = { onSelectTask, onBoundsChange, onPickLocation };
+  handlersRef.current = { onSelectTask, onBoundsChange, onPickLocation, onCenterChange };
 
   // 지도 생성 (1회)
   useEffect(() => {
@@ -94,6 +95,12 @@ export default function MapCanvas({
         mapRef.current = map;
         kakao.maps.event.addListener(map, 'idle', () => {
           handlersRef.current.onBoundsChange?.(boundsToPlain(map.getBounds()));
+          const center = map.getCenter();
+          handlersRef.current.onCenterChange?.({ lat: center.getLat(), lng: center.getLng() });
+        });
+        kakao.maps.event.addListener(map, 'center_changed', () => {
+          const center = map.getCenter();
+          handlersRef.current.onCenterChange?.({ lat: center.getLat(), lng: center.getLng() });
         });
         kakao.maps.event.addListener(map, 'click', (event) => {
           if (handlersRef.current.onPickLocation) handlersRef.current.onPickLocation({lat:event.latLng.getLat(),lng:event.latLng.getLng()});
@@ -106,6 +113,12 @@ export default function MapCanvas({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!ready || !onCenterChange) return;
+    const center = mapRef.current.getCenter();
+    onCenterChange({ lat: center.getLat(), lng: center.getLng() });
+  }, [ready, Boolean(onCenterChange)]);
 
   // 컨테이너 크기 변화 시 relayout
   useEffect(() => {

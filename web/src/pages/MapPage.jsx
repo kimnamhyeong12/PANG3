@@ -12,6 +12,7 @@ import AppIcon from '../components/AppIcon.jsx';
 import Modal from '../components/Modal.jsx';
 import { normalizeStatus, STATUS, STATUS_LABEL } from '../utils/taskStatus.js';
 import { personalGroup } from './GroupsPage.jsx';
+import { loadKakaoMaps } from '../lib/kakaoLoader.js';
 import { searchPlaces } from '../lib/placeSearch.js';
 import { applyVisitRecommendation, recommendationPayload } from '../lib/visitRecommendations.js';
 const REGISTRATION_METHODS = [['pick', '지도 선택', 'map-outline'], ['public', '공공시설물', 'business-outline'], ['project', '프로젝트', 'folder-outline'], ['excel', '엑셀 등록', 'grid-outline'], ['photo', '사진 등록', 'image-outline'], ['workplace', '근무지', 'home-outline']];
@@ -35,6 +36,8 @@ export default function MapPage() {
   const [selected, setSelected] = useState(null);
   const [registration, setRegistration] = useState(null);
   const [point, setPoint] = useState(null);
+  const [pickCenter, setPickCenter] = useState(null);
+  const [pickingAddress, setPickingAddress] = useState(false);
   const [searchResult, setSearchResult] = useState(null);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -275,10 +278,8 @@ export default function MapPage() {
       <MapCanvas key={groupId} tasks={visits} busStops={[]} aeds={[]} layers={{
         tasks: true,
         boundary: false
-      }} selectedTaskId={selected} onSelectTask={setSelected} searchResult={point || searchResult} dataReady={!loading} showTaskInfo={false} currentPosition={position} locateToken={locateToken} onPickLocation={registration === 'pick' ? place => {
-        setPoint(place);
-        setRegistration('manual');
-      } : undefined}>
+      }} selectedTaskId={selected} onSelectTask={setSelected} searchResult={point || searchResult} dataReady={!loading} showTaskInfo={false} currentPosition={position} locateToken={locateToken} onCenterChange={registration === 'pick' ? setPickCenter : undefined}>
+        {registration === 'pick' && <><div className="map-center-pin" aria-hidden="true">📍</div><div className="map-center-confirm"><strong>지도를 움직여 위치를 선택하세요</strong><div className="action-row"><button className="btn-secondary" disabled={pickingAddress} onClick={() => setRegistration(null)}>취소</button><button className="btn-primary btn-inline" disabled={!pickCenter || pickingAddress} onClick={async () => { setPickingAddress(true); try { const k = await loadKakaoMaps(); const address = await new Promise(resolve => new k.maps.services.Geocoder().coord2Address(pickCenter.lng, pickCenter.lat, rows => resolve(rows?.[0]?.road_address?.address_name || rows?.[0]?.address?.address_name || ''))); setPoint({ ...pickCenter, address }); setRegistration('manual'); } catch (e) { setError(e.message); } finally { setPickingAddress(false); } }}>{pickingAddress ? '확인 중…' : '이 위치 선택'}</button></div></div></>}
         <button className={`map-current-location${position ? ' located' : ''}`} aria-label="현재 위치" title="현재 위치" onClick={() => locate(true)} disabled={locating}><AppIcon name="locate-outline" />{locating && <span>확인 중</span>}</button>
         <div className="map-guidance-control"><div className="segmented travel-mode"><button className={mode === 'car' ? 'active' : ''} aria-label="차량 이동" onClick={() => setMode('car')}><AppIcon name="car-outline" /></button><button className={mode === 'walk' ? 'active' : ''} aria-label="도보 이동" onClick={() => setMode('walk')}><AppIcon name="walk-outline" /></button></div><button className="btn-secondary" disabled={!position || optimizing || loading} onClick={recommend}>{optimizing ? '추천 중…' : '방문 순서 추천'}</button>{target && target._status !== STATUS.COMPLETE && <button className="btn-primary btn-inline" disabled={sending} onClick={startGuidance}>{sending ? '연동 중…' : '안내 시작'}</button>}</div>
       </MapCanvas>

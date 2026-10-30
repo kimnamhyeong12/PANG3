@@ -1,3 +1,4 @@
+import SelectionEmpty from '../components/SelectionEmpty.jsx';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -65,7 +66,7 @@ export default function SupportAdminPage() {
   return <div className="support-admin">
     <header className="support-header"><div><span className="support-brand">핀워크</span><span className="support-admin-label">고객센터 운영</span></div><div><span>{user.name || user.loginId}</span><Link to="/dashboard">서비스로 이동</Link><button className="btn-secondary" onClick={logout}>로그아웃</button></div></header>
     <main className="support-main">
-      <div className="support-page-heading"><div><p className="support-eyebrow">CUSTOMER SUPPORT</p><h1>공통 문의함</h1><p>운영자들이 함께 확인하고 답변합니다. 답변은 사용자 앱에 표시됩니다.</p></div><button className="btn-secondary" onClick={refresh} disabled={loading}>새로고침</button></div>
+      <div className="support-page-heading"><div><h1>고객센터 문의함</h1></div><button className="btn-secondary" onClick={refresh} disabled={loading}>새로고침</button></div>
       <div className="support-workspace">
         <section className="support-list" aria-label="문의 목록">
           <div className="support-filters" role="tablist" aria-label="문의 상태">{[['WAITING', '답변 대기'], ['ANSWERED', '답변 완료'], ['', '전체']].map(([value, label]) => <button key={value} role="tab" aria-selected={status === value} disabled={sending} className={status === value ? 'active' : ''} onClick={() => { setStatus(value); setPage(0); setInbox(null); }}>{label}</button>)}</div>
@@ -76,7 +77,7 @@ export default function SupportAdminPage() {
           <div className="support-pagination"><button disabled={!page || loading || sending} onClick={() => setPage(value => value - 1)}>이전</button><span>{page + 1} 페이지</span><button disabled={!inbox?.hasMore || loading || sending} onClick={() => setPage(value => value + 1)}>다음</button></div>
         </section>
         <section className="support-detail" aria-label="문의 상세와 답변" aria-busy={detailLoading || sending}>
-          {!selected && <div className="support-detail-empty"><span aria-hidden="true">↗</span><h2>문의를 선택해 주세요</h2><p>내용을 확인하고 사용자에게 답변을 남길 수 있습니다.</p></div>}
+          {!selected && <SelectionEmpty icon="folder-outline">문의를 선택해 주세요</SelectionEmpty>}
           {detailLoading && <p role="status">문의 내용을 불러오는 중…</p>}
           {error && <div role="alert" className="support-error">{error}{selected && !record && !detailLoading && <button onClick={() => setDetailRevision(value => value + 1)}>다시 불러오기</button>}</div>}
           {notice && <p role="status" className="support-success">{notice}</p>}
@@ -85,7 +86,7 @@ export default function SupportAdminPage() {
             <dl className="support-metadata"><div><dt>문의 계정</dt><dd>{record.loginId} (회원번호 {record.userId})</dd></div><div><dt>답변 이메일</dt><dd>{record.inquiry.replyEmail}</dd></div><div><dt>앱 정보</dt><dd>{record.appVersion} / {record.platform}</dd></div></dl>
             <div className="support-message">{record.inquiry.message}</div>
             {!!record.inquiry.attachments?.length && <section className="support-attachments" aria-label="첨부파일"><h3>첨부파일</h3>{record.inquiry.attachments.map(file => <button key={file.id} type="button" disabled={downloadingId !== null} onClick={() => downloadAttachment(file)}><span>{file.name}</span><span>{downloadingId === file.id ? '다운로드 중…' : `${(file.size / 1024 / 1024).toFixed(1)}MB · 다운로드`}</span></button>)}</section>}
-            {record.inquiry.status === 'ANSWERED' ? <div className="support-saved-answer"><h3>등록된 답변</h3><p className="support-muted">{record.answeredByName || '운영자'} · {formatDate(record.inquiry.answeredAt)}</p><div className="support-message">{record.inquiry.answer}</div></div> : <form onSubmit={submit} className="support-answer-form"><label htmlFor="support-answer">답변 작성</label><p>등록한 답변은 사용자의 앱 문의 내역에 표시됩니다.</p><textarea id="support-answer" required maxLength={5000} value={answer} onChange={event => setAnswer(event.target.value)} disabled={sending} placeholder="사용자에게 안내할 내용을 입력해 주세요." /><div className="support-answer-footer"><span>{answer.length}/5000</span><button className="btn-primary" disabled={sending || !answer.trim()}>{sending ? '등록 중…' : '답변 등록'}</button></div></form>}
+            {record.inquiry.status === 'ANSWERED' ? <div className="support-saved-answer"><h3>등록된 답변</h3><p className="support-muted">{record.answeredByName || '운영자'} · {formatDate(record.inquiry.answeredAt)}</p><div className="support-message">{record.inquiry.answer}</div></div> : <form onSubmit={submit} className="support-answer-form"><label htmlFor="support-answer">답변 작성</label><textarea id="support-answer" required maxLength={5000} value={answer} onChange={event => setAnswer(event.target.value)} disabled={sending} placeholder="사용자에게 안내할 내용을 입력해 주세요." /><div className="support-answer-footer"><span>{answer.length}/5000</span><button className="btn-primary" disabled={sending || !answer.trim()}>{sending ? '등록 중…' : '답변 등록'}</button></div></form>}
           </>}
         </section>
       </div>

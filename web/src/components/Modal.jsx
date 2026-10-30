@@ -1,13 +1,15 @@
 import { useEffect, useRef } from 'react';
 
-export default function Modal({ title, onClose, children, footer }) {
+export default function Modal({ title, onClose, children, footer, wide = false }) {
   const backdrop=useRef(null);
+  const closeRef=useRef(onClose);
+  closeRef.current=onClose;
   useEffect(() => {
     const previous=document.activeElement;
     backdrop.current?.querySelector('button,input,select,textarea,a')?.focus();
     const onKey = (e) => {
       if([...document.querySelectorAll('.modal-backdrop')].at(-1)!==backdrop.current)return;
-      if(e.key==='Escape'){e.preventDefault();onClose();}
+      if(e.key==='Escape'){e.preventDefault();closeRef.current();}
       if(e.key==='Tab'){
         const controls=[...backdrop.current.querySelectorAll('button,input,select,textarea,a[href]')].filter(el=>!el.disabled&&el.getClientRects().length);
         const first=controls[0],last=controls.at(-1);
@@ -16,11 +18,11 @@ export default function Modal({ title, onClose, children, footer }) {
     };
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('keydown', onKey);previous?.focus(); };
-  }, [onClose]);
+  }, []);
 
   return (
     <div className="modal-backdrop" ref={backdrop} onMouseDown={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
+      <div className={`modal${wide ? " modal-wide" : ""}`} role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">{title}</h2>
           <button type="button" className="icon-button" aria-label="닫기" onClick={onClose}>

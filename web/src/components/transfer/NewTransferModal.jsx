@@ -15,7 +15,7 @@ export default function NewTransferModal({
     [tasks, setTasks] = useState([]),
     [projects, setProjects] = useState([]),
     [recipient, setRecipient] = useState(''),
-    [dong, setDong] = useState(''),
+    [viewMode, setViewMode] = useState('dong'),
     [project, setProject] = useState(''),
     [query, setQuery] = useState(''),
     [selected, setSelected] = useState([]),
@@ -38,11 +38,11 @@ export default function NewTransferModal({
       active = false;
     };
   }, [groupId, user.userId]);
-  const filtered = tasks.filter(t => (!dong || t.adminDong === dong) && (!project || (t.projectIds || []).some(id => String(id) === project)) && (!query || `${t.detailAddress} ${t.roadAddress}`.includes(query)));
-  const grouped = useMemo(() => Object.groupBy ? Object.groupBy(filtered, t => t.adminDong || '행정동 미지정') : filtered.reduce((a, t) => {
-    (a[t.adminDong || '행정동 미지정'] ??= []).push(t);
-    return a;
-  }, {}), [tasks, dong, project, query]);
+  const filtered = tasks.filter(t => (!project || (t.projectIds || []).some(id => String(id) === project)) && (!query || `${t.detailAddress} ${t.roadAddress}`.includes(query)));
+  const grouped = useMemo(() => {
+    if (viewMode === 'project') return [...projects.map(p => ({ key: `project:${p.projectId}`, title: p.name, rows: filtered.filter(t => (t.projectIds || []).some(id => String(id) === String(p.projectId))) })), { key: 'none', title: '프로젝트 미지정', rows: filtered.filter(t => !t.projectIds?.length) }].filter(group => group.rows.length);
+    return Object.entries(filtered.reduce((groups, task) => { (groups[task.adminDong || '행정동 미지정'] ??= []).push(task); return groups; }, {})).map(([title, rows]) => ({ key: title, title, rows }));
+  }, [tasks, project, query, viewMode, projects]);
   function toggle(ids) {
     setSelected(old => ids.every(id => old.includes(id)) ? old.filter(id => !ids.includes(id)) : [...new Set([...old, ...ids])]);
   }
@@ -65,5 +65,5 @@ export default function NewTransferModal({
       setBusy(false);
     }
   }
-  return <Modal title="새 이관 요청" onClose={() => !busy && onClose()} footer={<><button className="btn-secondary" disabled={busy} onClick={onClose}>취소</button><button className="btn-primary btn-inline" disabled={loading || busy || !recipient || !selected.length} onClick={send}>이관 요청 ({selected.length}건)</button></>}>{error && <p className="form-error" role="alert">{error}</p>}{loading ? <p>불러오는 중…</p> : <><label className="field">받을 팀원<select className="input" value={recipient} onChange={e => setRecipient(e.target.value)}><option value="">팀원을 선택하세요</option>{members.map(m => <option key={m.userId} value={m.userId}>{m.name}</option>)}</select></label><div className="filter-row"><input className="input" placeholder="방문지 검색" value={query} onChange={e => setQuery(e.target.value)} /><select className="input" aria-label="행정동" value={dong} onChange={e => setDong(e.target.value)}><option value="">전체 행정동</option>{[...new Set(tasks.map(t => t.adminDong).filter(Boolean))].map(d => <option key={d}>{d}</option>)}</select><select className="input" aria-label="프로젝트" value={project} onChange={e => setProject(e.target.value)}><option value="">전체 프로젝트</option>{projects.map(p => <option value={p.projectId} key={p.projectId}>{p.name}</option>)}</select></div>{!filtered.length && <p className="table-empty">이관할 수 있는 방문지가 없습니다.</p>}{Object.entries(grouped).map(([area, rows]) => <section key={area}><label className="check-row"><input type="checkbox" checked={rows.every(t => selected.includes(t.taskId))} onChange={() => toggle(rows.map(t => t.taskId))} /><strong>{area} · {rows.length}건</strong></label>{rows.map(t => <label className="check-row" key={t.taskId}><input type="checkbox" checked={selected.includes(t.taskId)} onChange={() => toggle([t.taskId])} /><span>{t.detailAddress || t.roadAddress}<small>{t.roadAddress}</small></span></label>)}</section>)}</>}</Modal>;
+  return <Modal title="새 이관 요청" onClose={() => !busy && onClose()} footer={<><button className="btn-secondary" disabled={busy} onClick={onClose}>취소</button><button className="btn-primary btn-inline" disabled={loading || busy || !recipient || !selected.length} onClick={send}>이관 요청 ({selected.length}건)</button></>}>{error && <p className="form-error" role="alert">{error}</p>}{loading ? <p>불러오는 중…</p> : <><label className="field">받을 팀원<select className="input" value={recipient} onChange={e => setRecipient(e.target.value)}><option value="">팀원을 선택하세요</option>{members.map(m => <option key={m.userId} value={m.userId}>{m.name}</option>)}</select></label><div className="filter-row"><input className="input" placeholder="방문지 검색" value={query} onChange={e => setQuery(e.target.value)} /></div><div className="segmented transfer-group-mode"><button className={viewMode === 'dong' ? 'active' : ''} onClick={() => { setViewMode('dong'); setProject(''); }}>행정동별</button><button className={viewMode === 'project' ? 'active' : ''} onClick={() => { setViewMode('project'); setProject(''); }}>프로젝트별</button></div>{!filtered.length && <p className="table-empty">이관할 수 있는 방문지가 없습니다.</p>}{grouped.map(({key, title: area, rows}) => <section key={key}><label className="check-row"><input type="checkbox" checked={rows.every(t => selected.includes(t.taskId))} onChange={() => toggle(rows.map(t => t.taskId))} /><strong>{area} · {rows.length}건</strong></label>{rows.map(t => <label className="check-row" key={t.taskId}><input type="checkbox" checked={selected.includes(t.taskId)} onChange={() => toggle([t.taskId])} /><span>{t.detailAddress || t.roadAddress}<small>{t.roadAddress}</small></span></label>)}</section>)}</>}</Modal>;
 }

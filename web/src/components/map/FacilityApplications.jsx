@@ -1,3 +1,5 @@
+import FilePicker from '../FilePicker.jsx';
+import SelectionEmpty from '../SelectionEmpty.jsx';
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client.js';
 import { upload } from '../../api/uploads.js';
@@ -69,7 +71,7 @@ export default function FacilityApplications({
       } finally {
         setBusy(false);
       }
-    }}>{[['name', '시설물 이름'], ['kind', '시설물 종류'], ['address', '주소'], ['detailLocation', '상세 위치']].map(([name, label]) => <label key={name}>{label}<input className="input" name={name} required maxLength={200} /></label>)}<label>확인 날짜<input className="input" type="date" name="date" required /></label><label>설명<textarea className="input" name="description" maxLength={3000} /></label><label>촬영 위치가 포함된 원본 사진<input className="input" name="photo" type="file" required accept="image/jpeg" /></label><label><input type="checkbox" required /> 사진과 촬영 위치를 검토에 사용하는 데 동의합니다.</label><button className="btn-primary btn-inline" disabled={busy}>신청하기</button></form> : detail ? <><button className="btn-secondary" onClick={() => setDetail(null)}>신청 목록</button><h3>{detail.name}</h3><p>{detail.status}</p><p>{detail.reviewNote || '검토 중입니다.'}</p></> : <>{rows.map(r => <button className="place-result" key={r.id} onClick={async () => {
+    }}>{[['name', '시설물 이름'], ['kind', '시설물 종류'], ['address', '주소'], ['detailLocation', '상세 위치']].map(([name, label]) => <label key={name}>{label}<input className="input" name={name} required maxLength={200} /></label>)}<label>확인 날짜<input className="input" type="date" name="date" required /></label><label>설명<textarea className="input" name="description" maxLength={3000} /></label><FilePicker title="원본 사진 선택" hint="촬영 위치가 포함된 JPG 사진" name="photo" required accept="image/jpeg" disabled={busy} /><label><input type="checkbox" required /> 사진과 촬영 위치를 검토에 사용하는 데 동의합니다.</label><button className="btn-primary btn-inline" disabled={busy}>신청하기</button></form> : detail ? <><button className="btn-secondary" onClick={() => setDetail(null)}>신청 목록</button><h3>{detail.name}</h3><p>{detail.status}</p><p>{detail.reviewNote || '검토 중입니다.'}</p></> : <>{rows.map(r => <button className="place-result" key={r.id} onClick={async () => {
         try {
           setDetail(await api.get(`/api/facility-applications/${r.id}`));
         } catch (e) {
@@ -81,5 +83,5 @@ export default function FacilityApplications({
             APPROVED: '승인',
             REJECTED: '반려',
             NEEDS_INFO: '보완 요청'
-          }[r.status] || r.status}</span></button>)}{!rows.length && <p>신청 내역이 없습니다.</p>}<div className="action-row"><button className="btn-secondary" disabled={!page} onClick={() => setPage(p => p - 1)}>이전</button><button className="btn-secondary" disabled={!more} onClick={() => setPage(p => p + 1)}>다음</button></div></>}</Modal>;
+          }[r.status] || r.status}</span></button>)}{!rows.length && <SelectionEmpty icon="business-outline">신청 내역이 없습니다</SelectionEmpty>}<div className="action-row"><button className="btn-secondary" disabled={!page} onClick={() => setPage(p => p - 1)}>이전</button><button className="btn-secondary" disabled={!more} onClick={() => setPage(p => p + 1)}>다음</button></div></>}</Modal>;
 }

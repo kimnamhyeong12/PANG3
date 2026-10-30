@@ -204,5 +204,5 @@ export function safeFileName(value) {
 }
 
 export const fetchProjectPlaces = projectId => api.get(`/api/projects/${projectId}/places`);
-export const registerProjectPlaces = (projectId, userId, placeIds) => api.post(`/api/projects/${projectId}/places/register`, { userId, placeIds });
+export const registerProjectPlaces = (projectId, userId, placeIds, allowActive = false) => api.post(`/api/projects/${projectId}/places/register`, { userId, placeIds, allowActive });
 export const linkReportsToProject = (projectId, userId, progressIds) => api.post(`/api/projects/${projectId}/link-reports`, { userId, progressIds });

@@ -2,18 +2,18 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 
-export function EmailEnrollment() {
-  const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
+export function EmailEnrollment({ compact = false, initialEmail = '' }) {
+  const [email, setEmail] = useState(initialEmail); const [password, setPassword] = useState('');
   const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
   const submit = async (event) => {
     event.preventDefault(); setBusy(true); setMessage('');
     try { const result = await api.post('/api/auth/email/request', { email, password }); setMessage(result.message); setPassword(''); }
     catch (error) { setMessage(error.message); } finally { setBusy(false); }
   };
-  return <section className="card"><h2>복구 이메일 등록·변경</h2><form onSubmit={submit}>
+  return <section className={compact ? "account-security-section" : "card"}><h3>복구 이메일</h3><form className="settings-form" onSubmit={submit}>
     <label>현재 비밀번호<input className="input" type="password" value={password} onChange={event => setPassword(event.target.value)} required autoComplete="current-password" /></label>
     <label>이메일<input className="input" type="email" value={email} onChange={event => setEmail(event.target.value)} required /></label>
-    <p aria-live="polite">{message}</p><button className="btn-primary" disabled={busy}>{busy ? '메일 요청 중…' : '인증 메일 받기'}</button>
+    {message && <p aria-live="polite">{message}</p>}<button className="btn-primary btn-inline" disabled={busy}>{busy ? '메일 요청 중…' : '인증 메일 받기'}</button>
   </form></section>;
 }
 
