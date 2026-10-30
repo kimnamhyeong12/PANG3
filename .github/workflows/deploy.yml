@@ -4,6 +4,10 @@ on:
   push:
     branches: [ "main" ]
 
+concurrency:
+  group: production-main
+  cancel-in-progress: false
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -107,12 +111,6 @@ jobs:
               sleep 10
             done
             docker compose up -d
-            # Nginx serves the web checkout's dist directory. Rebuild it on every
-            # main deployment alongside the API so the browser gets this commit.
-            cd web
-            npm ci --no-audit --no-fund
-            npm run build
-            cd ..
             docker image prune -f
 
       
