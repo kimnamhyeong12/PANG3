@@ -7,7 +7,8 @@
 - `VITE_API_BASE_URL`: API 주소. 개발에서는 기본 `/api` 프록시를 사용합니다.
 - `VITE_KAKAO_MAP_KEY`: 브라우저용 카카오 JavaScript 키. 로컬에서 미설정이면 `frontend/.env`의 `EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY`를 재사용합니다. REST·네이티브 키는 웹에 노출하지 않습니다.
 - 카카오 개발자 콘솔에 실제 서비스 도메인을 등록해야 합니다. `localhost:5173`에서 지도 SDK 로딩을 확인했습니다.
-- Vercel 빌드에 키가 없으면 로그인된 웹이 `/api/client-config`에서 공개 JavaScript 키를 받아옵니다. 메인 배포는 저장소 변수 `VITE_KAKAO_MAP_KEY`를 API 컨테이너의 `KAKAO_JAVASCRIPT_KEY`로 전달합니다. 웹은 기존 Vercel Git 연동으로 자동 배포됩니다.
+- 빌드에 키가 없으면 로그인된 웹이 `/api/client-config`에서 공개 JavaScript 키를 받아옵니다. 메인 배포는 저장소 변수 `VITE_KAKAO_MAP_KEY`를 API 컨테이너의 `KAKAO_JAVASCRIPT_KEY`로 전달합니다.
+- 운영 도메인 `pinwork.co.kr`은 EC2 Nginx에서 서비스됩니다. `infra/scripts/deploy-web.sh`가 해당 도메인의 실제 Nginx document root를 확인해 웹 빌드를 반영합니다. 저장소의 별도 Vercel 배포는 운영 도메인의 갱신 경로가 아닙니다.
 
 ## 화면과 연동
 

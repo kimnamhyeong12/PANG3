@@ -111,6 +111,7 @@ jobs:
               sleep 10
             done
             docker compose up -d
+            bash infra/scripts/deploy-web.sh
             docker image prune -f
 
       
