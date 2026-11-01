@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-export default function Modal({ title, onClose, children, footer, wide = false }) {
+export default function Modal({ title, onClose, children, footer, wide = false, className = '' }) {
   const backdrop=useRef(null);
   const closeRef=useRef(onClose);
   closeRef.current=onClose;
@@ -22,7 +22,7 @@ export default function Modal({ title, onClose, children, footer, wide = false }
 
   return (
     <div className="modal-backdrop" ref={backdrop} onMouseDown={onClose}>
-      <div className={`modal${wide ? " modal-wide" : ""}`} role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
+      <div className={`modal${wide ? " modal-wide" : ""} ${className}`} role="dialog" aria-label={title} aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">{title}</h2>
           <button type="button" className="icon-button" aria-label="닫기" onClick={onClose}>

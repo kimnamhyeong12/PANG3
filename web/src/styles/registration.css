@@ -13,7 +13,11 @@
 .registration-list .check-row{padding:16px 12px}.registration-list .check-row small{display:block;color:#8693a6;margin-top:6px}
 .photo-registration-row{display:flex;gap:16px;padding:16px 0;border-bottom:1px solid #e9edf3}.photo-registration-row>img{width:80px;height:96px;object-fit:cover;border-radius:12px}.photo-registration-fields{flex:1;min-width:0}.photo-registration-fields .action-row{justify-content:space-between;margin-bottom:8px}.photo-registration-fields .segmented{margin-top:12px}
 .text-button{border:0;background:none;color:#3275dc;padding:10px 0;text-align:left;cursor:pointer;font:inherit;font-size:13px}
-.map-center-pin{position:absolute;left:50%;top:50%;transform:translate(-50%,-100%);font-size:40px;line-height:1;pointer-events:none;z-index:12;filter:drop-shadow(0 3px 3px #0003)}
+.map-center-pin{position:absolute;left:50%;top:50%;transform:translate(-50%,-100%);width:34px;height:44px;pointer-events:none;z-index:12;filter:drop-shadow(0 3px 3px #0003)}
+.modal-body>.visit-registration-form{margin-top:0;padding-top:0;gap:16px}
+.visit-registration-options{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.visit-registration-options>label{display:grid;gap:8px;min-width:0}
+.visit-registration-options .input{width:100%;min-width:0}
 .map-center-confirm{position:absolute;bottom:90px;left:50%;transform:translateX(-50%);z-index:15;background:white;box-shadow:0 5px 30px #1e365333;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:14px;min-width:300px}.map-center-confirm .action-row{justify-content:flex-end}
 .photo-location-editor .map-canvas{height:300px;min-height:300px}.photo-location-editor .action-row{margin-top:12px}
 .import-settings{display:grid;grid-template-columns:1fr 1fr;gap:16px}.import-settings>label{display:flex;flex-direction:column;gap:8px}.import-settings>.check-row,.import-settings fieldset{grid-column:1/-1}.import-settings>.check-row{flex-direction:row}.import-settings fieldset{border:1px solid #e3e9f1;border-radius:12px;padding:14px}.import-settings legend{font-size:13px;padding:0 6px}.import-address-columns{display:flex;gap:12px;flex-wrap:wrap}.import-address-columns .check-row{padding:7px}

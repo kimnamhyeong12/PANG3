@@ -169,6 +169,10 @@ function AppContent() {
   const [webNavigationRequest, setWebNavigationRequest] = useState(null);
   const navigationHandoffSeen = useRef(null);
   useEffect(() => {
+    navigationHandoffSeen.current = null;
+    setWebNavigationRequest(null);
+  }, [user?.userId]);
+  useEffect(() => {
     let active = true;
     const receive = url => { const token = groupInviteToken(url); if (active && token) setInviteToken(token); };
     Linking.getInitialURL().then(receive).catch(() => {});

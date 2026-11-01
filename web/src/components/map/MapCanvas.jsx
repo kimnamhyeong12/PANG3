@@ -61,6 +61,11 @@ export default function MapCanvas({
   currentPosition,
   locateToken = 0,
   ownerColors,
+  focusRequest,
+  centerRequest,
+  previewPath,
+  onReady,
+  onMarkerDrag,
   showLegend = false,
   children,
 }) {
@@ -75,11 +80,11 @@ export default function MapCanvas({
   const aedMarkersRef = useRef([]);
   const searchMarkerRef = useRef(null);
   const lastLocateRef = useRef(0);
-  const handlersRef = useRef({ onSelectTask, onBoundsChange, onPickLocation, onCenterChange });
+  const handlersRef = useRef({ onSelectTask, onBoundsChange, onPickLocation, onCenterChange, onReady, onMarkerDrag });
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
-  handlersRef.current = { onSelectTask, onBoundsChange, onPickLocation, onCenterChange };
+  handlersRef.current = { onSelectTask, onBoundsChange, onPickLocation, onCenterChange, onReady, onMarkerDrag };
 
   // 지도 생성 (1회)
   useEffect(() => {
@@ -107,6 +112,7 @@ export default function MapCanvas({
           else handlersRef.current.onSelectTask?.(null);
         });
         setReady(true);
+        handlersRef.current.onReady?.();
       })
       .catch((e) => !cancelled && setLoadError(e.message));
     return () => {
@@ -119,6 +125,32 @@ export default function MapCanvas({
     const center = mapRef.current.getCenter();
     onCenterChange({ lat: center.getLat(), lng: center.getLng() });
   }, [ready, Boolean(onCenterChange)]);
+
+  useEffect(() => {
+    if (!ready || !focusRequest?.points?.length) return;
+    const k = kakaoRef.current, map = mapRef.current;
+    const points = focusRequest.points.filter(hasCoords);
+    if (!points.length) return;
+    if (points.length === 1) { map.setCenter(new k.maps.LatLng(points[0].lat, points[0].lng)); map.setLevel(4); }
+    else { const bounds = new k.maps.LatLngBounds(); points.forEach(p => bounds.extend(new k.maps.LatLng(p.lat, p.lng))); map.setBounds(bounds, 60, 40, 220, 40); }
+  }, [ready, focusRequest]);
+
+  useEffect(() => {
+    if (!ready || !centerRequest) return;
+    mapRef.current.setCenter(new kakaoRef.current.maps.LatLng(centerRequest.lat, centerRequest.lng));
+  }, [ready, centerRequest]);
+
+  useEffect(() => {
+    if (!ready || !previewPath?.length) return;
+    const kakao = kakaoRef.current, map = mapRef.current;
+    const points = previewPath.filter(hasCoords).map(p => new kakao.maps.LatLng(p.lat, p.lng));
+    if (points.length < 2) return;
+    const line = new kakao.maps.Polyline({ map, path: points, strokeWeight: 6, strokeColor: '#2477F3', strokeOpacity: .85, zIndex: 2 });
+    const bounds = new kakao.maps.LatLngBounds();
+    points.forEach(p => bounds.extend(p));
+    map.setBounds(bounds, 190, 40, 250, 40);
+    return () => line.setMap(null);
+  }, [ready, previewPath]);
 
   // 컨테이너 크기 변화 시 relayout
   useEffect(() => {
@@ -198,9 +230,14 @@ export default function MapCanvas({
         image: taskMarkerImage(kakao, task._status, false, task.markerNumber, ownerColors?.[task.assigneeUserId]),
         title: task.detailAddress ?? task.roadAddress ?? '',
         clickable: true,
+        draggable: Boolean(onMarkerDrag),
         zIndex: 3,
       });
       kakao.maps.event.addListener(marker, 'click', () => handlersRef.current.onSelectTask?.(task.taskId));
+      if (onMarkerDrag) kakao.maps.event.addListener(marker, 'dragend', () => {
+        const p = marker.getPosition();
+        handlersRef.current.onMarkerDrag?.(task, { lat: p.getLat(), lng: p.getLng() });
+      });
       markers.set(task.taskId, { marker, task });
     });
     taskMarkersRef.current = markers;
@@ -208,7 +245,7 @@ export default function MapCanvas({
       markers.forEach(({ marker }) => marker.setMap(null));
       taskMarkersRef.current = new Map();
     };
-  }, [ready, tasks, ownerColors]);
+  }, [ready, tasks, ownerColors, Boolean(onMarkerDrag)]);
 
   useEffect(() => {
     if (!ready) return;
@@ -252,7 +289,7 @@ export default function MapCanvas({
     const { marker, task } = entry;
     marker.setImage(taskMarkerImage(kakao, task._status, true, task.markerNumber, ownerColors?.[task.assigneeUserId]));
     marker.setZIndex(10);
-    mapRef.current.panTo(marker.getPosition());
+    if (!previewPath?.length) mapRef.current.panTo(marker.getPosition());
     if (!showTaskInfo) return () => {
       marker.setImage(taskMarkerImage(kakao, task._status, false, task.markerNumber, ownerColors?.[task.assigneeUserId]));
       marker.setZIndex(3);
@@ -274,7 +311,7 @@ export default function MapCanvas({
     });
     overlay.setMap(mapRef.current);
     infoOverlayRef.current = overlay;
-    mapRef.current.panTo(marker.getPosition());
+    if (!previewPath?.length) mapRef.current.panTo(marker.getPosition());
 
     return () => {
       overlay.setMap(null);
@@ -282,7 +319,7 @@ export default function MapCanvas({
       marker.setImage(taskMarkerImage(kakao, task._status, false, task.markerNumber, ownerColors?.[task.assigneeUserId]));
       marker.setZIndex(3);
     };
-  }, [ready, selectedTaskId, tasks, layers.tasks, showTaskInfo, ownerColors]);
+  }, [ready, selectedTaskId, tasks, layers.tasks, showTaskInfo, ownerColors, Boolean(previewPath?.length)]);
 
   useEffect(() => {
     if(!ready||!currentPosition)return;

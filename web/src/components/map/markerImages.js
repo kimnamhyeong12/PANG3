@@ -2,10 +2,10 @@ import { STATUS } from '../../utils/taskStatus.js';
 
 // 디자인 토큰과 같은 값 (SVG data URI 안에서는 CSS 변수를 쓸 수 없음)
 export const COLORS = {
-  navy: '#1B3A5C',
-  green: '#1E8E5A',
-  amber: '#B9790A',
-  red: '#C0392B',
+  navy: '#10285B',
+  green: '#4F9588',
+  amber: '#F3BF32',
+  red: '#C87973',
   gray: '#6B7280',
 };
 
@@ -26,6 +26,9 @@ function pinSvg(color, selected, number, ownerColor) {
       (Number.isInteger(number) ? `<circle cx="14" cy="13" r="8" fill="#FFFFFF"/><text x="14" y="16.5" text-anchor="middle" font-family="sans-serif" font-weight="700" font-size="10" fill="#1A2233">${number}</text></svg>` : `<circle cx="14" cy="13" r="4.5" fill="#FFFFFF"/></svg>`)
   );
 }
+
+// Match KakaoMapWebView's 30px red selected-location pin, rendered as an image.
+export const selectionMarkerUrl = svgUrl('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40"><path d="M16 1C7.7 1 1 7.7 1 16c0 10 15 22 15 22s15-12 15-22C31 7.7 24.3 1 16 1Z" fill="#E53935" stroke="#94A3B8" stroke-width="4"/><circle cx="16" cy="16" r="3.5" fill="white"/></svg>');
 
 const cache = new Map();
 
@@ -71,8 +74,8 @@ export function aedMarkerImage(kakao) {
 
 export function searchMarkerImage(kakao) {
   return cached('search', () =>
-    new kakao.maps.MarkerImage(pinSvg(COLORS.navy, false), new kakao.maps.Size(28, 36), {
-      offset: new kakao.maps.Point(14, 36),
+    new kakao.maps.MarkerImage(selectionMarkerUrl, new kakao.maps.Size(32, 40), {
+      offset: new kakao.maps.Point(16, 40),
     })
   );
 }

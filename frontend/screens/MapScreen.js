@@ -1418,15 +1418,15 @@ function NormalMapScreen({
     if (next && !preview) previewVisit(next);
   }, [nextAfterCompletion, isActive, isGuiding, recommendationBusy, recommendationReadyKey, scopeKey, membershipKey, returnOrderKey, transportMode, guidanceRecommendationToken, markers, preview]);
 
-  const handleStartGuidance = async (explicitTarget = null, requestedMode = null) => {
+  const handleStartGuidance = async (explicitTarget = null, requestedMode = null, { fromWeb = false } = {}) => {
     const target = hasVisitCoordinates(explicitTarget) ? explicitTarget : cardTarget;
-    if (!target || isCompleted(target) || segmentChanging || preview?.loading) return;
+    if (!target || isCompleted(target) || segmentChanging || (!fromWeb && preview?.loading)) return;
     if (!hasVisitCoordinates(currentLocation)) {
       showAlert('현재 위치 확인 중', '현재 위치를 확인한 뒤 다시 시도해 주세요.');
       return;
     }
     const targetKey = locationKey(target);
-    if (visitDistance(currentLocation, target) <= 25) {
+    if (!fromWeb && visitDistance(currentLocation, target) <= 25) {
       showAlert('목적지 근처입니다', '작업 기록을 작성할까요?', [{ text: '닫기', style: 'cancel' }, { text: '작업 기록', onPress: () => !target.isReturnLocation && onLocationClick?.(target, 'report') }]); return;
     }
     const mode = requestedMode || preview?.mode || activeSegment?.mode || transportMode;
@@ -1438,7 +1438,7 @@ function NormalMapScreen({
     const scope = workspaceScopeRef.current;
     setSegmentChanging(true);
     try {
-      if (returnDisplayMarker) {
+      if (returnDisplayMarker && !fromWeb) {
         if (!dailyReturnPending.current) dailyReturnPending.current = dailyReturnChoice(AsyncStorage, user.userId,
           () => new Promise(resolve => showAlert('근무지 복귀', '오늘 마지막 목적지에 근무지 복귀를 포함할까요?', [
             { text: '포함 안 함', onPress: () => resolve(false) }, { text: '포함', onPress: () => resolve(true) },
@@ -1447,7 +1447,7 @@ function NormalMapScreen({
         if (request !== guideRequestRef.current || scope !== workspaceScopeRef.current) return;
       }
       let result;
-      if (mode === 'car' && preview?.segment && preview.mode === mode && preview.targetKey === targetKey) {
+      if (!fromWeb && mode === 'car' && preview?.segment && preview.mode === mode && preview.targetKey === targetKey) {
         const origin = preview.segment.previewOrigin;
         const movedMeters = origin ? Math.hypot((Number(currentLocation.lat) - origin.lat) * 111000,
           (Number(currentLocation.lng) - origin.lng) * 111000 * Math.cos(origin.lat * Math.PI / 180)) : 0;
@@ -1496,9 +1496,9 @@ function NormalMapScreen({
   const [webHandoffRetry, setWebHandoffRetry] = useState(0);
   useEffect(() => {
     const request = webNavigationRequest;
-    if (!request || !isActive || !currentLocation || Number(request.groupId) !== Number(activeGroup?.groupId)
+    if (!request || !isActive || !currentLocation || segmentChanging || Number(request.groupId) !== Number(activeGroup?.groupId)
       || webHandoffAttempt.current === request.requestId) return;
-    const target = markers.find(row => locationKey(row) === String(request.taskId));
+    const target = request.destination === 'workplace' ? returnDisplayMarker : markers.find(row => locationKey(row) === String(request.taskId));
     if (!target) {
       const pending = pendingWork.find(row => locationKey(row) === String(request.taskId));
       if (pending && onAddWork) {
@@ -1513,7 +1513,7 @@ function NormalMapScreen({
     }
     webHandoffAttempt.current = request.requestId;
     if (Date.parse(request.expiresAt) <= Date.now()) { onWebNavigationHandled?.(request.requestId); return; }
-    handleStartGuidance(target, request.mode).then(async started => {
+    handleStartGuidance(target, request.mode, { fromWeb: true }).then(async started => {
       if (started) {
         try {
           await fetch(`${API_BASE_URL}/api/navigation-handoffs/${request.requestId}/acknowledge`, { method: 'POST' });
@@ -1521,7 +1521,7 @@ function NormalMapScreen({
       }
       onWebNavigationHandled?.(request.requestId);
     });
-  }, [webNavigationRequest?.requestId, isActive, currentLocation, markers, pendingWork, activeGroup?.groupId, webHandoffRetry]);
+  }, [webNavigationRequest?.requestId, isActive, currentLocation, markers, pendingWork, activeGroup?.groupId, returnDisplayMarker, segmentChanging, webHandoffRetry]);
 
   const handleStopGuidance = () => {
     clearGuidance();

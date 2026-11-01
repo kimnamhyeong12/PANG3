@@ -28,12 +28,12 @@ function MenuLink({ to, label, Icon }) {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ onNavigate }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" onClick={e => { if (e.target.closest('a')) onNavigate?.(); }}>
       <nav className="sidebar-nav">
         {MAIN_MENU.map((item) => (
           <MenuLink key={item.to} {...item} />

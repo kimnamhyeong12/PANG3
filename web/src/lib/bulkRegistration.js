@@ -1,5 +1,5 @@
 // Keep original worksheet row numbers across chunks and partial failures.
-export async function registerBulkRows(rows, send) {
+export async function registerBulkRows(rows, send, onProgress) {
   const result = { savedCount: 0, failures: [], savedRows: [], uncertain: false };
   for (let offset = 0; offset < rows.length; offset += 200) {
     const chunk = rows.slice(offset, offset + 200);
@@ -11,6 +11,7 @@ export async function registerBulkRows(rows, send) {
       result.savedCount += response.savedCount;
       result.failures.push(...response.failures);
       result.savedRows.push(...chunk.filter(row => !failed.has(row.rowNumber)).map(row => row.rowNumber));
+      onProgress?.({ ...result, processedCount: offset + chunk.length });
     } catch (error) {
       result.uncertain = !error.status || error.status >= 500;
       result.failures.push(...chunk.map(row => ({ rowNumber: row.rowNumber, reason: result.uncertain ? '저장 여부 확인 필요' : error.message })), ...rows.slice(offset + chunk.length).map(row => ({ rowNumber: row.rowNumber, reason: '미전송' })));

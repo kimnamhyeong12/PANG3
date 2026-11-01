@@ -4,6 +4,7 @@ import { useGroup } from '../../context/GroupContext.jsx';
 import { IconBell, IconChevronDown, IconLogo } from '../Icons.jsx';
 import { groupDisplayName } from '../../utils/groupDisplay.js';
 import { useNavigate } from 'react-router-dom';
+import AppIcon from '../AppIcon.jsx';
 
 function GroupSwitcher() {
   const { groups, groupId, currentGroup, setGroupId } = useGroup();
@@ -53,7 +54,7 @@ function GroupSwitcher() {
   );
 }
 
-export default function Header() {
+export default function Header({ onToggleMenu, menuOpen }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   // User 엔티티/로그인 응답에 부서 필드가 없어 근무 지역(workSido workSigungu)을 보조 정보로 표시
@@ -62,6 +63,7 @@ export default function Header() {
   return (
     <header className="header">
       <div className="header-left">
+        {onToggleMenu && <button className="icon-button app-mobile-menu-button" aria-label="메뉴" aria-expanded={menuOpen} onClick={onToggleMenu}><AppIcon name={menuOpen ? 'close' : 'menu-outline'} /></button>}
         <div className="header-logo">
           <IconLogo size={18} />
         </div>

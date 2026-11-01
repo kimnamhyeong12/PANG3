@@ -9,8 +9,8 @@ import java.util.Map;
 public class NavigationHandoffController {
     private final NavigationHandoffService service;
     public NavigationHandoffController(NavigationHandoffService service){this.service=service;}
-    public record Input(Long groupId,Long taskId,String mode){}
-    @PostMapping public Map<String,Object> create(@RequestBody Input body){return service.create(CurrentUser.id(),body.groupId(),body.taskId(),body.mode());}
+    public record Input(Long groupId,Long taskId,String mode,String destination){}
+    @PostMapping public Map<String,Object> create(@RequestBody Input body){return service.create(CurrentUser.id(),body.groupId(),body.taskId(),body.mode(),body.destination());}
     @GetMapping("/pending") public ResponseEntity<?> pending(){return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.pending(CurrentUser.id()));}
     @PostMapping("/{requestId}/acknowledge") public void acknowledge(@PathVariable String requestId){service.acknowledge(CurrentUser.id(),requestId);}
 }
