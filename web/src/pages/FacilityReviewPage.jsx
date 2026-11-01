@@ -1,5 +1,6 @@
 import useLiveRevision from '../components/useLiveRevision.js';
 import SelectionEmpty from '../components/SelectionEmpty.jsx';
+import PhotoPreview from '../components/PhotoPreview.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -18,7 +19,7 @@ function Evidence({id,kind,title}) {
     return()=>{active=false;controller.abort();if(created)URL.revokeObjectURL(created);};
   },[id,kind,retry]);
   return <figure className="facility-review-evidence"><figcaption>{title}</figcaption>{url
-    ?<a href={url} target="_blank" rel="noreferrer"><img src={url} alt={title}/></a>
+    ?<PhotoPreview src={url} alt={title}/>
     :<div className="facility-evidence-placeholder">{error||'사진을 불러오는 중…'}{error&&<button className="text-button" onClick={()=>setRetry(v=>v+1)}>다시 불러오기</button>}</div>}</figure>;
 }
 export default function FacilityReviewPage() {
@@ -81,7 +82,7 @@ export default function FacilityReviewPage() {
           {!selected&&!detail&&<SelectionEmpty icon="business-outline">신청을 선택해 주세요</SelectionEmpty>}
           {detail&&<>
             <div className="facility-detail-heading"><span className="support-muted">시설물 등록 신청 #{detail.id}</span><div><h2>{detail.name}</h2><span className={`support-badge facility-status-${detail.status.toLowerCase()}`}>{STATUS[detail.status]}</span></div></div>
-            <dl className="support-metadata facility-metadata"><div><dt>시설 종류</dt><dd>{detail.kind}</dd></div><div><dt>확인 날짜</dt><dd>{detail.confirmedDate}</dd></div><div><dt>주소</dt><dd>{detail.address||'주소 정보가 없습니다.'}{detail.detailLocation&&<span className="facility-location-detail">{detail.detailLocation}</span>}</dd></div><div><dt>촬영 위치</dt><dd><span>{coordinates(detail.photoLat)}, {coordinates(detail.photoLng)}</span><a className="facility-map-link" href={`https://map.kakao.com/link/map/${encodeURIComponent(detail.name)},${detail.photoLat},${detail.photoLng}`} target="_blank" rel="noreferrer">지도 확인 ↗</a></dd></div></dl>
+            <dl className="support-metadata facility-metadata"><div><dt>시설 종류</dt><dd>{detail.kind}</dd></div><div><dt>확인 날짜</dt><dd>{detail.confirmedDate}</dd></div><div><dt>주소</dt><dd>{detail.address||'주소 정보가 없습니다.'}</dd></div>{detail.detailLocation&&<div><dt>상세주소</dt><dd>{detail.detailLocation}</dd></div>}<div><dt>촬영 위치</dt><dd><span>{coordinates(detail.photoLat)}, {coordinates(detail.photoLng)}</span><a className="facility-map-link" href={`https://map.kakao.com/link/map/${encodeURIComponent(detail.name)},${detail.photoLat},${detail.photoLng}`} target="_blank" rel="noreferrer">지도 확인 ↗</a></dd></div></dl>
             <div className="facility-evidence-grid"><Evidence key={`${detail.id}-photo`} id={detail.id} kind="photo" title="시설물 사진"/>{detail.hasScreenshot&&<Evidence key={`${detail.id}-screenshot`} id={detail.id} kind="screenshot" title="기존 지도 스크린샷"/>}</div>
             {detail.description&&<section className="facility-description"><h3>신청 내용</h3><p className="support-message">{detail.description}</p></section>}
             {['APPROVED','REJECTED'].includes(detail.status)?<section className="support-saved-answer"><h3>처리 완료</h3><p className="support-message">{detail.reviewNote}</p></section>

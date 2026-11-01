@@ -20,6 +20,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
                 "/api/auth/email/request", "/api/auth/email/verify", "/api/auth/email/code/request", "/api/auth/email/code/verify", "/api/auth/password/forgot",
                 "/api/auth/password/reset", "/api/auth/refresh", "/api/auth/logout").contains(path);
         post = post || request.getMethod().equals("POST") && path.startsWith("/api/auth/social/");
+        post = post || request.getMethod().equals("POST") && path.matches("/api/users/[0-9]+/login-credentials");
         boolean availability = request.getMethod().equals("GET") && path.equals("/api/auth/login-id/availability");
         if (!post && !availability) { chain.doFilter(request, response); return; }
         long now = System.currentTimeMillis();

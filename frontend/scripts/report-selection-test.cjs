@@ -28,6 +28,7 @@ function load(file, dependencies = {}) {
 }
 const design = load('../constants/design.js');
 const Screen = load('../screens/ReportListScreen.js', {
+  '../utils/useLiveRevision': () => 0,
   '../constants/design': design,
   '../components/MapWorkspaceSwitcher': 'MapWorkspaceSwitcher',
   '../components/ProjectReportLink': 'ProjectReportLink',

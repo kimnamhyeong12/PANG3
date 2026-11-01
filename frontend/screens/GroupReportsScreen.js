@@ -1,3 +1,4 @@
+import { visibleLoginId } from '../utils/accountIdentity';
 import useLiveRevision from '../utils/useLiveRevision';
 import ReportFilters from '../components/ReportFilters';
 import ProjectReportLink from '../components/ProjectReportLink';
@@ -103,7 +104,7 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
     const report = reports.find(item => String(item.performedByUserId) === value);
     const name = report?.performedByName || '작업자';
     const sameName = new Set(reports.filter(item => item.performedByName === name && !item.performedByDeparted).map(item => item.performedByUserId));
-    const label = sameName.size > 1 ? `${name} (${report?.performedByLoginId || value})` : name;
+    const label = sameName.size > 1 ? `${name} (${visibleLoginId(report?.performedByLoginId) || value})` : name;
     return value === String(user.userId) ? `나 · ${label}` : label;
   };
   return <View style={[styles.container, embedded && { marginTop: 0 }]}>

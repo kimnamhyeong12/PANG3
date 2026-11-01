@@ -92,7 +92,7 @@
 .facility-map-link{font-weight:600;color:var(--navy);white-space:nowrap}
 .facility-evidence-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:20px}
 .facility-review-evidence{margin:0;min-width:0}.facility-review-evidence figcaption{font-size:14px;font-weight:700;margin-bottom:12px}
-.facility-review-evidence a{display:block;border:1px solid var(--border);background:var(--bg);border-radius:12px;overflow:hidden}
+.facility-review-evidence .photo-preview-trigger{border:1px solid var(--border);background:var(--bg)}
 .facility-review-evidence img{display:block;width:100%;height:240px;object-fit:contain}
 .facility-evidence-placeholder{min-height:180px;display:grid;place-content:center;gap:12px;background:var(--bg);border-radius:12px;color:var(--text-soft);font-size:13px}
 .facility-description{margin-top:24px}.facility-description h3{font-size:14px;margin:0 0 8px}.facility-description p{margin:0}

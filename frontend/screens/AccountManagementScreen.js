@@ -8,8 +8,11 @@ import { API_BASE_URL } from '../utils/api';
 import { colors } from '../constants/design';
 import WorkRegionField from '../components/WorkRegionField';
 import { parseWorkRegion, serializeWorkRegion, isOptionalWorkRegionValid } from '../utils/workRegion';
+import { needsLoginSetup } from '../utils/accountIdentity';
+import LoginCredentialsSetup from '../components/LoginCredentialsSetup';
 
 export default function AccountManagementScreen({ user, credential, onBack, onUpdatedUser, onLogout }) {
+  const loginSetupRequired = needsLoginSetup(user);
   const [name, setName] = useState(user.name || '');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -58,10 +61,10 @@ export default function AccountManagementScreen({ user, credential, onBack, onUp
     <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
       {!!syncNotice&&<Text>{syncNotice}</Text>}
       <View style={styles.card}>
-        <Text style={styles.label}>아이디</Text><Text style={styles.id}>@{user.loginId}</Text>
+        <LoginCredentialsSetup user={user} onBusyChange={setBusy} onCompleted={() => { showAlert('설정 완료', loginSetupRequired ? '설정한 아이디 또는 기존 간편 로그인으로 다시 로그인해 주세요.' : '새 아이디 또는 기존 간편 로그인으로 다시 로그인해 주세요.'); onLogout(); }}/>
         {field('이름', name, setName, { maxLength: 50, placeholder: '이름' })}
-        {field('새 비밀번호', password, setPassword, { secureTextEntry: true, placeholder: '변경할 때만 입력하세요', autoCapitalize: 'none' })}
-        {field('새 비밀번호 확인', confirm, setConfirm, { secureTextEntry: true, placeholder: '새 비밀번호를 다시 입력하세요', autoCapitalize: 'none' })}
+        {!loginSetupRequired && field('새 비밀번호', password, setPassword, { secureTextEntry: true, placeholder: '변경할 때만 입력하세요', autoCapitalize: 'none' })}
+        {!loginSetupRequired && field('새 비밀번호 확인', confirm, setConfirm, { secureTextEntry: true, autoCapitalize: 'none' })}
         <WorkRegionField value={region} onChange={setRegion} disabled={busy} />
         <WorkplaceField value={workplace} onChange={setWorkplace} userId={user.userId} disabled={busy} />
         {field('이메일', email, setEmail, { keyboardType: 'email-address', autoCapitalize: 'none', placeholder: '이메일 주소' })}

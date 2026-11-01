@@ -1,3 +1,4 @@
+import { visibleLoginId } from '../../../frontend/utils/accountIdentity.js';
 import useLiveRevision from '../components/useLiveRevision.js';
 import SelectionEmpty from '../components/SelectionEmpty.jsx';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -88,7 +89,7 @@ export default function SupportAdminPage() {
           {notice && <p role="status" className="support-success">{notice}</p>}
           {record && <>
             <div className="support-detail-heading"><span className="support-muted">문의 #{record.inquiry.id} · {record.inquiry.category}</span><h2>{record.inquiry.subject}</h2><time>{formatDate(record.inquiry.createdAt)}</time></div>
-            <dl className="support-metadata"><div><dt>문의 계정</dt><dd>{record.loginId} (회원번호 {record.userId})</dd></div><div><dt>답변 이메일</dt><dd>{record.inquiry.replyEmail}</dd></div><div><dt>앱 정보</dt><dd>{record.appVersion} / {record.platform}</dd></div></dl>
+            <dl className="support-metadata"><div><dt>문의 계정</dt><dd>{visibleLoginId(record.loginId)||'간편가입 계정'} (회원번호 {record.userId})</dd></div><div><dt>답변 이메일</dt><dd>{record.inquiry.replyEmail}</dd></div><div><dt>앱 정보</dt><dd>{record.appVersion} / {record.platform}</dd></div></dl>
             <div className="support-message">{record.inquiry.message}</div>
             {!!record.inquiry.attachments?.length && <section className="support-attachments" aria-label="첨부파일"><h3>첨부파일</h3>{record.inquiry.attachments.map(file => <button key={file.id} type="button" disabled={downloadingId !== null} onClick={() => downloadAttachment(file)}><span>{file.name}</span><span>{downloadingId === file.id ? '다운로드 중…' : `${(file.size / 1024 / 1024).toFixed(1)}MB · 다운로드`}</span></button>)}</section>}
             {record.inquiry.status === 'ANSWERED' ? <div className="support-saved-answer"><h3>등록된 답변</h3><p className="support-muted">{record.answeredByName || '운영자'} · {formatDate(record.inquiry.answeredAt)}</p><div className="support-message">{record.inquiry.answer}</div></div> : <form onSubmit={submit} className="support-answer-form"><label htmlFor="support-answer">답변 작성</label><textarea id="support-answer" required maxLength={5000} value={answer} onChange={event => setAnswer(event.target.value)} disabled={sending} placeholder="사용자에게 안내할 내용을 입력해 주세요." /><div className="support-answer-footer"><span>{answer.length}/5000</span><button className="btn-primary" disabled={sending || !answer.trim()}>{sending ? '등록 중…' : '답변 등록'}</button></div></form>}

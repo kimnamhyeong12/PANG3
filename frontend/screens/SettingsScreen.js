@@ -1,3 +1,4 @@
+import { visibleLoginId } from '../utils/accountIdentity';
 import useLiveRevision from '../utils/useLiveRevision';
 import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Linking, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -54,7 +55,7 @@ export default function SettingsScreen({ user, onBack, onUpdatedUser, onLogout, 
   const closeDetail = () => { if (!supportSending) setDetail(detail === 'inquiry' ? 'support' : detail === 'licenses' ? 'version' : null); };
   const closeGate = () => { if (!busy) { setGate(false); setPassword(''); } };
   return <View style={styles.container}><ScreenHeader root title="설정" onBack={onBack} /><ScrollView contentContainerStyle={[styles.body, styles.rootBody]}>
-    <View style={styles.profile}><View style={styles.avatar}><Text style={styles.avatarText}>{String(user.name || user.loginId).slice(0, 1)}</Text></View><View style={{ flex: 1 }}><Text style={styles.name}>{user.name || user.loginId}</Text><Text style={styles.id}>@{user.loginId}</Text></View><TouchableOpacity style={styles.manage} onPress={() => setGate(true)}><Text style={styles.manageText}>관리</Text></TouchableOpacity></View>
+    <View style={styles.profile}><View style={styles.avatar}><Text style={styles.avatarText}>{String(user.name || visibleLoginId(user.loginId) || '회원').slice(0, 1)}</Text></View><View style={{ flex: 1 }}><Text style={styles.name}>{user.name || visibleLoginId(user.loginId) || '회원'}</Text>{!!visibleLoginId(user.loginId)&&<Text style={styles.id}>@{visibleLoginId(user.loginId)}</Text>}</View><TouchableOpacity style={styles.manage} onPress={() => setGate(true)}><Text style={styles.manageText}>관리</Text></TouchableOpacity></View>
     <Text style={styles.sectionLabel}>간편 로그인 연결</Text>
     <SocialAuthButtons mode="link" />
     <Text style={styles.sectionLabel}>알림</Text>

@@ -20,7 +20,7 @@
 .account-card .field-label{font-size:13px;color:var(--text-soft);margin:0 0 12px}
 .account-workplace{display:flex;gap:12px;align-items:flex-start;padding:20px;background:var(--bg);border-radius:12px;min-height:105px;line-height:1.8}
 .account-workplace .app-icon{font-size:21px;color:var(--navy);margin-top:3px}.account-workplace strong{font-size:14px;font-weight:600;overflow-wrap:anywhere}
-.account-workplace-actions{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:22px}
+.account-workplace-actions{display:flex;justify-content:flex-end;gap:14px;align-items:center;flex-wrap:wrap;margin-top:22px}
 .account-integrations{margin-top:22px}.account-card .account-security-section{margin:0;padding:0;border:0}.account-card .account-security-section>h3{margin:0 0 20px}
 .account-card .settings-form{gap:16px;margin-top:0}.account-card .settings-form>label{font-size:13px;font-weight:600}
 .account-withdraw{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:22px}.account-withdraw>.btn-secondary{color:var(--red)}
@@ -65,8 +65,7 @@
 .account-password-card{grid-column:1;grid-row:2}.account-email-card{grid-column:2;grid-row:2}
 .account-workplace-card .account-workplace{min-height:0;padding:14px}.account-workplace-card .field-hint{margin:10px 0 0}.account-workplace-card .account-workplace-actions{margin-top:14px}
 .account-workplace-card>header,.account-social-card>header{margin-bottom:16px}
-.account-password-card .account-fields{gap:18px}.account-verify{padding-top:18px;border-top:1px solid var(--border)}.account-verify h4{font-size:13px;font-weight:600;margin:0 0 12px}
-.account-verify .social-provider{flex:1;min-width:130px;justify-content:center;padding:0 10px;font-size:12px}
+.account-password-card .account-fields{gap:18px}
 .account-form-footer{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:22px}
 .account-form-footer>button{display:inline-flex;align-items:center;justify-content:center;text-align:center;width:auto;min-height:44px;height:auto;padding:12px 20px;line-height:1.4}
 .account-form-footer>.account-delete-button{color:var(--red);min-width:120px}
@@ -74,5 +73,7 @@
 .email-action-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px}.email-action-row>.input{width:100%;min-width:0;height:44px}
 .email-action-row>button{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;width:auto;height:44px;padding:0 14px;font-size:12px}
 .email-enrollment-form>.field-hint{margin:0;line-height:1.8}.email-notice{margin:0;padding:14px;background:var(--bg);border-radius:10px;font-size:13px;line-height:1.8;overflow-wrap:anywhere}.email-notice.verified{color:var(--green);background:var(--green-soft)}
+.account-login-id .account-fields{gap:10px}.account-login-id .field-hint{margin:0;line-height:1.7}.account-login-id .btn-primary{justify-self:end}
+.account-password-card .account-fields>.field-hint{margin:0;line-height:1.7}.account-password-card .account-fields>.btn-primary{display:flex;align-items:center;justify-content:center;text-align:center}
 @media(max-width:1100px){.account-grid{grid-template-columns:1fr}.account-basic-card,.account-workplace-stack,.account-password-card,.account-email-card{grid-column:1;grid-row:auto}}
 @media(max-width:520px){.account-form-footer{justify-content:stretch;gap:10px}.account-form-footer>button{flex:1;min-width:0;padding:12px}.account-form-footer>.btn-primary{min-width:0}.account-form-footer>.account-delete-button{min-width:0}.email-action-row{gap:8px}.email-action-row>button{padding:0 10px}}

@@ -35,7 +35,7 @@ public class AuthController {
     @GetMapping("/login-id/availability")
     public Map<String, Object> loginIdAvailability(@RequestParam String loginId) {
         String value = loginId.trim();
-        if (!value.matches("[A-Za-z0-9_.-]{3,50}")) throw new IllegalArgumentException("아이디는 영문, 숫자 또는 _, ., -를 사용해 3~50자로 입력해 주세요.");
+        if (!value.matches("[A-Za-z0-9_.-]{3,50}") || com.fieldwork.entity.User.isGeneratedLoginId(value)) throw new IllegalArgumentException("아이디는 영문, 숫자 또는 _, ., -를 사용해 3~50자로 입력해 주세요.");
         return Map.of("loginId", value, "available", !users.existsByLoginId(value));
     }
 
@@ -44,7 +44,7 @@ public class AuthController {
     public Map<String, Object> register(@RequestBody Map<String, String> body) {
         String loginId = body.get("loginId");
         String password = body.get("password");
-        if (loginId == null || !loginId.trim().matches("[A-Za-z0-9_.-]{3,50}")) {
+        if (loginId == null || !loginId.trim().matches("[A-Za-z0-9_.-]{3,50}") || com.fieldwork.entity.User.isGeneratedLoginId(loginId.trim())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "아이디는 영문, 숫자 또는 특수문자(_, ., -)를 사용해 3~50자로 입력해 주세요.");
         }
         if (password == null || password.isBlank() || password.length() < 8) {

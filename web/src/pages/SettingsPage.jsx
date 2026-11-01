@@ -1,3 +1,4 @@
+import { visibleLoginId } from '../../../frontend/utils/accountIdentity.js';
 import useLiveRevision from '../components/useLiveRevision.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -244,7 +245,7 @@ export default function SettingsPage() {
               <div className="settings-row">
                 <span className="settings-label">로그인</span>
                 <span className="settings-value">
-                  {user.name} ({user.loginId})
+                  {user.name}{visibleLoginId(user.loginId)&&` (${visibleLoginId(user.loginId)})`}
                 </span>
               </div>
               <button

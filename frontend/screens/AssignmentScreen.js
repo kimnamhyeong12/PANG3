@@ -1,3 +1,4 @@
+import { visibleLoginId } from '../utils/accountIdentity';
 import useLiveRevision from '../utils/useLiveRevision';
 import { colors } from '../constants/design';
 import { apiFetch as fetch } from '../utils/auth';
@@ -1084,7 +1085,7 @@ export default function AssignmentScreen({
                       >
                         {(
                           member.name ||
-                          member.loginId ||
+                          visibleLoginId(member.loginId) ||
                           '?'
                         ).slice(0, 1)}
                       </Text>
@@ -1101,16 +1102,10 @@ export default function AssignmentScreen({
                         }
                       >
                         {member.name ||
-                          member.loginId}
+                          visibleLoginId(member.loginId) || '팀원'}
                       </Text>
 
-                      <Text
-                        style={
-                          styles.choiceLogin
-                        }
-                      >
-                        @{member.loginId}
-                      </Text>
+                      {!!visibleLoginId(member.loginId)&&<Text style={styles.choiceLogin}>@{visibleLoginId(member.loginId)}</Text>}
                     </View>
 
                     <Text

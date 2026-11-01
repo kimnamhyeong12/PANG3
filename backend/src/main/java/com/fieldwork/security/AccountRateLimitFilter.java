@@ -14,7 +14,7 @@ public class AccountRateLimitFilter extends OncePerRequestFilter {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         String path = AuthRateLimitFilter.path(request);
         if (auth != null && auth.getPrincipal() instanceof Long userId &&
-                (path.matches("/api/users/[0-9]+/account(?:/verify)?") ||
+                (path.matches("/api/users/[0-9]+/(?:account(?:/verify)?|login-credentials)") ||
                 path.equals("/api/auth/email/request") || path.startsWith("/api/auth/email/code/") || path.equals("/api/auth/account")) &&
                 !request.getMethod().equals("GET") &&
                 !budget.allow("account-check:" + userId, 30, 300000, System.currentTimeMillis())) {

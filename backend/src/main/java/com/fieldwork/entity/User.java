@@ -21,6 +21,12 @@ public class User {
     public boolean isPasswordLoginEnabled() { return !Boolean.FALSE.equals(passwordLoginEnabled); }
     public void setPasswordLoginEnabled(boolean value) { passwordLoginEnabled = value; }
 
+    public static boolean isGeneratedLoginId(String value) {
+        return value != null && value.matches("social-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+    }
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public boolean isLoginSetupRequired() { return isGeneratedLoginId(loginId); }
+
     @Column(name = "social_profile_pending", nullable = false, columnDefinition = "boolean default false")
     private boolean socialProfilePending = false;
     public boolean isSocialProfilePending() { return socialProfilePending; }
