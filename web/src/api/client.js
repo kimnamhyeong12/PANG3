@@ -1,3 +1,4 @@
+import { liveSync } from '../lib/liveSync.js';
 import { webSession } from './session.js';
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -8,11 +9,12 @@ async function request(method, path, { params, body } = {}) {
       if (value !== undefined && value !== null) url.searchParams.set(key, value);
     });
   }
-  const res = await webSession.fetch(url, {
+  let res;
+  try { res = await webSession.fetch(url, {
     method,
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  }); } catch (error) { if (method === 'GET') liveSync.recover(); throw error; }
   const text = await res.text();
   let data = null;
   if (text) {
@@ -23,9 +25,11 @@ async function request(method, path, { params, body } = {}) {
     }
   }
   if (!res.ok) {
+    if (method === 'GET' && res.status >= 500) liveSync.recover();
     // ApiExceptionHandler 응답: { timestamp, status, error, message } — 권한 에러 등은 message를 그대로 노출
     throw toApiError(res.status, data, `요청 실패 (${res.status})`);
   }
+  if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) liveSync.noteMutation(method, path, data);
   return data;
 }
 

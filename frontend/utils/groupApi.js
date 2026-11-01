@@ -1,13 +1,19 @@
-import { apiFetch as fetch } from '../utils/auth';
+import { apiFetch as fetch, liveSync } from '../utils/auth';
 import { API_BASE_URL } from './api';
 
 export async function groupApi(path, options = {}) {
+  const group = path.match(/^\/api\/(?:locations\/group\/(\d+)|groups\/(\d+)\/assignments\/mine)/);
+  if (group && (!options.method || options.method === 'GET') && !options.syncBypass) {
+    const owner = group[2] ? new URL(path, 'https://local').searchParams.get('userId') : null;
+    return liveSync.tasks(Number(group[1] || group[2]), owner, () => groupApi(path, { ...options, syncBypass: true }));
+  }
   if (!API_BASE_URL) {
     throw new Error('API_BASE_URL이 설정되어 있지 않습니다.');
   }
 
+  const { syncBypass, ...fetchOptions } = options;
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
+    ...fetchOptions,
     headers: {
       ...(typeof FormData !== 'undefined' && options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...(options.headers || {}),

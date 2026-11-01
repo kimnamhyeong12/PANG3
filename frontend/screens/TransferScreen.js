@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,6 +35,7 @@ export default function TransferScreen({
   initialRecipientId = null,
   initialRecipientName = '',
 }) {
+  const liveRevision = useLiveRevision(['transfers', 'tasks', 'groups']);
   const [tasks, setTasks] = useState([]);
   const [projectPicker, setProjectPicker] = useState(false);
   const [projectFilter, setProjectFilter] = useState(null);
@@ -82,7 +84,7 @@ export default function TransferScreen({
     } finally {
       setLoading(false);
     }
-  }, [group?.groupId, user?.userId, requestsOnly, recipientId]);
+  }, [group?.groupId, user?.userId, requestsOnly, recipientId, liveRevision]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {

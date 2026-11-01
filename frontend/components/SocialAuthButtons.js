@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +9,7 @@ import { showAlert } from './CustomAlert';
 import { colors } from '../constants/design';
 
 export default function SocialAuthButtons({ mode = 'login', onLogin, onVerified, onLinked, disabled = false, compact = false }) {
+  const liveRevision=useLiveRevision(['account']);
   const [providers, setProviders] = useState(null);
   const [linked, setLinked] = useState([]);
   const [pending, setPending] = useState('');
@@ -26,7 +28,7 @@ export default function SocialAuthButtons({ mode = 'login', onLogin, onVerified,
       .catch(() => { if (!abort.signal.aborted) setLoadFailed(true); })
       .finally(() => clearTimeout(timer));
     return () => { mounted = false; clearTimeout(timer); abort.abort(); };
-  }, [mode, reload]);
+  }, [mode, reload,liveRevision]);
   useEffect(() => () => controller.current?.abort(), []);
   const cancel = () => { controller.current?.abort(); setPending(''); };
   const start = async provider => {

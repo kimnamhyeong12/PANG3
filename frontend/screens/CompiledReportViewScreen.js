@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
@@ -28,6 +29,7 @@ const safeFileName = (value) => String(value || '보고서').replace(/[\\/:*?"<>
 // 통합 보고서 읽기 전용 보기 (B④). 편집·확정은 PC 웹에서만.
 // progressId 를 주면 건별 보고서 미리보기 (받기는 목록에서 하므로 HWPX 버튼 없음)
 export default function CompiledReportViewScreen({ user, reportId, progressId, title, onBack }) {
+  const liveRevision = useLiveRevision(['reports']);
   const [html, setHtml] = useState(null);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
@@ -49,7 +51,7 @@ export default function CompiledReportViewScreen({ user, reportId, progressId, t
       if (controller.signal.aborted) return;
       setError(loadError.message || '보고서를 불러오지 못했습니다.');
     }
-  }, [reportId, progressId, user?.userId]);
+  }, [reportId, progressId, user?.userId, liveRevision]);
 
   useEffect(() => { load(); return () => loading.current?.abort(); }, [load]);
 

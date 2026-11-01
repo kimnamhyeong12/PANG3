@@ -1,3 +1,4 @@
+import useLiveRevision from '../components/useLiveRevision.js';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -11,6 +12,7 @@ import { buildMemberColors } from '../../../frontend/utils/memberColors.js';
 import { isCurrentWork } from '../../../frontend/utils/completionDay.js';
 import MapCanvas from '../components/map/MapCanvas.jsx';
 export default function GroupStatusPage() {
+  const liveRevision = useLiveRevision(['tasks', 'groups']);
   const {
     user
   } = useAuth();
@@ -54,7 +56,7 @@ export default function GroupStatusPage() {
     return () => {
       active = false;
     };
-  }, [groupId, user.userId, user.workSido, user.workSigungu, currentGroup?.regionSido, currentGroup?.regionSigungu, currentGroup?.regionAdmCode, reload]);
+  }, [groupId, user.userId, user.workSido, user.workSigungu, currentGroup?.regionSido, currentGroup?.regionSigungu, currentGroup?.regionAdmCode, reload, liveRevision]);
   const tasks = data.groupId === groupId ? data.tasks : [];
   const members = data.groupId === groupId ? data.members : [];
   const colors = useMemo(() => buildMemberColors(members, tasks), [members, tasks]);

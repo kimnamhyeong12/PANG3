@@ -1,3 +1,4 @@
+import useLiveRevision from '../components/useLiveRevision.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -25,6 +26,7 @@ export default function MapPage() {
   return <MapWorkspace key={`${user.userId}:${groupId}`} />;
 }
 function MapWorkspace() {
+  const liveRevision = useLiveRevision(['tasks']);
   const { user, updateUser } = useAuth(), { groupId, currentGroup } = useGroup();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams(), personal = personalGroup(currentGroup);
@@ -45,8 +47,8 @@ function MapWorkspace() {
   const live = useRef(true), geoWatch = useRef(null), geoSeq = useRef(0), routeSeq = useRef(0), pickSeq = useRef(0), actionLock = useRef(false);
   useEffect(() => { live.current = true; return () => { live.current = false; routeSeq.current++; pickSeq.current++; if (geoWatch.current != null) navigator.geolocation.clearWatch(geoWatch.current); }; }, []);
   useEffect(() => { const timer = setInterval(() => setDay(koreaDay()), 30000); return () => clearInterval(timer); }, []);
-  useEffect(() => { let active = true; setLoading(true); fetchGroupTasks(groupId, user.userId).then(rows => { if (active) setTasks((rows || []).map(t => ({ ...t, id: t.taskId ?? t.id, taskId: t.taskId ?? t.id, _status: normalizeStatus(t), status: normalizeStatus(t) }))); }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [groupId, user.userId, reload]);
-  useEffect(() => { const timer = setInterval(() => { if (document.visibilityState !== 'hidden') setReload(v => v + 1); }, 15000); const refresh = () => setReload(v => v + 1); window.addEventListener('focus', refresh); return () => { clearInterval(timer); window.removeEventListener('focus', refresh); }; }, []);
+  useEffect(() => { let active = true; setLoading(true); fetchGroupTasks(groupId, user.userId).then(rows => { if (active) setTasks((rows || []).map(t => ({ ...t, id: t.taskId ?? t.id, taskId: t.taskId ?? t.id, _status: normalizeStatus(t), status: normalizeStatus(t) }))); }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [groupId, user.userId, reload, liveRevision]);
+
   useEffect(() => { let active = true; fetchRegionBoundaries(personal ? user.workSido : currentGroup?.regionSido, personal ? user.workSigungu : currentGroup?.regionSigungu, currentGroup?.regionAdmCode).then(data => { if (active) setBoundaries(data); }).catch(e => { if (active) { setError(e.message); setBoundaries({ type: 'FeatureCollection', features: [] }); } }); return () => { active = false; }; }, [personal, user.workSido, user.workSigungu, currentGroup?.regionSido, currentGroup?.regionSigungu, currentGroup?.regionAdmCode]);
   function clearPosition(status) {
     if (status) setLocationStatus(status);

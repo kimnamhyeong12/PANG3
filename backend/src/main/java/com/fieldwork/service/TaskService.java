@@ -102,6 +102,19 @@ public class TaskService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getChangedLocations(Long groupId, Long userId, List<Long> ids) {
+        User user = getUser(userId); WorkGroup group = getGroup(groupId);
+        if (!groupMemberRepository.existsByGroupAndUser(group, user))
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "그룹 구성원이 아닙니다.");
+        return taskRepository.findAllById(ids).stream().filter(t -> t.getGroup() != null && groupId.equals(t.getGroup().getGroupId()))
+                .map(t -> {
+                    Map<String,Object> row = toFrontendMap(t);
+                    locationAssignmentRepository.findByGroupAndTask(group, t).ifPresent(a -> { row.put("assignmentId", a.getAssignmentId()); row.put("assignedAt", a.getAssignedAt()); });
+                    return row;
+                }).collect(Collectors.toList());
+    }
+
     public User currentAssignee(Task task) {
         if (task.getCurrentAssignee() != null) return task.getCurrentAssignee();
         var assignments = locationAssignmentRepository.findByTaskOrderByAssignedAtAsc(task);

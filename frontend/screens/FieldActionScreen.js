@@ -2,6 +2,7 @@ import { getInteractiveMapHtml } from '../utils/reportLocationMap';
 import ProtectedImage from '../components/ProtectedImage';
 import { apiFetch as fetch } from '../utils/auth';
 import { showAlert } from '../components/CustomAlert';
+import useLiveRevision from '../utils/useLiveRevision';
 import React, { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { File } from 'expo-file-system';
@@ -240,6 +241,8 @@ export default function FieldActionScreen({
     fieldMemo: form.fieldMemo, markedMapUri: form.markedMapUri, progressId: form.progressId,
     revision: form.revision, recordedAt: form.recordedAt, mainComment: form.mainComment || '', reportName: form.reportName || defaultReportName });
 
+  const [syncNotice,setSyncNotice]=useState('');
+  const liveRevision=useLiveRevision(['reports','tasks'], {dirty:loadingReport||saving||editSnapshot(snapshot)!==initialFormRef.current,onConflict:()=>setSyncNotice('다른 기기에서 업무가 변경되었습니다. 작성 중인 내용은 유지됩니다.')});
   const recoverPhotoPick = async (form) => {
     const pending = await pendingPhotoPick(key);
     if (!pending) return form;
@@ -311,7 +314,7 @@ export default function FieldActionScreen({
         if (!response.ok) throw new Error('보고서 조회 실패');
         const text = await response.text();
         const data = text.trim() ? JSON.parse(text) : null;
-        const local = await readDraft(key);
+        const local = liveRevision ? null : await readDraft(key);
         if (!active) return;
         const base = normalizeComments({ status: location?.reportProgressId ? data?.progressStatus || 'pending' : location?.status || data?.progressStatus || 'pending',
           latitude: String(data?.latitude ?? location?.latitude ?? location?.lat ?? ''),
@@ -353,7 +356,7 @@ export default function FieldActionScreen({
       } finally { if (active) setLoadingReport(false); }
     })();
     return () => { active = false; };
-  }, [key]);
+  }, [key, liveRevision]);
 
   useEffect(() => {
     if (!readyRef.current || savedRef.current || savingRef.current) return;
@@ -951,6 +954,7 @@ export default function FieldActionScreen({
       }
     >
       <ScreenHeader title="보고서 양식 작성" onBack={requestBack} />
+      {syncNotice ? <Text style={{color:'#667085',padding:12}}>{syncNotice}</Text> : null}
       {loadingReport ? <ActivityIndicator style={{ padding: 16 }} /> : null}
       {loadError ? <Text style={{ color: '#DC2626', padding: 16 }}>{loadError}</Text> : null}
 

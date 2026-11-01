@@ -1,3 +1,4 @@
+import useLiveRevision from '../components/useLiveRevision.js';
 import SelectionEmpty from '../components/SelectionEmpty.jsx';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -7,6 +8,7 @@ import '../styles/support.css';
 
 const formatDate = value => value ? new Date(value).toLocaleString('ko-KR') : '';
 export default function SupportAdminPage() {
+  const liveRevision = useLiveRevision(['support']);
   const [params] = useSearchParams();
   const { user, logout } = useAuth();
   const agent = ['ADMIN', 'SUPPORT_AGENT'].includes(user?.role);
@@ -16,6 +18,7 @@ export default function SupportAdminPage() {
   const [detailRevision, setDetailRevision] = useState(0);
   const [downloadingId, setDownloadingId] = useState(null);
   const [answer, setAnswer] = useState(''), [error, setError] = useState(''), [notice, setNotice] = useState(''), [sending, setSending] = useState(false);
+  const detailLiveRevision = useLiveRevision(['support'], { dirty: Boolean(answer.trim()) || sending, onConflict: () => setNotice('다른 기기에서 문의가 변경되었습니다. 작성 중인 답변은 유지됩니다.') });
   const submitting = useRef(false), detailRequest = useRef(0);
   useEffect(() => { setSelected(params.get('inquiry') || null); }, [params]);
   const refresh = useCallback(() => setRevision(value => value + 1), []);
@@ -28,7 +31,7 @@ export default function SupportAdminPage() {
       setInbox(result);
     }).catch(failure => { if (active) setListError(errorMessage(failure, '문의함을 불러오지 못했습니다.')); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [agent, user?.userId, status, page, revision]);
+  }, [agent, user?.userId, status, page, revision, liveRevision]);
   useEffect(() => {
     if (!agent || !selected) return undefined;
     let active = true; const requestId = ++detailRequest.current;
@@ -36,7 +39,7 @@ export default function SupportAdminPage() {
     api.get(`/api/admin/support/inquiries/${selected}`).then(result => { if (active && requestId === detailRequest.current) setRecord(result); })
       .catch(failure => { if (active) setError(errorMessage(failure, '문의를 불러오지 못했습니다.')); }).finally(() => { if (active) setDetailLoading(false); });
     return () => { active = false; };
-  }, [agent, user?.userId, selected, detailRevision]);
+  }, [agent, user?.userId, selected, detailRevision, detailLiveRevision]);
   const submit = async event => {
     event.preventDefault();
     if (submitting.current || !record || !answer.trim()) return;
@@ -68,8 +71,7 @@ export default function SupportAdminPage() {
     <main className="support-main">
       <div className="support-workspace">
         <section className="support-list" aria-label="문의 목록">
-          <div className="support-list-toolbar"><button className="btn-secondary" onClick={refresh} disabled={loading}>새로고침</button></div>
-          <div className="support-filters" role="tablist" aria-label="문의 상태">{[['WAITING', '답변 대기'], ['ANSWERED', '답변 완료'], ['', '전체']].map(([value, label]) => <button key={value} role="tab" aria-selected={status === value} disabled={sending} className={status === value ? 'active' : ''} onClick={() => { setStatus(value); setPage(0); setInbox(null); }}>{label}</button>)}</div>
+          <div className="support-inbox-toolbar"><div className="support-filters" role="tablist" aria-label="문의 상태">{[['WAITING', '답변 대기'], ['ANSWERED', '답변 완료']].map(([value, label]) => <button key={value} role="tab" aria-selected={status === value} disabled={sending} className={status === value ? 'active' : ''} onClick={() => { setStatus(value); setPage(0); setInbox(null); }}>{label}</button>)}</div><button className="btn-secondary" onClick={refresh} disabled={loading}>새로고침</button></div>
           {listError && <div role="alert" className="support-error">{listError}<button onClick={refresh}>다시 시도</button></div>}
           {loading && <p role="status" className="support-muted">문의함을 불러오는 중…</p>}
           {!loading && !listError && !inbox?.items.length && <div className="support-list-empty">{status === 'WAITING' ? '답변을 기다리는 문의가 없습니다.' : '문의가 없습니다.'}</div>}

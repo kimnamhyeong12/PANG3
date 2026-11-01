@@ -1,6 +1,8 @@
+import useLiveRevision from './useLiveRevision.js';
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 export default function NotificationSettings() {
+  const liveRevision=useLiveRevision(['preferences']);
   const [value, setValue] = useState(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
@@ -14,7 +16,7 @@ export default function NotificationSettings() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [liveRevision]);
   return <><h2>알림</h2>{error && <p className="form-error" role="alert">{error}</p>}{value && [['taskAlerts', '업무 알림 받기'], ['teamAlerts', '팀 알림 받기'], ['activityAlerts', '팀원 활동 알림']].map(([key, label]) => <label className="check-row" key={key}><input type="checkbox" checked={value[key]} disabled={busy} onChange={async e => {
         setBusy(true);
         setError('');

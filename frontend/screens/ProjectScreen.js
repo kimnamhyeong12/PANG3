@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import ReportFilters from '../components/ReportFilters';
 import { currentMonthRange } from '../utils/calendar';
 import ProjectBrowser from '../components/ProjectBrowser';
@@ -35,6 +36,7 @@ const dateText = (value) => (value ? String(value).slice(0, 10) : '');
 
 // ---------- 그룹 작업공간 "프로젝트" 탭 내용 (B①) ----------
 export function GroupProjectList({ user, group, onOpenProject, onChanged }) {
+  const liveRevision = useLiveRevision(['projects', 'reports', 'tasks']);
   const [manage,setManage]=useState(false);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +53,7 @@ export function GroupProjectList({ user, group, onOpenProject, onChanged }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [group?.groupId, user?.userId]);
+  }, [group?.groupId, user?.userId, liveRevision]);
 
   useEffect(() => { setLoading(true); load(); }, [load]);
 
@@ -94,6 +96,7 @@ export function GroupProjectList({ user, group, onOpenProject, onChanged }) {
 
 // ---------- 프로젝트 항목 + 담기 (B③) ----------
 export default function ProjectScreen({ user, projectId, initialProject, onBack, onOpenReport }) {
+  const liveRevision = useLiveRevision(['projects', 'reports', 'tasks']);
   const [project, setProject] = useState(initialProject || null);
   const [data, setData] = useState(null);
   const [reportCounts, setReportCounts] = useState({});
@@ -129,7 +132,7 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
         showAlert('프로젝트 조회 실패', error.message);
       });
     return () => { alive = false; };
-  }, [projectId, userId]);
+  }, [projectId, userId, liveRevision]);
 
   const loadReports = useCallback(async () => {
     try {
@@ -148,7 +151,7 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
     } catch {
       // 건수 표시는 보조 정보라 실패해도 화면은 그대로 쓴다
     }
-  }, [projectId, userId]);
+  }, [projectId, userId, liveRevision]);
 
   const loadItems = useCallback(async () => {
     try {
@@ -163,7 +166,7 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
     } finally {
       if (mounted.current) setLoading(false);
     }
-  }, [projectId, userId]);
+  }, [projectId, userId, liveRevision]);
 
   useEffect(() => { loadItems(); }, [loadItems]);
   useEffect(() => { if (projectId && userId) loadReports(); }, [loadReports]);

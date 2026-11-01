@@ -1,3 +1,4 @@
+import useLiveRevision from '../components/useLiveRevision.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -233,6 +234,8 @@ export default function ReportEditorPage() {
   const canEdit = isLeader && isDraft;
   const canAdd = isDraft;
 
+  const [editingInput,setEditingInput]=useState(false);
+  const liveRevision=useLiveRevision(['reports','projects'],{dirty:busy||editingInput||Boolean(report&&titleDraft!==(report.report?.title??'')),onConflict:()=>setMessage({type:'error',text:'다른 기기에서 보고서가 변경되었습니다. 작성 중인 내용은 유지됩니다.'})});
   const loadReport = useCallback(async () => {
     const json = await fetchCompiledReport(reportId, userId);
     setReport(json);
@@ -248,6 +251,7 @@ export default function ReportEditorPage() {
     setFilters(EMPTY_FILTERS);
     loadReport().catch((e) => setLoadError(errorMessage(e, '보고서를 불러오지 못했습니다.')));
   }, [loadReport]);
+  useEffect(()=>{if(liveRevision)loadReport().catch(e=>setLoadError(errorMessage(e)));},[liveRevision,loadReport]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -268,7 +272,7 @@ export default function ReportEditorPage() {
     return fetchProjectItems(projectId, userId, mine ? { ...filters, authorId: userId } : filters)
       .then(setPool)
       .catch((e) => setPoolError(errorMessage(e, '완료 기록을 불러오지 못했습니다.')));
-  }, [projectId, userId, filters, mine]);
+  }, [projectId, userId, filters, mine, liveRevision]);
 
   useEffect(() => {
     loadPool();
@@ -446,7 +450,7 @@ export default function ReportEditorPage() {
   );
 
   return (
-    <div className="re-page">
+    <div className="re-page" onFocusCapture={e=>{if(e.target.matches('input,textarea'))setEditingInput(true);}} onBlurCapture={e=>{if(!e.relatedTarget?.matches('input,textarea'))setEditingInput(false);}}>
       <Link to={`/projects/${projectId}`} className="pj-back">
         ← {report.project?.name ?? '프로젝트'}
       </Link>

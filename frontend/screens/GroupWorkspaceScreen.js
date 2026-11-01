@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import { getSharedNotificationPreferences, updateSharedNotificationPreferences } from '../services/notificationService';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -78,6 +79,7 @@ export default function GroupWorkspaceScreen({
   // 보고서를 열거나 수정하는 동안 App 이 이 화면을 숨겨 둔 채 유지한다 (건별 보고서 거르기·폴더 유지)
   isActive = true,
 }) {
+  const liveRevision = useLiveRevision(['groups', 'transfers', 'tasks', 'preferences']);
   // H5: 프로젝트 탭 안 '프로젝트 | 건별 보고서' (건별 = 기존 그룹 보고서 전체보기 화면 그대로)
   // 보고서를 열었다 돌아와도(화면이 다시 그려져도) 보던 칸을 유지
   const [projectView, setProjectViewState] = useState(() => lastProjectView);
@@ -92,7 +94,7 @@ export default function GroupWorkspaceScreen({
   const [respondingRequestId, setRespondingRequestId] = useState(null);
   const [teamAlerts, setTeamAlerts] = useState(true);
   const [activityAlerts, setActivityAlerts] = useState(true);
-  useEffect(()=>{let active=true;getSharedNotificationPreferences().then(p=>{if(active){setTeamAlerts(p.teamAlerts);setActivityAlerts(p.activityAlerts);}}).catch(()=>{});return()=>{active=false;};},[user?.userId,tab]);
+  useEffect(()=>{let active=true;getSharedNotificationPreferences().then(p=>{if(active){setTeamAlerts(p.teamAlerts);setActivityAlerts(p.activityAlerts);}}).catch(()=>{});return()=>{active=false;};},[user?.userId,tab,liveRevision]);
   const saveAlertPreference=async (key,value)=>{try{const p=await updateSharedNotificationPreferences({[key]:value});setTeamAlerts(p.teamAlerts);setActivityAlerts(p.activityAlerts);}catch(e){showAlert('알림 설정 실패',e.message);}};
   useEffect(() => {
     setDetail(group || null);
@@ -127,7 +129,7 @@ export default function GroupWorkspaceScreen({
     } finally {
       setLoadingSettings(false);
     }
-  }, [tab, group, user?.userId, assignments]);
+  }, [tab, group, user?.userId, assignments, liveRevision]);
 
   useEffect(() => {
     loadSettings();

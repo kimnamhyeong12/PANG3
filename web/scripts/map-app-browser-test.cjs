@@ -23,10 +23,24 @@ function mockMaps() {
   window.qaMaps = []; window.qaMarkers = []; window.qaMapEvent = emit;
   window.kakao = { maps: { LatLng, LatLngBounds: Bounds, Map, Marker: Overlay, CustomOverlay: Overlay, Polygon: Overlay, Circle: Overlay, Polyline: Overlay, Size: class {}, Point: class {}, MarkerImage: class {}, event, services: { Geocoder, Places, Status: { OK: 'OK', ERROR: 'ERROR', ZERO_RESULT: 'ZERO_RESULT' }, SortBy: { DISTANCE: 'distance' } } } };
 }
+function mockChangeStream() {
+  const nativeFetch=window.fetch.bind(window); let current;
+  window.qaSyncConnections=0;
+  window.qaSyncSend=event=>current?.enqueue(new TextEncoder().encode(`event: change\ndata: ${JSON.stringify(event)}\n\n`));
+  window.qaSyncDisconnect=()=>{current?.close();current=null;};
+  window.fetch=(input,options={})=>{
+    const url=new URL(typeof input==='string'||input instanceof URL?String(input):input.url,location.href);
+    if(url.pathname!=='/api/sync/events')return nativeFetch(input,options);
+    window.qaSyncConnections++;
+    return Promise.resolve(new Response(new ReadableStream({start(c){current=c;c.enqueue(new TextEncoder().encode('event: sync\ndata: {"topics":["resync"]}\n\n'));options.signal?.addEventListener('abort',()=>{try{c.close();}catch{}if(current===c)current=null;},{once:true});},cancel(){current=null;}}),{headers:{'Content-Type':'text/event-stream'}}));
+  };
+}
 async function fixture(route) {
   const req = route.request(), u = new URL(req.url()), p = u.pathname, method = req.method(); if (!p.startsWith('/api/') || !['127.0.0.1', 'localhost'].includes(u.hostname)) return route.continue(); state.apiCalls.push({ p, method });
   const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
   if (p === '/api/auth/refresh') return json({ ...user, accessToken: 'local-test-only', expiresAt: '2099-01-01T00:00:00Z' });
+  if (p === '/api/sync/me') return json(user);
+  if (p === '/api/sync/tasks') { const ids=u.searchParams.get('ids').split(',').map(Number); return json({items:tasks.filter(t=>ids.includes(t.taskId)),removedIds:ids.filter(id=>!tasks.some(t=>t.taskId===id))}); }
   if (p === '/api/groups/user/1') return json(groups);
   if (p.includes('/api/locations/group/')) return json(tasks);
   if (p.includes('/api/sgis/boundaries')) return json({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: { adm_cd: '21100510', adm_nm: '부산광역시 사하구 하단1동' }, geometry: { type: 'Polygon', coordinates: [[[128.96,35.10],[128.98,35.10],[128.98,35.12],[128.96,35.10]]] } }] });
@@ -64,11 +78,12 @@ async function fixture(route) {
   if (p.includes('/workplace') && method === 'PATCH') return json(req.postDataJSON());
   return json([]);
 }
-module.exports = { mockMaps };
+module.exports = { mockMaps, mockChangeStream };
 if (require.main === module) (async () => {
   await fs.mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_EXECUTABLE ? { executablePath: process.env.CHROME_EXECUTABLE } : {}) });
   const context = await browser.newContext({ viewport: { width: 1360, height: 940 }, geolocation: { latitude: 35.105, longitude: 128.965 }, permissions: ['geolocation'] });
+  await context.addInitScript(mockChangeStream);
   if (process.env.MAP_QA_LIVE_PROVIDER !== '1') await context.addInitScript(mockMaps); await context.addInitScript(() => localStorage.setItem('pang3.groupId', '7'));
   await context.route('**/api/**', fixture);
   const page = await context.newPage(), errors = [], checks = []; page.setDefaultTimeout(12000);
@@ -77,6 +92,13 @@ if (require.main === module) (async () => {
   const ok = name => { checks.push(name); console.log('PASS ' + name); };
   const wait = async (fn, message) => { for (let i = 0; i < 80; i++) { if (await fn()) return; await new Promise(r => setTimeout(r, 100)); } throw Error(message); };
   const menu = async label => { await page.getByRole('button', { name: label, exact: true }).click(); };
+  const checkPublicCategoryAlignment = async () => {
+    const region = await page.getByRole('button', { name: '공공시설물 조회 지역 선택' }).boundingBox(), control = await page.getByRole('button', { name: '공공시설물 카테고리 선택' }).boundingBox(), options = await page.locator('.app-public-options').boundingBox();
+    assert(Math.abs(region.y - control.y) < 1, 'region/category selectors share one row');
+    assert(Math.abs(control.x - options.x) < 1 && Math.abs(control.width - options.width) < 1, 'menu matches category selector width and left edge');
+    const item = page.locator('.app-public-options>button').first(), icon = await item.locator('.app-icon').first().boundingBox(), label = await item.locator('span:not(.app-icon)').boundingBox();
+    assert(label.x - icon.x - icon.width >= 6 && label.x - icon.x - icon.width <= 10, 'icon and label stay close');
+  };
   const dialog = title => page.getByRole('dialog', { name: title, exact: true });
   const close = async title => { await dialog(title).getByRole('button', { name: '닫기', exact: true }).click(); };
   try {
@@ -96,7 +118,10 @@ if (require.main === module) (async () => {
       await page.screenshot({ path: path.join(output, '10-live-map-selection.png'), fullPage: true });
       await page.getByRole('button', { name: '이 위치 선택', exact: true }).click(); await dialog('방문지 추가').getByLabel('방문지 이름').waitFor();
       await page.screenshot({ path: path.join(output, '11-live-visit-add.png'), fullPage: true }); await close('방문지 추가');
-      await menu('공공시설물'); await page.getByRole('button', { name: '공공시설물 카테고리 선택' }).click(); await page.getByRole('button', { name: '공공시설물 등록 신청', exact: true }).click();
+      await menu('공공시설물'); await page.screenshot({ path: path.join(output, '21-public-panel-desktop.png'), fullPage: true });
+      await page.getByRole('button', { name: '공공시설물 조회 지역 선택' }).click(); await page.screenshot({ path: path.join(output, '22-public-region-desktop.png'), fullPage: true }); await page.getByRole('button', { name: '하단1동', exact: true }).click();
+      await page.getByRole('button', { name: '공공시설물 카테고리 선택' }).click(); await checkPublicCategoryAlignment(); await page.screenshot({ path: path.join(output, '26-public-options-desktop.png'), fullPage: true }); await page.getByRole('button', { name: '심폐제세동기', exact: true }).click(); await page.getByText('검증 AED', { exact: true }).waitFor(); await page.screenshot({ path: path.join(output, '23-public-results-desktop.png'), fullPage: true });
+      await page.getByRole('button', { name: '공공시설물 카테고리 선택' }).click(); await page.getByRole('button', { name: '공공시설물 등록 신청', exact: true }).click();
       const liveFacility = dialog('공공시설물 등록 신청'); await liveFacility.locator('input[type=file]').setInputFiles(path.join(root, 'web/scripts/fixtures/gps.jpg')); await liveFacility.getByText('촬영 위치 확인됨', { exact: true }).waitFor();
       await liveFacility.locator('.facility-map').scrollIntoViewIfNeeded(); await page.screenshot({ path: path.join(output, '12-live-facility-location.png'), fullPage: true });
       await close('공공시설물 등록 신청'); await page.getByRole('button', { name: '공공시설물 조회 닫기' }).click();
@@ -104,6 +129,10 @@ if (require.main === module) (async () => {
       await page.screenshot({ path: path.join(output, '13-live-map-mobile.png'), fullPage: true });
       await page.locator('.app-map-visit>button:first-child').filter({ hasText: '오늘 점검 방문지' }).click(); await page.getByLabel('예상 거리', { exact: true }).filter({ hasText: '1.4km' }).waitFor();
       await page.waitForTimeout(1000); await page.screenshot({ path: path.join(output, '17-route-preview-mobile.png'), fullPage: true });
+      await page.getByRole('button', { name: '방문지 선택 닫기' }).click(); await menu('공공시설물');
+      await page.screenshot({ path: path.join(output, '24-public-panel-mobile.png'), fullPage: true });
+      const panel = await page.locator('.app-public-panel').boundingBox(), tools = await page.locator('.app-map-tools').boundingBox(); assert(panel.y >= tools.y + tools.height); assert(panel.x >= 0 && panel.x + panel.width <= 390);
+      await page.getByRole('button', { name: '공공시설물 카테고리 선택' }).click(); await page.getByRole('button', { name: '심폐제세동기', exact: true }).waitFor(); await checkPublicCategoryAlignment(); await page.screenshot({ path: path.join(output, '25-public-options-mobile.png'), fullPage: true });
       console.log('PASS actual Kakao SDK, map tiles, preview polyline with fixture route data, distance/time, selection marker anchor, address lookup, facility photo map and mobile viewport'); return;
     }
     await page.waitForFunction(() => window.qaMaps.some(m => m.el.closest('.app-map-workspace')));
@@ -146,7 +175,7 @@ if (require.main === module) (async () => {
     await page.screenshot({ path: path.join(output, '15-route-preview-desktop.png'), fullPage: true });
     await page.getByRole('button', { name: '도보 이동', exact: true }).click(); await page.getByLabel('예상 거리', { exact: true }).filter({ hasText: '2.0km' }).waitFor(); assert.equal(await page.getByLabel('예상 시간', { exact: true }).textContent(), '20분'); assert.equal(state.routeSegments.at(-1).transportMode, 'walk');
     const centerBeforeRefresh = await page.evaluate(() => { const m = window.qaMaps.find(m => m.el.isConnected && m.el.closest('.app-map-workspace')); return [m.getCenter().getLat(), m.getCenter().getLng()]; });
-    const taskReads = state.apiCalls.filter(c => c.p === '/api/locations/group/7').length; await page.evaluate(() => window.dispatchEvent(new Event('focus'))); await wait(() => state.apiCalls.filter(c => c.p === '/api/locations/group/7').length > taskReads, 'task list refresh'); await page.waitForTimeout(100);
+    const taskReads = state.apiCalls.filter(c => c.p === '/api/sync/tasks').length; await page.evaluate(() => window.qaSyncSend({topics:['tasks'],groups:[7],taskIds:[12]})); await wait(() => state.apiCalls.filter(c => c.p === '/api/sync/tasks').length > taskReads, 'changed task delta'); await page.waitForTimeout(100);
     assert.deepEqual(await page.evaluate(() => { const m = window.qaMaps.find(m => m.el.isConnected && m.el.closest('.app-map-workspace')); return [m.getCenter().getLat(), m.getCenter().getLng()]; }), centerBeforeRefresh); ok('방문지 목록 갱신에도 경로 미리보기 화면 유지');
     const previewCallsBeforeGuidance = state.routeSegments.length; ok('경로 미리보기·거리·시간·차량/도보 전환·오류 재조회');
     state.failHandoff = 1; await page.getByRole('button', { name: '길안내 시작', exact: true }).click(); await page.getByRole('status').filter({ hasText: '휴대폰 연결 실패' }).waitFor(); assert.equal(await dialog('휴대폰 앱 연동').count(), 0); await page.getByRole('button', { name: '길안내 시작', exact: true }).click(); await dialog('휴대폰 앱 연동').getByText('휴대폰 앱을 켠 다음 안내받으세요.', { exact: true }).waitFor(); assert.equal(await dialog('휴대폰 앱 연동').locator('a').count(), 0); assert.equal(state.routeSegments.length, previewCallsBeforeGuidance); await page.screenshot({ path: path.join(output, '14-phone-handoff.png'), fullPage: true }); assert.equal(state.handoffs.at(-1).taskId, 12); assert.equal(state.handoffs.at(-1).groupId, 7); assert.equal(state.handoffs.at(-1).mode, 'walk'); await close('휴대폰 앱 연동'); state.holdPreview = true; await page.getByRole('button', { name: '차량 이동', exact: true }).click(); await wait(() => state.heldPreviews.length === 1, 'delayed old preview'); await page.getByRole('button', { name: '방문지 선택 닫기' }).click(); ok('미리보기 유지·휴대폰 요청·연결 실패 재시도·안내 문구·휴대폰에 이동 수단 전달');
@@ -164,7 +193,7 @@ if (require.main === module) (async () => {
     await close('공공시설물 등록 신청'); await page.getByRole('button', { name: '공공시설물 조회 닫기' }).click(); await page.getByRole('button', { name: '메뉴', exact: true }).click(); await page.getByRole('button', { name: '메뉴 닫기', exact: true }).click({ position: { x: 350, y: 150 } });
     await page.getByRole('button', { name: '업무공간 선택', exact: true }).click(); await page.locator('.group-switcher-menu').getByRole('button', { name: '내 개인 업무', exact: true }).click(); await menu('프로젝트'); await dialog('프로젝트').getByText('팀 그룹을 선택하면 프로젝트를 사용할 수 있습니다.').waitFor(); await close('프로젝트'); assert.equal(await page.getByRole('button', { name: '작성 이어하기', exact: true }).count(), 0); ok('모바일 메뉴·개인 업무공간 프로젝트 안내·업무공간 전환 초기화');
     const denied = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    await denied.addInitScript(mockMaps); await denied.addInitScript(() => { localStorage.setItem('pang3.groupId', '7'); navigator.permissions.query = async () => ({ state: 'denied' }); navigator.geolocation.watchPosition = () => { throw Error('PC GPS must not be required'); }; }); await denied.route('**/api/**', fixture);
+    await denied.addInitScript(mockChangeStream); await denied.addInitScript(mockMaps); await denied.addInitScript(() => { localStorage.setItem('pang3.groupId', '7'); navigator.permissions.query = async () => ({ state: 'denied' }); navigator.geolocation.watchPosition = () => { throw Error('PC GPS must not be required'); }; }); await denied.route('**/api/**', fixture);
     const previewCallsBeforeDenied = state.routeSegments.length; const pc = await denied.newPage(); pc.on('pageerror', e => errors.push(e.message)); await pc.goto(process.env.MAP_QA_URL || 'http://127.0.0.1:5176/map'); await pc.locator('.app-map-visit>button:first-child').filter({ hasText: '오늘 점검 방문지' }).click(); await pc.getByRole('button', { name: '길안내 시작', exact: true }).click(); await pc.getByRole('dialog', { name: '휴대폰 앱 연동', exact: true }).getByText('휴대폰 앱을 켠 다음 안내받으세요.', { exact: true }).waitFor(); assert(state.routeSegments.length > previewCallsBeforeDenied); assert.equal(state.routeSegments.at(-1).start.lat, user.workplaceLat); await denied.close(); ok('위치 거부 시 근무지 출발 경로·휴대폰 연결 가능');
     state.dashboard = true;
     tasks = Array.from({ length: 100 }, (_, i) => ({ ...tasks[0], taskId: 1000 + i, detailAddress: `방문지 ${i}`, assigneeName: '검증 담당자' }));
@@ -201,6 +230,7 @@ if (require.main === module) (async () => {
       await page.locator('.app-main').waitFor(); await page.waitForTimeout(200);
       assert.equal(await page.locator('.app-main .page-title,.app-main .page-desc').count(), 0, route);
       assert((await page.locator('.app-main').innerText()).trim().length > 0, route);
+      if (route === '/settings') { const form = page.locator('form').filter({ has: page.getByRole('button', { name: '변경사항 저장', exact: true }) }); assert.deepEqual(await form.locator('input[type=password]').evaluateAll(nodes => nodes.map(n => n.closest('label').textContent)), ['현재 비밀번호', '새 비밀번호', '새 비밀번호 확인']); ok('계정 설정 비밀번호 순서: 현재 → 새 비밀번호 → 확인'); }
     }
     ok('그룹·프로젝트·업무 이관·보고서·설정 상단 제목/안내 제거 및 본문 표시');
     assert.deepEqual(errors, []); ok('브라우저 런타임 오류 없음');

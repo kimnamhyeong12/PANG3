@@ -1,3 +1,4 @@
+import useLiveRevision from '../components/useLiveRevision.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useGroup } from '../context/GroupContext.jsx';
@@ -68,6 +69,7 @@ function TaskTable({ tasks, loading, error, onRetry }) {
 }
 
 export default function DashboardPage() {
+  const liveRevision = useLiveRevision(['tasks']);
   const { user } = useAuth();
   const { groupId } = useGroup();
   const [tasks, setTasks] = useState([]);
@@ -95,7 +97,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [groupId, user.userId, reloadKey]);
+  }, [groupId, user.userId, reloadKey, liveRevision]);
 
   const stats = useMemo(() => {
     const count = (s) => tasks.filter((t) => t._status === s).length;

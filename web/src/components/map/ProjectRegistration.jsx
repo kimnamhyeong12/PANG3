@@ -1,3 +1,4 @@
+import useLiveRevision from '../useLiveRevision.js';
 import { useEffect, useRef, useState } from 'react';
 import { createProject, updateProject, fetchProjectPlaces, registerProjectPlaces } from '../../api/projects.js';
 import Modal from '../Modal.jsx';
@@ -5,9 +6,11 @@ import AppIcon from '../AppIcon.jsx';
 import SelectionEmpty from '../SelectionEmpty.jsx';
 
 export default function ProjectRegistration({ projects, setProjects, user, groupId, onSaved, onBusyChange, personal, onShowPlaces }) {
+  const liveRevision=useLiveRevision(['projects','tasks']);
   const [project, setProject] = useState(null), [name, setName] = useState(''), [places, setPlaces] = useState([]), [selected, setSelected] = useState([]), [busy, setBusy] = useState(false), [error, setError] = useState(''), [confirmIds, setConfirmIds] = useState(null), [registered, setRegistered] = useState(null);
   const lock = useRef(false);
-  useEffect(() => { let active = true; setSelected([]); setPlaces([]); if (project) { setBusy(true); fetchProjectPlaces(project.projectId).then(rows => { if (active) setPlaces(rows); }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setBusy(false); }); } return () => { active = false; }; }, [project?.projectId]);
+  useEffect(() => { let active = true; if (project) { setBusy(true); fetchProjectPlaces(project.projectId).then(rows => { if (active) {setPlaces(rows);setSelected(old=>old.filter(id=>rows.some(row=>row.placeId===id)));} }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setBusy(false); }); } return () => { active = false; }; }, [project?.projectId,liveRevision]);
+  useEffect(()=>{setSelected([]);setPlaces([]);},[project?.projectId]);
   useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
   async function run(fn) { if (lock.current) return; lock.current = true; setBusy(true); setError(''); try { await fn(); } catch (e) { setError(e.message); } finally { lock.current = false; setBusy(false); } }
   async function register(ids, allowActive = false) {

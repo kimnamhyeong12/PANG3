@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import { showAlert } from '../components/CustomAlert';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -62,6 +63,7 @@ export default function ReportListScreen({
   selectedIds: selection,
   onSelectionChange,
 }) {
+  const liveRevision = useLiveRevision(['reports']);
   const [localSelectedIds, setLocalSelectedIds] = useState([]);
   const [savedReports, setSavedReports] = useState({});
   const [checkingReports, setCheckingReports] = useState(false);
@@ -92,7 +94,7 @@ export default function ReportListScreen({
       if (active) { setSavedReports(results); setCheckingReports(false); }
     });
     return () => { active = false; };
-  }, [locations, user?.userId, reportReload]);
+  }, [locations, user?.userId, reportReload, liveRevision]);
   // F7: 받을 수 있는 보고서마다 이 폰에서 받은 기록과 비교 (DownloadScreen 과 같은 기록)
   const downloadableReports = useMemo(() => Object.values(savedReports).filter(report => report?.downloadable), [savedReports]);
   const files = useReportDownloads(user?.userId, downloadableReports);

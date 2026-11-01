@@ -1,3 +1,4 @@
+import useLiveRevision from '../useLiveRevision.js';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import { upload } from '../../api/uploads.js';
@@ -16,6 +17,7 @@ function EvidenceImage({ id, kind }) {
   return source ? <img className="facility-evidence" src={source} alt={kind === 'photo' ? '시설물 원본 증빙 사진' : '시설물 위치 증빙'} /> : <p className="field-hint">{error || '사진을 불러오는 중…'}</p>;
 }
 export default function FacilityApplications({ onClose, initialId }) {
+  const liveRevision = useLiveRevision(['applications']);
   const [tab, setTab] = useState(initialId ? 'history' : 'form');
   const [name, setName] = useState(''), [kindChoice, setKindChoice] = useState(''), [customKind, setCustomKind] = useState(''), [kindOpen, setKindOpen] = useState(false);
   const [categories, setCategories] = useState([]), [categoryLoading, setCategoryLoading] = useState(true), [categoryError, setCategoryError] = useState(''), [categoryRevision, setCategoryRevision] = useState(0);
@@ -38,7 +40,7 @@ export default function FacilityApplications({ onClose, initialId }) {
       if (selected) setDetail(data); else { setRows(old => page ? [...old, ...data.items.filter(item => !old.some(r => r.id === item.id))] : data.items); setMore(data.hasMore); }
     }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [tab, selected, page, revision]);
+  }, [tab, selected, page, revision, liveRevision]);
   useEffect(() => () => { if (photo?.url) URL.revokeObjectURL(photo.url); }, [photo?.url]);
   async function choosePhoto(e) {
     const file = e.target.files?.[0]; e.target.value = ''; if (!file || lock.current) return;

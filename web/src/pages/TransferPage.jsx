@@ -1,3 +1,4 @@
+import useLiveRevision from '../components/useLiveRevision.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useGroup } from '../context/GroupContext.jsx';
@@ -54,6 +55,7 @@ function TransferItem({ item, canRespond, busy, onRespond }) {
 }
 
 export default function TransferPage() {
+  const liveRevision = useLiveRevision(['transfers', 'groups', 'tasks']);
   const [params] = useSearchParams();
   const { user } = useAuth();
   const { groupId, currentGroup } = useGroup();
@@ -83,13 +85,13 @@ export default function TransferPage() {
     } finally {
       if (seq === requestSeq.current) setLoading(false);
     }
-  }, [groupId, user.userId, personal]);
+  }, [groupId, user.userId, personal, liveRevision]);
 
   useEffect(() => {
     setActionError(null);
     setModalOpen(false);
-    load();
-  }, [load]);
+  }, [groupId]);
+  useEffect(() => { load(); }, [load]);
 
   const received = useMemo(() => transfers.filter((t) => t.recipientUserId === user.userId), [transfers, user.userId]);
   const sent = useMemo(() => transfers.filter((t) => t.senderUserId === user.userId), [transfers, user.userId]);
@@ -142,13 +144,13 @@ export default function TransferPage() {
 
   return (
     <>
-      <div className="page-head">
-        <button type="button" className="btn-primary btn-inline" disabled={personal} onClick={() => setModalOpen(true)}>
-          <IconPlus size={16} />새 이관 요청
-        </button>
-      </div>
-
       <section className="panel">
+        <div className="panel-header">
+          <h2 className="panel-title">이관 요청</h2>
+          <button type="button" className="btn-primary btn-inline" disabled={personal} onClick={() => setModalOpen(true)}>
+            <IconPlus size={16} />새 이관 요청
+          </button>
+        </div>
         {personal&&<p className="panel-notice">팀 그룹을 선택하면 업무를 이관할 수 있습니다.</p>}
         <div className="tabs">
           <button

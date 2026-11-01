@@ -251,11 +251,11 @@ public class GroupService {
     public Map<String, Object> removeMember(Long groupId, Long requesterId, Long memberUserId) {
         WorkGroup group = workGroupRepository.lockForJoin(groupId).orElseThrow(() ->
                 new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "그룹을 찾을 수 없습니다."));
-        if (group.isPersonal()) throw new IllegalArgumentException("개인 업무공간의 팀원을 강제 탈퇴시킬 수 없습니다.");
+        if (group.isPersonal()) throw new IllegalArgumentException("개인 업무공간의 팀원을 제외할 수 없습니다.");
         User requester = getUser(requesterId);
         if (!group.getLeader().getUserId().equals(requesterId)
                 || !groupMemberRepository.existsByGroupAndUser(group, requester)) {
-            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "그룹장만 팀원을 강제 탈퇴시킬 수 있습니다.");
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "그룹장만 팀원을 제외할 수 있습니다.");
         }
         if (requesterId.equals(memberUserId)) throw new IllegalArgumentException("본인은 그룹 탈퇴 버튼을 이용해 주세요.");
         User targetUser = getUser(memberUserId);
@@ -264,7 +264,7 @@ public class GroupService {
         // Preserve task/report history and apply the same pending-request cleanup as leaving.
         releaseMemberWork(group, target.getUser(), requester);
         groupMemberRepository.delete(target);
-        return Map.of("groupId", groupId, "removedUserId", memberUserId, "message", "팀원을 그룹에서 탈퇴시켰습니다.");
+        return Map.of("groupId", groupId, "removedUserId", memberUserId, "message", "팀원을 그룹에서 제외했습니다.");
     }
 
     @Transactional

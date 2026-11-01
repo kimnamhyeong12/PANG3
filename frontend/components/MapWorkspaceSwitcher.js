@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +10,7 @@ const personal = group => Boolean(group?.personalWorkspace || group?.personal ||
 const label = group => personal(group) || !group ? '개인 업무공간' : group.groupName;
 
 export default function MapWorkspaceSwitcher({ userId, activeGroup, onSelect, dropdown = false, compact = false }) {
+  const liveRevision=useLiveRevision(['groups']);
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const trigger = useRef(null);
@@ -36,7 +38,7 @@ export default function MapWorkspaceSwitcher({ userId, activeGroup, onSelect, dr
     }).catch(failure => { if (current) setError(failure.message || '그룹을 불러오지 못했습니다.'); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [open, userId, reload]);
+  }, [open, userId, reload, liveRevision]);
   const select = async group => {
     if (busy.current) return;
     if (String(group.groupId) === String(activeGroup?.groupId)) { setOpen(false); return; }

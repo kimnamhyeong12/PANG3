@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import { getSharedNotificationPreferences, updateSharedNotificationPreferences } from '../services/notificationService';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -37,11 +38,12 @@ export default function GroupSettingsScreen({
   onLeaveGroup,
   mode = 'all',
 }) {
+  const liveRevision = useLiveRevision(['groups', 'preferences']);
   const [detail, setDetail] = useState(group || null);
   const [loading, setLoading] = useState(true);
   const [teamAlerts, setTeamAlerts] = useState(true);
   const [activityAlerts, setActivityAlerts] = useState(true);
-  useEffect(()=>{let active=true;getSharedNotificationPreferences().then(p=>{if(active){setTeamAlerts(p.teamAlerts);setActivityAlerts(p.activityAlerts);}}).catch(()=>{});return()=>{active=false;};},[user?.userId]);
+  useEffect(()=>{let active=true;getSharedNotificationPreferences().then(p=>{if(active){setTeamAlerts(p.teamAlerts);setActivityAlerts(p.activityAlerts);}}).catch(()=>{});return()=>{active=false;};},[user?.userId,liveRevision]);
   const saveAlertPreference=async (key,value)=>{try{const p=await updateSharedNotificationPreferences({[key]:value});setTeamAlerts(p.teamAlerts);setActivityAlerts(p.activityAlerts);}catch(e){showAlert('알림 설정 실패',e.message);}};
   const [regionOpen, setRegionOpen] = useState(false);
   const [regionSaving, setRegionSaving] = useState(false);
@@ -65,7 +67,7 @@ export default function GroupSettingsScreen({
     } finally {
       setLoading(false);
     }
-  }, [group?.groupId, user?.userId]);
+  }, [group?.groupId, user?.userId, liveRevision]);
 
   useEffect(() => {
     load();

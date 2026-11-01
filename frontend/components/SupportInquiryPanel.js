@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +12,7 @@ import { downloadProtectedFile } from '../utils/auth';
 
 const date = value => value ? new Date(value).toLocaleString('ko-KR') : '';
 export default function SupportInquiryPanel({ user, onBusyChange }) {
+  const liveRevision=useLiveRevision(['support']);
   const [tab, setTab] = useState('write');
   const [sending, setSending] = useState(false);
   const [rows, setRows] = useState([]), [page, setPage] = useState(0), [more, setMore] = useState(false);
@@ -46,7 +48,8 @@ export default function SupportInquiryPanel({ user, onBusyChange }) {
       setError(failure.status === 404 ? '문의 내역을 불러올 수 없습니다. 서버 업데이트 후 다시 확인해 주세요.' : failure.message || '문의 내역을 불러오지 못했습니다.');
     }).finally(() => { if (active && id === request.current) setLoading(false); });
     return () => { active = false; };
-  }, [tab, user.userId, selected, page, revision]);
+  }, [tab, user.userId, selected, page, revision, liveRevision]);
+  useEffect(()=>{if(liveRevision)setPage(0);},[liveRevision]);
   const refresh = () => { setPage(0); setRevision(value => value + 1); };
   const changeTab = next => { if (!sending) { setTab(next); setSelected(null); setDetail(null); setError(''); if (next === 'history') refresh(); } };
   return <View style={styles.content}>

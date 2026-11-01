@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import { apiFetch as fetch } from '../utils/auth';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -736,6 +737,7 @@ export default function DashboardScreen({
   onBack,
   onSettings,
 }) {
+  const liveRevision = useLiveRevision(['tasks', 'transfers', 'support', 'applications']);
   const [
     locations,
     setLocations,
@@ -910,7 +912,7 @@ export default function DashboardScreen({
 
   useEffect(() => {
     loadDashboard();
-  }, [loadDashboard]);
+  }, [loadDashboard, liveRevision]);
 
   const analytics =
     useMemo(

@@ -1,10 +1,13 @@
+import useLiveRevision from './useLiveRevision.js';
 import { useEffect, useState, useRef } from 'react';
 import { fetchProjectPlaces, registerProjectPlaces } from '../api/projects.js';
 import { errorMessage } from '../api/client.js';
 export default function ProjectPlacesPanel({projectId,userId,onChanged}) {
+ const liveRevision=useLiveRevision(['projects','tasks']);
  const [places,setPlaces]=useState([]),[selected,setSelected]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');
  const lock=useRef(false);
- useEffect(()=>{let active=true;setSelected([]);setError('');fetchProjectPlaces(projectId).then(rows=>{if(active)setPlaces(rows);}).catch(e=>{if(active)setError(errorMessage(e));});return()=>{active=false;};},[projectId]);
+ useEffect(()=>{let active=true;setError('');fetchProjectPlaces(projectId).then(rows=>{if(active){setPlaces(rows);setSelected(old=>old.filter(id=>rows.some(row=>row.placeId===id&&!row.activeTaskCount)));}}).catch(e=>{if(active)setError(errorMessage(e));});return()=>{active=false;};},[projectId,liveRevision]);
+ useEffect(()=>setSelected([]),[projectId]);
  const register=async ids=>{if(lock.current)return;lock.current=true;setBusy(true);setError('');try{const result=await registerProjectPlaces(projectId,userId,ids);setMessage(`${result.created.length}건 등록 · 진행 중인 ${result.skipped.length}곳 제외`);setSelected([]);setPlaces(await fetchProjectPlaces(projectId));onChanged?.();}catch(e){setError(errorMessage(e));}finally{lock.current=false;setBusy(false);}};
  return <section className="panel pj-section"><div className="panel-header"><h2 className="panel-title">저장된 방문지</h2><span>{places.length}곳</span></div>
  <p>장소를 선택해 새 업무로 등록합니다. 완료한 업무의 사진·메모는 복사하지 않습니다.</p>

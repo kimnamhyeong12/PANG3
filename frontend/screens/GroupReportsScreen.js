@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import ReportFilters from '../components/ReportFilters';
 import ProjectReportLink from '../components/ProjectReportLink';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -17,6 +18,7 @@ import { downloadCountText, useReportDownloads } from '../utils/useReportDownloa
 const dongName = (value) => String(value || '').trim().split(/\s+/).pop().replace(/제(?=\d+동$)/, '') || '행정동 미확인';
 
 export default function GroupReportsScreen({ group, user, selectedDong, onBack, onOpenReport, onOpenReports, onEditReport, onPreviewReport, isActive = true, embedded = false, personalArchive = false }) {
+  const liveRevision = useLiveRevision(['reports']);
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [member, setMember] = useState('');
@@ -59,7 +61,7 @@ export default function GroupReportsScreen({ group, user, selectedDong, onBack, 
       .catch(() => { if (active) setError('보고서를 불러오지 못했습니다. 돌아가서 다시 시도하세요.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [group.groupId, user.userId, isActive]);
+  }, [group.groupId, user.userId, isActive, liveRevision]);
 
   // 작업자 목록: 본인을 맨 위에 (목록이 길면 끝에 있던 본인이 스크롤 아래로 숨었음)
   const members = useMemo(() => {

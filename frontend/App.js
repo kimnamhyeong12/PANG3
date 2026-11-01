@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { apiFetch as fetch, session, subscribeAuthExpired } from './utils/auth';
+import { apiFetch as fetch, session, subscribeAuthExpired, liveSync } from './utils/auth';
 
 import AppErrorBoundary from './components/AppErrorBoundary';
 import LocalReportHost from './components/LocalReportHost';
@@ -513,22 +513,6 @@ function AppContent() {
     }
   };
 
-  const pollSharedWorkspace = Boolean(activeGroup && !isPersonalGroup(activeGroup));
-  useEffect(() => {
-    if (!user?.userId) return;
-    const subscription = AppState.addEventListener('change', (state) => {
-      exitConfirmation.current.reset();
-      if (state === 'active') {
-        setCalendarDayKey(getLocalDateKey());
-        if (['main', 'mapDirect'].includes(screenRef.current)) loadWorkspaceLocations();
-      }
-    });
-    const timer = pollSharedWorkspace ? setInterval(() => {
-      if (AppState.currentState === 'active' && ['main', 'mapDirect'].includes(screenRef.current)) loadWorkspaceLocations();
-    }, 30000) : null;
-    return () => { subscription.remove(); clearInterval(timer); };
-  }, [user?.userId, loadWorkspaceLocations, pollSharedWorkspace]);
-
   useEffect(() => {
     loadWorkspaceLocations();
   }, [loadWorkspaceLocations]);
@@ -721,6 +705,38 @@ function AppContent() {
     ]);
   }, [activeGroup, loadTeamLocations, loadWorkspaceLocations, refreshGroupAssignments]);
 
+  const syncHandlers = useRef(null);
+  syncHandlers.current = { refreshCurrentWorkspace, refreshAvailableGroups, selectActiveGroup, activeGroup, user };
+  useEffect(() => {
+    if (!user?.userId) return;
+    let active = true;
+    const off = liveSync.subscribe(event => {
+      const topics = event.topics || [], handlers = syncHandlers.current;
+      if (topics.some(t => ['account', 'resync'].includes(t)) && (!event.userIds?.length || event.userIds.includes(user.userId))) {
+        groupApi('/api/sync/me').then(profile => { if (active && profile.userId === user.userId) setUser(old => JSON.stringify(old) === JSON.stringify(profile) ? old : profile); }).catch(() => {});
+      }
+      if (topics.some(t => ['groups', 'resync'].includes(t))) {
+        handlers.refreshAvailableGroups().then(groups => {
+          if (!active) return;
+          const current = groups.find(g => Number(g.groupId) === Number(syncHandlers.current.activeGroup?.groupId));
+          const next = current || groups.find(isPersonalGroup) || groups[0];
+          if (next) {
+            if (Number(next.groupId) !== Number(syncHandlers.current.activeGroup?.groupId)) handlers.selectActiveGroup(next);
+            else setActiveGroup(old => JSON.stringify(old) === JSON.stringify(next) ? old : next);
+          }
+          else { setActiveGroup(null); setRouteLocations([]); setTeamLocations([]); }
+        }).catch(() => {});
+      }
+      if (topics.some(t => ['tasks', 'groups', 'resync'].includes(t))) handlers.refreshCurrentWorkspace();
+    });
+    const subscription = AppState.addEventListener('change', state => {
+      exitConfirmation.current.reset();
+      if (state === 'active') { setCalendarDayKey(getLocalDateKey()); liveSync.resume(); } else liveSync.pause();
+    });
+    liveSync.start(); if (AppState.currentState !== 'active') liveSync.pause();
+    return () => { active = false; off(); subscription.remove(); liveSync.stop(); };
+  }, [user?.userId]);
+
   // The web queues only an authenticated user's own destination. The app resolves
   // the workspace and starts the existing SDK flow after its location is ready.
   useEffect(() => {
@@ -747,8 +763,8 @@ function AppContent() {
     check();
     const subscription = AppState.addEventListener('change', state => { if (state === 'active') check(); });
     const link = Linking.addEventListener('url', event => { if (event.url?.startsWith('pang3://navigation')) check(); });
-    const timer = setInterval(check, 15000);
-    return () => { active = false; clearInterval(timer); subscription.remove(); link.remove(); };
+    const off = liveSync.subscribe(event => { if (event.topics?.some(t => t === 'navigation' || t === 'resync')) check(); });
+    return () => { active = false; off(); subscription.remove(); link.remove(); };
   }, [user?.userId, workspaceReady, selectActiveGroup]);
 
   useEffect(() => {

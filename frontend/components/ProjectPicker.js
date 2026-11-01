@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,10 +7,11 @@ import { fetchProjects } from '../utils/projectApi';
 
 // Selection only. Project creation is kept in the explicit project-management screen.
 export default function ProjectPicker({ visible, userId, groupId, personal, selectedId, includeAll = false, allLabel = '전체 업무', onSelect, onClose }) {
+ const liveRevision=useLiveRevision(['projects']);
  const [rows,setRows]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
  useEffect(()=>{if(!visible)return;let active=true;setRows([]);setError('');if(!groupId||personal){setBusy(false);return;}setBusy(true);
   fetchProjects(groupId,userId).then(data=>{if(active)setRows(data||[]);}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setBusy(false);});
-  return()=>{active=false;};},[visible,groupId,userId,personal]);
+  return()=>{active=false;};},[visible,groupId,userId,personal,liveRevision]);
  const row=(project)=>{const selected=project ? String(project.projectId)===String(selectedId) : selectedId==null;
   return <TouchableOpacity key={project?.projectId??'all'} accessibilityRole="button" accessibilityState={{selected}} onPress={()=>onSelect(project)} style={styles.option}>
    <Text numberOfLines={2} style={[styles.text,selected&&styles.active]}>{project?.name||allLabel}</Text>{selected&&<Ionicons name="checkmark" size={20} color={colors.primary}/>}</TouchableOpacity>;};

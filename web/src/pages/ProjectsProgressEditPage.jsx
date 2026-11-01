@@ -1,3 +1,4 @@
+import useLiveRevision from '../components/useLiveRevision.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -51,6 +52,9 @@ export default function ProjectsProgressEditPage() {
   const dirty =
     data != null &&
     (title.trim() !== (data.reportName ?? '') || body !== (data.mainComment ?? '') || Object.keys(changedCaptions).length > 0);
+
+  const liveRevision=useLiveRevision(['reports'], {dirty:dirty||busy, onConflict:()=>setMessage({type:'error',text:'다른 기기에서 보고서가 변경되었습니다. 작성 중인 내용은 유지됩니다.'})});
+  useEffect(()=>{if(liveRevision)load();},[liveRevision,load]);
 
   useEffect(() => {
     if (!dirty) return undefined;

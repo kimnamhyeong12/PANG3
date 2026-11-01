@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,8 +7,9 @@ import { EmptyState, ScreenHeader } from '../components/ui';
 import { groupApi } from '../utils/groupApi';
 import { colors, radius } from '../constants/design';
 export default function GroupInvitationsScreen({ user, onBack, onAccepted }) {
+  const liveRevision = useLiveRevision(['groups']);
   const [items, setItems] = useState([]); const [loading, setLoading] = useState(true); const [busyId, setBusyId] = useState(null);
-  const load = useCallback(async () => { try { const data = await groupApi(`/api/groups/invitations?userId=${user.userId}&status=PENDING`); setItems(Array.isArray(data) ? data : []); } catch (error) { showAlert('초대 조회 실패', error.message); } finally { setLoading(false); } }, [user?.userId]); useEffect(() => { load(); }, [load]);
+  const load = useCallback(async () => { try { const data = await groupApi(`/api/groups/invitations?userId=${user.userId}&status=PENDING`); setItems(Array.isArray(data) ? data : []); } catch (error) { showAlert('초대 조회 실패', error.message); } finally { setLoading(false); } }, [user?.userId, liveRevision]); useEffect(() => { load(); }, [load]);
   const process = async (item, action) => { try { setBusyId(item.invitationId); const data = await groupApi(`/api/groups/invitations/${item.invitationId}/${action}`, { method: 'POST', body: JSON.stringify({ userId: user.userId }) }); setItems((prev) => prev.filter((v) => v.invitationId !== item.invitationId)); if (action === 'accept') { showAlert('초대 수락', `${item.groupName} 그룹에 참여했습니다.`); onAccepted?.(data); } } catch (error) { showAlert('처리 실패', error.message); } finally { setBusyId(null); } };
   return <View style={styles.container}><ScreenHeader title="받은 초대" onBack={onBack} /><ScrollView contentContainerStyle={styles.body}>{loading ? <ActivityIndicator color={colors.primary} /> : !items.length ? <EmptyState icon="mail-open-outline" title="새 초대가 없습니다" /> : items.map((item) => <View key={item.invitationId} style={styles.card}><View style={styles.top}><View style={styles.icon}><Ionicons name="people-outline" size={21} color={colors.primary} /></View><View style={{ flex: 1 }}><Text style={styles.name}>{item.groupName}</Text><Text style={styles.meta}>{item.inviterName || item.inviterLoginId}님의 초대</Text></View></View><View style={styles.buttons}><TouchableOpacity style={[styles.button, styles.reject]} disabled={busyId === item.invitationId} onPress={() => process(item, 'reject')}><Text style={styles.rejectText}>거절</Text></TouchableOpacity><TouchableOpacity style={[styles.button, styles.accept]} disabled={busyId === item.invitationId} onPress={() => process(item, 'accept')}><Text style={styles.acceptText}>{busyId === item.invitationId ? '처리 중...' : '수락'}</Text></TouchableOpacity></View></View>)}</ScrollView></View>;
 }

@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Keyboard, KeyboardAvoidingView, Modal, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +30,7 @@ function EvidenceImage({ url }) {
   return source ? <Image source={source} resizeMode="contain" style={styles.image} /> : <Text style={styles.help}>{error||'사진을 불러오는 중…'}</Text>;
 }
 export default function FacilityApplicationScreen({ user, onClose, onSubmitted }) {
+  const liveRevision = useLiveRevision(['applications', 'facilities']);
   const [tab,setTab]=useState('form'),[name,setName]=useState(''),[kindChoice,setKindChoice]=useState(''),[location,setLocation]=useState(''),[description,setDescription]=useState('');
   const [customKind,setCustomKind]=useState(''),[kindOpen,setKindOpen]=useState(false);
   const [noticeExpanded,setNoticeExpanded]=useState(false);
@@ -40,7 +42,7 @@ export default function FacilityApplicationScreen({ user, onClose, onSubmitted }
   const [items,setItems]=useState([]),[page,setPage]=useState(0),[hasMore,setHasMore]=useState(false),[selected,setSelected]=useState(null),[detail,setDetail]=useState(null),[revision,setRevision]=useState(0),[loading,setLoading]=useState(false);
   const lock=useRef(false),request=useRef(null);
   useEffect(()=>{let active=true;setCategoriesLoading(true);setCategoryError('');groupApi('/api/public-data/categories').then(data=>{if(!Array.isArray(data)||!data.length)throw new Error('등록된 시설 종류를 불러오지 못했습니다.');if(active)setCategories([...new Set(data.map(item=>item.label).filter(label=>typeof label==='string'&&label.trim()))]);}).catch(failure=>{if(active)setCategoryError(failure.message||'시설 종류를 불러오지 못했습니다.');}).finally(()=>{if(active)setCategoriesLoading(false);});return()=>{active=false;};},[categoryRevision]);
-  useEffect(()=>{if(tab!=='history')return;let active=true;setLoading(true);setError('');groupApi(selected?`/api/facility-applications/${selected}`:`/api/facility-applications?page=${page}`).then(data=>{if(!active)return;if(selected)setDetail(data);else{setItems(old=>page===0?data.items:[...old,...data.items]);setHasMore(data.hasMore);}}).catch(failure=>{if(active)setError(failure.message);}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[tab,selected,page,revision,user.userId]);
+  useEffect(()=>{if(tab!=='history')return;let active=true;setLoading(true);setError('');groupApi(selected?`/api/facility-applications/${selected}`:`/api/facility-applications?page=${page}`).then(data=>{if(!active)return;if(selected)setDetail(data);else{setItems(old=>page===0?data.items:[...old,...data.items]);setHasMore(data.hasMore);}}).catch(failure=>{if(active)setError(failure.message);}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[tab,selected,page,revision,user.userId,liveRevision]);
   const permissions=()=>requestPhotoPermissions({platform:Platform.OS,version:Platform.Version,expoGo:Constants.appOwnership==='expo',picker:ImagePicker,library:MediaLibrary,android:PermissionsAndroid});
   const validateFile=asset=>{const fileName=asset.fileName||asset.filename||'photo.jpg';if(!/\.(jpe?g|png)$/i.test(fileName))throw new Error('위치정보가 있는 JPG·PNG 원본 사진을 선택해 주세요.');const size=new File(asset.uri).size;if(!size)throw new Error('사진 파일을 읽지 못했습니다. 다시 선택해 주세요.');if(size>15*1024*1024)throw new Error('15MB 이하의 사진을 선택해 주세요.');return {...asset,fileName,size,mimeType:/\.png$/i.test(fileName)?'image/png':'image/jpeg'};};
   const prepareOriginal=async(asset,permission)=>{

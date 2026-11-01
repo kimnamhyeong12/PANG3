@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client.js';
+import useLiveRevision from '../components/useLiveRevision.js';
 import { useAuth } from './AuthContext.jsx';
 
 const STORAGE_KEY = 'pang3.groupId';
@@ -11,6 +12,7 @@ function loadGroupId() {
 }
 
 export function GroupProvider({ children }) {
+  const liveRevision = useLiveRevision(['groups']);
   const { user, loading: authLoading } = useAuth();
   const [groups, setGroups] = useState([]);
   const [groupId, setGroupIdState] = useState(loadGroupId);
@@ -57,7 +59,7 @@ export function GroupProvider({ children }) {
       loadedOnceRef.current = false;
       setGroupId(null);
     }
-  }, [user, authLoading, reload, setGroupId]);
+  }, [user, authLoading, reload, setGroupId, liveRevision]);
 
   // 그룹 목록이 바뀌면: 1개면 자동 선택, 저장된 groupId가 목록에 없으면 해제
   useEffect(() => {

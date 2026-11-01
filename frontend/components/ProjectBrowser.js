@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import ProjectPicker from './ProjectPicker';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Modal, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
@@ -7,6 +8,7 @@ import { showAlert } from './CustomAlert';
 import { createProject, fetchProjects, fetchProjectPlaces, registerProjectPlaces, updateProject } from '../utils/projectApi';
 
 function ProjectManager({ visible, userId, groupId, personal, selectOnly = false, onSelect, onClose, onRegistered, onShowPlaces }) {
+ const liveRevision=useLiveRevision(['projects','tasks']);
  const [projects,setProjects]=useState([]), [project,setProject]=useState(null), [places,setPlaces]=useState([]), [selected,setSelected]=useState([]);
  const [name,setName]=useState(''), [busy,setBusy]=useState(false), [error,setError]=useState('');
  const {height:windowHeight,width:windowWidth}=useWindowDimensions();
@@ -16,6 +18,7 @@ function ProjectManager({ visible, userId, groupId, personal, selectOnly = false
  const lock=useRef(false), epoch=useRef(0);
  const load=async () => { const e=++epoch.current; setBusy(true); setError(''); try { const rows=await fetchProjects(groupId,userId); if(e===epoch.current) setProjects(rows||[]); } catch(err){if(e===epoch.current)setError(err.message);} finally{if(e===epoch.current)setBusy(false);} };
  useEffect(()=>{setProject(null);setPlaces([]);setSelected([]);setName('');setError(''); if(visible && groupId && !personal)load(); return()=>{epoch.current++;};},[visible,groupId,personal]);
+ useEffect(()=>{if(!liveRevision||!visible||!groupId||personal)return;let active=true;fetchProjects(groupId,userId).then(rows=>{if(active)setProjects(rows||[]);}).catch(err=>{if(active)setError(err.message);});if(project)fetchProjectPlaces(project.projectId).then(rows=>{if(active){setPlaces(rows);setSelected(old=>old.filter(id=>rows.some(row=>row.placeId===id)));}}).catch(err=>{if(active)setError(err.message);});return()=>{active=false;};},[liveRevision,visible,groupId,personal,project?.projectId]);
  const open=async p=>{ if(selectOnly){onSelect?.(p);return;} setProject(p);setSelected([]);setName(p.name);setBusy(true);setError('');try{setPlaces(await fetchProjectPlaces(p.projectId));}catch(err){setError(err.message);}finally{setBusy(false);} };
  const run=async action=>{if(lock.current)return;lock.current=true;setBusy(true);setError('');try{await action();}catch(err){setError(err.message);}finally{lock.current=false;setBusy(false);} };
  const confirmRegistration=(ids,count)=>showAlert('새 업무로 등록',`선택한 방문지 중 ${count}곳에 진행 중인 업무가 있습니다. 기존 업무를 유지하고 새 업무로 추가할까요?`,[

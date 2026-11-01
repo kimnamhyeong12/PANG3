@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ScreenHeader, PrimaryButton } from '../components/ui';
 import WorkplaceField from '../components/WorkplaceField';
@@ -19,6 +19,15 @@ export default function AccountManagementScreen({ user, credential, onBack, onUp
   const [workplace, setWorkplace] = useState({ workplaceAddress: user.workplaceAddress || '', workplaceLat: user.workplaceLat, workplaceLng: user.workplaceLng });
   const [email, setEmail] = useState(user.email || '');
   const [busy, setBusy] = useState(false);
+  const [syncNotice,setSyncNotice]=useState('');
+  const profileBase=useRef(user);
+  useEffect(()=>{
+    const old=profileBase.current;profileBase.current=user;
+    if(JSON.stringify(old)===JSON.stringify(user))return;
+    const clean=name===(old.name||'')&&region.sido===parseWorkRegion(old.workSido,old.workSigungu).sido&&serializeWorkRegion(region)===serializeWorkRegion(parseWorkRegion(old.workSido,old.workSigungu))&&['workplaceAddress','workplaceLat','workplaceLng'].every(k=>(workplace[k]??'')===(old[k]??''))&&!password&&!confirm&&email===(old.email||'');
+    if(clean){setName(user.name||'');setRegion(parseWorkRegion(user.workSido,user.workSigungu));setWorkplace({workplaceAddress:user.workplaceAddress||'',workplaceLat:user.workplaceLat,workplaceLng:user.workplaceLng});setEmail(user.email||'');}
+    else setSyncNotice('다른 기기에서 계정 정보가 변경되었습니다. 작성 중인 내용은 유지됩니다.');
+  },[user]);
   const save = async () => {
     if (busy || !name.trim() || !isOptionalWorkRegionValid(region)) return;
     if (password !== confirm) return showAlert('비밀번호 확인', '새 비밀번호가 서로 일치하지 않습니다.');
@@ -47,6 +56,7 @@ export default function AccountManagementScreen({ user, credential, onBack, onUp
   return <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ScreenHeader title="계정 관리" onBack={() => { if (!busy) onBack(); }} />
     <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      {!!syncNotice&&<Text>{syncNotice}</Text>}
       <View style={styles.card}>
         <Text style={styles.label}>아이디</Text><Text style={styles.id}>@{user.loginId}</Text>
         {field('이름', name, setName, { maxLength: 50, placeholder: '이름' })}

@@ -1,5 +1,6 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, AppState, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { showAlert } from '../components/CustomAlert';
 import { EmptyState, ScreenHeader, SectionTitle } from '../components/ui';
@@ -9,6 +10,7 @@ import { colors, radius } from '../constants/design';
 const isPersonal = (group) => Boolean(group?.personalWorkspace || group?.personal || group?.workspaceType === 'PERSONAL');
 
 export default function GroupScreen({ user, activeGroup, onBack, onCreate, onInvitations, onOpenGroup, tab = 'groups', onTabChange, overview }) {
+  const liveRevision = useLiveRevision(['groups']);
   const [groups, setGroups] = useState([]); const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false);
   const [hasPendingInvites, setHasPendingInvites] = useState(false);
   const loadInvitations = useCallback(async () => {
@@ -18,12 +20,8 @@ export default function GroupScreen({ user, activeGroup, onBack, onCreate, onInv
       setHasPendingInvites(Array.isArray(data) && data.length > 0);
     } catch { /* Keep the last known invitation state when the network is unavailable. */ }
   }, [user?.userId]);
-  const load = useCallback(async () => { if (!user?.userId) return; await Promise.all([loadInvitations(), (async () => { try { const data = await groupApi(`/api/groups/user/${user.userId}`); setGroups(Array.isArray(data) ? data : []); } catch (error) { showAlert('그룹 조회 실패', error.message); } })()]); setLoading(false); setRefreshing(false); }, [user?.userId, loadInvitations]);
+  const load = useCallback(async () => { if (!user?.userId) return; await Promise.all([loadInvitations(), (async () => { try { const data = await groupApi(`/api/groups/user/${user.userId}`); setGroups(Array.isArray(data) ? data : []); } catch (error) { showAlert('그룹 조회 실패', error.message); } })()]); setLoading(false); setRefreshing(false); }, [user?.userId, loadInvitations, liveRevision]);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', state => { if (state === 'active') loadInvitations(); });
-    return () => subscription.remove();
-  }, [loadInvitations]);
   return <View style={styles.container}>
     <ScreenHeader root title="그룹" onBack={onBack} right={<View style={{ flexDirection: 'row', gap: 2 }}>
       <TouchableOpacity style={styles.gear} onPress={onCreate} accessibilityRole="button" accessibilityLabel="그룹 만들기"><Ionicons name="add" size={27} color={colors.primary} /></TouchableOpacity>

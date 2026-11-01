@@ -1,3 +1,4 @@
+import useLiveRevision from './useLiveRevision.js';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
@@ -5,6 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useGroup } from '../context/GroupContext.jsx';
 import { fetchTransfers } from '../api/transfers.js';
 export default function RecentNotifications() {
+  const liveRevision = useLiveRevision(['transfers', 'support', 'applications']);
   const {
       user
     } = useAuth(),
@@ -59,6 +61,6 @@ export default function RecentNotifications() {
     return () => {
       active = false;
     };
-  }, [user.userId, user.role, groupId, retry]);
+  }, [user.userId, user.role, groupId, retry, liveRevision]);
   return <section className="panel" id="notifications"><div className="panel-header"><h2 className="panel-title">최근 알림</h2><button className="btn-secondary" onClick={() => setRetry(v => v + 1)}>새로고침</button></div><div className="notification-scroll" tabIndex={0} aria-label="최근 알림 목록">{loading ? <p className="table-empty">불러오는 중…</p> : <>{failures > 0 && <p className="form-error panel-error">일부 알림을 불러오지 못했습니다.</p>}{!items.length && <p className="table-empty">최근 알림이 없습니다.</p>}{items.map(i => <div key={i.key} className="notification-row"><div>{i.label}<small>{i.date ? String(i.date).slice(0, 16).replace('T', ' ') : ''}</small></div><button className="btn-secondary" onClick={() => navigate(i.to)}>확인</button></div>)}</>}</div></section>;
 }

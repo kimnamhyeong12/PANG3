@@ -31,19 +31,12 @@ async function refresh(personal, fail = false) {
   if (!personal && !fail) assert.equal(teamRows[0].id, 12, 'shared results still populate normalized team markers');
   if (personal) assert.equal(teamRows, undefined, 'personal refresh does not query a team map');
 }
-function poll(shared) {
-  let tick, resume, loads = 0, intervals = 0;
-  const screenRef = { current: 'main' }, AppState = { currentState: 'active', addEventListener: (_, fn) => { resume = fn; return { remove() {} }; } };
-  const env = { user: { userId: 1 }, pollSharedWorkspace: shared, AppState, screenRef,
-    exitConfirmation: { current: { reset() {} } }, getLocalDateKey: () => '2026-10-30', setCalendarDayKey() {},
-    loadWorkspaceLocations: () => loads++, setInterval: fn => { intervals++; tick = fn; return 1; }, clearInterval() {} };
-  const cleanup = compile(polling, env)();
-  assert.equal(intervals, shared ? 1 : 0, 'personal workspaces have no periodic server reads');
-  screenRef.current = 'settings'; tick?.(); resume('active'); assert.equal(loads, 0, 'settings and inquiries do not refresh hidden map data');
-  screenRef.current = 'mapDirect'; tick?.(); assert.equal(loads, shared ? 1 : 0);
-  AppState.currentState = 'background'; tick?.(); assert.equal(loads, shared ? 1 : 0, 'no background polling');
-  cleanup();
+function liveNotifications() {
+ assert.equal(polling,undefined,'visit polling effect is removed for personal and team workspaces');
+ assert.ok(source.includes("liveSync.subscribe(event =>"));
+ assert.ok(source.includes("['tasks', 'groups', 'resync']"));
+ assert.ok(source.includes('liveSync.pause()')&&source.includes('liveSync.resume()'));
 }
-(async () => { await refresh(false); await refresh(true); await refresh(false, true); poll(false); poll(true);
-  console.log('Workspace refresh checks passed: shared request reused, failed request not duplicated, personal/hidden/background polling suppressed.');
+(async () => { await refresh(false); await refresh(true); await refresh(false, true); liveNotifications();
+  console.log('Workspace refresh checks passed: shared request reused, failed request not duplicated, change notifications and reconnect reconciliation replace periodic polling.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

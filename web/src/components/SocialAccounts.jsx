@@ -1,9 +1,11 @@
+import useLiveRevision from './useLiveRevision.js';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 export default function SocialAccounts({
   mode = 'link',
   onVerified
 }) {
+  const liveRevision=useLiveRevision(['account']);
   const [providers, setProviders] = useState({}),
     [linked, setLinked] = useState([]),
     [busy, setBusy] = useState(false),
@@ -23,7 +25,7 @@ export default function SocialAccounts({
     return () => {
       active = false;
     };
-  }, [reload]);
+  }, [reload,liveRevision]);
   useEffect(() => () => controller.current?.abort(), []);
   async function start(provider) {
     const popup = window.open('about:blank', 'pinwork-social', 'width=520,height=720');

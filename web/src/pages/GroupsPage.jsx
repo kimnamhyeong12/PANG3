@@ -1,3 +1,4 @@
+import useLiveRevision from '../components/useLiveRevision.js';
 import { useNavigate } from 'react-router-dom';
 import IdentityDialog from '../components/IdentityDialog.jsx';
 import { useEffect, useState } from 'react';
@@ -11,6 +12,7 @@ import WorkRegionFields from '../components/WorkRegionFields.jsx';
 import { serializeWorkRegion, isWorkRegionComplete } from '../lib/workRegion.js';
 export const personalGroup = g => Boolean(g?.personal || g?.personalWorkspace || g?.workspaceType === 'PERSONAL');
 export default function GroupsPage() {
+  const liveRevision = useLiveRevision(['groups']);
   const navigate=useNavigate();
   const {
     user
@@ -52,7 +54,7 @@ export default function GroupsPage() {
     return () => {
       active = false;
     };
-  }, [user.userId]);
+  }, [user.userId, liveRevision]);
   const run = async fn => {
     setBusy(true);
     setError('');
@@ -67,6 +69,12 @@ export default function GroupsPage() {
   const open = async group => run(async () => setSelected(await api.get(`/api/groups/${group.groupId}`, {
     userId: user.userId
   })));
+  useEffect(() => {
+    if (!selected || !liveRevision) return;
+    let active = true;
+    api.get(`/api/groups/${selected.groupId}`, { userId: user.userId }).then(g => { if (active) setSelected(g); }).catch(e => { if (active) { setError(e.message); setSelected(null); } });
+    return () => { active = false; };
+  }, [liveRevision, selected?.groupId, user.userId]);
   const listHeading = <div className="panel-header groups-list-heading"><h2 className="panel-title">{tab === 'invitations' ? '초대 목록' : '그룹 목록'}</h2><div className="action-row"><button className="btn-primary btn-inline" onClick={() => setCreating(true)}>그룹 만들기</button><button className="btn-secondary" onClick={() => setTab(tab === 'invitations' ? 'groups' : 'invitations')}>{tab === 'invitations' ? '그룹 목록' : '초대 목록'}{invites.length > 0 && <span className="tab-badge">{invites.length}</span>}</button></div></div>;
   return <div className="groups-workspace">{error && <p role="alert" className="form-error">{error}</p>}{!selected && <>
     {notice && <p role="status" className="form-success">{notice}</p>}

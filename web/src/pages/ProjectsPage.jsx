@@ -1,3 +1,4 @@
+import useLiveRevision from '../components/useLiveRevision.js';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -86,6 +87,7 @@ export function projectPeriod(project) {
 }
 
 export default function ProjectsPage() {
+  const liveRevision = useLiveRevision(['projects']);
   const { user } = useAuth();
   const { groupId, currentGroup } = useGroup();
   const navigate = useNavigate();
@@ -116,7 +118,7 @@ export default function ProjectsPage() {
     return () => {
       cancelled = true;
     };
-  }, [groupId, user.userId, personal]);
+  }, [groupId, user.userId, personal, liveRevision]);
 
   useEffect(() => load(), [load]);
 

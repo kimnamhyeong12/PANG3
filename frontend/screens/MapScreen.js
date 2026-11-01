@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { showAlert } from '../components/CustomAlert';
 import { colors, workStatus } from '../constants/design';
@@ -166,6 +167,7 @@ function NormalMapScreen({
   onSearchVisibilityChange,
   renderGuidanceNavigation,
 }) {
+  const facilityRevision=useLiveRevision(['facilities']);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchInitialQuery, setSearchInitialQuery] = useState('');
   const [resultsMode, setResultsMode] = useState(false);
@@ -291,7 +293,7 @@ function NormalMapScreen({
     let active = true;
     fetch(`${API_BASE_URL}/api/public-data/categories`).then(response => response.ok ? response.json() : null).then(data => { if (active && Array.isArray(data) && data.length) setPublicCategories(data); }).catch(() => {});
     return () => { active = false; };
-  }, [publicFacilityMode, facilityApplicationOpen]);
+  }, [publicFacilityMode, facilityApplicationOpen, facilityRevision]);
   const [publicCategory, setPublicCategory] = useState('');
   const [publicItems, setPublicItems] = useState([]);
   const [publicSelectedIds, setPublicSelectedIds] = useState([]);
@@ -703,8 +705,6 @@ function NormalMapScreen({
       return undefined;
     }
     let cancelled = false;
-    setPublicItems([]);
-    setPublicSelectedIds([]);
     (async () => {
       try {
         setPublicLoading(true);
@@ -717,7 +717,7 @@ function NormalMapScreen({
         const text = await response.text();
         if (!response.ok) throw new Error(text || '공공시설물 조회 실패');
         const data = JSON.parse(text);
-        if (!cancelled) setPublicItems(Array.isArray(data?.items) ? data.items : []);
+        if (!cancelled) { const rows=Array.isArray(data?.items)?data.items:[];setPublicItems(rows);setPublicSelectedIds(old=>old.filter(id=>rows.some(row=>row.id===id))); }
       } catch (error) {
         if (!cancelled) {
           setPublicItems([]);
@@ -728,7 +728,7 @@ function NormalMapScreen({
       }
     })();
     return () => { cancelled = true; };
-  }, [publicFacilityMode, publicCategory, selectedDong, activeGroup?.regionSido, activeGroup?.regionSigungu, user?.workSido, user?.workSigungu]);
+  }, [publicFacilityMode, publicCategory, selectedDong, activeGroup?.regionSido, activeGroup?.regionSigungu, user?.workSido, user?.workSigungu, facilityRevision]);
 
   const allPublicSelected = publicItems.length > 0 && publicItems.every(item => publicSelectedIds.includes(item.id));
   const togglePublicFacility = (item) => {

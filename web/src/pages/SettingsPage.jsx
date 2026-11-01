@@ -1,3 +1,4 @@
+import useLiveRevision from '../components/useLiveRevision.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -36,6 +37,7 @@ function InviteLinkModal({ groupId, onClose }) {
 }
 
 export function MembersSection({ groupId, user, canManage = false, onLeave, onChanged }) {
+  const liveRevision = useLiveRevision(['groups']);
   const [members, setMembers] = useState([]), [loading, setLoading] = useState(true), [error, setError] = useState(''), [revision, setRevision] = useState(0);
   const [inviteOpen, setInviteOpen] = useState(false), [removing, setRemoving] = useState(null), [busy, setBusy] = useState(false), [removeError, setRemoveError] = useState(''), [notice, setNotice] = useState('');
   const removeLock = useRef(false);
@@ -43,26 +45,26 @@ export function MembersSection({ groupId, user, canManage = false, onLeave, onCh
     let active = true; setLoading(true); setError('');
     fetchGroupMembers(groupId, user.userId).then(rows => { if (active) setMembers(rows || []); }).catch(e => { if (active) setError(errorMessage(e, '팀원 목록을 불러오지 못했습니다.')); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [groupId, user.userId, revision]);
+  }, [groupId, user.userId, revision, liveRevision]);
   async function removeMember() {
     if (removeLock.current || !removing) return;
     removeLock.current = true; setBusy(true); setRemoveError('');
     try {
       await api.delete(`/api/groups/${groupId}/members/${removing.userId}`, { userId: user.userId });
-      setMembers(rows => rows.filter(m => m.userId !== removing.userId)); setNotice(`${removing.name}님을 그룹에서 탈퇴시켰습니다.`); setRemoving(null);
+      setMembers(rows => rows.filter(m => m.userId !== removing.userId)); setNotice(`${removing.name}님을 그룹에서 제외했습니다.`); setRemoving(null);
       await onChanged?.();
     } catch (e) { setRemoveError(errorMessage(e)); }
     finally { removeLock.current = false; setBusy(false); }
   }
   return <section className="panel group-members-panel" aria-label="팀원 관리">
-    <div className="panel-header"><h2 className="panel-title">팀원 관리 {!loading && !error && <span className="panel-count">{members.length}명</span>}</h2></div>
+    <div className="panel-header"><h2 className="panel-title">팀원 관리 {!loading && !error && <span className="panel-count">{members.length}명</span>}</h2><div className="group-members-actions"><button className="btn-primary btn-inline" disabled={busy} onClick={() => setInviteOpen(true)}>팀원 초대</button>{onLeave && <button className="btn-secondary" disabled={busy} onClick={onLeave}>그룹 탈퇴</button>}</div></div>
     <div className="group-members-scroll" tabIndex={0} aria-label="팀원 목록">
       {notice && <p role="status" className="form-success panel-notice">{notice}</p>}
-      {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} onRetry={() => setRevision(v => v + 1)} /> : !members.length ? <p className="table-empty">팀원이 없습니다.</p> : <ul className="group-member-list">{members.map(m => <li key={m.userId}><span><strong>{m.name}</strong>{Number(m.userId) === Number(user.userId) && <span className="badge badge-navy badge-inline">나</span>}</span>{canManage && Number(m.userId) !== Number(user.userId) && m.role !== 'LEADER' && <button className="btn-secondary" disabled={busy} aria-label={`${m.name} 강제 탈퇴`} onClick={() => { setRemoveError(''); setRemoving(m); }}>강제 탈퇴</button>}</li>)}</ul>}
+      {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} onRetry={() => setRevision(v => v + 1)} /> : !members.length ? <p className="table-empty">팀원이 없습니다.</p> : <ul className="group-member-list">{members.map(m => <li key={m.userId}><span><strong>{m.name}</strong>{Number(m.userId) === Number(user.userId) && <span className="badge badge-navy badge-inline">나</span>}</span>{canManage && Number(m.userId) !== Number(user.userId) && m.role !== 'LEADER' && <button className="btn-secondary" disabled={busy} aria-label={`${m.name} 팀원 제외`} onClick={() => { setRemoveError(''); setRemoving(m); }}>팀원 제외</button>}</li>)}</ul>}
     </div>
-    <div className="group-members-actions"><button className="btn-primary btn-inline" disabled={busy} onClick={() => setInviteOpen(true)}>팀원 초대</button>{onLeave && <button className="btn-secondary" disabled={busy} onClick={onLeave}>그룹 탈퇴</button>}</div>
+
     {inviteOpen && <InviteLinkModal groupId={groupId} onClose={() => setInviteOpen(false)} />}
-    {removing && <Modal title="팀원 강제 탈퇴" onClose={() => !busy && setRemoving(null)}><p>{removing.name}님을 그룹에서 강제 탈퇴시키겠습니까?</p>{removeError && <p role="alert" className="form-error">{removeError}</p>}<div className="action-row"><button className="btn-secondary" disabled={busy} onClick={() => setRemoving(null)}>취소</button><button className="btn-primary btn-inline" disabled={busy} onClick={removeMember}>{busy ? '처리 중…' : '강제 탈퇴'}</button></div></Modal>}
+    {removing && <Modal title="팀원 제외" onClose={() => !busy && setRemoving(null)}><p>{removing.name}님을 그룹에서 제외하시겠습니까?</p>{removeError && <p role="alert" className="form-error">{removeError}</p>}<div className="action-row"><button className="btn-secondary" disabled={busy} onClick={() => setRemoving(null)}>취소</button><button className="btn-primary btn-inline" disabled={busy} onClick={removeMember}>{busy ? '처리 중…' : '팀원 제외'}</button></div></Modal>}
   </section>;
 }
 
@@ -77,9 +79,13 @@ export function RegionSection({ groupId, group, user, onSaved }) {
   const [saveError, setSaveError] = useState(null);
   const [saved, setSaved] = useState(null);
 
-  // 그룹이 바뀌면 현재 값으로 초기화
+  const regionBase=useRef({groupId,sido:initialSido?.code||'',sigungu:group?.regionAdmCode??''});
+  // 다른 기기에서 설정이 바뀌어도 편집 중인 선택은 유지한다.
   useEffect(() => {
+    const old=regionBase.current;
     const sido = SIDO_LIST.find((s) => s.name === group?.regionSido);
+    regionBase.current={groupId,sido:sido?.code||'',sigungu:group?.regionAdmCode??''};
+    if(old.groupId===groupId&&(sidoCode!==old.sido||sigunguCode!==old.sigungu)){setSaveError('다른 기기에서 활동 지역이 변경되었습니다. 현재 선택은 유지됩니다.');return;}
     setSidoCode(sido?.code || '');
     setSigunguCode(group?.regionAdmCode ?? '');
     setSaveError(null);
@@ -210,7 +216,7 @@ export function RegionSection({ groupId, group, user, onSaved }) {
         </div>
         {listError && <ErrorBlock message={listError} onRetry={loadSigungu} />}
         <p className="field-hint">
-          활동 지역을 정하면 지도에서 해당 지역의 행정동 경계를 확인하고, 버스정류장·AED 같은 공공시설물을 지역별로 좁혀 볼 수 있습니다. 필요한 시설을 더 쉽게 찾을 수 있도록 조회 범위를 정하는 설정입니다.
+          활동 지역을 정하면 지도에서 해당 지역의 행정동 경계를 확인하고, 공공시설물을 지역별로 볼 수 있습니다.
         </p>
       </div>
     </section>

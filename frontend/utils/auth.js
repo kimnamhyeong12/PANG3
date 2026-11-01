@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { fetch as expoFetch } from 'expo/fetch';
+import { createChangeSync } from './changeSync';
 import { createSessionClient } from './sessionClient';
 import { File, Paths, Directory } from 'expo-file-system';
 
@@ -14,7 +15,22 @@ export const session = createSessionClient({
   },
   onExpired: () => listeners.forEach((listener) => listener()),
 });
-export const apiFetch = (url, options) => session.fetch(url, options);
+export const liveSync = createChangeSync({ request: (path, options) => session.fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL || ''}${path}`, options) });
+export const apiFetch = async (url, options = {}) => {
+  const pathname = new URL(String(url)).pathname;
+  const reading = (!options.method || options.method === 'GET') && pathname.startsWith('/api/');
+  let response;
+  try { response = await session.fetch(url, options); }
+  catch (error) { if (reading && error.name !== 'AbortError') liveSync.recover(); throw error; }
+  if (reading && response.status >= 500) liveSync.recover();
+  if (response.ok && ['POST', 'PATCH', 'PUT', 'DELETE'].includes(options.method)) {
+    if (pathname.startsWith('/api/locations') || pathname.startsWith('/api/task-progress')) {
+      const data = await response.clone().json().catch(() => null);
+      liveSync.noteMutation(options.method, pathname, data);
+    }
+  }
+  return response;
+};
 export const subscribeAuthExpired = (listener) => { listeners.add(listener); return () => listeners.delete(listener); };
 export async function protectedImageSource(uri) {
   const base = process.env.EXPO_PUBLIC_API_BASE_URL;

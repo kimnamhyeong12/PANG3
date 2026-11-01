@@ -1,3 +1,4 @@
+import useLiveRevision from '../components/useLiveRevision.js';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -15,6 +16,7 @@ export default function VisitReportPage() {
   const [task, setTask] = useState(null), [title, setTitle] = useState(''), [body, setBody] = useState('');
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
+  const liveRevision=useLiveRevision(['reports','tasks'],{dirty:loading||busy||Boolean(task&&(body||title!==(task.detailAddress||task.roadAddress||'현장 보고서'))),onConflict:()=>setError('다른 기기에서 업무가 변경되었습니다. 작성 중인 내용은 유지됩니다.')});
   const lock = useRef(false);
   useEffect(() => {
     let active = true; setLoading(true); setError(''); setTask(null);
@@ -26,7 +28,7 @@ export default function VisitReportPage() {
       setTask(visit); setTitle(visit.detailAddress || visit.roadAddress || '현장 보고서'); setBody('');
     }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [taskId, groupId, user.userId, retry, navigate]);
+  }, [taskId, groupId, user.userId, retry, navigate,liveRevision]);
   async function save(e) {
     e.preventDefault(); if (lock.current || !task) return;
     lock.current = true; setBusy(true); setError('');

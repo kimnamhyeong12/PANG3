@@ -1,6 +1,7 @@
+import useLiveRevision from '../components/useLiveRevision.js';
 import FilePicker from '../components/FilePicker.jsx';
 import IdentityDialog from '../components/IdentityDialog.jsx';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
@@ -12,6 +13,7 @@ import SocialAccounts from '../components/SocialAccounts.jsx';
 import NotificationSettings from '../components/NotificationSettings.jsx';
 import { EmailEnrollment } from './AccountRecoveryPage.jsx';
 export function SupportPanel() {
+  const liveRevision = useLiveRevision(['support']);
   const [params, setParams] = useSearchParams();
   const [tab, setTab] = useState(params.has('inquiry') ? 'mine' : 'write'),
     [rows, setRows] = useState([]),
@@ -36,7 +38,7 @@ export function SupportPanel() {
     return () => {
       active = false;
     };
-  }, [tab, page, version]);
+  }, [tab, page, version, liveRevision]);
   useEffect(() => {
     let active = true;
     const id = params.get('inquiry');
@@ -52,7 +54,7 @@ export function SupportPanel() {
     return () => {
       active = false;
     };
-  }, [params]);
+  }, [params, liveRevision]);
   return <><div className="tabs"><button className={`tab${tab === 'write' ? ' active' : ''}`} onClick={() => setTab('write')}>문의 작성</button><button className={`tab${tab === 'mine' ? ' active' : ''}`} onClick={() => setTab('mine')}>내 문의</button></div>{error && <p role="alert" className="form-error">{error}</p>}{tab === 'write' ? <form className="settings-form" onSubmit={async e => {
       e.preventDefault();
       setBusy(true);
@@ -128,6 +130,15 @@ export default function AccountSettingsPage() {
     [picking, setPicking] = useState(false),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState('');
+  const profileBase=useRef(user);
+  useEffect(()=>{
+    const old=profileBase.current; profileBase.current=user;
+    if(JSON.stringify(old)===JSON.stringify(user))return;
+    if(name===(user.name||'')&&region.sido===parseWorkRegion(user.workSido,user.workSigungu).sido&&serializeWorkRegion(region)===serializeWorkRegion(parseWorkRegion(user.workSido,user.workSigungu))&&['workplaceAddress','workplaceLat','workplaceLng'].every(k=>(workplace[k]??'')===(user[k]??'')))return;
+    const clean=name===(old.name||'')&&region.sido===parseWorkRegion(old.workSido,old.workSigungu).sido&&serializeWorkRegion(region)===serializeWorkRegion(parseWorkRegion(old.workSido,old.workSigungu))&&['workplaceAddress','workplaceLat','workplaceLng'].every(k=>(workplace[k]??'')===(old[k]??''))&&!password&&!confirm;
+    if(clean){setName(user.name||'');setRegion(parseWorkRegion(user.workSido,user.workSigungu));setWorkplace({workplaceAddress:user.workplaceAddress||'',workplaceLat:user.workplaceLat,workplaceLng:user.workplaceLng});}
+    else setMessage('다른 기기에서 계정 정보가 변경되었습니다. 작성 중인 내용은 유지됩니다.');
+  },[user]);
   const save = async e => {
     e.preventDefault();
     setBusy(true);
@@ -154,7 +165,7 @@ export default function AccountSettingsPage() {
   };
   return <><div className="settings-workspace"><nav className="settings-menu">{[['account', '내 계정'], ['notifications', '알림'], ['support', '고객센터'], ['info', '공지사항']].map(([key, label]) => <button key={key} className={`btn-secondary${tab === key ? ' selected' : ''}`} onClick={() => setParams({
           tab: key
-        })}>{label}</button>)}</nav><section className="panel padded">{tab === 'account' ? <><h2>내 계정</h2><p>{user.loginId}</p><form className="settings-form" onSubmit={save}><label>이름<input className="input" value={name} onChange={e => setName(e.target.value)} required maxLength={50} /></label><WorkRegionFields value={region} onChange={setRegion} /><label>근무지 주소<div className="action-row"><span>{workplace.workplaceAddress || '주소를 검색해 근무지를 등록하세요.'}</span><button type="button" className="btn-secondary" onClick={() => setPicking(true)}>주소 검색·변경</button>{workplace.workplaceLat != null && <button type="button" className="btn-secondary" onClick={() => setWorkplace({ workplaceAddress: null, workplaceLat: null, workplaceLng: null })}>근무지 삭제</button>}</div><span className="field-hint">복귀 안내에 사용할 위치입니다.</span></label><label>새 비밀번호<input className="input" type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} minLength={8} /></label><label>새 비밀번호 확인<input className="input" type="password" autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} /></label><label>현재 비밀번호<input className="input" type="password" autoComplete="current-password" value={credential} onChange={e => setCredential(e.target.value)} required={!credential.startsWith('social:')} /></label><SocialAccounts mode="verify" onVerified={setCredential} /><button className="btn-primary btn-inline" disabled={busy || password !== confirm || !isOptionalWorkRegionValid(region)}>변경사항 저장</button></form><section className="account-security-section"><h3>간편 로그인</h3><SocialAccounts /></section><EmailEnrollment compact initialEmail={user.email || ''} /><button className="btn-secondary section-gap" disabled={busy} onClick={() => setDeleting(true)}>계정 탈퇴</button></> : tab === 'support' ? <SupportPanel /> : tab === 'notifications' ? <NotificationSettings /> : <><h2>공지사항</h2><p className="table-empty">등록된 공지사항이 없습니다.</p></>}{message && <p role="status">{message}</p>}</section></div>{deleting && <IdentityDialog title="계정 탈퇴" onClose={() => setDeleting(false)} busy={busy} onConfirm={async password => {
+        })}>{label}</button>)}</nav><section className="panel padded">{tab === 'account' ? <><h2>내 계정</h2><p>{user.loginId}</p><form className="settings-form" onSubmit={save}><label>이름<input className="input" value={name} onChange={e => setName(e.target.value)} required maxLength={50} /></label><WorkRegionFields value={region} onChange={setRegion} /><label>근무지 주소<div className="action-row"><span>{workplace.workplaceAddress || '주소를 검색해 근무지를 등록하세요.'}</span><button type="button" className="btn-secondary" onClick={() => setPicking(true)}>주소 검색·변경</button>{workplace.workplaceLat != null && <button type="button" className="btn-secondary" onClick={() => setWorkplace({ workplaceAddress: null, workplaceLat: null, workplaceLng: null })}>근무지 삭제</button>}</div><span className="field-hint">복귀 안내에 사용할 위치입니다.</span></label><label>현재 비밀번호<input className="input" type="password" autoComplete="current-password" value={credential} onChange={e => setCredential(e.target.value)} required={!credential.startsWith('social:')} /></label><SocialAccounts mode="verify" onVerified={setCredential} /><label>새 비밀번호<input className="input" type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} minLength={8} /></label><label>새 비밀번호 확인<input className="input" type="password" autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} /></label><button className="btn-primary btn-inline" disabled={busy || password !== confirm || !isOptionalWorkRegionValid(region)}>변경사항 저장</button></form><section className="account-security-section"><h3>간편 로그인</h3><SocialAccounts /></section><EmailEnrollment compact initialEmail={user.email || ''} /><button className="btn-secondary section-gap" disabled={busy} onClick={() => setDeleting(true)}>계정 탈퇴</button></> : tab === 'support' ? <SupportPanel /> : tab === 'notifications' ? <NotificationSettings /> : <><h2>공지사항</h2><p className="table-empty">등록된 공지사항이 없습니다.</p></>}{message && <p role="status">{message}</p>}</section></div>{deleting && <IdentityDialog title="계정 탈퇴" onClose={() => setDeleting(false)} busy={busy} onConfirm={async password => {
       setBusy(true);
       try {
         await api.delete('/api/auth/account', {

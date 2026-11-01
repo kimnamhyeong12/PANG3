@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -96,6 +97,7 @@ kakao.maps.load(function(){
 </script></body></html>`;
 
 export default function WorkStatusScreen({ user, group, assignments = [], onBack, onRefresh, embedded = false, showDashboard = false }) {
+  const liveRevision = useLiveRevision(['groups']);
   const [loadingBoundary, setLoadingBoundary] = useState(true);
   const [boundaryError, setBoundaryError] = useState('');
   const [boundaries, setBoundaries] = useState({ type: 'FeatureCollection', features: [] });
@@ -176,7 +178,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
       .then((rows) => { if (active) setGroupMembers(Array.isArray(rows) ? rows : []); })
       .catch(() => { if (active) setGroupMembers([]); });
     return () => { active = false; };
-  }, [group?.groupId, user?.userId]);
+  }, [group?.groupId, user?.userId, liveRevision]);
 
   useEffect(() => {
     let cancelled = false;

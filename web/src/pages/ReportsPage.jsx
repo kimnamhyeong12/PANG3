@@ -1,3 +1,4 @@
+import useLiveRevision from '../components/useLiveRevision.js';
 import { fetchProjects, linkReportsToProject } from '../api/projects.js';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -86,6 +87,7 @@ function ReportCard({ report, downloading, onDownload }) {
 }
 
 export default function ReportsPage() {
+  const liveRevision = useLiveRevision(['reports', 'projects']);
   const { user } = useAuth();
   const { groupId } = useGroup();
   const [reports, setReports] = useState([]);
@@ -119,7 +121,7 @@ export default function ReportsPage() {
     return () => {
       cancelled = true;
     };
-  }, [groupId, user.userId, reloadKey]);
+  }, [groupId, user.userId, reloadKey, liveRevision]);
 
   // 그룹이 바뀌면 이전 그룹 기준 필터(담당자 등)를 비운다
   useEffect(() => {

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { liveSync } from '../lib/liveSync.js';
 import { webSession } from '../api/session.js';
 
 const STORAGE_KEY = 'pang3.user';
@@ -21,6 +22,20 @@ export function AuthProvider({ children }) {
     restore();
     return () => window.removeEventListener('pang3:session-expired', expired);
   }, [restore]);
+
+  useEffect(() => {
+    if (!user?.userId) return;
+    const off = liveSync.subscribe(event => {
+      if (!(event.topics || []).some(t => t === 'account' || t === 'resync')) return;
+      if (!event.topics.includes('resync') && event.userIds?.length && !event.userIds.includes(user.userId)) return;
+      webSession.fetch(new URL('/api/sync/me', import.meta.env.VITE_API_BASE_URL || window.location.origin)).then(r => {
+        if (!r.ok) throw Error('profile'); return r.json();
+      }).then(profile => setUser(previous => previous?.userId === profile.userId && JSON.stringify(previous) !== JSON.stringify(profile) ? profile : previous)).catch(() => liveSync.recover());
+    });
+    const changed = () => document.visibilityState === 'hidden' ? liveSync.pause() : liveSync.resume();
+    liveSync.start(); changed(); document.addEventListener('visibilitychange', changed);
+    return () => { off(); document.removeEventListener('visibilitychange', changed); liveSync.stop(); };
+  }, [user?.userId]);
 
   // POST /api/auth/login → { userId, loginId, name, role, workSido, workSigungu, message }
   const login = useCallback(async (loginId, password) => {

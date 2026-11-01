@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import { colors } from '../constants/design';
 import { apiFetch as fetch } from '../utils/auth';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -72,6 +73,7 @@ export default function AssignmentScreen({
   onBack,
   onChanged,
 }) {
+  const liveRevision=useLiveRevision(['groups','tasks']);
   const [members, setMembers] = useState([]);
   const [locations, setLocations] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -211,6 +213,7 @@ export default function AssignmentScreen({
   }, [
     group?.groupId,
     user?.userId,
+    liveRevision,
   ]);
 
   useEffect(() => {

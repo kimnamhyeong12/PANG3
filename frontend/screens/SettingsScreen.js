@@ -1,3 +1,4 @@
+import useLiveRevision from '../utils/useLiveRevision';
 import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Linking, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,11 +19,12 @@ import { checkNotificationPermission, requestNotificationPermission, getTaskNoti
 export { REGIONS, DISTRICTS_BY_REGION } from '../utils/workRegion';
 
 export default function SettingsScreen({ user, onBack, onUpdatedUser, onLogout, onDeleteAccount }) {
+  const liveRevision = useLiveRevision(['preferences']);
   const [supportSending, setSupportSending] = useState(false);
   const [gate, setGate] = useState(false), [password, setPassword] = useState(''), [credential, setCredential] = useState('');
   const [busy, setBusy] = useState(false), [detail, setDetail] = useState(null), [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState(''), [enabled, setEnabled] = useState(null), [notificationBusy, setNotificationBusy] = useState(true);
-  useEffect(() => { let active = true; setEnabled(null); setNotificationBusy(true); Promise.all([getTaskNotificationPreference(user.userId), checkNotificationPermission()]).then(([preferred, granted]) => { if (active) setEnabled(preferred && granted); }).catch(() => { if (active) setEnabled(false); }).finally(() => { if (active) setNotificationBusy(false); }); return () => { active = false; }; }, [user.userId]);
+  useEffect(() => { let active = true; setEnabled(null); setNotificationBusy(true); Promise.all([getTaskNotificationPreference(user.userId), checkNotificationPermission()]).then(([preferred, granted]) => { if (active) setEnabled(preferred && granted); }).catch(() => { if (active) setEnabled(false); }).finally(() => { if (active) setNotificationBusy(false); }); return () => { active = false; }; }, [user.userId, liveRevision]);
   useScreenBackHandler(() => { if (!credential) return false; setCredential(''); return true; }, !!credential);
   const verify = async () => {
     if (busy || !password) return; setBusy(true);

@@ -11,6 +11,7 @@ const react = {
 };
 const jsx=(type,props)=>({type,props:props||{}});
 const dependencies = {
+  '../utils/useLiveRevision':()=>0,
   react, 'react/jsx-runtime': {jsx,jsxs:jsx},
   'react-native': {useWindowDimensions:()=>({width:390,height:844}),ActivityIndicator:'Spinner',Modal:'Modal',Pressable:'Pressable',ScrollView:'ScrollView',Text:'Text',TouchableOpacity:'Button',View:'View',StyleSheet:{create:v=>v}},
   '@expo/vector-icons':{Ionicons:'Icon'},

@@ -1,3 +1,4 @@
+import useLiveRevision from '../components/useLiveRevision.js';
 import ProjectPlacesPanel from '../components/ProjectPlacesPanel.jsx';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -328,6 +329,7 @@ export function ItemFilters({ options, filters, setFilter, mine, onToggleMine })
 }
 
 function TaskLinkPanel({ projectId, groupId, userId, onChanged }) {
+  const liveRevision=useLiveRevision(['projects','tasks']);
   const [groupTasks, setGroupTasks] = useState([]);
   const [linked, setLinked] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -355,7 +357,7 @@ function TaskLinkPanel({ projectId, groupId, userId, onChanged }) {
     return () => {
       cancelled = true;
     };
-  }, [projectId, groupId, userId, retry]);
+  }, [projectId, groupId, userId, retry,liveRevision]);
 
   const linkedIds = useMemo(() => new Set(linked.map((t) => t.taskId)), [linked]);
 
@@ -627,6 +629,7 @@ function TaskLinkPanel({ projectId, groupId, userId, onChanged }) {
 }
 
 export default function ProjectsDetailPage() {
+  const liveRevision=useLiveRevision(['projects','reports','tasks']);
   const { projectId } = useParams();
   const { user } = useAuth();
   const { groupId } = useGroup();
@@ -643,7 +646,7 @@ export default function ProjectsDetailPage() {
       .then(setProject)
       .catch((e) => setError(errorMessage(e, '프로젝트를 불러오지 못했습니다.')))
       .finally(() => setLoading(false));
-  }, [projectId, user.userId]);
+  }, [projectId, user.userId, liveRevision]);
 
   useEffect(() => {
     load();
@@ -692,8 +695,8 @@ export default function ProjectsDetailPage() {
       </div>
 
       <ProjectPlacesPanel projectId={projectId} userId={user.userId} onChanged={onTasksChanged} />
-      <ReportsPanel projectId={projectId} userId={user.userId} isLeader={isLeader} reloadKey={reloadKey} />
-      <ItemsPanel projectId={projectId} userId={user.userId} isLeader={isLeader} reloadKey={reloadKey} />
+      <ReportsPanel projectId={projectId} userId={user.userId} isLeader={isLeader} reloadKey={`${reloadKey}:${liveRevision}`} />
+      <ItemsPanel projectId={projectId} userId={user.userId} isLeader={isLeader} reloadKey={`${reloadKey}:${liveRevision}`} />
       {isLeader && sameGroup && (
         <TaskLinkPanel projectId={projectId} groupId={groupId} userId={user.userId} onChanged={onTasksChanged} />
       )}

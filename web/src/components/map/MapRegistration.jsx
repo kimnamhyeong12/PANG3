@@ -1,3 +1,4 @@
+import useLiveRevision from '../useLiveRevision.js';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import { fetchProjects } from '../../api/projects.js';
@@ -11,12 +12,13 @@ import ProjectPicker from './ProjectPicker.jsx';
 import PlacePicker from '../PlacePicker.jsx';
 const titles = { manual: '방문지 추가', project: '프로젝트', excel: '엑셀 등록', photo: '사진으로 등록', workplace: '근무지 등록' };
 export default function MapRegistration({ method, point, groupId, user, personal, onClose, onSaved, onShowPlaces, onUpdatedUser }) {
+  const liveRevision=useLiveRevision(['projects']);
   const [projects, setProjects] = useState([]), [project, setProject] = useState(null);
   const [name, setName] = useState(point?.label ?? point?.address ?? ''), [task, setTask] = useState('');
   const [coords, setCoords] = useState(point || null), [picker, setPicker] = useState(false), [projectPicker, setProjectPicker] = useState(false), [taskPicker, setTaskPicker] = useState(false);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const lock = useRef(false);
-  useEffect(() => { if (method !== 'project' || personal) return; let active = true; fetchProjects(groupId, user.userId).then(p => { if (active) setProjects(p); }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, [method, personal, groupId, user.userId]);
+  useEffect(() => { if (method !== 'project' || personal) return; let active = true; fetchProjects(groupId, user.userId).then(p => { if (active) setProjects(p); }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, [method, personal, groupId, user.userId,liveRevision]);
   const close = () => { if (!lock.current && !busy) onClose(); };
   async function submit(e) {
     e.preventDefault(); if (lock.current || !coords) return;

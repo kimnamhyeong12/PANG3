@@ -22,6 +22,9 @@ public class AuthSessionService {
     private final long accessSeconds;
     private final long refreshSeconds;
     private final SecureRandom random = new SecureRandom();
+    private com.fieldwork.sync.ChangeHub changes;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    public void setChanges(com.fieldwork.sync.ChangeHub changes) { this.changes = changes; }
 
     public AuthSessionService(AuthSessionRepository sessions, UserRepository users,
             @Value("${fieldwork.auth.access-seconds:900}") long accessSeconds,
@@ -88,6 +91,12 @@ public class AuthSessionService {
         return session != null && active(session, now) && session.accessExpiresAt.isAfter(now)
                 ? session.user.getUserId() : null;
     }
+    @Transactional(readOnly = true)
+    public Instant streamExpiresAt(String accessToken) {
+        AuthSession session = sessions.findByAccessHash(hashChecked(accessToken)).orElseThrow(AuthSessionService::unauthorized);
+        if (!active(session, Instant.now())) throw unauthorized();
+        return session.refreshExpiresAt;
+    }
     static boolean active(AuthSession session, Instant now) {
         return !session.revoked && session.refreshExpiresAt.isAfter(now) && !"DELETED".equals(session.user.getRole());
     }
@@ -97,7 +106,10 @@ public class AuthSessionService {
         sessions.findRefreshLocked(hash(token)).ifPresent(session -> session.revoked = true);
     }
     @Transactional
-    public void revokeAll(Long userId) { sessions.revokeAll(userId); }
+    public void revokeAll(Long userId) {
+        sessions.revokeAll(userId);
+        if (changes != null) { var event = new com.fieldwork.sync.ChangeBatch(); event.topics.add("session"); event.users.add(userId); changes.record(event); }
+    }
     @Transactional(readOnly = true)
     public List<Map<String, Object>> listActive(Long userId) {
         return sessions.findByUser_UserIdAndRevokedFalse(userId).stream().filter(s -> active(s, Instant.now()))
