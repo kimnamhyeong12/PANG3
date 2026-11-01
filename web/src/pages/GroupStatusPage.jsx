@@ -7,7 +7,6 @@ import { fetchGroupMembers } from '../api/groups.js';
 import { fetchRegionBoundaries } from '../api/publicData.js';
 import { normalizeStatus, STATUS_LABEL } from '../utils/taskStatus.js';
 import { personalGroup } from './GroupsPage.jsx';
-import { groupDisplayName } from '../utils/groupDisplay.js';
 import { buildMemberColors } from '../../../frontend/utils/memberColors.js';
 import { isCurrentWork } from '../../../frontend/utils/completionDay.js';
 import MapCanvas from '../components/map/MapCanvas.jsx';
@@ -68,7 +67,7 @@ export default function GroupStatusPage() {
     working: 0,
     complete: 0
   });
-  return <section className="group-status-workspace"><div className="group-status-heading"><div><Link to="/groups">그룹 목록</Link><h1>{currentGroup ? groupDisplayName(currentGroup) : '그룹'} 업무현황</h1></div><button className="btn-secondary" disabled={loading} onClick={() => setReload(value => value + 1)}>새로고침</button></div>{error && <p className="form-error" role="alert">{error}</p>}
+  return <section className="group-status-workspace"><div className="group-status-heading"><div><Link to="/groups">그룹 목록</Link></div><button className="btn-secondary" disabled={loading} onClick={() => setReload(value => value + 1)}>새로고침</button></div>{error && <p className="form-error" role="alert">{error}</p>}
     <div className="group-status-summary">{[['전체', visible.length], ['작업 전', counts.pending], ['작업 중', counts.working], ['작업 후', counts.complete]].map(([label, count]) => <div key={label}><strong>{count}</strong><span>{label}</span></div>)}</div>
     <div className="group-status-layout"><aside className="panel group-status-list"><div className="panel-header"><h2 className="panel-title">{member ? members.find(row => String(row.userId) === member)?.name || '팀원' : '전체'} 방문지</h2><span>{visible.length}곳</span></div><div className="map-visit-scroll" tabIndex={0} aria-label="그룹 방문지 목록">{loading ? <p className="table-empty">불러오는 중…</p> : visible.length ? <ul className="map-task-list">{visible.map(task => <li key={task.taskId}><button className={`map-task-item${selected === task.taskId ? ' active' : ''}`} onClick={() => setSelected(task.taskId)}><span className="owner-dot" style={{
                   background: colors[task.assigneeUserId] || '#94A3B8'

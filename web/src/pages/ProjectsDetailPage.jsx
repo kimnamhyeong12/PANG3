@@ -672,15 +672,15 @@ export default function ProjectsDetailPage() {
   return (
     <>
       <Link to="/projects" className="pj-back">← 프로젝트 목록</Link>
-      <div className="page-head">
+      <div className="page-head project-detail-heading">
         <div>
-          <h1 className="page-title">
+          <h2 className="panel-title">
             {project.name}{' '}
             <span className={`pill pill-${project.status === 'ARCHIVED' ? 'gray' : 'green'}`}>
               {project.status === 'ARCHIVED' ? '보관' : '진행'}
             </span>
-          </h1>
-          <p className="page-desc">
+          </h2>
+          <p className="field-hint">
             {projectPeriod(project)} · 연결 업무 {project.taskCount ?? 0}건 · 완료 기록 {project.completedCount ?? 0}건
           </p>
         </div>

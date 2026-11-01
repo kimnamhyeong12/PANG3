@@ -1,16 +1,13 @@
-import { groupDisplayName } from '../utils/groupDisplay.js';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useGroup } from '../context/GroupContext.jsx';
 import { fetchGroupTasks } from '../api/tasks.js';
 import { STATUS, normalizeStatus } from '../utils/taskStatus.js';
-import { formatDate, formatToday } from '../utils/format.js';
+import { formatDate } from '../utils/format.js';
 import StatusPill from '../components/StatusPill.jsx';
 import ErrorBlock from '../components/ErrorBlock.jsx';
 import { SkeletonLine, SkeletonTable } from '../components/Loading.jsx';
 import { errorMessage } from '../api/client.js';
-import { IconBell, IconMap, IconPlus, IconReport } from '../components/Icons.jsx';
 import LiveNotifications from '../components/RecentNotifications.jsx';
 
 function StatCard({ label, value, tone, loading }) {
@@ -31,13 +28,13 @@ function TaskTable({ tasks, loading, error, onRetry }) {
   else if (tasks.length === 0) body = <div className="table-empty">등록된 업무가 없습니다.</div>;
 
   return (
-    <section className="panel">
+    <section className="panel dashboard-task-panel" aria-label="업무 목록">
       <div className="panel-header">
         <h2 className="panel-title">업무 목록</h2>
         {!loading && !error && <span className="panel-count">{tasks.length}건</span>}
       </div>
       {body ?? (
-        <div className="table-scroll">
+        <div className="table-scroll" tabIndex={0} aria-label="업무 목록 스크롤">
           <table className="table">
             <thead>
               <tr>
@@ -72,7 +69,7 @@ function TaskTable({ tasks, loading, error, onRetry }) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { groupId, currentGroup } = useGroup();
+  const { groupId } = useGroup();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -111,15 +108,7 @@ export default function DashboardPage() {
   }, [tasks]);
 
   return (
-    <>
-      <h1 className="page-title">대시보드</h1>
-            <p className="page-desc">
-        {formatToday()} ·{' '}
-        {currentGroup?.personal
-          ? '내 개인 업무 현황입니다.'
-          : `${currentGroup ? groupDisplayName(currentGroup) : ''} 팀의 업무 현황입니다.`}
-      </p>
-
+    <div className="dashboard-workspace">
       <div className="stat-grid">
         <StatCard label="전체 방문지" value={error ? null : stats.total} tone="text" loading={loading} />
         <StatCard label="작업 중" value={error ? null : stats.working} tone="amber" loading={loading} />
@@ -133,6 +122,6 @@ export default function DashboardPage() {
           <LiveNotifications />
         </div>
       </div>
-    </>
+    </div>
   );
 }

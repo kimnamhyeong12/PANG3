@@ -143,9 +143,6 @@ export default function TransferPage() {
   return (
     <>
       <div className="page-head">
-        <div>
-          <h1 className="page-title">업무 이관</h1>
-        </div>
         <button type="button" className="btn-primary btn-inline" disabled={personal} onClick={() => setModalOpen(true)}>
           <IconPlus size={16} />새 이관 요청
         </button>

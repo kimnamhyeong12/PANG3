@@ -30,6 +30,7 @@ async function fixture(route) {
   if (p === '/api/groups/user/1') return json(groups);
   if (p.includes('/api/locations/group/')) return json(tasks);
   if (p.includes('/api/sgis/boundaries')) return json({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: { adm_cd: '21100510', adm_nm: '부산광역시 사하구 하단1동' }, geometry: { type: 'Polygon', coordinates: [[[128.96,35.10],[128.98,35.10],[128.98,35.12],[128.96,35.10]]] } }] });
+  if (/\/groups\/\d+\/transfers$/.test(p) && state.dashboard) return json(Array.from({ length: 16 }, (_, i) => ({ id: i, status: 'PENDING', senderName: '검증 담당자', requestedAt: day + 'T10:00:00' })));
   if (p === '/api/public-data/categories') { if (state.failCategories-- > 0) return json({ message: '종류 조회 실패' }, 503); return json(categories); }
   if (p === '/api/public-data') { state.publicQueries.push(Object.fromEntries(u.searchParams)); return json({ items: [{ id: -1, detailAddress: '검증 AED', roadAddress: '부산 사하구 하단동', lat: 35.106, lng: 128.966, sido: '부산광역시', sigungu: '사하구', adminDong: '하단1동', task: '점검' }] }); }
   if (p === '/api/facility-applications' && method === 'POST') {
@@ -73,22 +74,22 @@ async function fixture(route) {
   page.on('pageerror', e => errors.push(e.message)); const providerResponses = []; page.on('response', r => { const u = new URL(r.url()); if (/daumcdn|kakao/.test(u.hostname)) providerResponses.push({ host: u.hostname, path: u.pathname, status: r.status(), type: r.headers()['content-type'] }); });
   const ok = name => { checks.push(name); console.log('PASS ' + name); };
   const wait = async (fn, message) => { for (let i = 0; i < 80; i++) { if (await fn()) return; await new Promise(r => setTimeout(r, 100)); } throw Error(message); };
-  const menu = async label => { await page.getByRole('button', { name: '방문지 등록 메뉴 열기', exact: true }).click(); await page.getByRole('button', { name: label, exact: true }).click(); };
+  const menu = async label => { await page.getByRole('button', { name: label, exact: true }).click(); };
   const dialog = title => page.getByRole('dialog', { name: title, exact: true });
   const close = async title => { await dialog(title).getByRole('button', { name: '닫기', exact: true }).click(); };
   try {
-    await page.goto(process.env.MAP_QA_URL || 'http://127.0.0.1:5176/map'); await page.getByRole('button', { name: '방문지 등록 메뉴 열기', exact: true }).waitFor();
+    await page.goto(process.env.MAP_QA_URL || 'http://127.0.0.1:5176/map'); await page.locator('.app-map-sidebar').waitFor();
     if (process.env.MAP_QA_LIVE_PROVIDER === '1') {
       await page.waitForFunction(() => Boolean(window.kakao?.maps?.LatLng), undefined, { timeout: 20000 });
       await page.waitForTimeout(5000);
       const mapState = await page.evaluate(() => ({ sdkReady: Boolean(window.kakao?.maps?.LatLng), imageTiles: [...document.querySelectorAll('.map-container img')].map(i => ({ width: i.naturalWidth, loaded: i.complete, host: i.src.startsWith('http') ? new URL(i.src).hostname : 'inline' })), styles: [...document.querySelectorAll('.map-container div')].filter(e => e.style.backgroundImage && e.style.backgroundImage !== 'none').map(e => e.style.backgroundImage.replace(/\?.*/, '')) }));
       await page.screenshot({ path: path.join(output, '09-live-kakao-map.png'), fullPage: true });
       await fs.writeFile(path.join(output, 'live-provider.json'), JSON.stringify({ ...mapState, api: 'isolated local fixtures', providerResponses, errors }, null, 2)); assert(mapState.imageTiles.some(i => i.width >= 128), 'actual map tiles loaded'); assert.equal(errors.length, 0);
-      await page.getByRole('button', { name: /방문지 \d+개/ }).click(); await page.locator('.app-map-visit>button:first-child').filter({ hasText: '오늘 점검 방문지' }).click();
+      await page.locator('.app-map-visit>button:first-child').filter({ hasText: '오늘 점검 방문지' }).click();
       await page.getByLabel('예상 거리', { exact: true }).filter({ hasText: '1.4km' }).waitFor(); assert.equal(await page.getByLabel('예상 시간', { exact: true }).textContent(), '10분');
       await page.waitForTimeout(1000); await page.screenshot({ path: path.join(output, '16-route-preview-live-map.png'), fullPage: true }); await page.getByRole('button', { name: '방문지 선택 닫기' }).click();
       await menu('지도 선택'); await page.getByLabel('위도 직접 입력').fill('35.106'); await page.getByLabel('경도 직접 입력').fill('128.966');
-      const pin = await page.locator('.map-center-pin').boundingBox(), mapBox = await page.locator('.app-map-workspace>.map-canvas').boundingBox();
+      const pin = await page.locator('.map-center-pin').boundingBox(), mapBox = await page.locator('.app-map-layout>.map-canvas').boundingBox();
       assert(Math.abs(pin.x + pin.width / 2 - mapBox.x - mapBox.width / 2) < 2); assert(Math.abs(pin.y + pin.height - mapBox.y - mapBox.height / 2) < 2);
       await page.screenshot({ path: path.join(output, '10-live-map-selection.png'), fullPage: true });
       await page.getByRole('button', { name: '이 위치 선택', exact: true }).click(); await dialog('방문지 추가').getByLabel('방문지 이름').waitFor();
@@ -99,7 +100,7 @@ async function fixture(route) {
       await close('공공시설물 등록 신청'); await page.getByRole('button', { name: '공공시설물 조회 닫기' }).click();
       await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(1000); assert((await page.locator('.app-map-workspace').boundingBox()).width >= 360);
       await page.screenshot({ path: path.join(output, '13-live-map-mobile.png'), fullPage: true });
-      await page.getByRole('button', { name: /방문지 \d+개/ }).click(); await page.locator('.app-map-visit>button:first-child').filter({ hasText: '오늘 점검 방문지' }).click(); await page.getByLabel('예상 거리', { exact: true }).filter({ hasText: '1.4km' }).waitFor();
+      await page.locator('.app-map-visit>button:first-child').filter({ hasText: '오늘 점검 방문지' }).click(); await page.getByLabel('예상 거리', { exact: true }).filter({ hasText: '1.4km' }).waitFor();
       await page.waitForTimeout(1000); await page.screenshot({ path: path.join(output, '17-route-preview-mobile.png'), fullPage: true });
       console.log('PASS actual Kakao SDK, map tiles, preview polyline with fixture route data, distance/time, selection marker anchor, address lookup, facility photo map and mobile viewport'); return;
     }
@@ -125,13 +126,13 @@ async function fixture(route) {
     await facility.getByLabel('시설물 이름', { exact: true }).fill('두 번째 신청'); await facility.getByRole('button', { name: '시설 종류 선택' }).click(); await facility.getByRole('radio', { name: '심폐제세동기' }).click(); await facility.locator('input[type=file]').setInputFiles(path.join(root, 'web/scripts/fixtures/gps.png')); await facility.getByText('촬영 위치 확인됨', { exact: true }).waitFor(); await facility.getByLabel('사진·촬영 위치정보 수집·이용 동의').check(); await facility.getByRole('button', { name: '등록 신청', exact: true }).click(); await facility.getByRole('button', { name: /두 번째 신청/ }).waitFor(); assert.notEqual(state.applicationPosts[2].requestKey, state.applicationPosts[1].requestKey); ok('새 신청 새 키·폼 초기화·GPS PNG');
     await close('공공시설물 등록 신청'); await page.getByRole('button', { name: '공공시설물 조회 지역 선택' }).click(); await page.getByRole('button', { name: '하단1동', exact: true }).click(); await page.getByRole('button', { name: '공공시설물 카테고리 선택' }).click(); await page.getByRole('button', { name: '심폐제세동기', exact: true }).click(); await page.getByText('검증 AED', { exact: true }).waitFor();
     assert.equal(state.publicQueries.at(-1).sido, '부산광역시'); assert.equal(state.publicQueries.at(-1).sigungu, '사하구'); assert.equal(state.publicQueries.at(-1).adminDong, '하단1동');
-    await page.getByRole('button', { name: '전체 선택', exact: true }).click(); await page.getByRole('button', { name: '1건 등록', exact: true }).click(); await dialog('방문지 등록 완료').getByRole('button', { name: '확인', exact: true }).click(); await page.getByRole('button', { name: '방문지 등록 메뉴 열기', exact: true }).waitFor(); assert.equal(state.locationPosts.at(-1).deferAssignment, true); ok('시설물 지역 전체 조건·선택 등록·팀 배정 유예');
+    await page.getByRole('button', { name: '전체 선택', exact: true }).click(); await page.getByRole('button', { name: '1건 등록', exact: true }).click(); await dialog('방문지 등록 완료').getByRole('button', { name: '확인', exact: true }).click(); await page.locator('.app-map-sidebar').waitFor(); assert.equal(state.locationPosts.at(-1).deferAssignment, true); ok('시설물 지역 전체 조건·선택 등록·팀 배정 유예');
     await menu('지도 선택'); await page.getByLabel('위도 직접 입력').fill('35.106'); await page.getByLabel('경도 직접 입력').fill('128.966'); await page.getByRole('button', { name: '이 위치 선택', exact: true }).click();
     const add = dialog('방문지 추가'); await add.getByLabel('방문지 이름', { exact: true }).waitFor(); assert.equal(await add.getByRole('textbox').count(), 1); assert.equal(await add.getByText(/선택 위치|주소 검색/).count(), 0);
     const projectBox = await add.getByRole('button', { name: '프로젝트 선택', exact: true }).boundingBox(), taskBox = await add.getByRole('button', { name: '업무유형 선택', exact: true }).boundingBox(); assert.equal(projectBox.y, taskBox.y); assert(projectBox.x < taskBox.x);
     await add.getByLabel('방문지 이름', { exact: true }).fill('지도 선택 검증'); await add.getByRole('button', { name: '프로젝트 선택', exact: true }).click(); await dialog('프로젝트 선택').getByRole('button', { name: '시설물 정기 점검' }).click(); await add.getByRole('button', { name: '업무유형 선택', exact: true }).click(); await dialog('업무유형').getByRole('button', { name: '점검', exact: true }).click();
-    await page.screenshot({ path: path.join(output, '04-visit-add.png'), fullPage: true }); await close('방문지 추가'); await page.getByRole('button', { name: '방문지 등록 메뉴 열기', exact: true }).click(); await page.getByRole('button', { name: '작성 이어하기', exact: true }).click(); assert.equal(await dialog('방문지 추가').getByLabel('방문지 이름', { exact: true }).inputValue(), '지도 선택 검증'); await dialog('방문지 추가').getByRole('button', { name: '방문지 추가', exact: true }).click(); await wait(() => state.locationPosts.some(p => p.detailAddress === '지도 선택 검증'), 'visit POST'); assert.equal(state.locationPosts.at(-1).projectId, 9); assert.equal(state.locationPosts.at(-1).scheduledDate, day); await dialog('방문지 등록 완료').getByRole('button', { name: '확인', exact: true }).click(); ok('지도 선택·추가 폼 한 줄 순서·초안 복원·프로젝트/업무유형 저장');
-    await page.getByRole('button', { name: /미처리 업무 \d+건/ }).click(); await page.getByLabel('지난 미처리 방문지').check(); await page.getByRole('button', { name: '1건 지도에 표시' }).click(); await page.getByRole('button', { name: /방문지 \d+개/ }).click(); await page.locator('.app-map-visit>button:first-child').filter({ hasText: '지난 미처리 방문지' }).waitFor(); state.failPreview = 1; await page.locator('.app-map-visit>button:first-child').filter({ hasText: '지난 미처리 방문지' }).click();
+    await page.screenshot({ path: path.join(output, '04-visit-add.png'), fullPage: true }); await close('방문지 추가'); await page.getByRole('button', { name: '작성 이어하기', exact: true }).click(); assert.equal(await dialog('방문지 추가').getByLabel('방문지 이름', { exact: true }).inputValue(), '지도 선택 검증'); await dialog('방문지 추가').getByRole('button', { name: '방문지 추가', exact: true }).click(); await wait(() => state.locationPosts.some(p => p.detailAddress === '지도 선택 검증'), 'visit POST'); assert.equal(state.locationPosts.at(-1).projectId, 9); assert.equal(state.locationPosts.at(-1).scheduledDate, day); await dialog('방문지 등록 완료').getByRole('button', { name: '확인', exact: true }).click(); ok('지도 선택·추가 폼 한 줄 순서·초안 복원·프로젝트/업무유형 저장');
+    await page.getByRole('button', { name: /미처리 업무 \d+건/ }).click(); await page.getByLabel('지난 미처리 방문지').check(); await page.getByRole('button', { name: '1건 지도에 표시' }).click(); await page.locator('.app-map-visit>button:first-child').filter({ hasText: '지난 미처리 방문지' }).waitFor(); state.failPreview = 1; await page.locator('.app-map-visit>button:first-child').filter({ hasText: '지난 미처리 방문지' }).click();
     await page.getByRole('alert').filter({ hasText: '검증 경로 오류' }).waitFor(); await page.getByRole('button', { name: '경로 다시 불러오기', exact: true }).click();
     await page.getByLabel('예상 거리', { exact: true }).filter({ hasText: '1.4km' }).waitFor(); assert.equal(await page.getByLabel('예상 시간', { exact: true }).textContent(), '10분');
     assert(await page.evaluate(() => window.qaMarkers.some(m => m.options.strokeWeight === 6 && m.map)), 'route polyline is displayed');
@@ -149,15 +150,52 @@ async function fixture(route) {
     await menu('사진 등록'); const photo = dialog('사진으로 등록'); await wait(() => photo.getByRole('button', { name: '사진 선택', exact: true }).isEnabled(), 'photo draft initialization'); await photo.locator('input[type=file]').setInputFiles([path.join(root, 'web/scripts/fixtures/gps.jpg'), path.join(root, 'web/scripts/fixtures/no-gps.jpg')]); await photo.getByText('위치정보 없음 · 등록 불가', { exact: true }).waitFor(); await photo.getByRole('button', { name: '방문지 1곳 등록' }).waitFor(); await close('사진으로 등록'); await menu('사진 등록'); await dialog('사진으로 등록').getByLabel('gps.jpg 방문지 이름').waitFor(); await dialog('사진으로 등록').getByLabel('gps.jpg 방문지 이름').fill('사진 복원 검증'); await dialog('사진으로 등록').getByRole('button', { name: '방문지 1곳 등록' }).click(); await dialog('방문지 1곳을 추가했어요').waitFor(); assert.equal(state.photoPosts.length, 1); await page.screenshot({ path: path.join(output, '06-photo-result.png'), fullPage: true }); await dialog('방문지 1곳을 추가했어요').getByRole('button', { name: '지도 보기' }).click(); ok('사진 원본 선택·GPS 없는 사진 제외·초안 복구·등록 결과');
     state.failPhoto = 1; await menu('사진 등록'); await wait(() => dialog('사진으로 등록').getByRole('button', { name: '사진 선택', exact: true }).isEnabled(), 'photo draft initialization'); await dialog('사진으로 등록').locator('input[type=file]').setInputFiles(path.join(root, 'web/scripts/fixtures/gps.png')); await dialog('사진으로 등록').getByRole('button', { name: '방문지 1곳 등록' }).click();
     await dialog('0곳 등록 · 확인이 필요해요').getByText('중복 등록을 피하려면 지도에서 저장 여부를 먼저 확인해 주세요.').waitFor(); const sentPhotos = state.photoPosts.length;
-    await page.reload(); await page.getByRole('button', { name: '방문지 등록 메뉴 열기', exact: true }).waitFor(); await menu('사진 등록'); await dialog('0곳 등록 · 확인이 필요해요').waitFor(); assert.equal(state.photoPosts.length, sentPhotos); await dialog('0곳 등록 · 확인이 필요해요').getByRole('button', { name: '지도 보기', exact: true }).click(); ok('사진 저장 여부 미확인·새로고침 복구·재전송 방지');
+    await page.reload(); await page.locator('.app-map-sidebar').waitFor(); await menu('사진 등록'); await dialog('0곳 등록 · 확인이 필요해요').waitFor(); assert.equal(state.photoPosts.length, sentPhotos); await dialog('0곳 등록 · 확인이 필요해요').getByRole('button', { name: '지도 보기', exact: true }).click(); ok('사진 저장 여부 미확인·새로고침 복구·재전송 방지');
     await page.getByRole('button', { name: '주소 또는 장소 검색', exact: true }).click(); const search = dialog('주소 또는 방문지 검색'); await search.getByLabel('주소 또는 방문지 검색', { exact: true }).fill('검증'); await search.getByRole('button', { name: '검증 방문지', exact: false }).first().waitFor(); await search.getByRole('button', { name: '지도에서 검색 결과 보기' }).click(); await page.getByText('검색 결과 1건', { exact: true }).waitFor(); await page.getByRole('button', { name: '검색 결과 닫기' }).click(); await page.getByRole('button', { name: '주소 또는 장소 검색', exact: true }).click(); await dialog('주소 또는 방문지 검색').getByRole('button', { name: '검증', exact: true }).waitFor(); await close('주소 또는 방문지 검색'); ok('자동 검색·지도 결과·최근 검색');
     await page.setViewportSize({ width: 390, height: 844 }); assert((await page.locator('.app-map-workspace').boundingBox()).width >= 360); await page.screenshot({ path: path.join(output, '07-map-mobile.png'), fullPage: true }); await menu('공공시설물'); await page.getByRole('button', { name: '공공시설물 카테고리 선택' }).click(); await page.getByRole('button', { name: '공공시설물 등록 신청', exact: true }).click(); await page.screenshot({ path: path.join(output, '08-facility-mobile.png'), fullPage: true });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false); ok('390px 모바일 지도 폭·가로 넘침 없음');
     await close('공공시설물 등록 신청'); await page.getByRole('button', { name: '공공시설물 조회 닫기' }).click(); await page.getByRole('button', { name: '메뉴', exact: true }).click(); await page.getByRole('button', { name: '메뉴 닫기', exact: true }).click({ position: { x: 350, y: 150 } });
-    await page.getByLabel('업무공간 선택', { exact: true }).selectOption('8'); await menu('프로젝트'); await dialog('프로젝트').getByText('팀 그룹을 선택하면 프로젝트를 사용할 수 있습니다.').waitFor(); await close('프로젝트'); assert.equal(await page.getByRole('button', { name: '작성 이어하기', exact: true }).count(), 0); ok('모바일 메뉴·개인 업무공간 프로젝트 안내·업무공간 전환 초기화');
+    await page.getByRole('button', { name: '업무공간 선택', exact: true }).click(); await page.locator('.group-switcher-menu').getByRole('button', { name: '내 개인 업무', exact: true }).click(); await menu('프로젝트'); await dialog('프로젝트').getByText('팀 그룹을 선택하면 프로젝트를 사용할 수 있습니다.').waitFor(); await close('프로젝트'); assert.equal(await page.getByRole('button', { name: '작성 이어하기', exact: true }).count(), 0); ok('모바일 메뉴·개인 업무공간 프로젝트 안내·업무공간 전환 초기화');
     const denied = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     await denied.addInitScript(mockMaps); await denied.addInitScript(() => { localStorage.setItem('pang3.groupId', '7'); navigator.permissions.query = async () => ({ state: 'denied' }); navigator.geolocation.watchPosition = () => { throw Error('PC GPS must not be required'); }; }); await denied.route('**/api/**', fixture);
-    const previewCallsBeforeDenied = state.routeSegments.length; const pc = await denied.newPage(); pc.on('pageerror', e => errors.push(e.message)); await pc.goto(process.env.MAP_QA_URL || 'http://127.0.0.1:5176/map'); await pc.getByRole('button', { name: /방문지 \d+개/ }).click(); await pc.locator('.app-map-visit>button:first-child').filter({ hasText: '오늘 점검 방문지' }).click(); await pc.getByRole('button', { name: '길안내 시작', exact: true }).click(); await pc.getByRole('dialog', { name: '휴대폰 앱 연동', exact: true }).getByText('휴대폰 앱을 켠 다음 안내받으세요.', { exact: true }).waitFor(); assert.equal(state.routeSegments.length, previewCallsBeforeDenied); await denied.close(); ok('PC 위치 권한 없이 휴대폰 연결 가능');
+    const previewCallsBeforeDenied = state.routeSegments.length; const pc = await denied.newPage(); pc.on('pageerror', e => errors.push(e.message)); await pc.goto(process.env.MAP_QA_URL || 'http://127.0.0.1:5176/map'); await pc.locator('.app-map-visit>button:first-child').filter({ hasText: '오늘 점검 방문지' }).click(); await pc.getByRole('button', { name: '길안내 시작', exact: true }).click(); await pc.getByRole('dialog', { name: '휴대폰 앱 연동', exact: true }).getByText('휴대폰 앱을 켠 다음 안내받으세요.', { exact: true }).waitFor(); assert.equal(state.routeSegments.length, previewCallsBeforeDenied); await denied.close(); ok('PC 위치 권한 없이 휴대폰 연결 가능');
+    state.dashboard = true;
+    tasks = Array.from({ length: 100 }, (_, i) => ({ ...tasks[0], taskId: 1000 + i, detailAddress: `방문지 ${i}`, assigneeName: '검증 담당자' }));
+    await page.setViewportSize({ width: 1360, height: 940 });
+    await page.goto(new URL('/map', page.url()).href);
+    await page.locator('.app-map-visit').nth(99).waitFor({ state: 'attached' });
+    assert.equal(await page.locator('.app-registration-fab,.app-map-top').count(), 0);
+    assert.equal(await page.getByLabel('업무공간 선택', { exact: true }).count(), 1);
+    for (const label of ['지도 선택','공공시설물','프로젝트','엑셀 등록','사진 등록','근무지']) assert(await page.locator('.app-map-sidebar').getByRole('button', { name: label, exact: true }).isVisible());
+    for (const viewport of [{ width: 1360, height: 940 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      const fixed = await page.evaluate(() => { const main = document.querySelector('.app-main'), list = document.querySelector('.app-map-visit-list'); list.scrollTop = 150; const travel = document.querySelector('.app-map-travel').getBoundingClientRect(), zoom = document.querySelector('.map-zoom').getBoundingClientRect(); return { mainScroll: main.scrollHeight > main.clientHeight + 1, listScroll: list.scrollTop, overlap: travel.x < zoom.right && travel.right > zoom.x && travel.y < zoom.bottom && travel.bottom > zoom.y }; });
+      assert.equal(fixed.mainScroll, false); assert(fixed.listScroll > 0); assert.equal(fixed.overlap, false);
+    }
+    await page.screenshot({ path: path.join(output, '20-map-visit-list-mobile.png'), fullPage: true }); ok('왼쪽 등록 버튼 상시 표시·중복 그룹 제거·방문지 독립 스크롤·이동수단/확대축소 겹침 없음');
+    await page.setViewportSize({ width: 1360, height: 940 });
+    await page.goto(new URL('/dashboard', page.url()).href);
+    await page.locator('.dashboard-task-panel tbody tr').nth(99).waitFor({ state: 'attached' });
+    await page.locator('.notification-row').nth(11).waitFor({ state: 'attached' });
+    const checkFixedDashboard = async () => {
+      assert.equal(await page.locator('.page-title,.page-desc').count(), 0);
+      const layout = await page.evaluate(() => {
+        const main = document.querySelector('.app-main');
+        return { vertical: main.scrollHeight > main.clientHeight + 1, horizontal: document.documentElement.scrollWidth > innerWidth, body: document.documentElement.scrollHeight > innerHeight, cards: ['.table-scroll', '.notification-scroll'].map(selector => { const e = document.querySelector(selector); e.scrollTop = 120; return { overflow: e.scrollHeight > e.clientHeight, scrollTop: e.scrollTop, bottom: e.getBoundingClientRect().bottom }; }) };
+      });
+      assert.equal(layout.vertical, false); assert.equal(layout.horizontal, false); assert.equal(layout.body, false);
+      for (const c of layout.cards) { assert(c.overflow); assert(c.scrollTop > 0); assert(c.bottom <= (await page.viewportSize()).height); }
+    };
+    await checkFixedDashboard(); await page.screenshot({ path: path.join(output, '18-dashboard-desktop.png'), fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 }); await checkFixedDashboard();
+    await page.screenshot({ path: path.join(output, '19-dashboard-mobile.png'), fullPage: true }); ok('대시보드 제목·안내 제거·화면 고정·업무/알림 독립 스크롤 PC/모바일');
+    for (const route of ['/groups','/projects','/transfers','/reports','/settings']) {
+      await page.goto(new URL(route, page.url()).href);
+      await page.locator('.app-main').waitFor(); await page.waitForTimeout(200);
+      assert.equal(await page.locator('.app-main .page-title,.app-main .page-desc').count(), 0, route);
+      assert((await page.locator('.app-main').innerText()).trim().length > 0, route);
+    }
+    ok('그룹·프로젝트·업무 이관·보고서·설정 상단 제목/안내 제거 및 본문 표시');
     assert.deepEqual(errors, []); ok('브라우저 런타임 오류 없음');
     await fs.writeFile(path.join(output, 'results.json'), JSON.stringify({ basis: 'Actual web components in Chromium, isolated API and map SDK fixtures; no live Android device', checks, errors, counts: { applicationPosts: state.applicationPosts.length, locationPosts: state.locationPosts.length, bulkPosts: state.bulkPosts.length, photoPosts: state.photoPosts.length } }, null, 2));
     console.log(`PASS ${checks.length} checks`);

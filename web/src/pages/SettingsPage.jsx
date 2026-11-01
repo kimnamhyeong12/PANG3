@@ -325,8 +325,6 @@ export default function SettingsPage() {
 
   return (
     <>
-      <h1 className="page-title">설정</h1>
-      <p className="page-desc">팀원과 그룹 활동 지역을 관리합니다.</p>
 
       <div className="settings-grid">
         <MembersSection groupId={groupId} user={user} />

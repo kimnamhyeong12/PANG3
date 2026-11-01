@@ -9,13 +9,15 @@ export default function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => setMenuOpen(false), [pathname]);
   const mapPage = pathname === '/map';
+  const dashboardPage = pathname === '/dashboard';
+  const fixedWorkspace = mapPage || dashboardPage;
   return (
-    <div className={`app-shell${mapPage ? ' app-shell-map' : ''}${menuOpen ? ' mobile-nav-open' : ''}`}>
-      <Header onToggleMenu={mapPage ? () => setMenuOpen(v => !v) : undefined} menuOpen={menuOpen} />
+    <div className={`app-shell${fixedWorkspace ? ' app-shell-map' : ''}${menuOpen ? ' mobile-nav-open' : ''}`}>
+      <Header onToggleMenu={fixedWorkspace ? () => setMenuOpen(v => !v) : undefined} menuOpen={menuOpen} />
       <div className="app-body">
-        {mapPage && menuOpen && <button className="app-mobile-nav-backdrop" aria-label="메뉴 닫기" onClick={() => setMenuOpen(false)} />}
+        {fixedWorkspace && menuOpen && <button className="app-mobile-nav-backdrop" aria-label="메뉴 닫기" onClick={() => setMenuOpen(false)} />}
         <Sidebar onNavigate={() => setMenuOpen(false)} />
-        <main className={`app-main${pathname === '/map' || pathname === '/groups/status' ? ' app-main-map' : ''}`}>
+        <main className={`app-main${pathname === '/map' || pathname === '/groups/status' ? ' app-main-map' : dashboardPage ? ' app-main-dashboard' : ''}`}>
           {(pathname.startsWith('/reports') || pathname.startsWith('/projects')) && <ReportNavigation />}
           <Outlet />
         </main>

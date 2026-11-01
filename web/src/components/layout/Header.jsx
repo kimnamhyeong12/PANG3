@@ -26,6 +26,8 @@ function GroupSwitcher() {
       <button
         type="button"
         className="group-switcher-button"
+        aria-label="업무공간 선택"
+        aria-expanded={open}
         disabled={!switchable}
         onClick={() => setOpen((v) => !v)}
       >

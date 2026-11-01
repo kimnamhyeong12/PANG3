@@ -284,10 +284,6 @@ export default function PublicDataPage() {
   return (
     <>
       <div className="page-head">
-        <div>
-          <h1 className="page-title">공공데이터 관리</h1>
-          <p className="page-desc">AED와 버스정류장 데이터를 조회하고 행정동 정보를 갱신합니다.</p>
-        </div>
         <button
           type="button"
           className="btn-primary btn-inline"

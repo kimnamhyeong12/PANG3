@@ -166,9 +166,6 @@ export default function ProjectsPage() {
   return (
     <>
       <div className="page-head">
-        <div>
-          <h1 className="page-title">프로젝트</h1>
-        </div>
         {isLeader && !personal && (
           <button type="button" className="btn-primary btn-inline" onClick={() => setCreating(true)}>
             <IconPlus size={16} />새 프로젝트
