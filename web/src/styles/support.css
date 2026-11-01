@@ -11,6 +11,7 @@
 .support-page-heading .support-eyebrow { color:var(--navy); font-size:11px; letter-spacing:2px; font-weight:800; }
 .support-workspace { display:grid; grid-template-columns:minmax(300px, .8fr) minmax(0, 1.5fr); gap:24px; align-items:start; }
 .support-list,.support-detail { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; }
+.support-list-toolbar { display:flex; justify-content:flex-end; padding:12px 16px; border-bottom:1px solid var(--border); }
 .support-filters { display:flex; padding:16px; gap:8px; border-bottom:1px solid var(--border); }
 .support-filters button,.support-pagination button { border:0; background:var(--bg); border-radius:8px; min-height:40px; padding:8px 14px; }
 .support-filters button.active { background:var(--navy); color:white; font-weight:700; }

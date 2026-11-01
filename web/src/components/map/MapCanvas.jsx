@@ -45,6 +45,7 @@ function escapeHtml(value) {
 }
 
 export default function MapCanvas({
+  initialView,
   tasks,
   busStops,
   aeds,
@@ -67,6 +68,7 @@ export default function MapCanvas({
   onReady,
   onMarkerDrag,
   showLegend = false,
+  showZoomControls = true,
   children,
 }) {
   const containerRef = useRef(null);
@@ -86,16 +88,29 @@ export default function MapCanvas({
 
   handlersRef.current = { onSelectTask, onBoundsChange, onPickLocation, onCenterChange, onReady, onMarkerDrag };
 
+  const initialViewReady = initialView?.ready ?? true;
+  const initialViewRef = useRef(null);
+  initialViewRef.current = { center: initialView?.center, level: initialView?.level, tasks, boundaries: initialView?.boundaries ?? boundaries };
+
   // 지도 생성 (1회)
   useEffect(() => {
+    if (!initialViewReady || mapRef.current) return;
     let cancelled = false;
     loadKakaoMaps()
       .then((kakao) => {
         if (cancelled || !containerRef.current) return;
         kakaoRef.current = kakao;
+        const view = initialViewRef.current;
+        let center = DEFAULT_CENTER;
+        if (view.level != null) {
+          const regionPoints = (view.boundaries?.features || []).flatMap(f => geometryRings(f.geometry).flat(2)).filter(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+          const regionCenter = regionPoints.length ? { lat: regionPoints.reduce((n, p) => n + p[1], 0) / regionPoints.length, lng: regionPoints.reduce((n, p) => n + p[0], 0) / regionPoints.length } : null;
+          center = hasCoords(view.center) ? view.center : view.tasks.find(hasCoords) || regionCenter || DEFAULT_CENTER;
+          fittedRef.current = true;
+        }
         const map = new kakao.maps.Map(containerRef.current, {
-          center: new kakao.maps.LatLng(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng),
-          level: DEFAULT_LEVEL,
+          center: new kakao.maps.LatLng(center.lat, center.lng),
+          level: view.level ?? DEFAULT_LEVEL,
         });
         mapRef.current = map;
         kakao.maps.event.addListener(map, 'idle', () => {
@@ -118,7 +133,7 @@ export default function MapCanvas({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialViewReady]);
 
   useEffect(() => {
     if (!ready || !onCenterChange) return;
@@ -398,7 +413,7 @@ export default function MapCanvas({
 
   return (
     <div className="map-canvas">
-      {children}
+      {Array.isArray(children) ? children.map((child, i) => typeof child === 'function' ? <div key={i} className="map-tools-slot">{child({ zoom })}</div> : child) : typeof children === 'function' ? children({ zoom }) : children}
       <div ref={containerRef} className="map-container" />
       {loadError && <div className="map-error">{loadError}</div>}
       {!ready && !loadError && (
@@ -409,7 +424,7 @@ export default function MapCanvas({
 
       {ready && (
         <>
-          <div className="map-zoom">
+          <div className="map-zoom" style={{ display: showZoomControls ? undefined : 'none' }}>
             <button type="button" aria-label="확대" onClick={() => zoom(-1)}>
               +
             </button>

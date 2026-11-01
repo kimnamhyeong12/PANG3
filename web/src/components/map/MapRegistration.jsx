@@ -10,14 +10,12 @@ import ProjectRegistration from './ProjectRegistration.jsx';
 import ProjectPicker from './ProjectPicker.jsx';
 import PlacePicker from '../PlacePicker.jsx';
 const titles = { manual: '방문지 추가', project: '프로젝트', excel: '엑셀 등록', photo: '사진으로 등록', workplace: '근무지 등록' };
-export default function MapRegistration({ method, point, groupId, user, personal, draft, onDraft, onClose, onSaved, onShowPlaces, onUpdatedUser }) {
-  const [projects, setProjects] = useState([]), [project, setProject] = useState(draft?.project || null);
-  const [name, setName] = useState(draft?.name ?? point?.label ?? point?.address ?? ''), [task, setTask] = useState(draft?.task || '');
+export default function MapRegistration({ method, point, groupId, user, personal, onClose, onSaved, onShowPlaces, onUpdatedUser }) {
+  const [projects, setProjects] = useState([]), [project, setProject] = useState(null);
+  const [name, setName] = useState(point?.label ?? point?.address ?? ''), [task, setTask] = useState('');
   const [coords, setCoords] = useState(point || null), [picker, setPicker] = useState(false), [projectPicker, setProjectPicker] = useState(false), [taskPicker, setTaskPicker] = useState(false);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false);
-  const lock = useRef(false), saved = useRef(false), latest = useRef(null);
-  latest.current = { point, name, task, project };
-  useEffect(() => () => { if (method === 'manual' && !saved.current) onDraft?.(latest.current); }, []);
+  const lock = useRef(false);
   useEffect(() => { if (method !== 'project' || personal) return; let active = true; fetchProjects(groupId, user.userId).then(p => { if (active) setProjects(p); }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, [method, personal, groupId, user.userId]);
   const close = () => { if (!lock.current && !busy) onClose(); };
   async function submit(e) {
@@ -26,11 +24,11 @@ export default function MapRegistration({ method, point, groupId, user, personal
     try {
       if (method === 'workplace') {
         const updated = await api.patch(`/api/users/${user.userId}/workplace`, { workplaceAddress: coords.address || coords.label, workplaceLat: coords.lat, workplaceLng: coords.lng });
-        onUpdatedUser?.(updated); saved.current = true; onSaved();
+        onUpdatedUser?.(updated); onSaved();
       } else {
         const region = await regionAt(coords);
         const row = await api.post('/api/locations', { createdByUserId: user.userId, groupId, detailAddress: name.trim(), roadAddress: coords.address || '', lat: coords.lat, lng: coords.lng, status: 'pending', task, projectId: project?.projectId ?? null, workDate: koreaDay(), scheduledDate: koreaDay(), ...region });
-        saved.current = true; onDraft?.(null); onSaved([row]);
+        onSaved([row]);
       }
     } catch (e) { setError(e.message); } finally { lock.current = false; setBusy(false); }
   }

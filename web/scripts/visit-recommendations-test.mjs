@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recommendationPayload, applyVisitRecommendation } from '../src/lib/visitRecommendations.js';
+import { recommendationPayload, applyVisitRecommendation, routeContext } from '../src/lib/visitRecommendations.js';
 const tasks=[
   {taskId:1,assigneeUserId:10,status:'pending',lat:35.1,lng:129.1},
   {taskId:2,assigneeUserId:11,status:'working',lat:35.2,lng:129.2},
@@ -22,4 +22,21 @@ test('server recommendation numbers both list items and pins without losing comp
   assert.deepEqual(result.slice(0,2).map(row=>[row.taskId,row.markerNumber]),[[5,1],[1,2]]);
   assert.equal(result.length,tasks.length);assert.equal(result.find(row=>row.taskId===3).markerNumber,null);
   assert.equal(tasks[0].markerNumber,undefined);
+});
+
+test('current position wins; workplace supplies fallback origin and return destination',()=>{
+ const current={lat:35.1,lng:129.1}, home={lat:35.2,lng:129.2};
+ assert.deepEqual(routeContext(current,home),{origin:current,home,source:'current'});
+ assert.deepEqual(routeContext(current,null),{origin:current,home:null,source:'current'});
+ assert.deepEqual(routeContext(null,home),{origin:home,home,source:'workplace'});
+ assert.deepEqual(routeContext(null,null),{origin:null,home:null,source:null});
+ assert.equal(routeContext({lat:'',lng:''},null).origin,null);
+ const payload=recommendationPayload(tasks,10,current,'car',1,home);
+ assert.deepEqual(payload.currentLocation,current);assert.deepEqual(payload.returnLocation,home);
+});
+test('discarded recommendations leave every marker unnumbered without sorting by registration order',()=>{
+ const previous=tasks.map(t=>({...t,markerNumber:99}));
+ const cleared=applyVisitRecommendation(previous,[]);
+ assert(cleared.every(t=>t.markerNumber===null));
+ assert.deepEqual(cleared.map(t=>t.taskId),previous.map(t=>t.taskId));
 });

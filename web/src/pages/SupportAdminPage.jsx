@@ -66,9 +66,9 @@ export default function SupportAdminPage() {
   return <div className="support-admin">
     <header className="support-header"><div><span className="support-brand">핀워크</span><span className="support-admin-label">고객센터 운영</span></div><div><span>{user.name || user.loginId}</span><Link to="/dashboard">서비스로 이동</Link><button className="btn-secondary" onClick={logout}>로그아웃</button></div></header>
     <main className="support-main">
-      <div className="support-page-heading"><button className="btn-secondary" onClick={refresh} disabled={loading}>새로고침</button></div>
       <div className="support-workspace">
         <section className="support-list" aria-label="문의 목록">
+          <div className="support-list-toolbar"><button className="btn-secondary" onClick={refresh} disabled={loading}>새로고침</button></div>
           <div className="support-filters" role="tablist" aria-label="문의 상태">{[['WAITING', '답변 대기'], ['ANSWERED', '답변 완료'], ['', '전체']].map(([value, label]) => <button key={value} role="tab" aria-selected={status === value} disabled={sending} className={status === value ? 'active' : ''} onClick={() => { setStatus(value); setPage(0); setInbox(null); }}>{label}</button>)}</div>
           {listError && <div role="alert" className="support-error">{listError}<button onClick={refresh}>다시 시도</button></div>}
           {loading && <p role="status" className="support-muted">문의함을 불러오는 중…</p>}

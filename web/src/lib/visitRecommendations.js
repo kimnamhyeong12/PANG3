@@ -1,6 +1,11 @@
 import { normalizeStatus, STATUS } from '../utils/taskStatus.js';
-export const validPoint = point => point?.lat != null && point?.lng != null && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng)) && Math.abs(Number(point.lat)) <= 90 && Math.abs(Number(point.lng)) <= 180;
-export function recommendationPayload(tasks, userId, position, mode, groupId) {
+export const validPoint = point => point?.lat != null && point?.lng != null && point.lat !== '' && point.lng !== '' && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng)) && Math.abs(Number(point.lat)) <= 90 && Math.abs(Number(point.lng)) <= 180;
+export function routeContext(position, workplace) {
+  const home = validPoint(workplace) ? { lat: Number(workplace.lat), lng: Number(workplace.lng) } : null;
+  const current = validPoint(position) ? { lat: Number(position.lat), lng: Number(position.lng) } : null;
+  return { origin: current || home, home, source: current ? 'current' : home ? 'workplace' : null };
+}
+export function recommendationPayload(tasks, userId, position, mode, groupId, workplace = null) {
   if (!validPoint(position)) throw new Error('현재 위치를 먼저 확인해 주세요.');
   const locations = tasks.filter(task => Number(task.assigneeUserId) === Number(userId) && normalizeStatus(task) !== STATUS.COMPLETE && validPoint(task));
   if (!locations.length) throw new Error('추천할 방문지가 없습니다.');
@@ -16,6 +21,7 @@ export function recommendationPayload(tasks, userId, position, mode, groupId) {
       lng: Number(task.lng),
       status: normalizeStatus(task)
     })),
+    ...(validPoint(workplace) ? { returnLocation: { lat: Number(workplace.lat), lng: Number(workplace.lng) } } : {}),
     transportMode: mode,
     cacheScope: `web:${groupId}:${userId}`,
     guidanceStart: false

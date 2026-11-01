@@ -10,6 +10,7 @@ import GroupSelectPage from './pages/GroupSelectPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import TransferPage from './pages/TransferPage.jsx';
 import MapPage from './pages/MapPage.jsx';
+import VisitReportPage from './pages/VisitReportPage.jsx';
 import ReportsPage from './pages/ReportsPage.jsx';
 import PublicDataPage from './pages/PublicDataPage.jsx';
 import SettingsPage from './pages/AccountSettingsPage.jsx';
@@ -65,6 +66,7 @@ export default function App() {
             <Route path="/groups/status" element={<GroupStatusPage />} />
             <Route path="/transfers" element={<TransferPage />} />
             <Route path="/map" element={<MapPage />} />
+            <Route path="/visits/:taskId/report" element={<VisitReportPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/public-data" element={<Navigate to="/map?add=public" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
