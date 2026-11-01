@@ -2,35 +2,27 @@ import { liveSync } from '../lib/liveSync.js';
 import { webSession } from './session.js';
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
-async function request(method, path, { params, body } = {}) {
+async function request(method, path, { params, body, signal, timeoutMs } = {}) {
   const url = new URL(BASE_URL + path, window.location.origin);
-  if (params) {
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) url.searchParams.set(key, value);
-    });
-  }
-  let res;
-  try { res = await webSession.fetch(url, {
-    method,
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  }); } catch (error) { if (method === 'GET') liveSync.recover(); throw error; }
-  const text = await res.text();
-  let data = null;
-  if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = null; // 게이트웨이 HTML 에러 페이지 등 JSON이 아닌 응답
-    }
-  }
-  if (!res.ok) {
-    if (method === 'GET' && res.status >= 500) liveSync.recover();
-    // ApiExceptionHandler 응답: { timestamp, status, error, message } — 권한 에러 등은 message를 그대로 노출
-    throw toApiError(res.status, data, `요청 실패 (${res.status})`);
-  }
-  if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) liveSync.noteMutation(method, path, data);
-  return data;
+  if (params) Object.entries(params).forEach(([key,value]) => { if(value!==undefined&&value!==null)url.searchParams.set(key,value); });
+  const controller=new AbortController();let timedOut=false;
+  const cancel=()=>controller.abort();
+  if(signal?.aborted)cancel();else signal?.addEventListener('abort',cancel,{once:true});
+  const timer=timeoutMs?setTimeout(()=>{timedOut=true;controller.abort();},timeoutMs):null;
+  try {
+    const res=await webSession.fetch(url,{method,signal:controller.signal,
+      headers:body!==undefined?{'Content-Type':'application/json'}:undefined,
+      body:body!==undefined?JSON.stringify(body):undefined});
+    const text=await res.text();let data=null;
+    if(text){try{data=JSON.parse(text);}catch{/* Gateways may return HTML. */}}
+    if(!res.ok)throw toApiError(res.status,data,`요청 실패 (${res.status})`);
+    if(['POST','PATCH','PUT','DELETE'].includes(method))liveSync.noteMutation(method,path,data);
+    return data;
+  } catch(error) {
+    if(timedOut)throw new ApiError('서버 응답이 지연되고 있습니다. 다시 불러오기를 눌러 주세요.',0);
+    // A failed resource read must not restart the healthy global event stream.
+    throw error;
+  } finally { clearTimeout(timer);signal?.removeEventListener('abort',cancel); }
 }
 
 export class ApiError extends Error {
@@ -69,8 +61,8 @@ export function isServerDown(error) {
 }
 
 // 파일 다운로드: Blob으로 받는다 (실패 시 ApiError)
-async function download(path) {
-  const res = await webSession.fetch(new URL(BASE_URL + path, window.location.origin), { cache: 'no-store' });
+async function download(path, { signal } = {}) {
+  const res = await webSession.fetch(new URL(BASE_URL + path, window.location.origin), { cache: 'no-store', signal });
   if (!res.ok) {
     let data = null;
     try {
@@ -90,7 +82,7 @@ async function download(path) {
 export const api = {
   download,
   delete: (path, body) => request('DELETE', path, { body }),
-  get: (path, params) => request('GET', path, { params }),
+  get: (path, params, options) => request('GET', path, { params, ...options }),
   post: (path, body, params) => request('POST', path, { body, params }),
   patch: (path, body, params) => request('PATCH', path, { body, params }),
 };

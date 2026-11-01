@@ -18,27 +18,27 @@ export default function SupportAdminPage() {
   const [detailRevision, setDetailRevision] = useState(0);
   const [downloadingId, setDownloadingId] = useState(null);
   const [answer, setAnswer] = useState(''), [error, setError] = useState(''), [notice, setNotice] = useState(''), [sending, setSending] = useState(false);
-  const detailLiveRevision = useLiveRevision(['support'], { dirty: Boolean(answer.trim()) || sending, onConflict: () => setNotice('다른 기기에서 문의가 변경되었습니다. 작성 중인 답변은 유지됩니다.') });
+  const detailLiveRevision = useLiveRevision(['support'], { scope: selected, dirty: Boolean(answer.trim()) || sending, onConflict: () => setNotice('다른 기기에서 문의가 변경되었습니다. 작성 중인 답변은 유지됩니다.') });
   const submitting = useRef(false), detailRequest = useRef(0);
   useEffect(() => { setSelected(params.get('inquiry') || null); }, [params]);
   const refresh = useCallback(() => setRevision(value => value + 1), []);
   useEffect(() => {
     if (!agent) return undefined;
-    let active = true; setLoading(true); setListError('');
-    api.get('/api/admin/support/inquiries', { page, status: status || undefined }).then(result => {
+    let active = true; const controller=new AbortController(); setLoading(true); setListError('');
+    api.get('/api/admin/support/inquiries', { page, status: status || undefined }, {signal:controller.signal,timeoutMs:20000}).then(result => {
       if (!active) return;
       if (page > 0 && !result.items.length) { setPage(0); return; }
       setInbox(result);
     }).catch(failure => { if (active) setListError(errorMessage(failure, '문의함을 불러오지 못했습니다.')); }).finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    return () => { active = false; controller.abort(); };
   }, [agent, user?.userId, status, page, revision, liveRevision]);
   useEffect(() => {
     if (!agent || !selected) return undefined;
-    let active = true; const requestId = ++detailRequest.current;
-    setDetailLoading(true); setRecord(null); setError(''); setNotice(''); setAnswer('');
-    api.get(`/api/admin/support/inquiries/${selected}`).then(result => { if (active && requestId === detailRequest.current) setRecord(result); })
+    let active = true; const controller=new AbortController(); const requestId = ++detailRequest.current;
+    setDetailLoading(true); setRecord(old=>String(old?.inquiry?.id)===String(selected)?old:null); setError(''); setNotice(''); setAnswer('');
+    api.get(`/api/admin/support/inquiries/${selected}`,undefined,{signal:controller.signal,timeoutMs:20000}).then(result => { if (active && requestId === detailRequest.current) setRecord(result); })
       .catch(failure => { if (active) setError(errorMessage(failure, '문의를 불러오지 못했습니다.')); }).finally(() => { if (active) setDetailLoading(false); });
-    return () => { active = false; };
+    return () => { active = false; controller.abort(); };
   }, [agent, user?.userId, selected, detailRevision, detailLiveRevision]);
   const submit = async event => {
     event.preventDefault();
@@ -72,13 +72,16 @@ export default function SupportAdminPage() {
       <div className="support-workspace">
         <section className="support-list" aria-label="문의 목록">
           <div className="support-inbox-toolbar"><div className="support-filters" role="tablist" aria-label="문의 상태">{[['WAITING', '답변 대기'], ['ANSWERED', '답변 완료']].map(([value, label]) => <button key={value} role="tab" aria-selected={status === value} disabled={sending} className={status === value ? 'active' : ''} onClick={() => { setStatus(value); setPage(0); setInbox(null); }}>{label}</button>)}</div><button className="btn-secondary" onClick={refresh} disabled={loading}>새로고침</button></div>
+          <div className="support-list-scroll">
           {listError && <div role="alert" className="support-error">{listError}<button onClick={refresh}>다시 시도</button></div>}
           {loading && <p role="status" className="support-muted">문의함을 불러오는 중…</p>}
           {!loading && !listError && !inbox?.items.length && <div className="support-list-empty">{status === 'WAITING' ? '답변을 기다리는 문의가 없습니다.' : '문의가 없습니다.'}</div>}
           {inbox?.items.map(item => <button key={item.id} disabled={sending} aria-pressed={selected === item.id} className={`support-list-item${selected === item.id ? ' selected' : ''}`} onClick={() => setSelected(item.id)}><span className="support-item-meta"><span>#{item.id} · {item.category}</span><span className={`support-badge ${item.status === 'ANSWERED' ? 'answered' : ''}`}>{item.status === 'ANSWERED' ? '답변 완료' : '답변 대기'}</span></span><strong>{item.subject}</strong><time>{formatDate(item.createdAt)}</time></button>)}
+          </div>
           <div className="support-pagination"><button disabled={!page || loading || sending} onClick={() => setPage(value => value - 1)}>이전</button><span>{page + 1} 페이지</span><button disabled={!inbox?.hasMore || loading || sending} onClick={() => setPage(value => value + 1)}>다음</button></div>
         </section>
         <section className="support-detail" aria-label="문의 상세와 답변" aria-busy={detailLoading || sending}>
+          <div className="support-detail-scroll">
           {!selected && <SelectionEmpty icon="folder-outline">문의를 선택해 주세요</SelectionEmpty>}
           {detailLoading && <p role="status">문의 내용을 불러오는 중…</p>}
           {error && <div role="alert" className="support-error">{error}{selected && !record && !detailLoading && <button onClick={() => setDetailRevision(value => value + 1)}>다시 불러오기</button>}</div>}
@@ -90,6 +93,7 @@ export default function SupportAdminPage() {
             {!!record.inquiry.attachments?.length && <section className="support-attachments" aria-label="첨부파일"><h3>첨부파일</h3>{record.inquiry.attachments.map(file => <button key={file.id} type="button" disabled={downloadingId !== null} onClick={() => downloadAttachment(file)}><span>{file.name}</span><span>{downloadingId === file.id ? '다운로드 중…' : `${(file.size / 1024 / 1024).toFixed(1)}MB · 다운로드`}</span></button>)}</section>}
             {record.inquiry.status === 'ANSWERED' ? <div className="support-saved-answer"><h3>등록된 답변</h3><p className="support-muted">{record.answeredByName || '운영자'} · {formatDate(record.inquiry.answeredAt)}</p><div className="support-message">{record.inquiry.answer}</div></div> : <form onSubmit={submit} className="support-answer-form"><label htmlFor="support-answer">답변 작성</label><textarea id="support-answer" required maxLength={5000} value={answer} onChange={event => setAnswer(event.target.value)} disabled={sending} placeholder="사용자에게 안내할 내용을 입력해 주세요." /><div className="support-answer-footer"><span>{answer.length}/5000</span><button className="btn-primary" disabled={sending || !answer.trim()}>{sending ? '등록 중…' : '답변 등록'}</button></div></form>}
           </>}
+          </div>
         </section>
       </div>
     </main>

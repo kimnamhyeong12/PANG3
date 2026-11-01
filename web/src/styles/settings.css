@@ -1,0 +1,59 @@
+.settings-workspace{grid-template-columns:180px minmax(0,1fr);align-items:start;margin-top:0;gap:24px}
+.settings-menu{position:sticky;top:0;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:16px;gap:4px}
+.settings-menu>.btn-secondary{display:flex;align-items:center;gap:10px;border:0;text-align:left;justify-content:flex-start;min-height:48px;background:transparent;padding:12px}
+.settings-menu>.btn-secondary.selected{background:var(--navy-soft)}
+.settings-menu .app-icon{font-size:21px}.settings-menu .app-icon:last-child{margin-left:auto;font-size:16px}
+.settings-content{min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:28px}
+.settings-content.settings-account{padding:0;border:0;background:transparent}
+.account-profile{display:flex;gap:18px;align-items:center;padding:24px 26px;background:var(--surface);border:1px solid var(--border);border-radius:18px;margin-bottom:22px}
+.account-avatar{display:grid;place-items:center;width:62px;height:62px;border-radius:20px;background:var(--navy-soft);color:var(--navy);font-size:26px;font-weight:800;flex:none}
+.account-profile h2{font-size:13px;font-weight:600;color:var(--text-soft);margin:0 0 8px}.account-profile strong{font-size:20px}.account-profile>div>span{color:var(--text-soft);margin-left:12px;font-size:13px}
+.account-form,.account-integrations{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.account-card{min-width:0;padding:24px;background:var(--surface);border:1px solid var(--border);border-radius:16px}
+.account-card>header{display:flex;gap:10px;align-items:center;margin-bottom:22px}.account-card>header>.app-icon{font-size:21px;color:var(--navy)}
+.account-card h3{font-size:16px;line-height:1.6;margin:0;font-weight:750}.account-fields{display:grid;gap:22px}
+.account-fields label,.account-password-fields>label{display:grid;gap:9px;font-size:14px;font-weight:600}
+.account-fields .region-fields{gap:14px}.account-fields .region-fields legend{font-size:14px;font-weight:600;padding:0;margin-bottom:10px}
+.account-fields .region-fields label{font-size:13px;color:var(--text-soft);font-weight:500}
+.account-card-wide,.account-form-footer{grid-column:1/-1}.account-password-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.account-form-footer{display:flex;justify-content:flex-end}.account-form-footer .btn-primary{min-width:160px}
+.account-card .field-label{font-size:13px;color:var(--text-soft);margin:0 0 12px}
+.account-workplace{display:flex;gap:12px;align-items:flex-start;padding:20px;background:var(--bg);border-radius:12px;min-height:105px;line-height:1.8}
+.account-workplace .app-icon{font-size:21px;color:var(--navy);margin-top:3px}.account-workplace strong{font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.account-workplace-actions{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:22px}
+.account-integrations{margin-top:22px}.account-card .account-security-section{margin:0;padding:0;border:0}.account-card .account-security-section>h3{margin:0 0 20px}
+.account-card .settings-form{gap:16px;margin-top:0}.account-card .settings-form>label{font-size:13px;font-weight:600}
+.account-withdraw{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:22px}.account-withdraw>.btn-secondary{color:var(--red)}
+.settings-notice{padding:16px 18px;border-radius:12px;background:var(--navy-soft);color:var(--navy);line-height:1.7}
+.customer-support{max-width:850px;margin:auto;min-width:0}.customer-help{display:grid;gap:26px}
+.customer-help h2{font-size:25px;margin:0;line-height:1.5}.customer-help h3,.customer-inquiry-heading h2{font-size:17px;line-height:1.6;margin:0}
+.customer-help-search{display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:12px;background:var(--bg);padding:0 14px}
+.customer-help-search>.input{border:0;background:transparent;padding-left:0;box-shadow:none;min-width:0}.customer-help-search>.app-icon{color:var(--text-soft);font-size:22px}
+.customer-faq>h3{margin-bottom:8px}.customer-faq-item{border-bottom:1px solid var(--border)}
+.customer-faq-item>button{display:flex;gap:12px;align-items:center;width:100%;padding:20px 0;background:transparent;border:0;text-align:left;color:var(--text)}
+.customer-faq-item>button>span:first-child{font-size:20px;font-weight:800;color:var(--navy)}.customer-faq-item strong{flex:1;font-size:14px;line-height:1.7;font-weight:600}
+.customer-faq-item>.app-icon,.customer-faq-item button>.app-icon{font-size:18px;color:var(--text-soft)}.customer-faq-item>p{margin:0;padding:0 0 22px 28px;font-size:13px;line-height:1.9;color:var(--text-soft)}
+.customer-contact{padding:22px;background:var(--bg);border-radius:14px}.customer-contact p{font-size:13px;line-height:1.8;color:var(--text-soft);margin:8px 0 18px}.customer-contact .btn-primary{display:flex;gap:8px;align-items:center}
+.customer-inquiry-heading{display:grid;gap:18px}.customer-inquiry-heading>.text-button{justify-self:start}
+.customer-inquiry-heading .tabs{margin-bottom:24px}.customer-inquiry-heading .tab{flex:1}
+.customer-inquiry-form{display:grid;gap:26px}.customer-inquiry-form .input{width:100%;min-width:0;font-weight:400}.customer-inquiry-form>label,.inquiry-email legend{font-size:14px;font-weight:700;line-height:1.6}
+.customer-inquiry-form .required{color:var(--red);font-size:13px}.customer-inquiry-form>label>.input{display:block;margin-top:9px}
+.inquiry-email{border:0;padding:0;margin:0;min-width:0}.inquiry-email legend{padding:0;margin-bottom:9px}
+.inquiry-email-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:12px}.inquiry-email-row input{min-width:0;width:100%}.inquiry-email-row>span{color:var(--text-soft)}
+.inquiry-title-input{position:relative;margin-top:9px}.inquiry-title-input .input{padding-right:75px}.inquiry-title-input>span{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--text-faint);font-size:12px;font-weight:400}
+.customer-inquiry-form textarea.input{min-height:190px;resize:vertical;line-height:1.8;padding:16px}
+.inquiry-counter{display:block;text-align:right;margin-top:8px;color:var(--text-soft);font-size:12px;font-weight:400}
+.inquiry-attachments{display:grid;gap:12px}.inquiry-attachments h3{font-size:14px;margin:0}
+.inquiry-file-button{display:flex;align-items:center;gap:12px;text-align:left}.inquiry-file-button .app-icon:last-child{margin-left:auto}
+.inquiry-file{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--border);border-radius:10px;min-width:0}
+.inquiry-file>span{flex:1;min-width:0;overflow-wrap:anywhere}.inquiry-file strong{font-size:13px;font-weight:600;display:block}.inquiry-file small{color:var(--text-soft);font-size:12px;display:block;margin-top:5px}.inquiry-file>.app-icon{color:var(--navy)}
+.inquiry-attachment-summary{display:flex;justify-content:space-between;gap:12px;color:var(--text-soft);font-size:12px;line-height:1.8}
+.support-consent{padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--bg)}.support-consent .check-row{padding:0 0 15px;font-size:13px;line-height:1.7;font-weight:600}.support-consent .check-row input{flex:none}
+.support-consent summary{font-size:12px;color:var(--text-soft);cursor:pointer;padding-top:14px}.support-consent details p{font-size:12px;line-height:1.8;color:var(--text-soft)}
+.inquiry-privacy-table{overflow-x:auto;margin-top:16px}.inquiry-privacy-table table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px;line-height:1.8}.inquiry-privacy-table th,.inquiry-privacy-table td{padding:12px;border:1px solid var(--border);vertical-align:top;text-align:left}.inquiry-privacy-table th{background:var(--surface)}
+.customer-history{display:grid;gap:20px}.customer-history-meta{display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px}.customer-history-detail{line-height:1.9;overflow-wrap:anywhere}.customer-history-detail>h3{font-size:19px;margin:0 0 12px}.customer-history-detail>p{margin:8px 0 16px}.customer-answer{padding:20px;background:var(--bg);border-radius:14px;margin-top:24px}.customer-answer h3{font-size:15px;margin:0 0 12px}.customer-answer p{margin:8px 0 0}.download-file{width:100%;text-align:left;background:var(--surface);margin-top:10px}
+@media(max-width:1100px){.settings-workspace{grid-template-columns:155px minmax(0,1fr);gap:18px}.account-form,.account-integrations{grid-template-columns:1fr}.account-card-wide,.account-form-footer{grid-column:auto}}
+@media(max-width:760px){.settings-workspace{display:block}.settings-menu{position:static;flex-direction:row;flex-wrap:wrap;margin-bottom:18px}.settings-menu>.btn-secondary{min-height:42px;flex:1;justify-content:center;white-space:nowrap;font-size:12px;padding:8px}.settings-menu .app-icon:last-child{display:none}.settings-content{padding:22px}.account-profile{padding:20px}.account-card{padding:20px}}
+@media(max-width:520px){.settings-content{padding:18px}.account-profile>div>span{display:block;margin:6px 0 0}.account-password-fields{grid-template-columns:1fr}.account-card{padding:18px}.customer-help h2{font-size:21px}.customer-faq-item strong{font-size:13px}.inquiry-email-row{gap:8px}.inquiry-email-row input{font-size:12px;padding:12px 10px}.inquiry-attachment-summary{font-size:11px}.inquiry-privacy-table th,.inquiry-privacy-table td{padding:8px}.support-consent{padding:14px}}
+
+@media(max-width:760px){.app-main-settings{padding:16px;min-width:0}.app-main-settings .settings-workspace{display:block;width:100%}.app-main-settings .settings-menu{display:flex;position:static;flex-direction:row;flex-wrap:wrap;width:100%}.app-main-settings .settings-menu>.btn-secondary{min-width:110px;flex:1}.app-main-settings .settings-menu .app-icon:last-child{display:none}}

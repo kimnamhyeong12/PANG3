@@ -111,6 +111,6 @@ export default function GroupsPage() {
           setGroupId(result.groupId);
           setCreating(false);
         });
-      }}><label className="field">그룹명<input className="input" value={name} onChange={e => setName(e.target.value)} required maxLength={100} /></label><WorkRegionFields label="활동 지역" value={region} onChange={setRegion} /><button className="btn-primary btn-inline section-gap" disabled={busy || !name.trim() || !isWorkRegionComplete(region)}>그룹 만들기</button></form></Modal>}
+      }}><label className="field">그룹명<input className="input" value={name} onChange={e => setName(e.target.value)} required maxLength={100} /></label><WorkRegionFields label="활동 지역" value={region} onChange={setRegion} /><div className="form-actions-end"><button className="btn-primary btn-inline" disabled={busy || !name.trim() || !isWorkRegionComplete(region)}>그룹 만들기</button></div></form></Modal>}
   </div>;
 }

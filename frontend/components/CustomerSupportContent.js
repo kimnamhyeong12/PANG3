@@ -1,18 +1,11 @@
+import { SUPPORT_FAQ as FAQ } from '../constants/support';
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { PrimaryButton } from './ui';
 import { colors } from '../constants/design';
 
-const FAQ = [
-  { id: 'location', category: '위치·길안내', question: '현재 위치가 나오지 않거나 정확하지 않아요.', answer: '휴대폰의 위치 기능을 켜고 앱의 위치 권한을 허용해 주세요. 실내나 지하에서는 위치가 부정확할 수 있어요. 실외에서 다시 확인하고, 계속 문제가 있으면 앱 정보 → 권한 설정에서 위치 권한을 확인해 주세요.' },
-  { id: 'place', category: '방문지', question: '방문지는 어떻게 등록하나요?', answer: '방문지 등록 화면에서 주소나 장소를 검색한 뒤 위치를 확인해 등록해 주세요. 사진으로 등록할 때는 사진의 촬영 위치 정보와 사진 접근 권한이 필요할 수 있어요. 위치 정보가 없는 사진은 주소 검색으로 위치를 지정해 주세요.' },
-  { id: 'navigation', category: '위치·길안내', question: '길안내가 시작되지 않아요.', answer: '네트워크 연결과 위치 권한을 확인하고 출발지·목적지가 올바른지 확인해 주세요. 외부 지도 앱으로 연결하는 경우 해당 앱이 설치되어 있는지도 확인해 주세요. 문제가 계속되면 이용한 이동 수단과 발생 상황을 문의에 적어 주세요.' },
-  { id: 'report', category: '보고서', question: '보고서를 다운로드할 수 없어요.', answer: '먼저 보고서가 저장되어 있는지 확인해 주세요. 네트워크 연결과 휴대폰의 남은 저장 공간을 확인한 뒤 다시 시도해 주세요. Android에서는 내 파일 → Download → 외근도우미 → 다운로드 폴더를, iPhone에서는 공유 화면에서 선택한 저장 위치를 확인해 주세요.' },
-  { id: 'photo', category: '사진', question: '사진을 촬영하거나 선택할 수 없어요.', answer: '앱 정보 → 권한 설정에서 카메라와 사진 권한을 확인해 주세요. 선택한 사진만 허용한 경우 사용할 사진을 추가로 선택해야 할 수 있어요. 사진 선택은 가능해도 촬영 위치를 읽으려면 추가 권한이 필요할 수 있어요.' },
-  { id: 'notification', category: '계정·알림', question: '업무 알림이 오지 않아요.', answer: '설정의 업무 알림을 켜고 휴대폰 설정에서도 앱 알림을 허용해 주세요. 방해 금지 모드나 배터리 절약 설정에 따라 알림이 늦어질 수 있어요. 앱 정보 → 권한 설정에서 알림 허용 상태를 확인할 수 있어요.' },
-  { id: 'account', category: '계정·알림', question: '계정 정보 변경이나 탈퇴는 어디에서 하나요?', answer: '설정 상단 프로필의 관리에서 본인 확인 후 계정 정보를 관리할 수 있어요. 계정 탈퇴는 설정 하단에서 진행할 수 있어요. 계정 이용에 문제가 있으면 문의하기로 상황을 알려 주세요. 비밀번호나 인증번호는 보내지 마세요.' },
-];
+
 
 export default function CustomerSupportContent({ onInquiry }) {
   const [query, setQuery] = useState('');

@@ -67,3 +67,7 @@ select.input,select{padding-right:36px;appearance:none;background-image:url("dat
 @media(max-width:520px){.groups-list-heading{padding:16px;gap:12px}.groups-list-heading>.action-row{gap:6px}.groups-list-heading button{font-size:12px;padding:0 10px}.groups-list-body{padding:0 16px}.group-management-workspace,.group-management-grid{gap:16px}.group-management-heading{padding:16px}}
 
 @media(max-width:520px){.group-members-panel>.panel-header{padding:14px 12px}.group-members-panel>.panel-header>.panel-title{font-size:13px}.group-members-actions{gap:6px}.group-members-actions>button{font-size:12px;padding:0 8px;white-space:nowrap}}
+
+.project-name-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px}
+.project-name-row>.input{width:100%;min-width:0}.project-name-row>button{white-space:nowrap;align-self:stretch}
+.form-actions-end{display:flex;justify-content:flex-end;gap:12px;margin-top:22px}

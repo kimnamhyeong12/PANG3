@@ -15,6 +15,7 @@ function panel(behavior) {
   const code = babel.transformFileSync(require.resolve('../components/SupportInquiryPanel.js'), { configFile: false, babelrc: false,
     plugins: [[require.resolve('../node_modules/@babel/plugin-transform-react-jsx'), { runtime: 'classic' }], require.resolve('../node_modules/@babel/plugin-transform-modules-commonjs')] }).code;
   const dependencies = {
+    '../utils/useLiveRevision':()=>0,
     react, 'react-native': { StyleSheet: { create: s => s }, View: 'View', Text: 'Text', TouchableOpacity: 'Button', AppState: { addEventListener(_, fn) { foreground = fn; return { remove() {} }; } } },
     '@expo/vector-icons': { Ionicons: 'Icon' }, './SupportInquiryForm': 'Form', './ui': { SecondaryButton: 'SecondaryButton' }, '../constants/design': { colors: {} },
     'expo-sharing': { isAvailableAsync: async()=>true, shareAsync:async()=>{} }, '../utils/api': { API_BASE_URL:'https://example.test' }, '../utils/auth': { downloadProtectedFile:async()=> 'file:///test.jpg' },

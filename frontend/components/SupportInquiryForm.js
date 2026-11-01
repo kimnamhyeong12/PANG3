@@ -1,3 +1,4 @@
+import { INQUIRY_TYPES, EMAIL_DOMAINS, PRIVACY_NOTICE_VERSION } from '../constants/support';
 import React, { useRef, useState } from 'react';
 import { Keyboard, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,9 +10,6 @@ import { groupApi } from '../utils/groupApi';
 import { colors } from '../constants/design';
 import { createUploadFile } from '../utils/uploadFile';
 
-const INQUIRY_TYPES = ['이용 방법', '오류 신고', '계정', '결제·환불', '대량 데이터 등록 요청', '기타'];
-const EMAIL_DOMAINS = ['naver.com', 'gmail.com', 'daum.net', 'hanmail.net', 'nate.com', 'outlook.com', 'icloud.com'];
-const PRIVACY_NOTICE_VERSION = 'support-2026-10-29-v1';
 const MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024;
 const MAX_SINGLE_FILE_BYTES = 15 * 1024 * 1024;
 const splitEmail = value => {

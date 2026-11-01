@@ -59,3 +59,46 @@
 
 .support-inbox-toolbar{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border)}
 .support-inbox-toolbar>.support-filters{padding:0;border:0;min-width:0}.support-inbox-toolbar>.btn-secondary{margin-left:auto;flex:none}
+
+/* The page stays fixed; each card owns its content overflow. */
+.app-main-inbox{display:flex;min-height:0;overflow:hidden;padding:20px 24px}
+.app-main-inbox>.support-admin{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;height:100%}
+.app-main-inbox .support-main{display:flex;flex-direction:column;flex:1;width:100%;min-height:0}
+.app-main-inbox .support-workspace{flex:1;height:100%;min-height:0;align-items:stretch;grid-template-columns:minmax(280px,.8fr) minmax(0,1.5fr);gap:22px}
+.support-list{display:flex;flex-direction:column;min-height:0}
+.support-list-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.support-list-toolbar,.support-inbox-toolbar,.support-pagination{flex:none}
+.support-list-toolbar{align-items:center;gap:12px;justify-content:space-between;min-height:72px}
+.support-list-toolbar h2{font-size:16px;line-height:1.5;margin:0}
+.support-list-toolbar button{flex:none}.support-pagination{border-top:1px solid var(--border);gap:12px}
+.app-main-inbox .support-detail{display:flex;padding:0;min-height:0;min-width:0;overflow:hidden}
+.support-detail-scroll{width:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:26px;scrollbar-gutter:stable}
+.support-detail-scroll>.selection-empty{height:100%;min-height:180px}
+.support-detail-scroll>.support-error,.support-detail-scroll>.support-success{margin:0 0 20px}
+.support-loading{margin:0;padding:18px 20px;color:var(--text-soft);font-size:13px;line-height:1.7}
+.support-detail-scroll>.support-loading{padding:0 0 18px}
+.support-answer-form{display:grid;gap:12px}
+.support-answer-form h3,.support-saved-answer h3{margin:0;font-size:17px;line-height:1.6}
+.support-answer-form label{display:block;font-size:14px;font-weight:700;line-height:1.6}
+.support-answer-form textarea{display:block;min-height:150px;max-height:360px;margin:0}
+.support-answer-form .support-answer-footer{margin:0;gap:16px}
+.facility-review-form>select{margin-bottom:8px}
+.facility-detail-heading>div{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:8px}
+.facility-detail-heading h2{font-size:23px;line-height:1.5;margin:0;overflow-wrap:anywhere}
+.facility-metadata{margin:22px 0;padding:18px 20px;gap:16px;line-height:1.7}
+.facility-metadata>div{gap:18px}.facility-metadata dd{min-width:0;flex:1}
+.facility-location-detail{display:block;color:var(--text-soft);margin-top:4px}
+.facility-metadata dd:has(.facility-map-link){display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.facility-map-link{font-weight:600;color:var(--navy);white-space:nowrap}
+.facility-evidence-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:20px}
+.facility-review-evidence{margin:0;min-width:0}.facility-review-evidence figcaption{font-size:14px;font-weight:700;margin-bottom:12px}
+.facility-review-evidence a{display:block;border:1px solid var(--border);background:var(--bg);border-radius:12px;overflow:hidden}
+.facility-review-evidence img{display:block;width:100%;height:240px;object-fit:contain}
+.facility-evidence-placeholder{min-height:180px;display:grid;place-content:center;gap:12px;background:var(--bg);border-radius:12px;color:var(--text-soft);font-size:13px}
+.facility-description{margin-top:24px}.facility-description h3{font-size:14px;margin:0 0 8px}.facility-description p{margin:0}
+.facility-approval-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 16px;margin:8px 0}
+.facility-approval-fields>label{display:grid;gap:8px}.facility-approval-fields>label:nth-child(3){grid-column:1/-1}
+.facility-status-approved{background:var(--green-soft);color:var(--green)}.facility-status-rejected{background:var(--red-soft);color:var(--red)}
+.facility-status-reviewing,.facility-status-needs_info{background:var(--navy-soft);color:var(--navy)}
+@media(max-width:850px){.app-main-inbox{padding:14px}.app-main-inbox .support-workspace{grid-template-columns:1fr;grid-template-rows:minmax(150px,.65fr) minmax(0,1.35fr);gap:14px}.support-detail-scroll{padding:20px}.support-list-toolbar{min-height:60px}.support-list-item{padding:14px 16px}.support-pagination{padding:10px 14px}.facility-review-evidence img{height:200px}}
+@media(max-width:520px){.facility-approval-fields{grid-template-columns:1fr}.facility-detail-heading h2{font-size:19px}.facility-metadata{padding:14px}.facility-metadata>div{gap:10px}.facility-metadata dt{width:66px}.support-inbox-toolbar{padding:10px;gap:6px}.support-inbox-toolbar button{font-size:12px;padding:8px 10px}.support-detail-scroll{padding:16px}}

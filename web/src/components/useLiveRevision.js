@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { liveSync } from '../lib/liveSync.js';
 // Re-run data-loading effects; forms can defer updates while a draft is dirty.
-export default function useLiveRevision(topics, { dirty = false, onConflict } = {}) {
+export default function useLiveRevision(topics, { dirty = false, onConflict, scope } = {}) {
   const [revision, setRevision] = useState(0), key = topics.join(',');
   const pending = useRef(false), options = useRef({ dirty, onConflict });
   options.current = { dirty, onConflict };
+  useEffect(() => { pending.current = false; }, [scope]);
   useEffect(() => {
     if (!dirty && pending.current) { pending.current = false; setRevision(v => v + 1); }
   }, [dirty]);

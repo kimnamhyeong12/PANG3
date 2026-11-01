@@ -46,6 +46,10 @@ public class SecurityConfig {
                     response.getWriter().write("{\"message\":\"접근 권한이 없습니다.\"}");
                 }))
             .authorizeHttpRequests(auth -> auth
+                // Completion of an already-authenticated stream runs on an async
+                // dispatcher after its original security context has been cleared.
+                .requestMatchers(request -> request.getDispatcherType() == jakarta.servlet.DispatcherType.ASYNC
+                    && request.getRequestURI().equals(request.getContextPath() + "/api/sync/events")).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/join/*").permitAll()
                 // Public runtime/code only. Photos and report data stay behind authenticated /api routes.

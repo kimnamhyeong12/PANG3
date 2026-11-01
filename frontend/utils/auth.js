@@ -18,11 +18,7 @@ export const session = createSessionClient({
 export const liveSync = createChangeSync({ request: (path, options) => session.fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL || ''}${path}`, options) });
 export const apiFetch = async (url, options = {}) => {
   const pathname = new URL(String(url)).pathname;
-  const reading = (!options.method || options.method === 'GET') && pathname.startsWith('/api/');
-  let response;
-  try { response = await session.fetch(url, options); }
-  catch (error) { if (reading && error.name !== 'AbortError') liveSync.recover(); throw error; }
-  if (reading && response.status >= 500) liveSync.recover();
+  const response = await session.fetch(url, options);
   if (response.ok && ['POST', 'PATCH', 'PUT', 'DELETE'].includes(options.method)) {
     if (pathname.startsWith('/api/locations') || pathname.startsWith('/api/task-progress')) {
       const data = await response.clone().json().catch(() => null);

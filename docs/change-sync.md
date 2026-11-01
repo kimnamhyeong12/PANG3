@@ -27,3 +27,11 @@
 - Android 실제 단말 및 실제 PostgreSQL 다중 프로세스 부하 검증은 별도로 필요하다. 기존 설치 앱에는 새 앱 빌드를 설치해야 적용된다.
 
 PostgreSQL 동작 근거: [NOTIFY](https://www.postgresql.org/docs/current/sql-notify.html), [pgJDBC PGConnection](https://jdbc.postgresql.org/documentation/publicapi/org/postgresql/PGConnection.html).
+
+## SSE 연결 점유 결함 수정
+
+기존 구현은 기본 Open EntityManager in View가 SSE 요청에도 적용되어, 열린 스트림마다 JDBC 연결을 유지했다. 여러 탭·앱 연결이 쌓이면 풀의 연결이 부족해 일반 목록·상세 요청이 대기하다 실패할 수 있었다. `JpaViewConfig`에서 SSE 경로만 제외하고 다른 MVC 경로의 기존 JPA 범위는 유지한다. 정상 SSE 종료의 ASYNC 디스패치는 최초 요청의 인증을 다시 요구하지 않도록 해당 경로에 한정해 허용한다.
+
+실제 내장 Tomcat과 HTTP 클라이언트, DB 풀 2개로 검증한다. 수정 전에는 스트림 1개가 DB 연결 1개를 계속 점유하는 것을 재현했다. 수정 후에는 스트림 4개가 열려 있어도 DB 연결 점유가 0개이며 시설물 목록을 조회할 수 있다. 일반 MVC 경로의 Open in View 유지도 검사한다.
+
+개별 화면의 GET 실패는 건강한 전체 변경 알림 연결을 재시작하지 않는다. 방문지 delta/초기 스냅샷의 복구 처리는 유지한다. 문의함·시설물 신청함은 화면 전환 시 진행 중인 요청을 취소하고 목록/상세 조회를 20초로 제한한다. 실패를 빈 목록이나 선택 전 화면으로 표시하지 않으며 선택·기존 데이터·작성 중 내용은 유지한다.

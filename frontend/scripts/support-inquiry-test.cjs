@@ -11,6 +11,7 @@ function form(email='reply@example.test') {
     plugins:[[require.resolve('../node_modules/@babel/plugin-transform-react-jsx'),{runtime:'classic'}],require.resolve('../node_modules/@babel/plugin-transform-modules-commonjs')] }).code;
   class TestFormData { constructor(){this.parts=[];} append(name,value){this.parts.push([name,value]);} }
   vm.runInNewContext(source,{module,exports:module.exports,FormData:TestFormData,require(name){
+    if(name==='../constants/support')return require('../constants/support.js');
     if(name==='react')return react;
     if(name==='react-native')return {Keyboard:{dismiss(){}},Modal:'Modal',ScrollView:'ScrollView',Platform:{OS:'android'},StyleSheet:{create:s=>s},Text:'Text',TextInput:'TextInput',TouchableOpacity:'TouchableOpacity',View:'View'};
     if(name==='@expo/vector-icons')return {Ionicons:'Icon'};
