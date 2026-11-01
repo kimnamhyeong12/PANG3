@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 export default function SocialAccounts({
   mode = 'link',
+  showAll = false,
   onVerified
 }) {
   const liveRevision=useLiveRevision(['account']);
@@ -72,5 +73,5 @@ export default function SocialAccounts({
       }
     }
   }
-  return <div><div className="action-row">{['google', 'kakao'].filter(p => mode !== 'verify' || linked.includes(p)).map(p => <button type="button" className={`btn-secondary social-provider social-provider-${p}`} key={p} disabled={busy || !providers[p] || mode === 'link' && linked.includes(p)} onClick={() => start(p)}><span className="social-provider-mark" aria-hidden="true">{p === 'google' ? 'G' : 'K'}</span><span>{p === 'google' ? 'Google' : '카카오'}</span><span className="social-provider-status">{mode === 'verify' ? '본인 인증' : linked.includes(p) ? '연결됨' : '계정 연결'}</span></button>)}{busy && <button className="btn-secondary" type="button" onClick={() => controller.current?.abort()}>인증 취소</button>}</div>{error && <p role="alert" className="form-error">{error}</p>}</div>;
+  return <div><div className="action-row">{['google', 'kakao'].filter(p => mode !== 'verify' || showAll || linked.includes(p)).map(p => <button type="button" className={`btn-secondary social-provider social-provider-${p}`} key={p} disabled={busy || !providers[p] || mode === 'link' && linked.includes(p) || mode === 'verify' && !linked.includes(p)} onClick={() => start(p)}><span className="social-provider-mark" aria-hidden="true">{p === 'google' ? 'G' : 'K'}</span><span>{p === 'google' ? 'Google' : '카카오'}</span><span className="social-provider-status">{mode === 'verify' ? linked.includes(p) ? '본인 인증' : '연결 필요' : linked.includes(p) ? '연결됨' : '계정 연결'}</span></button>)}{busy && <button className="btn-secondary" type="button" onClick={() => controller.current?.abort()}>인증 취소</button>}</div>{error && <p role="alert" className="form-error">{error}</p>}</div>;
 }

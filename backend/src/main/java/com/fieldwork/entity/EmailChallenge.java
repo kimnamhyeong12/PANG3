@@ -12,4 +12,6 @@ public class EmailChallenge {
     @Column(nullable = false, length = 254) public String email;
     @Column(nullable = false) public Instant expiresAt;
     @Column(nullable = false) public boolean used;
+    @Column(length = 64) public String codeHash;
+    @Column(nullable = false, columnDefinition = "integer default 0") public int attempts;
 }

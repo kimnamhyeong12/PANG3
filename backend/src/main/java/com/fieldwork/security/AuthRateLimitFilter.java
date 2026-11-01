@@ -17,7 +17,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String path = path(request);
         boolean post = request.getMethod().equals("POST") && Set.of("/api/auth/login", "/api/auth/register",
-                "/api/auth/email/request", "/api/auth/email/verify", "/api/auth/password/forgot",
+                "/api/auth/email/request", "/api/auth/email/verify", "/api/auth/email/code/request", "/api/auth/email/code/verify", "/api/auth/password/forgot",
                 "/api/auth/password/reset", "/api/auth/refresh", "/api/auth/logout").contains(path);
         post = post || request.getMethod().equals("POST") && path.startsWith("/api/auth/social/");
         boolean availability = request.getMethod().equals("GET") && path.equals("/api/auth/login-id/availability");

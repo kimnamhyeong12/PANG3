@@ -18,6 +18,16 @@ public class AccountEmailController {
     public Map<String,String> verify(@RequestBody Map<String,String> body) {
         email.verify(body.get("token")); return Map.of("message", "이메일 인증이 완료되었습니다.");
     }
+    @PostMapping("/email/code/request")
+    public Map<String,String> requestCode(@RequestBody Map<String,String> body) {
+        String id=email.requestCode(CurrentUser.id(),body.get("password"),body.get("email"));
+        return Map.of("challengeId",id,"message","인증코드를 보냈습니다. 10분 안에 입력해 주세요.");
+    }
+    @PostMapping("/email/code/verify")
+    public Map<String,String> verifyCode(@RequestBody Map<String,String> body) {
+        String address=email.verifyCode(CurrentUser.id(),body.get("challengeId"),body.get("code"));
+        return Map.of("email",address,"message","복구 이메일 인증이 완료되었습니다.");
+    }
     @PostMapping("/password/forgot")
     public Map<String,String> forgot(@RequestBody Map<String,String> body) {
         email.requestReset(body.get("loginId"), body.get("email"));

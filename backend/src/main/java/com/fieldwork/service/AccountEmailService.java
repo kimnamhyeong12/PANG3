@@ -25,6 +25,7 @@ public class AccountEmailService {
     private final String from;
     private final String publicUrl;
     private final com.fieldwork.security.RequestBudget mailBudget = new com.fieldwork.security.RequestBudget();
+    private final java.security.SecureRandom codeRandom = new java.security.SecureRandom();
     public AccountEmailService(EmailChallengeRepository challenges, UserRepository users, AuthSessionService sessions,
             PasswordEncoder encoder, ObjectProvider<JavaMailSender> mail,
             @Value("${fieldwork.auth.mail-from:}") String from, @Value("${fieldwork.auth.public-url:}") String publicUrl) {
@@ -37,6 +38,7 @@ public class AccountEmailService {
         if (users.findByEmail(normalized).filter(other -> !other.getUserId().equals(user.getUserId())).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "사용할 수 없는 이메일입니다.");
         }
+        challenges.invalidate(user.getUserId(), "VERIFY_CODE");
         sendChallenge(user, normalized, "VERIFY", "이메일 인증", "verify-email");
     }
     @Transactional
@@ -45,6 +47,48 @@ public class AccountEmailService {
         if (password == null || !(socialVerification.valid(userId, password) || user.isPasswordLoginEnabled() && encoder.matches(password, user.getPassword()))) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "다시 본인 인증해 주세요.");
         requestVerification(user, email);
     }
+    @Transactional
+    public String requestCode(Long userId, String password, String email) {
+        User user=users.findById(userId).orElseThrow();
+        if ("DELETED".equals(user.getRole()) || password == null || !(socialVerification.valid(userId,password)
+                || user.isPasswordLoginEnabled() && encoder.matches(password,user.getPassword())))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"현재 비밀번호 또는 Google·카카오 본인 인증을 확인해 주세요.");
+        String normalized=normalize(email);
+        if(users.findByEmail(normalized).filter(other->!other.getUserId().equals(userId)).isPresent())
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"사용할 수 없는 이메일입니다.");
+        JavaMailSender sender=checkMail();
+        long now=System.currentTimeMillis();
+        if(!mailBudget.allow("recipient:VERIFY:"+AuthSessionService.hash(normalized),1,60000,now)
+                || !mailBudget.allow("user:"+userId,5,3600000,now))
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,"메일 요청이 많습니다. 잠시 후 다시 시도해 주세요.");
+        String id=sessions.token(),code=String.format(Locale.ROOT,"%06d",codeRandom.nextInt(1_000_000));
+        challenges.invalidate(userId,"VERIFY_CODE");challenges.invalidate(userId,"VERIFY");
+        EmailChallenge challenge=new EmailChallenge();challenge.user=user;challenge.email=normalized;challenge.purpose="VERIFY_CODE";
+        challenge.tokenHash=AuthSessionService.hash(id);challenge.codeHash=AuthSessionService.hash(id+":"+code);
+        challenge.expiresAt=Instant.now().plusSeconds(600);challenges.save(challenge);
+        SimpleMailMessage message=new SimpleMailMessage();message.setFrom(from);message.setTo(normalized);message.setSubject("핀워크 복구 이메일 인증코드");
+        message.setText("복구 이메일 인증코드: "+code+"\n\n10분 안에 핀워크 설정 화면에 입력해 주세요.\n본인이 요청하지 않았다면 이 메일을 무시해 주세요.");
+        try{sender.send(message);}catch(org.springframework.mail.MailException ex){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.");}
+        return id;
+    }
+    // HTTP 400 must not roll back the failed-code attempt counter.
+    @Transactional(noRollbackFor=ResponseStatusException.class)
+    public String verifyCode(Long userId,String id,String code) {
+        if(id==null||!id.matches("[A-Za-z0-9_-]{43}")||code==null||!code.matches("[0-9]{6}"))throw invalidCode();
+        EmailChallenge challenge=challenges.findLocked(AuthSessionService.hash(id)).orElseThrow(AccountEmailService::invalidCode);
+        if(!challenge.user.getUserId().equals(userId)||challenge.used||!"VERIFY_CODE".equals(challenge.purpose)
+                ||challenge.attempts>=5||!challenge.expiresAt.isAfter(Instant.now())||"DELETED".equals(challenge.user.getRole()))throw invalidCode();
+        String expected=AuthSessionService.hash(id+":"+code);
+        if(challenge.codeHash==null||!java.security.MessageDigest.isEqual(expected.getBytes(java.nio.charset.StandardCharsets.US_ASCII),challenge.codeHash.getBytes(java.nio.charset.StandardCharsets.US_ASCII))){
+            challenge.attempts++;if(challenge.attempts>=5)challenge.used=true;throw invalidCode();
+        }
+        if(users.findByEmail(challenge.email).filter(other->!other.getUserId().equals(userId)).isPresent())
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"사용할 수 없는 이메일입니다.");
+        challenge.user.setEmail(challenge.email);challenge.used=true;
+        challenges.invalidate(userId,"VERIFY_CODE");challenges.invalidate(userId,"VERIFY");challenges.invalidate(userId,"RESET");
+        return challenge.email;
+    }
+    private static ResponseStatusException invalidCode(){return new ResponseStatusException(HttpStatus.BAD_REQUEST,"인증코드가 올바르지 않거나 만료되었습니다. 5회 틀린 경우 새 인증코드를 받아 주세요.");}
     @Transactional
     public void verify(String token) {
         EmailChallenge challenge = challenge(token, "VERIFY");
@@ -55,6 +99,7 @@ public class AccountEmailService {
         challenge.used = true;
         challenges.invalidate(challenge.user.getUserId(), "VERIFY");
         challenges.invalidate(challenge.user.getUserId(), "RESET");
+        challenges.invalidate(challenge.user.getUserId(), "VERIFY_CODE");
     }
     @Transactional
     public void requestReset(String loginId, String email) {
@@ -80,6 +125,7 @@ public class AccountEmailService {
         challenges.invalidate(challenge.user.getUserId(), "RESET");
         challenges.invalidate(challenge.user.getUserId(), "VERIFY");
         sessions.revokeAll(challenge.user.getUserId());
+        challenges.invalidate(challenge.user.getUserId(), "VERIFY_CODE");
     }
     private EmailChallenge challenge(String token, String purpose) {
         if (token == null || !token.matches("[A-Za-z0-9_-]{43}")) throw invalid();

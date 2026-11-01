@@ -1,19 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 
-export function EmailEnrollment({ compact = false, initialEmail = '' }) {
-  const [email, setEmail] = useState(initialEmail); const [password, setPassword] = useState('');
-  const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
-  const submit = async (event) => {
-    event.preventDefault(); setBusy(true); setMessage('');
-    try { const result = await api.post('/api/auth/email/request', { email, password }); setMessage(result.message); setPassword(''); }
-    catch (error) { setMessage(error.message); } finally { setBusy(false); }
+export function EmailEnrollment({ compact = false, initialEmail = '', credential, onVerified }) {
+  const [email,setEmail]=useState(initialEmail),[password,setPassword]=useState(''),[code,setCode]=useState('');
+  const [challengeId,setChallengeId]=useState(null),[verified,setVerified]=useState(false),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
+  const lock=useRef(false),emailField=useRef(null);
+  const sharedCredential=credential!==undefined;
+  const send=async()=>{
+    if(lock.current||!emailField.current.reportValidity())return;
+    const auth=sharedCredential?credential:password;
+    if(!auth){setMessage('현재 비밀번호 또는 Google·카카오 본인 인증 후 요청해 주세요.');return;}
+    lock.current=true;setBusy(true);setMessage('');
+    try{const result=await api.post('/api/auth/email/code/request',{email,password:auth});setChallengeId(result.challengeId);setCode('');setVerified(false);setMessage(result.message);}
+    catch(error){setMessage(error.message);}
+    finally{lock.current=false;setBusy(false);}
   };
-  return <section className={compact ? "account-security-section" : "card"}><h3>복구 이메일</h3><form className="settings-form" onSubmit={submit}>
-    <label>현재 비밀번호<input className="input" type="password" value={password} onChange={event => setPassword(event.target.value)} required autoComplete="current-password" /></label>
-    <label>이메일<input className="input" type="email" value={email} onChange={event => setEmail(event.target.value)} required /></label>
-    {message && <p aria-live="polite">{message}</p>}<button className="btn-primary btn-inline" disabled={busy}>{busy ? '메일 요청 중…' : '인증 메일 받기'}</button>
+  const verify=async event=>{
+    event.preventDefault();if(!challengeId){await send();return;}
+    if(lock.current||!/^\d{6}$/.test(code))return;
+    lock.current=true;setBusy(true);setMessage('');
+    try{const result=await api.post('/api/auth/email/code/verify',{challengeId,code});setVerified(true);setMessage(result.message);onVerified?.(result.email);setPassword('');setCode('');}
+    catch(error){setMessage(error.message);}
+    finally{lock.current=false;setBusy(false);}
+  };
+  return <section className={compact?'email-enrollment':'card email-enrollment'}>{!compact&&<h3>복구 이메일</h3>}<form className="email-enrollment-form" onSubmit={verify}>
+    {!sharedCredential&&<label>현재 비밀번호<input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} required autoComplete="current-password"/></label>}
+    <label>이메일<div className="email-action-row"><input ref={emailField} className="input" type="email" aria-label="복구 이메일" value={email} onChange={e=>{setEmail(e.target.value);setChallengeId(null);setVerified(false);setCode('');setMessage('');}} required disabled={busy}/><button type="button" className="btn-primary btn-inline" disabled={busy||!email.trim()} onClick={send}>{busy&&!challengeId?'발송 중…':'인증 메일 받기'}</button></div></label>
+    <label>인증코드<div className="email-action-row"><input className="input" aria-label="이메일 인증코드" value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="6자리 인증코드" disabled={!challengeId||busy||verified}/><button type="submit" className="btn-secondary" disabled={!challengeId||busy||verified||code.length!==6}>{verified?'인증 완료':'인증 확인'}</button></div></label>
+    <p className="field-hint">현재 비밀번호 또는 Google·카카오 본인 인증 후 메일을 요청해 주세요. 받은 인증코드는 10분 동안 사용할 수 있습니다.</p>
+    {message&&<p role="status" className={`email-notice${verified?' verified':''}`}>{message}</p>}
   </form></section>;
 }
 
