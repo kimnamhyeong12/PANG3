@@ -10,7 +10,7 @@ export default function AppLayout() {
   useEffect(() => setMenuOpen(false), [pathname]);
   const mapPage = pathname === '/map';
   const dashboardPage = pathname === '/dashboard';
-  const fixedWorkspace = mapPage || dashboardPage;
+  const fixedWorkspace = mapPage || dashboardPage || pathname.startsWith('/groups');
   return (
     <div className={`app-shell${fixedWorkspace ? ' app-shell-map' : ''}${menuOpen ? ' mobile-nav-open' : ''}`}>
       <Header onToggleMenu={fixedWorkspace ? () => setMenuOpen(v => !v) : undefined} menuOpen={menuOpen} />

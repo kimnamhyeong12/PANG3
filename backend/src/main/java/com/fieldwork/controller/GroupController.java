@@ -50,6 +50,12 @@ public class GroupController {
         return groupService.leaveGroup(groupId, CurrentUser.require(body.get("userId")), stringValue(body.get("password")));
     }
 
+    @DeleteMapping("/{groupId}/members/{memberUserId}")
+    public Map<String, Object> removeMember(@PathVariable Long groupId, @PathVariable Long memberUserId,
+            @RequestBody Map<String, Object> body) {
+        return groupService.removeMember(groupId, CurrentUser.require(body.get("userId")), memberUserId);
+    }
+
     @PatchMapping("/{groupId}/region")
     public Map<String, Object> updateGroupRegion(
             @PathVariable Long groupId,
