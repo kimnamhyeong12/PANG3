@@ -41,6 +41,13 @@ class ProjectPlaceWorkflowTest {
   assertEquals(1,destinations.findByProject_ProjectIdOrderByPlaceId(projectId).size());
  }
  @Test void deletingTaskDoesNotDeleteSavedPlace(){var first=taskService.createFromFrontendBody(registerBody());taskService.deletePendingTask(id(first));tasks.flush();assertEquals(1,places.list(projectId,member.getUserId()).size());}
+ @Test void deletingProjectKeepsVisitButClearsSavedDestinationReference(){
+  var first=taskService.createFromFrontendBody(registerBody());Long taskId=id(first);
+  projects.delete(projectId,leader.getUserId());
+  assertTrue(tasks.findById(taskId).isPresent());
+  assertNull(tasks.findById(taskId).orElseThrow().getProjectPlaceId());
+  assertTrue(destinations.findByProject_ProjectIdOrderByPlaceId(projectId).isEmpty());
+ }
  @Test void outsideMembersAndForeignProjectCannotRegister(){
   var first=taskService.createFromFrontendBody(registerBody());Long placeId=((Number)first.get("projectPlaceId")).longValue();
   assertThrows(org.springframework.web.server.ResponseStatusException.class,()->places.list(projectId,outsider.getUserId()));

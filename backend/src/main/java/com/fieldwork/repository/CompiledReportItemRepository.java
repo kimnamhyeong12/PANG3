@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface CompiledReportItemRepository extends JpaRepository<CompiledReportItem, Long> {
+    void deleteByReport_Project(Project project);
 
     @Query("select i from CompiledReportItem i join fetch i.progress p join fetch p.task where i.report = :report")
     List<CompiledReportItem> findWithProgress(@Param("report") CompiledReport report);

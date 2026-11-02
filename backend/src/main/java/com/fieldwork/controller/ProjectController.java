@@ -19,6 +19,10 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 public class ProjectController {
+    @DeleteMapping("/projects/{projectId}")
+    public Map<String, Object> delete(@PathVariable Long projectId, @RequestParam(required = false) Long userId) {
+        return projects.delete(projectId, CurrentUser.require(userId));
+    }
     private final ProjectService projects;
     private final CompiledReportService reports;
 

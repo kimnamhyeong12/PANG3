@@ -52,6 +52,7 @@ function createScreen({ nativeNavigation = false, nativeWalking = false, taskRem
     const code = babel.transformSync(fs.readFileSync(file, 'utf8'), { configFile: false, babelrc: false,
       plugins: [[require('../node_modules/@babel/plugin-transform-react-jsx'), { runtime: 'automatic' }], require('../node_modules/@babel/plugin-transform-modules-commonjs')] }).code;
     const requireMock = name => {
+      if (name.endsWith('/useLiveRevision')) return () => 0;
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'Fragment' };
       if (name === 'react-native') return native;

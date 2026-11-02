@@ -1180,7 +1180,7 @@ function NormalMapScreen({
   const [recommendationBasis, setRecommendationBasis] = useState('distance');
   const [recommendationBusy, setRecommendationBusy] = useState(false);
   const [recommendationReadyKey, setRecommendationReadyKey] = useState('');
-  const [guidanceRecommendationToken, setGuidanceRecommendationToken] = useState(0);
+  const guidanceRecommendationToken = 0;
   const sentGuidanceRecommendation = useRef(0);
   const previousRecommendationInput = useRef(null);
   const [nextAfterCompletion, setNextAfterCompletion] = useState(null);
@@ -1194,16 +1194,11 @@ function NormalMapScreen({
   const liveVisitsRef = useRef(allVisits);
   liveVisitsRef.current = allVisits;
   const resumedRouteRef = useRef(null);
-  const [resumeRetryToken, setResumeRetryToken] = useState(0);
-  const resumeRetryTimerRef = useRef(null);
-  const resumeFailureCountRef = useRef(0);
-  useEffect(() => () => {
-    clearTimeout(resumeRetryTimerRef.current);
-    resumeFailureCountRef.current = 0;
-  }, [isActive, isGuiding, scopeKey]);
-
+  const savedRouteOnlyRef = useRef(false);
   useEffect(() => {
     workspaceScopeRef.current = scopeKey;
+    resumedRouteRef.current = null;
+    savedRouteOnlyRef.current = false;
     orderSetRef.current = null;
     previousRecommendationInput.current = null;
     sentGuidanceRecommendation.current = 0;
@@ -1236,6 +1231,10 @@ function NormalMapScreen({
     const guidanceStart = Boolean(guidanceRecommendationToken && sentGuidanceRecommendation.current !== guidanceRecommendationToken);
     previousRecommendationInput.current = { key: inputKey, coordinates };
     const pending = (locations || []).filter(row => !isCompleted(row));
+    const unchangedStops = previous && Object.keys(previous.coordinates).length === Object.keys(coordinates).length && Object.entries(coordinates).every(([key, value]) => previous.coordinates[key] === value);
+    if (pending.length && pending.every(row => row.visitOrderVersion === 2 && Number(row.markerNumber) > 0) && (!previous || unchangedStops)) {
+      setRecommendationBusy(false); setRecommendationReadyKey(recommendationKey); return;
+    }
     if (!guidanceStart && (pending.length <= 1 ||
         (previous?.key === inputKey && onlyRemovedVisits(previous.coordinates, coordinates)))) {
       setLocations?.(rows => stableVisitOrder(Array.isArray(rows) ? rows : locations || [], pinnedKey));
@@ -1278,6 +1277,7 @@ function NormalMapScreen({
   }, [isActive, membershipKey, locationReady, scopeKey, returnOrderKey, transportMode, recommendationPinnedKey, guidanceRecommendationToken]);
 
   const clearGuidance = () => {
+    savedRouteOnlyRef.current = false;
     if (isGuiding) endRouteSession();
     guideRequestRef.current += 1;
     setIsGuiding(false);
@@ -1419,6 +1419,7 @@ function NormalMapScreen({
   }, [nextAfterCompletion, isActive, isGuiding, recommendationBusy, recommendationReadyKey, scopeKey, membershipKey, returnOrderKey, transportMode, guidanceRecommendationToken, markers, preview]);
 
   const handleStartGuidance = async (explicitTarget = null, requestedMode = null, { fromWeb = false } = {}) => {
+    savedRouteOnlyRef.current = false;
     const target = hasVisitCoordinates(explicitTarget) ? explicitTarget : cardTarget;
     if (!target || isCompleted(target) || segmentChanging || (!fromWeb && preview?.loading)) return;
     if (!hasVisitCoordinates(currentLocation)) {
@@ -1476,7 +1477,6 @@ function NormalMapScreen({
       resumedRouteRef.current = `${scopeKey}:${routeResumeToken}:${targetKey}`;
       setOptimized(true);
       beginRouteSession();
-      setGuidanceRecommendationToken(value => value + 1);
       setIsGuiding(true);
       previewRequestRef.current += 1;
       setPreview(null);
@@ -1537,7 +1537,7 @@ function NormalMapScreen({
   };
 
   const handleReroute = async (position = currentLocation, mode = activeSegment?.mode || transportMode) => {
-    if (mode === 'car') return;
+    if (mode === 'car' || savedRouteOnlyRef.current) return;
     if (segmentChanging || !isGuiding || !activeTarget || isCompleted(activeTarget) || !hasVisitCoordinates(position)) return;
     const targetKey = locationKey(activeTarget);
     const request = ++guideRequestRef.current;
@@ -1555,43 +1555,27 @@ function NormalMapScreen({
 
   useEffect(() => {
     const key = `${scopeKey}:${routeResumeToken}:${activeSegment?.destinationKey}`;
-    if (!isActive || !isGuiding || !activeTarget || !hasVisitCoordinates(currentLocation) || resumedRouteRef.current === key) return;
+    if (!isActive || !isGuiding || !activeTarget || !activeSegment || !hasVisitCoordinates(currentLocation) || resumedRouteRef.current === key) return;
+    const interrupted = resumedRouteRef.current == null || wasRouteTaskRemoved();
     resumedRouteRef.current = key;
-    // Task removal stopped the old SDK/notification, but did not end the user's
-    // destination. Begin a fresh native session before rebuilding that route.
-    setGuidanceRecommendationToken(value => value + 1);
-    beginRouteSession();
-    if (activeSegment.mode === 'car') {
-      if (!isKakaoNavigationAvailable()) { clearGuidance(); return; }
-      if (!isSdkPreviewAvailable(activeSegment.sdkPreviewId)) {
-        setKakaoDestination(null);
-        setNativeProgress(null); setNativeSafety(null); setNativeManeuver(null);
-        const request = ++guideRequestRef.current;
-        fetchRouteSegment(cleanLocation(currentLocation), cleanLocation(activeTarget), 'car', activeSegment.arrivalMode === 'MULTI').then(result => {
-          if (request !== guideRequestRef.current) return;
-          resumeFailureCountRef.current = 0;
-          clearTimeout(resumeRetryTimerRef.current);
-          resumedRouteRef.current = null;
-          setRouteSegments([{ ...result.segment, destinationKey: activeSegment.destinationKey }]);
-          setRoadPath(result.segment.path || []);
-          setTotalDuration(result.totalDuration);
-        }).catch(() => {
-          if (request !== guideRequestRef.current) return;
-          // A transient route request failure must not turn an unfinished
-          // destination into an explicit stop. Retry without adding a button.
-          if (++resumeFailureCountRef.current < 3) {
-            resumeRetryTimerRef.current = setTimeout(() => {
-              resumedRouteRef.current = null;
-              setResumeRetryToken(value => value + 1);
-            }, 5000);
-          } else showAlert('안내 재개 대기', '목적지는 보관했습니다. 인터넷 연결을 확인한 뒤 앱을 다시 열어 주세요.');
-        });
-        return;
-      }
-      setNativeProgress(null); setNativeSafety(null); setNativeManeuver(null);
-      setKakaoDestination({ previewId: activeSegment.sdkPreviewId, destinationKey: activeSegment.destinationKey });
-    } else handleReroute(currentLocation);
-  }, [isActive, isGuiding, routeResumeToken, resumeRetryToken, scopeKey, activeTarget, activeSegment, currentLocation]);
+    if (!interrupted) return; // Ordinary server updates must not ask to resume an ongoing trip.
+    savedRouteOnlyRef.current = true;
+    setKakaoDestination(null); setNativeProgress(null); setNativeSafety(null); setNativeManeuver(null);
+    showAlert('길안내 이어서 보기', '진행 중이던 안내가 있습니다. 기존 방문 순서와 저장된 경로로 안내를 계속할까요?', [
+      { text: '안내 종료', style: 'cancel', onPress: () => { if (resumedRouteRef.current === key) handleStopGuidance(); } },
+      { text: '계속 안내', onPress: () => {
+        if (resumedRouteRef.current !== key || workspaceScopeRef.current !== scopeKey) return;
+        beginRouteSession();
+        // SDK previews live only in process memory. Never recreate a missing
+        // preview through a new route request when resuming a saved session.
+        if (activeSegment.mode === 'car' && isKakaoNavigationAvailable() && isSdkPreviewAvailable(activeSegment.sdkPreviewId)) {
+          setKakaoDestination({ previewId: activeSegment.sdkPreviewId, destinationKey: activeSegment.destinationKey });
+        }
+        // Walking and expired SDK previews continue with the saved polyline.
+        // GPS updates progress along it; automatic reroute is suppressed.
+      } },
+    ], { cancelable: false });
+  }, [isActive, isGuiding, routeResumeToken, scopeKey, activeTarget, activeSegment, currentLocation]);
 
   const handleTransportPress = (mode) => {
     if (mode === transportMode) return;

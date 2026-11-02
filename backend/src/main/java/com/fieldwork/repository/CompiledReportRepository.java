@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface CompiledReportRepository extends JpaRepository<CompiledReport, Long> {
+    void deleteByProject(Project project);
 
     List<CompiledReport> findByProjectOrderByReportIdDesc(Project project);
 

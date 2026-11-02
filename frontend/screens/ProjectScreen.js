@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, Scrol
 import { Ionicons } from '@expo/vector-icons';
 import useLiveRevision from '../utils/useLiveRevision';
 import { useScreenBackHandler } from '../utils/screenBack';
-import { createProject, fetchProject, fetchProjectReports, fetchProjects, fetchProjectTasks, updateProject } from '../utils/projectApi';
+import { createProject, deleteProject, fetchProject, fetchProjectReports, fetchProjects, fetchProjectTasks, updateProject } from '../utils/projectApi';
 import { recordDay } from '../utils/projectWorkflow';
 import { colors } from '../constants/design';
 import { EmptyState, ScreenHeader } from '../components/ui';
@@ -65,7 +65,17 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
   useEffect(() => { onReportViewChange?.(view); }, [view, onReportViewChange]);
   const [visitDirty, setVisitDirty] = useState(false), [reportDirty, setReportDirty] = useState(false);
   const [error, setError] = useState(''), [revision, setRevision] = useState(0), [refreshing, setRefreshing] = useState(false);
-  const dirty = visitDirty || reportDirty || renaming;
+  const [deleting, setDeleting] = useState(false);
+  const deleteLock = useRef(false);
+  const dirty = visitDirty || reportDirty || renaming || deleting;
+  const remove = () => showAlert('프로젝트 삭제', `"${project.name}" 프로젝트와 통합보고서를 삭제할까요? 원본 방문지와 건별 보고서는 유지됩니다.`, [
+    { text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: async () => {
+      if (deleteLock.current) return; deleteLock.current = true; setDeleting(true);
+      try { await deleteProject(projectId, user.userId); onBack(); }
+      catch (error) { showAlert('프로젝트 삭제 실패', error.message); }
+      finally { deleteLock.current = false; setDeleting(false); }
+    } },
+  ]);
   const liveRevision = useLiveRevision(['projects', 'reports', 'tasks'], { dirty });
   const changed = useCallback(() => setRevision(n => n + 1), []);
   const close = useCallback(() => { setView(null); setReportDirty(false); }, []);
@@ -89,7 +99,7 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
     return () => { active = false; };
   }, [projectId, user.userId, revision, liveRevision]);
   return <View style={s.root}>
-    <ScreenHeader title={project?.name || '프로젝트'} onBack={back} right={<TouchableOpacity style={s.icon} disabled={dirty} accessibilityLabel="프로젝트 이름 변경" onPress={() => setRenaming(true)}><Ionicons name="create-outline" size={22} color={colors.primary}/></TouchableOpacity>}/>
+    <ScreenHeader title={project?.name || '프로젝트'} onBack={back} right={<View style={s.heading}><TouchableOpacity style={s.icon} disabled={dirty} accessibilityLabel="프로젝트 이름 변경" onPress={() => setRenaming(true)}><Ionicons name="create-outline" size={22} color={colors.primary}/></TouchableOpacity>{project?.canDelete && <TouchableOpacity style={s.icon} accessibilityLabel="프로젝트 삭제" disabled={dirty} onPress={remove}><Ionicons name="trash-outline" size={21} color={colors.danger}/></TouchableOpacity>}</View>}/>
     <ScrollView ref={projectScroll} keyboardShouldPersistTaps="handled" contentContainerStyle={s.body} refreshControl={<RefreshControl refreshing={refreshing} enabled={!dirty} onRefresh={() => { if (!dirty) { setRefreshing(true); changed(); } }}/>}>
       <ProjectError message={error} onRetry={!dirty ? changed : undefined}/>
       {!reports ? !error && <ProjectLoading/> : <>

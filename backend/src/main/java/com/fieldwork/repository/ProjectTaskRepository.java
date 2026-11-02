@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ProjectTaskRepository extends JpaRepository<ProjectTask, Long> {
+    void deleteByProject(Project project);
 
     void deleteByTask_TaskId(Long taskId);
 

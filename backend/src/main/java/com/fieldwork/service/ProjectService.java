@@ -11,6 +11,7 @@ import com.fieldwork.repository.CompiledReportItemRepository;
 import com.fieldwork.repository.CompiledReportRepository;
 import com.fieldwork.repository.GroupMemberRepository;
 import com.fieldwork.repository.ProjectRepository;
+import com.fieldwork.repository.ProjectPlaceRepository;
 import com.fieldwork.repository.ProjectTaskRepository;
 import com.fieldwork.repository.TaskRepository;
 import com.fieldwork.repository.UserRepository;
@@ -52,10 +53,11 @@ public class ProjectService {
     private final CompiledReportItemRepository items;
     private final ProjectTaskRepository links;
     private final AdminDongService adminDongs;
+    private final ProjectPlaceRepository places;
 
     public ProjectService(ProjectRepository projects, WorkGroupRepository groups, GroupMemberRepository members,
             UserRepository users, TaskRepository tasks, CompiledReportRepository reports, CompiledReportItemRepository items,
-            ProjectTaskRepository links, AdminDongService adminDongs) {
+            ProjectTaskRepository links, AdminDongService adminDongs, ProjectPlaceRepository places) {
         this.projects = projects;
         this.groups = groups;
         this.members = members;
@@ -65,6 +67,7 @@ public class ProjectService {
         this.items = items;
         this.links = links;
         this.adminDongs = adminDongs;
+        this.places = places;
     }
 
     // ---------- permissions ----------
@@ -102,6 +105,7 @@ public class ProjectService {
         List<Map<String, Object>> result = new ArrayList<>();
         for (Project project : projects.findByGroupOrderByProjectIdDesc(group)) {
             Map<String, Object> map = toMap(project);
+            map.put("canDelete", canDelete(project, userId));
             map.put("completedCount", eligibleProgress(project).size());
             List<CompiledReport> drafts = reports.findByProjectAndStatusOrderByReportIdDesc(project, "DRAFT");
             map.put("draftReportCount", drafts.size());
@@ -142,7 +146,33 @@ public class ProjectService {
         map.put("taskCount", projects.findTasks(project).size());
         map.put("isLeader", isLeader(project.getGroup(), userId));
         map.put("canManage", true);
+        map.put("canDelete", canDelete(project, userId));
         return map;
+    }
+
+    private boolean canDelete(Project project, Long userId) {
+        return isLeader(project.getGroup(), userId) || userId != null && project.getCreatedBy() != null
+                && userId.equals(project.getCreatedBy().getUserId());
+    }
+
+    @Transactional
+    public Map<String, Object> delete(Long projectId, Long userId) {
+        Project project = projects.lockById(projectId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다."));
+        requireMember(project.getGroup(), userId);
+        if (!canDelete(project, userId)) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "프로젝트를 만든 사람 또는 그룹장만 삭제할 수 있습니다.");
+        // Delete project-owned records only. Source tasks/progress and files belong to their owners.
+        items.deleteByReport_Project(project); items.flush();
+        reports.deleteByProject(project); reports.flush();
+        links.deleteByProject(project); links.flush();
+        var destinations = places.lockProjectPlaces(projectId);
+        for (var destination : destinations) {
+            for (Task task : tasks.findByProjectPlaceId(destination.getPlaceId())) task.setProjectPlaceId(null);
+        }
+        tasks.flush();
+        places.deleteAll(destinations); places.flush();
+        projects.delete(project); projects.flush();
+        return Map.of("deletedProjectId", projectId);
     }
 
     /**

@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { createScreen } = require('./map-recommendation-harness.cjs');
-const visit = id => ({ id, lat: 35, lng: 129 + id / 1000, status: 'pending', markerNumber: id, visitOrderVersion: 2, detailAddress: `방문지 ${id}` });
+const visit = id => ({ id, lat: 35, lng: 129 + id / 1000, status: 'pending', markerNumber: id, visitOrderVersion: undefined, detailAddress: `방문지 ${id}` });
 const ids = app => Array.from(app.props.locations, row => row.id);
 async function respond(app, pending, order, basis = 'roadDuration') {
   const byId = new Map(app.props.locations.map(row => [row.id, row]));
@@ -55,23 +55,20 @@ async function respond(app, pending, order, basis = 'roadDuration') {
   app.response(app.requests.shift(), { segments: [{ path: [{ lat: 35.01, lng: 129.01 }, { lat: target.lat, lng: target.lng }] }], totalDistance: 1000, totalDuration: 600 });
   await app.settle(); await app.find('TouchableOpacity', '안내 시작').props.onPress(); await app.settle();
   assert.equal(app.props.isGuiding, true);assert.equal(app.props.routeSegments[0].destinationKey, '3');
-  const guidance = app.pendingOrders.shift();
-  assert.equal(guidance.input.guidanceStart, true, 'the existing first-guidance freshness policy is preserved');
-  assert.equal(guidance.input.pinnedKey, '3');
+  const savedOrder = ids(app);
+  assert.equal(app.pendingOrders.length, 0, 'starting guidance preserves the recommendation instead of forcing a new solve');
   assert.equal(app.find('MapCanvas').props.guideTarget.id, 3);
   const requestsBeforeStop = app.orderRequests.length;
   app.find('TouchableOpacity', '안내 종료').props.onPress();
   app.alerts.at(-1)[2].find(button => button.text === '안내 종료').onPress();
   app.render(); await app.settle();
   assert.equal(app.props.isGuiding, false);
-  assert.equal(app.orderRequests.length, requestsBeforeStop, 'stopping guidance must not restart the duration calculation');
-  assert.equal(guidance.signal.aborted, false, 'ending navigation must not cancel the pending recommendation');
-  await respond(app, guidance, [3, 5, 4, 2, 6, 7]);
-  assert.deepEqual(ids(app), [3, 5, 4, 2, 6, 7], 'cached-duration optimization still applies after navigation ends; no fixed rotation');
+  assert.equal(app.orderRequests.length, requestsBeforeStop, 'stopping guidance does not restart the duration calculation');
+  assert.deepEqual(ids(app), savedOrder, 'start and stop retain the current recommendation');
   assert(app.props.locations.every(row => row.status === 'pending'), 'ending guidance never completes a visit');
   app.props.locations = app.props.locations.map(row => row.id === 3 ? { ...row, status: 'complete' } : row);
   app.render(); await app.settle();
-  assert.deepEqual(ids(app), [5, 4, 2, 6, 7, 3]);
+  assert.deepEqual(ids(app), [...savedOrder.filter(id => id !== 3), 3]);
   assert.deepEqual(Array.from(app.props.locations, row => row.markerNumber), [1, 2, 3, 4, 5, null]);
   assert.equal(app.orderRequests.length, requestsBeforeStop, 'completion advances the saved order without new calls');
   console.log('MapScreen reuse flow passed: coalescing, completion, undo, GPS gating, stale responses and pinned guidance');

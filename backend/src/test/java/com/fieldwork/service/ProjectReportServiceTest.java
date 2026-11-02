@@ -107,6 +107,33 @@ class ProjectReportServiceTest {
     @SuppressWarnings("unchecked")
     static List<Map<String, Object>> list(Object value) { return (List<Map<String, Object>>) value; }
 
+    @Test void deletingProjectPreservesSourceRecordsAndOtherProjects() {
+        Task task = task(group, "하단동", LocalDateTime.now()); link(task);
+        TaskProgress progress = progress(task, "complete", "원본 유지");
+        Long report = newReport("adminDong");
+        reports.addItems(report, leader.getUserId(), List.of(progress.getProgressId()));
+        reports.finalizeReport(report, leader.getUserId());
+        Long other = id(projects.create(group.getGroupId(), member.getUserId(), Map.of("name", "다른 프로젝트")), "projectId");
+        projects.linkTasks(other, member.getUserId(), List.of(task.getTaskId()));
+        projects.delete(projectId, leader.getUserId());
+        em.clear();
+        assertStatus(HttpStatus.NOT_FOUND, () -> projects.get(projectId, leader.getUserId()));
+        assertStatus(HttpStatus.NOT_FOUND, () -> reports.getJson(report, leader.getUserId()));
+        assertTrue(tasks.findById(task.getTaskId()).isPresent());
+        assertEquals("원본 유지", progressRepository.findById(progress.getProgressId()).orElseThrow().getMainComment());
+        assertEquals(1, projects.tasks(other, member.getUserId()).size());
+    }
+
+    @Test void onlyCreatorOrGroupLeaderCanDeleteProject() {
+        assertEquals(false, projects.get(projectId, member.getUserId()).get("canDelete"));
+        assertStatus(HttpStatus.FORBIDDEN, () -> projects.delete(projectId, member.getUserId()));
+        assertStatus(HttpStatus.FORBIDDEN, () -> projects.delete(projectId, outsider.getUserId()));
+        Long own = id(projects.create(group.getGroupId(), member.getUserId(), Map.of("name", "내 프로젝트")), "projectId");
+        assertEquals(true, projects.get(own, member.getUserId()).get("canDelete"));
+        projects.delete(own, member.getUserId());
+        assertStatus(HttpStatus.NOT_FOUND, () -> projects.get(own, member.getUserId()));
+    }
+
     @Test void nonMemberIsForbidden() {
         Task t = task(group, "하단동", LocalDateTime.of(2026, 5, 1, 10, 0)); link(t);
         TaskProgress p = progress(t, "complete", "원본");

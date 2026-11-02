@@ -51,6 +51,10 @@ export function updateProject(projectId, userId, patch) {
   return api.patch(`/api/projects/${projectId}`, { userId, ...patch });
 }
 
+export function deleteProject(projectId, userId) {
+  return del(`/api/projects/${projectId}`, { userId });
+}
+
 // 연결된 업무 → [{ taskId, roadAddress, detailAddress, adminDong, taskCategory, taskStatus, completedAt, lat, lng }]
 export function fetchProjectTasks(projectId, userId) {
   return api.get(`/api/projects/${projectId}/tasks`, { userId }, { timeoutMs: 20000 });
