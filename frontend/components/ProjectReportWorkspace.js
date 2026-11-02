@@ -9,17 +9,20 @@ import { createProjectReport, fetchCompiledReport, fetchProjectGroupReports, fet
 import { EmptyState } from './ui';
 import ProtectedImage from './ProtectedImage';
 import { showAlert } from './CustomAlert';
+import { downloadCompiledReportHwpx } from '../utils/compiledReportDownload';
 import CompiledReportViewScreen from '../screens/CompiledReportViewScreen';
 import ProjectReportMap from './ProjectReportMap';
 import { ProjectFilters, ProjectModal, ProjectError, ProjectLoading, ProjectCheckRow, PrimaryButton, SecondaryButton, projectStyles as s } from './ProjectNativeUI';
 
-export default function ProjectReportWorkspace({ project, tasks, userId, reportId, onClose, onOpenReport, onChanged, onDirtyChange, onEditReport }) {
+export default function ProjectReportWorkspace({ project, tasks, userId, reportId, onClose, onOpenReport, onChanged, onDirtyChange, onEditReport, onScrollToItem }) {
   const [rows, setRows] = useState(null), [document, setDocument] = useState(null);
   const [selected, setSelected] = useState(new Set()), [initial, setInitial] = useState(new Set());
   const [title, setTitle] = useState(''), [filters, setFilters] = useState(emptyProjectFilters), [outside, setOutside] = useState(false);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [retry, setRetry] = useState(0);
   const [preview, setPreview] = useState(false), [versions, setVersions] = useState(null);
   const mounted = useRef(true), lock = useRef(false);
+  const [activeMarker, setActiveMarker] = useState(null);
+  const workspaceTop = useRef(0), itemPositions = useRef({});
   const changed = selectionChanged(selected, initial);
   const nameChanged = title !== (document?.report?.title || '');
   const dirty = busy || changed || nameChanged;
@@ -76,7 +79,7 @@ export default function ProjectReportWorkspace({ project, tasks, userId, reportI
     } finally { refresh(); }
   });
   const canAct = !busy && !changed && !nameChanged;
-  return <View style={s.panel}>
+  return <View style={{ gap: 16 }} onLayout={event => { workspaceTop.current = event.nativeEvent.layout.y; }}><View style={s.panel}>
     <View style={s.heading}><Text style={s.headingText}>{reportId ? '건별 보고서' : '새 통합보고서'}</Text><TouchableOpacity disabled={busy} style={s.icon} accessibilityLabel="보고서 접기" onPress={close}><Ionicons name="chevron-up" size={20} color={colors.textSoft}/></TouchableOpacity></View>
     <ProjectError message={error} onRetry={!rows ? () => setRetry(n => n + 1) : undefined}/>
     {!rows ? !error && <ProjectLoading/> : <>
@@ -91,18 +94,27 @@ export default function ProjectReportWorkspace({ project, tasks, userId, reportI
       {!visible.length && <EmptyState title="조건에 맞는 완료 기록이 없어요"/>}
       {!readonly && <PrimaryButton title={busy ? '저장 중…' : reportId ? `${selected.size}건 선택 적용` : `${selected.size}건으로 보고서 만들기`} disabled={busy || !selected.size || !title.trim() || (reportId && !changed)} onPress={saveSelection}/>}
     </>}
-    {document && <>
+    </View>
+    {document && <><View style={s.panel}>
       <View style={s.heading}><Text style={s.headingText}>통합보고서</Text><Text style={s.meta}>{readonly ? '확정' : '작성 중'} v{document.report.version || 1}</Text></View>
-      <ProjectReportMap items={items}/>
+      <ProjectReportMap items={items} activeN={activeMarker} onPick={n => {
+        setActiveMarker(n);
+        if (itemPositions.current[n] != null) onScrollToItem?.(workspaceTop.current + itemPositions.current[n]);
+      }}/>
       <Text style={s.meta}>작성날짜 {recordDay(document.report.createdAt)} · 총 {items.length}건</Text>
-      <View style={[s.heading, { flexWrap: 'wrap' }]}>
-        <SecondaryButton title="미리보기 · 다운로드" icon="document-text-outline" disabled={!canAct} onPress={() => setPreview(true)}/>
-        <SecondaryButton title="이전 버전" disabled={!canAct} onPress={() => act(async () => { const list = await fetchReportVersions(reportId, userId); if (mounted.current) setVersions(list); })}/>
+      <View style={s.heading}>
+        <SecondaryButton style={{ flex: 1 }} title="미리보기" icon="document-text-outline" disabled={!canAct} onPress={() => setPreview(true)}/>
+        <SecondaryButton style={{ flex: 1 }} title="HWPX 다운로드" icon="download-outline" disabled={!canAct} onPress={() => act(async () => {
+          try { await downloadCompiledReportHwpx(reportId); }
+          catch (error) { showAlert('HWPX 다운로드 실패', error.message || '보고서를 저장하지 못했습니다.'); throw error; }
+        })}/>
+        </View><View style={s.heading}><SecondaryButton style={{ flex: 1 }} title="이전 버전" disabled={!canAct} onPress={() => act(async () => { const list = await fetchReportVersions(reportId, userId); if (mounted.current) setVersions(list); })}/>
       </View>
       {project.status !== 'ARCHIVED' && (readonly
         ? <SecondaryButton title="수정본 만들기" disabled={!canAct} onPress={() => act(async () => { const result = await reviseCompiledReport(reportId, userId); if (mounted.current) { onChanged(); onOpenReport(result.reportId); } })}/>
         : <PrimaryButton title="확정하기" disabled={!canAct || !items.length} onPress={() => showAlert('보고서 확정', '현재 내용으로 확정합니다. 이후 변경은 새 버전에서 할 수 있습니다.', [{ text: '취소', style: 'cancel' }, { text: '확정하기', onPress: () => act(async () => { await finalizeCompiledReport(reportId, userId); refresh(); }) }])}/>)}
-      {items.map((item, index) => <View key={item.progressId} style={[s.panel, { padding: 12, backgroundColor: colors.surfaceMuted }]}>
+      </View>
+      {items.map((item, index) => <View key={item.progressId} onLayout={event => { itemPositions.current[index + 1] = event.nativeEvent.layout.y; }} style={[s.panel, activeMarker === index + 1 && { borderColor: '#7A5BD6', borderWidth: 2 }]}>
         <View style={s.heading}><Text style={s.headingText}>{index + 1}. {item.title}</Text>
           {!readonly && <><TouchableOpacity disabled={!canAct || index === 0} style={s.icon} accessibilityLabel={`${item.title} 위로`} onPress={() => move(index, -1)}><Ionicons name="chevron-up" color={index ? colors.primary : colors.textFaint} size={18}/></TouchableOpacity>
             <TouchableOpacity disabled={!canAct || index === items.length - 1} style={s.icon} accessibilityLabel={`${item.title} 아래로`} onPress={() => move(index, 1)}><Ionicons name="chevron-down" color={index < items.length - 1 ? colors.primary : colors.textFaint} size={18}/></TouchableOpacity></>}

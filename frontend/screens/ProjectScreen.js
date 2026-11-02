@@ -58,6 +58,8 @@ export function GroupProjectList({ user, group, onOpenProject, onChanged }) {
 }
 
 export default function ProjectScreen({ user, projectId, initialProject, onBack, onEditReport, onReportViewChange }) {
+  const projectScroll = useRef(null);
+  const scrollToReportItem = useCallback(y => projectScroll.current?.scrollTo({ y: Math.max(0, y - 12), animated: true }), []);
   const [project, setProject] = useState(initialProject), [tasks, setTasks] = useState([]), [reports, setReports] = useState(null);
   const [view, setView] = useState(initialProject?.reportView || null), [collapsed, setCollapsed] = useState(true), [renaming, setRenaming] = useState(false);
   useEffect(() => { onReportViewChange?.(view); }, [view, onReportViewChange]);
@@ -88,7 +90,7 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
   }, [projectId, user.userId, revision, liveRevision]);
   return <View style={s.root}>
     <ScreenHeader title={project?.name || '프로젝트'} onBack={back} right={<TouchableOpacity style={s.icon} disabled={dirty} accessibilityLabel="프로젝트 이름 변경" onPress={() => setRenaming(true)}><Ionicons name="create-outline" size={22} color={colors.primary}/></TouchableOpacity>}/>
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.body} refreshControl={<RefreshControl refreshing={refreshing} enabled={!dirty} onRefresh={() => { if (!dirty) { setRefreshing(true); changed(); } }}/>}>
+    <ScrollView ref={projectScroll} keyboardShouldPersistTaps="handled" contentContainerStyle={s.body} refreshControl={<RefreshControl refreshing={refreshing} enabled={!dirty} onRefresh={() => { if (!dirty) { setRefreshing(true); changed(); } }}/>}>
       <ProjectError message={error} onRetry={!dirty ? changed : undefined}/>
       {!reports ? !error && <ProjectLoading/> : <>
         <ProjectVisits project={project} userId={user.userId} rows={tasks} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} onChanged={changed} onDirtyChange={setVisitDirty} disabled={reportDirty}/>
@@ -99,7 +101,7 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack,
             <Ionicons name={view === String(report.reportId) ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSoft}/>
           </TouchableOpacity>)}{!reports.length && <Text style={s.meta}>아직 보고서가 없습니다.</Text>}
         </View>
-        {view && <ProjectReportWorkspace key={`${projectId}:${view}`} project={project} tasks={tasks} userId={user.userId} reportId={view === 'new' ? null : view} onClose={close} onOpenReport={open} onChanged={changed} onDirtyChange={setReportDirty} onEditReport={onEditReport}/ >}
+        {view && <ProjectReportWorkspace key={`${projectId}:${view}`} project={project} tasks={tasks} userId={user.userId} reportId={view === 'new' ? null : view} onClose={close} onOpenReport={open} onChanged={changed} onDirtyChange={setReportDirty} onEditReport={onEditReport} onScrollToItem={scrollToReportItem}/ >}
       </>}
     </ScrollView>
     {renaming && <ProjectNameForm project={project} userId={user.userId} onClose={() => setRenaming(false)} onSaved={() => { setRenaming(false); changed(); }}/ >}

@@ -18,13 +18,21 @@ export function bytesToBase64(bytes) {
   return chunks.join('');
 }
 export function base64ToBytes(text) {
-  if (typeof text !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text))
-    throw new Error('보고서 파일 전송을 확인해 주세요.');
-  const bytes = new Uint8Array(text.length / 4 * 3 - (text.endsWith('==') ? 2 : text.endsWith('=') ? 1 : 0));
+  const invalid = () => { throw new Error('보고서 파일 전송을 확인해 주세요.'); };
+  if (typeof text !== 'string' || text.length % 4 !== 0) return invalid();
+  const padding = text.endsWith('==') ? 2 : text.endsWith('=') ? 1 : 0;
+  const bytes = new Uint8Array(text.length / 4 * 3 - padding);
   let at = 0;
+  // Do not validate large compiled-report chunks with a repeated-group RegExp:
+  // that can exhaust the native JS engine's regex stack on a full 256KB chunk.
   for (let i = 0; i < text.length; i += 4) {
-    const n = (alphabet.indexOf(text[i]) << 18) | (alphabet.indexOf(text[i + 1]) << 12)
-      | (Math.max(0, alphabet.indexOf(text[i + 2])) << 6) | Math.max(0, alphabet.indexOf(text[i + 3]));
+    const a = alphabet.indexOf(text[i]), b = alphabet.indexOf(text[i + 1]);
+    const c = text[i + 2] === '=' ? 0 : alphabet.indexOf(text[i + 2]);
+    const d = text[i + 3] === '=' ? 0 : alphabet.indexOf(text[i + 3]);
+    const last = i + 4 === text.length;
+    if (a < 0 || b < 0 || c < 0 || d < 0 || (!last && (text[i + 2] === '=' || text[i + 3] === '='))
+        || (text[i + 2] === '=' && text[i + 3] !== '=')) return invalid();
+    const n = (a << 18) | (b << 12) | (c << 6) | d;
     if (at < bytes.length) bytes[at++] = n >>> 16;
     if (at < bytes.length) bytes[at++] = n >>> 8 & 255;
     if (at < bytes.length) bytes[at++] = n & 255;
@@ -91,6 +99,7 @@ export function localReportSession({ descriptor, send, fetchAsset, onProgress = 
           attribution: String(response.headers?.get('x-map-attribution') || '').slice(0, 160) });
       }
       if (message.type === 'chunk') {
+        onProgress(`완성된 HWPX 파일을 옮기고 있어요. (${message.index + 1}/${message.count})`);
         if (isHtml) throw new Error('보고서 파일 형식이 올바르지 않습니다.');
         if (message.index !== chunks.length || message.count < 1 || message.count > 342 || message.data?.length > 262144)
           throw new Error('보고서 파일 전송에 실패했습니다.');
@@ -121,5 +130,5 @@ export function localReportSession({ descriptor, send, fetchAsset, onProgress = 
       if (message.type === 'error') throw new Error(message.message || '보고서를 만들지 못했습니다.');
     } catch (error) { finish(null, error); }
   };
-  return { promise, receive, cancel: () => finish(null, new Error('보고서 생성을 취소했습니다.')) };
+  return { promise, receive, fail: error => finish(null, error), cancel: () => finish(null, new Error('보고서 생성을 취소했습니다.')) };
 }

@@ -11,6 +11,17 @@ export function ReportFileCard({
   editLabel, onEdit, downloadable, state = 'new', onDownload, onOpenFolder, style,
   badgeInContent = false, hideSavedFolder = false, showSelection = true,
 }) {
+  if (!showSelection) return <View style={[styles.singleCard, style]}>
+    <TouchableOpacity onPress={onPress} disabled={!onPress} accessibilityRole="button" accessibilityLabel={pressLabel} activeOpacity={0.85} style={styles.singleBody}>{children}</TouchableOpacity>
+    <View style={styles.singleActions}>
+      <TouchableOpacity onPress={editLabel ? onEdit : onPress} disabled={!(editLabel ? onEdit : onPress) || busy} accessibilityRole="button" accessibilityLabel={`${title} ${editLabel || '보기'}`} style={styles.viewAction}>
+        <Ionicons name={editLabel ? 'create-outline' : 'document-text-outline'} size={17} color={colors.primary}/><Text style={styles.viewActionText}>{editLabel ? '보기 · 수정' : '보기'}</Text>
+      </TouchableOpacity>
+      {downloadable && <TouchableOpacity onPress={state === 'saved' && !hideSavedFolder ? onOpenFolder : onDownload} disabled={busy} accessibilityRole="button" accessibilityLabel={`${title} ${state === 'saved' && !hideSavedFolder ? '저장 폴더 열기' : '다운로드'}`} style={[styles.fileAction, busy && styles.disabled]}>
+        <Ionicons name={state === 'saved' && !hideSavedFolder ? 'folder-open-outline' : 'download-outline'} size={17} color="#FFFFFF"/><Text style={styles.fileActionText}>{state === 'saved' && !hideSavedFolder ? '저장 폴더' : state === 'changed' ? '다시 받기' : '다운로드'}</Text>
+      </TouchableOpacity>}
+    </View>
+  </View>;
   return <View style={[styles.card, { borderColor: checked ? colors.text : colors.line }, style]}>
     {/* 체크박스는 처음부터. 받을 수 있는 것만 누를 수 있음 */}
     {showSelection && <TouchableOpacity style={styles.check} onPress={onToggle} disabled={!selectable || busy} accessibilityRole="checkbox"
@@ -51,6 +62,13 @@ export function ReportDownloadFooter({ toast, onOpenFolder, count, hint, busy, o
 }
 
 const styles = StyleSheet.create({
+  singleCard: { padding: 16, borderRadius: 18, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, gap: 16 },
+  singleBody: { gap: 2 },
+  singleActions: { flexDirection: 'row', gap: 10, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
+  viewAction: { flex: 1, minHeight: 44, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.line, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center' },
+  viewActionText: { color: colors.primary, fontSize: 13, fontWeight: '700' },
+  fileAction: { flex: 1, minHeight: 44, paddingHorizontal: 10, borderRadius: 12, backgroundColor: colors.primary, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center' },
+  fileActionText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
   card: { minHeight: 82, borderRadius: 14, borderWidth: 2, flexDirection: 'row', alignItems: 'center', paddingRight: 8, backgroundColor: colors.surface },
   check: { width: 44, minHeight: 78, alignItems: 'center', justifyContent: 'center' },
   body: { flex: 1, minHeight: 78, justifyContent: 'center', paddingVertical: 10 },

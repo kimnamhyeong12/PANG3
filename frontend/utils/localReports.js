@@ -12,12 +12,24 @@ async function generate(kind, id, format, { signal } = {}) {
   if (!['progress', 'compiled'].includes(kind) || !/^\d+$/.test(String(id))) throw new Error('보고서 번호를 확인해 주세요.');
   if (!host) throw new Error('보고서 화면을 다시 열어 주세요.');
   if (signal?.aborted) throw new Error('보고서 생성을 취소했습니다.');
-  const response = await apiFetch(`${API_BASE_URL}/api/local-reports/${kind}/${id}${format === 'html' ? '/html-data' : ''}`, { cache: 'no-store', signal });
-  if (!response.ok) {
-    const error = await response.json().catch(() => null);
-    throw new Error(error?.message || '보고서 자료를 불러오지 못했습니다.');
-  }
-  const descriptor = await response.json();
+  const controller = new AbortController();
+  let timedOut = false;
+  const abort = () => controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 30000);
+  let descriptor;
+  try {
+    const response = await apiFetch(`${API_BASE_URL}/api/local-reports/${kind}/${id}${format === 'html' ? '/html-data' : ''}`, { cache: 'no-store', signal: controller.signal });
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      throw new Error(error?.message || '보고서 자료를 불러오지 못했습니다.');
+    }
+    descriptor = await response.json();
+  } catch (error) {
+    if (timedOut) throw new Error('보고서 자료 요청이 지연되고 있습니다. 다시 시도해 주세요.');
+    if (signal?.aborted) throw new Error('보고서 생성을 취소했습니다.');
+    throw error;
+  } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); }
   if (signal?.aborted) throw new Error('보고서 생성을 취소했습니다.');
   if (!host) throw new Error('보고서 화면을 다시 열어 주세요.');
   return host(descriptor, { signal });

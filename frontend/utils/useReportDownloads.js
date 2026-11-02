@@ -12,7 +12,7 @@ export function useReportDownloads(userId, reports) {
   const busy = useRef(false); // 같은 순간 두 번 눌러도 한 번만 받기
   const mounted = useRef(true);
   const toastTimer = useRef(null);
-  useEffect(() => () => { mounted.current = false; clearTimeout(toastTimer.current); }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; clearTimeout(toastTimer.current); }; }, []);
   useEffect(() => {
     let active = true;
     const rows = (reports || []).filter(report => report?.progressId);

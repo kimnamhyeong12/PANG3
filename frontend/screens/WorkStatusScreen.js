@@ -1,5 +1,5 @@
 import useLiveRevision from '../utils/useLiveRevision';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -17,6 +17,7 @@ import { groupApi } from '../utils/groupApi';
 import { regionBoundariesPath } from '../utils/workRegion';
 import { koreaDayKey, isCurrentWork } from '../utils/completionDay';
 import { buildMemberColors } from '../utils/memberColors';
+import { stableMapViewportSource } from '../utils/stableMapViewport';
 import GroupDashboardScreen from './GroupDashboardScreen';
 
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
@@ -47,7 +48,7 @@ const STATUS = {
 
 const safeJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
 
-const buildMapHtml = ({ boundaries, assignments, memberColors, selectedMemberId, focusedAreaBounds, districtView }) => `<!doctype html>
+export const buildMapHtml = ({ boundaries, assignments, memberColors, selectedMemberId, focusedAreaBounds, districtView, cameraScope }) => `<!doctype html>
 <html><head>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
 <style>
@@ -58,19 +59,28 @@ html,body,#map{width:100%;height:100%;margin:0;padding:0;overflow:hidden}body{ba
 </style>
 <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JAVASCRIPT_KEY || ''}&autoload=false"></script>
 </head><body><div id="map"></div><script>
-const boundaries=${safeJson(boundaries || { type: 'FeatureCollection', features: [] })};
-const assignments=${safeJson(assignments || [])};
-const memberColors=${safeJson(memberColors || {})};
-const selectedMemberId=${safeJson(selectedMemberId ? String(selectedMemberId) : '')};
-const focusedAreaBounds=${safeJson(focusedAreaBounds || null)};
-const districtView=${safeJson(districtView || null)};
+let boundaries=${safeJson(boundaries || { type: 'FeatureCollection', features: [] })};
+let assignments=${safeJson(assignments || [])};
+let memberColors=${safeJson(memberColors || {})};
+let selectedMemberId=${safeJson(selectedMemberId ? String(selectedMemberId) : '')};
+let focusedAreaBounds=${safeJson(focusedAreaBounds || null)};
+let districtView=${safeJson(districtView || null)};
+let cameraScope=${safeJson(cameraScope || '')};
+${stableMapViewportSource}
 const statusColors=${safeJson({ pending: colors.pending, working: colors.warning, complete: colors.success })};
 function statusOf(v){v=String(v||'pending').toLowerCase();if(['complete','completed','done'].includes(v))return'complete';if(['working','progress','in_progress'].includes(v))return'working';return'pending'}
 function shortName(v){const p=String(v||'').trim().split(/\\s+/);return(p[p.length-1]||'').replace(/제(?=\\d+동$)/,'')}
 function esc(v){return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function post(v){window.ReactNativeWebView.postMessage(JSON.stringify(v))}
 kakao.maps.load(function(){
- const map=new kakao.maps.Map(document.getElementById('map'),{center:new kakao.maps.LatLng(36.3,127.8),level:13});
+ const box=document.getElementById('map');
+ const map=new kakao.maps.Map(box,{center:new kakao.maps.LatLng(36.3,127.8),level:8});
+ let overlays=[],openedCallout=null,openedMarkerKey=null,lastScope=null,lastFitKind=null,fitCurrent=()=>false;
+ const viewport=createStableMapViewport(map,box,()=>fitCurrent());
+ kakao.maps.event.addListener(map,'click',()=>{if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;});
+ function redraw(){
+ overlays.forEach(o=>o.setMap(null));overlays=[];
+ if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;
  const bounds=new kakao.maps.LatLngBounds();let hasBounds=false;const regionBounds=new kakao.maps.LatLngBounds();let hasRegionBounds=false;const byArea={};
  assignments.forEach(i=>{const a=shortName(i.adminDong||i.admin_dong);if(a)(byArea[a]||(byArea[a]=[])).push(i)});
  function addRing(feature,ring,areaBounds,areaKey){
@@ -78,21 +88,34 @@ kakao.maps.load(function(){
   const ownerIds=Array.from(new Set(items.map(item=>String(item.assigneeUserId||'unknown'))));
   const singleOwner=ownerIds.length===1,ownerId=singleOwner?ownerIds[0]:'',color=singleOwner?(memberColors[ownerId]||'${UNASSIGNED_COLOR}'):'${MIXED_AREA_COLOR}',dimmed=selectedMemberId&&!ownerIds.includes(selectedMemberId);
   const path=ring.map(p=>{const ll=new kakao.maps.LatLng(Number(p[1]),Number(p[0]));bounds.extend(ll);hasBounds=true;return ll});
-  const polygon=new kakao.maps.Polygon({path,strokeWeight:dimmed?1:3,strokeColor:color,strokeOpacity:dimmed?0.25:1,fillColor:color,fillOpacity:dimmed?0.05:0.24});polygon.setMap(map);
+  const polygon=new kakao.maps.Polygon({path,strokeWeight:dimmed?1:3,strokeColor:color,strokeOpacity:dimmed?0.25:1,fillColor:color,fillOpacity:dimmed?0.05:0.24});polygon.setMap(map);overlays.push(polygon);
   kakao.maps.event.addListener(polygon,'click',()=>{
-   map.setBounds(areaBounds,35,35,35,35);
    const sw=areaBounds.getSouthWest(),ne=areaBounds.getNorthEast();
    post({type:'AREA_SELECT',areaKey,memberId:ownerId,bounds:{south:sw.getLat(),west:sw.getLng(),north:ne.getLat(),east:ne.getLng()}});
   });
  }
  (boundaries.features||[]).forEach((f,index)=>{const g=f.geometry||{},rings=[];if(g.type==='Polygon'&&g.coordinates&&g.coordinates[0])rings.push(g.coordinates[0]);else if(g.type==='MultiPolygon')(g.coordinates||[]).forEach(p=>p[0]&&rings.push(p[0]));if(!rings.length)return;const areaBounds=new kakao.maps.LatLngBounds(),properties=f.properties||{},areaKey=String(properties.adm_cd||properties.adm_nm||index);rings.forEach(r=>r.forEach(p=>{const ll=new kakao.maps.LatLng(Number(p[1]),Number(p[0]));areaBounds.extend(ll);regionBounds.extend(ll);hasRegionBounds=true;}));rings.forEach(r=>addRing(f,r,areaBounds,areaKey));});
- let openedCallout=null,openedMarkerKey=null;
- assignments.forEach((i,index)=>{const lat=Number(i.lat!=null?i.lat:i.latitude),lng=Number(i.lng!=null?i.lng:i.longitude);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;const s=statusOf(i.status||i.taskStatus),ownerId=String(i.assigneeUserId||'unknown'),ownerColor=memberColors[ownerId]||'${UNASSIGNED_COLOR}',markerKey=String(i.taskId||i.assignmentId||i.id||index),dimmed=selectedMemberId&&selectedMemberId!==ownerId,position=new kakao.maps.LatLng(lat,lng);bounds.extend(position);hasBounds=true;const content=document.createElement('div');content.className='pin';content.style.opacity=dimmed?'.22':'1';content.innerHTML='<div class="pin-body" style="background:'+(s==='complete'?statusColors.complete:'#E34D59')+';border-color:'+ownerColor+'"></div>';const markerOverlay=new kakao.maps.CustomOverlay({map,position,content,yAnchor:1,zIndex:5});content.onclick=(event)=>{event.stopPropagation();if(openedMarkerKey===markerKey){if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;return;}if(openedCallout)openedCallout.setMap(null);const box=document.createElement('div');box.className='place-callout';const title=document.createElement('div');title.className='place-title';title.textContent=i.detailAddress||i.roadAddress||('방문지 '+i.taskId);const address=document.createElement('div');address.className='place-address';address.textContent=i.roadAddress||i.detailAddress||'주소 정보 없음';const assignee=document.createElement('div');assignee.className='place-assignee';assignee.style.color=ownerColor;assignee.textContent='담당자: '+(i.assigneeName||i.assigneeLoginId||'미배정');const status=document.createElement('span');status.className='place-status';status.style.background=statusColors[s];status.textContent=s==='complete'?'작업 후':s==='working'?'작업 중':'작업 전';box.appendChild(title);box.appendChild(address);box.appendChild(assignee);box.appendChild(status);openedCallout=new kakao.maps.CustomOverlay({map,position,content:box,yAnchor:1.65,zIndex:10});openedMarkerKey=markerKey;};});
- kakao.maps.event.addListener(map,'click',()=>{if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;});
- // 사용자가 행정동을 직접 눌렀을 때만 해당 동으로 확대한다.
- // 그 외 최초 진입/재진입은 SGIS 시군구 전체 경계를 최우선으로 사용한다.
- // 방문지 좌표 bounds는 SGIS 경계를 못 불러온 경우에만 최후의 fallback이다.
- if(focusedAreaBounds&&Number.isFinite(Number(focusedAreaBounds.south))&&Number.isFinite(Number(focusedAreaBounds.west))&&Number.isFinite(Number(focusedAreaBounds.north))&&Number.isFinite(Number(focusedAreaBounds.east))){const focused=new kakao.maps.LatLngBounds(new kakao.maps.LatLng(Number(focusedAreaBounds.south),Number(focusedAreaBounds.west)),new kakao.maps.LatLng(Number(focusedAreaBounds.north),Number(focusedAreaBounds.east)));map.setBounds(focused,35,35,35,35);}else if(hasRegionBounds)map.setBounds(regionBounds,12,12,12,12);else if(districtView){map.setCenter(new kakao.maps.LatLng(districtView.lat,districtView.lng));map.setLevel(districtView.level);}else if(hasBounds)map.setBounds(bounds,35,35,35,35);
+ assignments.forEach((i,index)=>{const rawLat=i.lat!=null?i.lat:i.latitude,rawLng=i.lng!=null?i.lng:i.longitude;const lat=Number(rawLat),lng=Number(rawLng);if(rawLat==null||rawLng==null||rawLat===''||rawLng===''||!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)return;const s=statusOf(i.status||i.taskStatus),ownerId=String(i.assigneeUserId||'unknown'),ownerColor=memberColors[ownerId]||'${UNASSIGNED_COLOR}',markerKey=String(i.taskId||i.assignmentId||i.id||index),dimmed=selectedMemberId&&selectedMemberId!==ownerId,position=new kakao.maps.LatLng(lat,lng);bounds.extend(position);hasBounds=true;const content=document.createElement('div');content.className='pin';content.style.opacity=dimmed?'.22':'1';content.innerHTML='<div class="pin-body" style="background:'+(s==='complete'?statusColors.complete:'#E34D59')+';border-color:'+ownerColor+'"></div>';const markerOverlay=new kakao.maps.CustomOverlay({map,position,content,yAnchor:1,zIndex:5});overlays.push(markerOverlay);content.onclick=(event)=>{event.stopPropagation();if(openedMarkerKey===markerKey){if(openedCallout)openedCallout.setMap(null);openedCallout=null;openedMarkerKey=null;return;}if(openedCallout)openedCallout.setMap(null);const box=document.createElement('div');box.className='place-callout';const title=document.createElement('div');title.className='place-title';title.textContent=i.detailAddress||i.roadAddress||('방문지 '+i.taskId);const address=document.createElement('div');address.className='place-address';address.textContent=i.roadAddress||i.detailAddress||'주소 정보 없음';const assignee=document.createElement('div');assignee.className='place-assignee';assignee.style.color=ownerColor;assignee.textContent='담당자: '+(i.assigneeName||i.assigneeLoginId||'미배정');const status=document.createElement('span');status.className='place-status';status.style.background=statusColors[s];status.textContent=s==='complete'?'작업 후':s==='working'?'작업 중':'작업 전';box.appendChild(title);box.appendChild(address);box.appendChild(assignee);box.appendChild(status);openedCallout=new kakao.maps.CustomOverlay({map,position,content:box,yAnchor:1.65,zIndex:10});openedMarkerKey=markerKey;};});
+
+ const focusedValid=focusedAreaBounds&&[focusedAreaBounds.south,focusedAreaBounds.west,focusedAreaBounds.north,focusedAreaBounds.east].every(v=>v!=null&&v!==''&&Number.isFinite(Number(v)));
+ const kind=focusedValid?'focused':hasRegionBounds?'region':districtView?'district':hasBounds?'visits':'none';
+ fitCurrent=()=>{
+  if(focusedValid){const focused=new kakao.maps.LatLngBounds(new kakao.maps.LatLng(Number(focusedAreaBounds.south),Number(focusedAreaBounds.west)),new kakao.maps.LatLng(Number(focusedAreaBounds.north),Number(focusedAreaBounds.east)));map.setBounds(focused,35,35,35,35);}
+  else if(hasRegionBounds)map.setBounds(regionBounds,12,12,12,12);
+  else if(districtView){map.setLevel(districtView.level);map.setCenter(new kakao.maps.LatLng(districtView.lat,districtView.lng));}
+  else if(hasBounds)map.setBounds(bounds,35,35,35,35);
+  else return false;
+ };
+ const scope=String(cameraScope)+':'+JSON.stringify(focusedAreaBounds||null);
+ if(scope!==lastScope||kind!==lastFitKind){lastScope=scope;lastFitKind=kind;viewport.requestFit();}
+ }
+ window.updateDashboardData=function(data){
+  boundaries=data.boundaries||{features:[]};assignments=data.assignments||[];memberColors=data.memberColors||{};
+  selectedMemberId=data.selectedMemberId||'';focusedAreaBounds=data.focusedAreaBounds||null;districtView=data.districtView||null;cameraScope=data.cameraScope||'';
+  redraw();
+ };
+ window.relayoutDashboardMap=function(){viewport.relayout();};
+ redraw();post({type:'MAP_READY'});
 });
 </script></body></html>`;
 
@@ -108,6 +131,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
   const [focusedAreaBounds, setFocusedAreaBounds] = useState(null);
   const [mapInteracting, setMapInteracting] = useState(false);
   const [districtView, setDistrictView] = useState(null);
+  const boundaryEpoch = useRef(0), boundaryScope = useRef('');
   useEffect(() => {
     let active = true;
     setDistrictView(null); setFocusedAreaBounds(null); setSelectedAreaKey(null);
@@ -140,6 +164,9 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
   }, []);
 
   const loadBoundaries = useCallback(async () => {
+    const request = ++boundaryEpoch.current;
+    const scope = [group?.groupId, group?.regionAdmCode, group?.regionSido, group?.regionSigungu, personalWorkspace, user?.workSido, user?.workSigungu].join(':');
+    if (boundaryScope.current !== scope) { boundaryScope.current = scope; setBoundaries({ type: 'FeatureCollection', features: [] }); }
     setLoadingBoundary(true);
     setBoundaryError('');
     try {
@@ -154,6 +181,7 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
         return;
       }
       const results = await Promise.allSettled(paths.map(path => groupApi(path)));
+      if (boundaryEpoch.current !== request) return;
       const unique = new Map();
       results.forEach(result => {
         if (result.status !== 'fulfilled') return;
@@ -163,14 +191,14 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
       setBoundaries({ type: 'FeatureCollection', features });
       if (features.length === 0) setBoundaryError('행정동 경계를 불러오지 못했습니다.');
     } catch (error) {
-      setBoundaryError(error.message || '행정동 경계를 불러오지 못했습니다.');
+      if (boundaryEpoch.current === request) setBoundaryError(error.message || '행정동 경계를 불러오지 못했습니다.');
     } finally {
-      setLoadingBoundary(false);
+      if (boundaryEpoch.current === request) setLoadingBoundary(false);
     }
-  }, [group?.regionAdmCode, group?.regionSido, group?.regionSigungu, personalWorkspace, user?.workSido, user?.workSigungu, assignments]);
+  }, [group?.groupId, group?.regionAdmCode, group?.regionSido, group?.regionSigungu, personalWorkspace, user?.workSido, user?.workSigungu, assignments]);
 
   useEffect(() => { onRefresh?.(); }, [onRefresh]);
-  useEffect(() => { loadBoundaries(); }, [loadBoundaries]);
+  useEffect(() => { loadBoundaries(); return () => { boundaryEpoch.current++; }; }, [loadBoundaries]);
   useEffect(() => {
     if (!group?.groupId || !user?.userId) return undefined;
     let active = true;
@@ -259,14 +287,15 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
     return Array.from(members.values());
   }, [visibleAssignments, memberColors, groupMembers]);
 
-  const mapHtml = useMemo(() => buildMapHtml({
-    boundaries,
-    assignments: mapAssignments,
-    memberColors,
-    selectedMemberId,
-    focusedAreaBounds,
-    districtView,
-  }), [boundaries, mapAssignments, memberColors, selectedMemberId, focusedAreaBounds, districtView]);
+  const mapRef = useRef(null), mapReady = useRef(false);
+  const mapData = useMemo(() => ({ boundaries, assignments: mapAssignments, memberColors, selectedMemberId,
+    focusedAreaBounds, districtView, cameraScope: [group?.groupId, group?.regionAdmCode, group?.regionSido, group?.regionSigungu].join(':') }),
+    [boundaries, mapAssignments, memberColors, selectedMemberId, focusedAreaBounds, districtView, group?.groupId, group?.regionAdmCode, group?.regionSido, group?.regionSigungu]);
+  const latestMapData = useRef(mapData); latestMapData.current = mapData;
+  const mapSource = useMemo(() => ({ html: buildMapHtml({}), baseUrl: 'https://localhost/' }), [group?.groupId]);
+  useEffect(() => {
+    if (mapReady.current) mapRef.current?.injectJavaScript(`window.updateDashboardData?.(${safeJson(mapData)});true;`);
+  }, [mapData]);
   const selectedMember = memberProgress.find((member) => member.id === selectedMemberId);
 
   return (
@@ -293,15 +322,16 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
           onTouchEnd={() => setMapInteracting(false)}
           onTouchCancel={() => setMapInteracting(false)}
         >
-          {loadingBoundary ? (
-            <View style={styles.mapState}><ActivityIndicator color="#1551A6" /><Text style={styles.mapStateText}>행정동 경계를 불러오는 중입니다.</Text></View>
-          ) : !KAKAO_JAVASCRIPT_KEY ? (
+          {!KAKAO_JAVASCRIPT_KEY ? (
             <View style={styles.mapState}><Text style={styles.errorText}>카카오 JavaScript 키가 설정되지 않았습니다.</Text></View>
           ) : (
             <WebView
-              key={mapHtml}
+              ref={mapRef}
+              key={group?.groupId}
               originWhitelist={['*']}
-              source={{ html: mapHtml }}
+              source={mapSource}
+              onLoadStart={() => { mapReady.current = false; }}
+              onLayout={() => mapRef.current?.injectJavaScript('window.relayoutDashboardMap?.();true;')}
               javaScriptEnabled
               domStorageEnabled
               mixedContentMode="always"
@@ -310,6 +340,10 @@ export default function WorkStatusScreen({ user, group, assignments = [], onBack
               onMessage={(event) => {
                 try {
                   const message = JSON.parse(event.nativeEvent.data);
+                  if (message.type === 'MAP_READY') {
+                    mapReady.current = true;
+                    mapRef.current?.injectJavaScript(`window.updateDashboardData?.(${safeJson(latestMapData.current)});true;`);
+                  }
                   if (message.type === 'AREA_SELECT') {
                     const id = String(message.memberId || '');
                     const areaKey = String(message.areaKey || '');

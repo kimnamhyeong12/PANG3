@@ -1,16 +1,14 @@
 import useLiveRevision from '../utils/useLiveRevision';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Directory, File, Paths } from 'expo-file-system';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
-import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import { EmptyState, ScreenHeader, SecondaryButton } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
 import { colors, radius } from '../constants/design';
-import { generateLocalReport } from '../utils/localReports';
-import { openReportDownloadsFolder, saveReportToDownloads } from '../modules/kakao-navigation';
+import { downloadCompiledReportHwpx } from '../utils/compiledReportDownload';
 import { fetchCompiledReportHtml, fetchProgressReportHtml, injectKakaoKey } from '../utils/projectApi';
+import { stabilizeReportHtmlViewport } from '../utils/stableMapViewport';
 
 // D15: 기존 KakaoMapWebView와 같은 키·baseUrl로 보고서 지도 표시
 const KAKAO_KEY = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY || '';
@@ -34,8 +32,8 @@ export default function CompiledReportViewScreen({ user, reportId, progressId, t
   const [html, setHtml] = useState(null);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
-  const [downloadMenu, setDownloadMenu] = useState(false);
   const loading = useRef(null);
+  const reportSource = useMemo(() => ({ html: html || '', baseUrl: 'https://localhost/' }), [html]);
 
   const load = useCallback(async () => {
     if ((!reportId && !progressId) || !user?.userId) return;
@@ -48,7 +46,7 @@ export default function CompiledReportViewScreen({ user, reportId, progressId, t
       const options = { signal: controller.signal };
       const text = progressId ? await fetchProgressReportHtml(progressId, options) : await fetchCompiledReportHtml(reportId, user.userId, options);
       if (controller.signal.aborted) return;
-      setHtml(injectKakaoKey(text, KAKAO_KEY));
+      setHtml(injectKakaoKey(stabilizeReportHtmlViewport(text), KAKAO_KEY));
     } catch (loadError) {
       if (controller.signal.aborted) return;
       setError(loadError.message || '보고서를 불러오지 못했습니다.');
@@ -58,50 +56,20 @@ export default function CompiledReportViewScreen({ user, reportId, progressId, t
   useEffect(() => { load(); return () => loading.current?.abort(); }, [load]);
 
   const downloadLock = useRef(false);
-  const downloadReport = async (format) => {
+  const downloadReport = async () => {
     if (downloadLock.current) return;
-    downloadLock.current = true;
-    setDownloadMenu(false);
-    try {
-      setDownloading(true);
-      let prepared;
-      if (format === 'html') {
-        const directory = new Directory(Paths.cache, 'local-reports');
-        directory.create({ intermediates: true, idempotent: true });
-        const fileName = `${safeFileName(title)}.html`;
-        const file = new File(directory, `${Date.now()}-${fileName}`);
-        file.write(html);
-        prepared = { uri: file.uri, fileName };
-      } else prepared = await generateLocalReport('compiled', reportId);
-      const fileName = prepared.fileName || `${safeFileName(title)}.${format}`;
-      const uri = prepared.uri;
-      if (Platform.OS === 'android') {
-        // 건별 보고서 받기와 같이: Download/외근도우미 에 저장 → 폴더 열기
-        // (파일을 바로 열면 hwp+zip 을 등록한 다른 앱(통신사 PASS 등)이 뜨는 폰이 있었다)
-        await saveReportToDownloads(uri, fileName);
-        showAlert(`${format.toUpperCase()} 저장 완료`, `다운로드 폴더(외근도우미)에 저장했어요.\n${fileName}`, [
-          { text: '닫기', style: 'cancel' },
-          { text: '폴더 열기', onPress: () => openReportDownloadsFolder().catch((openError) => showAlert('폴더 열기', openError.message)) },
-        ]);
-      } else if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: format === 'html' ? 'text/html' : 'application/octet-stream', dialogTitle: `${fileName} 받기` });
-      } else {
-        showAlert('보고서 저장', '파일을 받았지만 이 기기에서 공유를 사용할 수 없습니다.');
-      }
-    } catch (downloadError) {
-      showAlert('보고서 받기 실패', downloadError.message || '파일을 받지 못했습니다.');
-    } finally {
-      setDownloading(false);
-      downloadLock.current = false;
-    }
+    downloadLock.current = true; setDownloading(true);
+    try { await downloadCompiledReportHwpx(reportId); }
+    catch (downloadError) { showAlert('HWPX 다운로드 실패', downloadError.message || '파일을 받지 못했습니다.'); }
+    finally { setDownloading(false); downloadLock.current = false; }
   };
 
   const headerRight = (
-    <TouchableOpacity style={styles.headerAction} onPress={() => setDownloadMenu(true)} disabled={downloading || !html} activeOpacity={0.75}>
+    <TouchableOpacity style={styles.headerAction} onPress={downloadReport} disabled={downloading} activeOpacity={0.75}>
       {downloading
         ? <ActivityIndicator size="small" color={colors.primary} />
-        : <Ionicons name="download-outline" size={18} color={html ? colors.primary : colors.textFaint} />}
-      <Text style={[styles.headerActionText, !html && { color: colors.textFaint }]}>다운로드</Text>
+        : <Ionicons name="download-outline" size={18} color={colors.primary} />}
+      <Text style={styles.headerActionText}>HWPX 다운로드</Text>
     </TouchableOpacity>
   );
 
@@ -119,7 +87,7 @@ export default function CompiledReportViewScreen({ user, reportId, progressId, t
         ) : (
           <WebView
             originWhitelist={['*']}
-            source={{ html, baseUrl: 'https://localhost/' }}
+            source={reportSource}
             javaScriptEnabled
             domStorageEnabled
             mixedContentMode="always"
@@ -132,14 +100,7 @@ export default function CompiledReportViewScreen({ user, reportId, progressId, t
           />
         )}
       </View>
-      <Modal visible={downloadMenu} transparent animationType="fade" onRequestClose={() => setDownloadMenu(false)}>
-        <Pressable style={{ flex: 1, justifyContent: 'center', padding: 32, backgroundColor: '#10285B55' }} onPress={() => setDownloadMenu(false)}>
-          <Pressable style={{ backgroundColor: colors.surface, borderRadius: 18, padding: 18, gap: 12 }}>
-            <Text style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>다운로드 형식</Text>
-            {['html', 'hwpx'].map(format => <SecondaryButton key={format} title={format.toUpperCase()} onPress={() => downloadReport(format)}/>)}
-          </Pressable>
-        </Pressable>
-      </Modal>
+
     </View>
   );
 }
