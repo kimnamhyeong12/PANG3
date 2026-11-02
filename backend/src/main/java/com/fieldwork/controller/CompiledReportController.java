@@ -56,6 +56,11 @@ public class CompiledReportController {
         return reports.addItems(reportId, CurrentUser.require(body.get("userId")), body.get("progressIds"));
     }
 
+    @org.springframework.web.bind.annotation.PutMapping("/items")
+    public Map<String, Object> replaceItems(@PathVariable Long reportId, @RequestBody Map<String, Object> body) {
+        return reports.replaceItems(reportId, CurrentUser.require(body.get("userId")), body);
+    }
+
     @PatchMapping("/items/{progressId}")
     public Map<String, Object> updateItem(@PathVariable Long reportId, @PathVariable Long progressId,
             @RequestBody Map<String, Object> body) {

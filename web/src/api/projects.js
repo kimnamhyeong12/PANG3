@@ -35,7 +35,7 @@ async function del(path, params) {
 
 // → [{ projectId, groupId, name, startDate, endDate, status, completedCount, draftReportCount, latestDraft:{reportId,title}|null }]
 export function fetchProjects(groupId, userId) {
-  return api.get(`/api/groups/${groupId}/projects`, { userId });
+  return api.get(`/api/groups/${groupId}/projects`, { userId }, { timeoutMs: 20000 });
 }
 
 export function createProject(groupId, userId, { name, startDate, endDate }) {
@@ -44,7 +44,7 @@ export function createProject(groupId, userId, { name, startDate, endDate }) {
 
 // → { ...project, completedCount, taskCount, isLeader }
 export function fetchProject(projectId, userId) {
-  return api.get(`/api/projects/${projectId}`, { userId });
+  return api.get(`/api/projects/${projectId}`, { userId }, { timeoutMs: 20000 });
 }
 
 export function updateProject(projectId, userId, patch) {
@@ -53,7 +53,7 @@ export function updateProject(projectId, userId, patch) {
 
 // 연결된 업무 → [{ taskId, roadAddress, detailAddress, adminDong, taskCategory, taskStatus, completedAt, lat, lng }]
 export function fetchProjectTasks(projectId, userId) {
-  return api.get(`/api/projects/${projectId}/tasks`, { userId });
+  return api.get(`/api/projects/${projectId}/tasks`, { userId }, { timeoutMs: 20000 });
 }
 
 export function linkProjectTasks(projectId, userId, taskIds) {
@@ -85,11 +85,15 @@ export function fetchProjectItems(projectId, userId, filters = {}) {
 
 // → [{ reportId, projectId, title, status, version, rootReportId, groupBy, itemCount, finalizedAt, createdAt, updatedAt }]
 export function fetchProjectReports(projectId, userId) {
-  return api.get(`/api/projects/${projectId}/reports`, { userId });
+  return api.get(`/api/projects/${projectId}/reports`, { userId }, { timeoutMs: 20000 });
 }
 
-export function createProjectReport(projectId, userId, { title, groupBy }) {
-  return api.post(`/api/projects/${projectId}/reports`, { userId, title, groupBy });
+export function createProjectReport(projectId, userId, { title, groupBy, progressIds }) {
+  return api.post(`/api/projects/${projectId}/reports`, { userId, title, groupBy, progressIds });
+}
+
+export function replaceReportItems(reportId, userId, progressIds, expectedUpdatedAt) {
+  return api.put(`/api/compiled-reports/${reportId}/items`, { userId, progressIds, expectedUpdatedAt });
 }
 
 // ---------- 통합 보고서 (CompiledReportController) ----------
@@ -98,7 +102,7 @@ const reportPath = (reportId) => `/api/compiled-reports/${reportId}`;
 
 // REPORT_SCHEMA v1 JSON
 export function fetchCompiledReport(reportId, userId) {
-  return api.get(reportPath(reportId), { userId });
+  return api.get(reportPath(reportId), { userId }, { timeoutMs: 20000 });
 }
 
 export function updateCompiledReport(reportId, userId, patch) {
@@ -121,8 +125,8 @@ export function removeReportItem(reportId, progressId, userId) {
 }
 
 // 서버 JSON과 사진으로 이 브라우저에서 HTML을 만든다.
-export async function fetchCompiledReportHtml(reportId, userId) {
-  return generateLocalReportHtml('compiled', reportId);
+export async function fetchCompiledReportHtml(reportId, userId, onProgress) {
+  return generateLocalReportHtml('compiled', reportId, onProgress);
 }
 
 // 건별 보고서 HTML (통합 보고서와 같은 지도+카드 양식, 한 건)
@@ -145,8 +149,8 @@ export function fetchReportVersions(reportId, userId) {
 }
 
 // 서버에서 자료·사진을 읽고 이 브라우저의 Python worker에서 HWPX 생성.
-export async function downloadCompiledHwpx(reportId, userId) {
-  return generateLocalReport('compiled', reportId);
+export async function downloadCompiledHwpx(reportId, userId, onProgress) {
+  return generateLocalReport('compiled', reportId, onProgress);
 }
 
 // ---------- 보고서 보관함 건별 편집 (D23) ----------

@@ -7,7 +7,7 @@ import { generateLocalReport } from './localReports.js';
 //      performedByUserId, performedByName, progressStatus, createdAt, reportDownloadUrl, ... }]
 // 주의: 식별자는 id가 아니라 progressId
 export function fetchGroupReports(groupId, userId) {
-  return api.get(`/api/groups/${groupId}/reports`, { userId });
+  return api.get(`/api/groups/${groupId}/reports`, { userId }, { timeoutMs: 20000 });
 }
 
 // TaskProgressController GET /api/task-progress/{progressId}/report/download (HWPX)

@@ -12,14 +12,15 @@ export default function AppLayout() {
   const dashboardPage = pathname === '/dashboard';
   const inboxPage = pathname === '/admin/support' || pathname === '/admin/facilities';
   const settingsPage = pathname === '/settings';
-  const fixedWorkspace = mapPage || dashboardPage || inboxPage || settingsPage || pathname.startsWith('/groups');
+  const projectPage = pathname.startsWith('/projects');
+  const fixedWorkspace = mapPage || dashboardPage || inboxPage || settingsPage || projectPage || pathname.startsWith('/groups');
   return (
     <div className={`app-shell${fixedWorkspace ? ' app-shell-map' : ''}${menuOpen ? ' mobile-nav-open' : ''}`}>
       <Header onToggleMenu={fixedWorkspace ? () => setMenuOpen(v => !v) : undefined} menuOpen={menuOpen} />
       <div className="app-body">
         {fixedWorkspace && menuOpen && <button className="app-mobile-nav-backdrop" aria-label="메뉴 닫기" onClick={() => setMenuOpen(false)} />}
         <Sidebar onNavigate={() => setMenuOpen(false)} />
-        <main className={`app-main${pathname === '/map' || pathname === '/groups/status' ? ' app-main-map' : dashboardPage ? ' app-main-dashboard' : inboxPage ? ' app-main-inbox' : settingsPage ? ' app-main-settings' : ''}`}>
+        <main className={`app-main${pathname === '/map' || pathname === '/groups/status' ? ' app-main-map' : dashboardPage ? ' app-main-dashboard' : inboxPage ? ' app-main-inbox' : settingsPage ? ' app-main-settings' : projectPage ? ' app-main-projects' : ''}`}>
           {(pathname.startsWith('/reports') || pathname.startsWith('/projects')) && <ReportNavigation />}
           <Outlet />
         </main>

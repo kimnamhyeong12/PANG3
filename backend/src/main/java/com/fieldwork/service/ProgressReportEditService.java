@@ -110,7 +110,9 @@ public class ProgressReportEditService {
         // 기존 저장 경로와 같이: 만들어 둔 HWPX 는 다시 만들고, 본문이 바뀌면 AI 정리는 버린다.
         progress.setReportFilePath(null);
         if (commentChanged) progress.setAiRefinedContent(null);
-        return toMap(progressRepository.saveAndFlush(progress), userId);
+        progressRepository.saveAndFlush(progress);
+        compiledReports.sourceEdited(progressId, body);
+        return toMap(progress, userId);
     }
 
     private static List<Map<String, Object>> applyPhotoComments(List<Map<String, Object>> photos, Map<?, ?> changes) {
@@ -193,7 +195,7 @@ public class ProgressReportEditService {
         return map;
     }
 
-    private static String revisionOf(TaskProgress progress) {
+    public static String revisionOf(TaskProgress progress) {
         StringBuilder data = new StringBuilder();
         data.append(Objects.toString(progress.getReportName(), "")).append('\u0000')
                 .append(Objects.toString(ProjectService.memoOf(progress), "")).append('\u0000');

@@ -85,4 +85,5 @@ export const api = {
   get: (path, params, options) => request('GET', path, { params, ...options }),
   post: (path, body, params) => request('POST', path, { body, params }),
   patch: (path, body, params) => request('PATCH', path, { body, params }),
+  put: (path, body) => request('PUT', path, { body }),
 };

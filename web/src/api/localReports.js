@@ -20,7 +20,8 @@ async function generate(kind, id, format, onProgress) {
 }
 
 async function run(kind, id, format, onProgress) {
-  const descriptor = await api.get(`/api/local-reports/${kind}/${id}${format === 'html' ? '/html-data' : ''}`);
+  onProgress?.('보고서 자료를 불러오고 있습니다.');
+  const descriptor = await api.get(`/api/local-reports/${kind}/${id}${format === 'html' ? '/html-data' : ''}`, undefined, { timeoutMs: 20000 });
   const base = import.meta.env.VITE_API_BASE_URL || window.location.origin;
   const source = new URL('/report-runtime/index.html', base);
   const frame = document.createElement('iframe');
@@ -31,8 +32,13 @@ async function run(kind, id, format, onProgress) {
     send: message => frame.contentWindow?.postMessage(message, source.origin),
     fetchAsset: (path, options) => webSession.fetch(new URL(path, base), options),
   });
+  let runtimeError;
+  const bootTimer = setTimeout(() => { runtimeError = Error('보고서 생성 화면을 불러오지 못했습니다. 서버 연결을 확인한 뒤 다시 시도해 주세요.'); job.cancel(); }, 20000);
   const receive = event => {
-    if (event.source === frame.contentWindow && event.origin === source.origin) job.receive(event.data);
+    if (event.source === frame.contentWindow && event.origin === source.origin) {
+      if (event.data?.channel === 'pang3-local-report-v1' && event.data.type === 'ready') clearTimeout(bootTimer);
+      job.receive(event.data);
+    }
   };
   const cancel = () => job.cancel();
   window.addEventListener('message', receive);
@@ -43,7 +49,9 @@ async function run(kind, id, format, onProgress) {
     const result = await job.promise;
     if (format === 'html') return result;
     return { blob: new Blob([result.bytes], { type: 'application/hwp+zip' }), fileName: result.fileName };
-  } finally {
+  } catch (error) { throw runtimeError || error; }
+  finally {
+    clearTimeout(bootTimer);
     frame.remove();
     window.removeEventListener('message', receive);
     window.removeEventListener('pagehide', cancel);

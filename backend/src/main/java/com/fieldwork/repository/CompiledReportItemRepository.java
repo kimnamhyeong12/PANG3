@@ -22,6 +22,9 @@ public interface CompiledReportItemRepository extends JpaRepository<CompiledRepo
 
     long countByReport(CompiledReport report);
 
+    @Query("select i from CompiledReportItem i where i.progress.progressId = :progressId and i.report.status = 'DRAFT'")
+    List<CompiledReportItem> findDraftItemsForProgress(@Param("progressId") Long progressId);
+
     @Query("select coalesce(max(i.sortOrder), -1) from CompiledReportItem i where i.report = :report")
     int maxSortOrder(@Param("report") CompiledReport report);
 

@@ -241,6 +241,7 @@ public class ProjectService {
     public Map<String, Object> unlinkTask(Long projectId, Long taskId, Long userId) {
         Project project = loadProject(projectId);
         requireMember(project.getGroup(), userId);
+        lockProject(projectId);
         List<ProjectTask> found = links.findLinks(project, List.of(taskId));
         if (found.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트에 연결된 업무가 아닙니다.");
@@ -254,6 +255,7 @@ public class ProjectService {
     public Map<String, Object> unlinkTasks(Long projectId, Long userId, Object rawTaskIds) {
         Project project = loadProject(projectId);
         requireMember(project.getGroup(), userId);
+        lockProject(projectId);
         List<ProjectTask> found = links.findLinks(project, parseIds(rawTaskIds, "taskIds"));
         unlink(project, found);
         return Map.of("unlinked", found.stream().map(link -> link.getTask().getTaskId()).toList());
@@ -269,6 +271,8 @@ public class ProjectService {
     public boolean isLinked(Project project, Task task) {
         return links.existsByProjectAndTask(project, task);
     }
+
+    public void lockProject(Long projectId) { projects.lockById(projectId).orElseThrow(); }
 
     // ---------- completed items ----------
 
@@ -473,6 +477,9 @@ public class ProjectService {
         map.put("adminDong", task.getAdminDong());
         map.put("taskCategory", task.getTaskCategory());
         map.put("taskStatus", task.getTaskStatus());
+        map.put("projectPlaceId", task.getProjectPlaceId());
+        map.put("workDate", task.getWorkDate());
+        map.put("createdAt", task.getCreatedAt());
         map.put("completedAt", task.getCompletedAt());
         map.put("lat", task.getLat());
         map.put("lng", task.getLng());

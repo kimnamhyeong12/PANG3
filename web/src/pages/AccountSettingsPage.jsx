@@ -10,7 +10,6 @@ import WorkRegionFields from '../components/WorkRegionFields.jsx';
 import PlacePicker from '../components/PlacePicker.jsx';
 import { parseWorkRegion, serializeWorkRegion, isOptionalWorkRegionValid } from '../lib/workRegion.js';
 import SocialAccounts from '../components/SocialAccounts.jsx';
-import NotificationSettings from '../components/NotificationSettings.jsx';
 import { EmailEnrollment } from './AccountRecoveryPage.jsx';
 import LoginCredentialsSetup from '../components/LoginCredentialsSetup.jsx';
 import { needsLoginSetup, visibleLoginId } from '../../../frontend/utils/accountIdentity.js';
@@ -24,7 +23,8 @@ export default function AccountSettingsPage() {
     logout
   } = useAuth();
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') || 'account';
+  const requestedTab = params.get('tab');
+  const tab = ['account', 'support', 'info'].includes(requestedTab) ? requestedTab : 'account';
   const loginSetupRequired = needsLoginSetup(user);
   const [name, setName] = useState(user.name || ''),
     [region, setRegion] = useState(() => parseWorkRegion(user.workSido, user.workSigungu)),
@@ -82,7 +82,7 @@ export default function AccountSettingsPage() {
     }
   };
   return <><div className="settings-workspace">
-    <nav className="settings-menu" aria-label="설정 메뉴">{[['account','내 계정','person-circle-outline'],['notifications','알림','notifications-outline'],['support','고객센터','chatbubbles-outline'],['info','공지사항','information-circle-outline']].map(([key,label,icon])=><button key={key} className={`btn-secondary${tab===key?' selected':''}`} aria-current={tab===key?'page':undefined} onClick={()=>setParams({tab:key})}><AppIcon name={icon}/>{label}<AppIcon name="chevron-forward"/></button>)}</nav>
+    <nav className="settings-menu" aria-label="설정 메뉴">{[['account','내 계정','person-circle-outline'],['support','고객센터','chatbubbles-outline'],['info','공지사항','information-circle-outline']].map(([key,label,icon])=><button key={key} className={`btn-secondary${tab===key?' selected':''}`} aria-current={tab===key?'page':undefined} onClick={()=>setParams({tab:key})}><AppIcon name={icon}/>{label}<AppIcon name="chevron-forward"/></button>)}</nav>
     <section className={`settings-content${tab==='account'?' settings-account':''}`}>
       {tab==='account'?<>
         <header className="account-profile"><span className="account-avatar">{(user.name||visibleLoginId(user.loginId)||'?').slice(0,1)}</span><div><h2>내 계정</h2><strong>{user.name}</strong>{visibleLoginId(user.loginId)&&<span>@{visibleLoginId(user.loginId)}</span>}</div></header>
@@ -100,7 +100,7 @@ export default function AccountSettingsPage() {
         </div>
         {message&&<p role="status" className="settings-notice">{message}</p>}
         <div className="account-form-footer"><button type="submit" form="account-profile-form" className="btn-primary btn-inline" disabled={busy||password!==confirm||!isOptionalWorkRegionValid(region)}>변경사항 저장</button><button type="button" className="btn-secondary account-delete-button" disabled={busy} onClick={()=>setDeleting(true)}>계정 탈퇴</button></div>
-      </>:tab==='support'?<SupportPanel/>:tab==='notifications'?<NotificationSettings/>:<><h2>공지사항</h2><p className="table-empty">등록된 공지사항이 없습니다.</p></>}
+      </>:tab==='support'?<SupportPanel/>:<><h2>공지사항</h2><p className="table-empty">등록된 공지사항이 없습니다.</p></>}
       {tab!=='account'&&message&&<p role="status" className="settings-notice">{message}</p>}
     </section>
   </div>{confirmingSave&&<IdentityDialog title="인증 후 변경사항 저장" busy={busy} error={message} onClose={()=>setConfirmingSave(false)} onConfirm={persist}/>} {deleting && <IdentityDialog title="계정 탈퇴" onClose={() => setDeleting(false)} busy={busy} onConfirm={async password => {

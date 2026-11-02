@@ -62,4 +62,17 @@ class ProjectPlaceWorkflowTest {
   assertEquals(List.of(record.getProgressId()),reports.addItems(reportId,member.getUserId(),List.of(record.getProgressId())).get("added"));
  }
  @Test void completedTaskCanBeReopenedExplicitly(){Long id=id(taskService.createFromFrontendBody(registerBody()));taskService.updateStatus(id,"complete");assertNotNull(tasks.findById(id).orElseThrow().getCompletedAt());taskService.updateStatus(id,"pending");assertEquals("pending",tasks.findById(id).orElseThrow().getTaskStatus());assertNull(tasks.findById(id).orElseThrow().getCompletedAt());}
+ @Test void projectSelectedVisitRemainsInIndividualReportListAfterLinkAndUnlink(){
+  var created=taskService.createFromFrontendBody(registerBody());Long taskId=id(created);taskService.updateStatus(taskId,"complete");
+  TaskProgress p=new TaskProgress();p.setTask(tasks.findById(taskId).orElseThrow());p.setProgressStatus("complete");p.setMainComment("현장 기록");p.setPerformedByUserId(member.getUserId());records.saveAndFlush(p);
+  TaskProgressService progress=org.mockito.Mockito.mock(TaskProgressService.class);
+  org.mockito.Mockito.when(progress.toResponseMap(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any())).thenAnswer(call->{TaskProgress r=call.getArgument(0);return new HashMap<String,Object>(Map.of("progressId",r.getProgressId(),"taskId",r.getTask().getTaskId()));});
+  var controller=new com.fieldwork.controller.GroupReportController(taskService,records,progress,users,members);
+  org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(member.getUserId(),null,List.of()));
+  try{
+   assertTrue(controller.list(group.getGroupId(),member.getUserId()).stream().anyMatch(r->p.getProgressId().equals(r.get("progressId"))));
+   projects.unlinkTask(projectId,taskId,member.getUserId());
+   assertTrue(controller.list(group.getGroupId(),member.getUserId()).stream().anyMatch(r->p.getProgressId().equals(r.get("progressId"))));
+  }finally{org.springframework.security.core.context.SecurityContextHolder.clearContext();}
+ }
 }

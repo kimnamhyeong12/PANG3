@@ -393,4 +393,48 @@ class ProjectReportServiceTest {
         assertEquals("현수막", list(item.get("photos")).get(1).get("comment"));
         assertEquals(false, item.get("titleOverridden"));
     }
+    @Test void selectedRecordsCreatePopulatedDraftAndLinkOutsideTasksInOneOperation() {
+        Task a=task(group,"하단동",LocalDateTime.now()), b=task(group,"당리동",LocalDateTime.now());
+        TaskProgress pa=progress(a,"complete","A"),pb=progress(b,"complete","B");
+        Long report=id(reports.create(projectId,member.getUserId(),Map.of("title","선택 보고서","progressIds",List.of(pa.getProgressId(),pb.getProgressId()))),"reportId");
+        assertEquals(2,projects.tasks(projectId,member.getUserId()).size());
+        assertEquals(2,((Number)((Map<?,?>)reports.getJson(report,member.getUserId()).get("summary")).get("totalCount")).intValue());
+    }
+
+    @Test void replacingSelectionChangesOnlyDraftMembershipAndRejectsStaleOrFinalEdits() {
+        Task a=task(group,"하단동",LocalDateTime.now()),b=task(group,"당리동",LocalDateTime.now());TaskProgress pa=progress(a,"complete","A"),pb=progress(b,"complete","B");
+        Long report=id(reports.create(projectId,leader.getUserId(),Map.of("title","초안","progressIds",List.of(pa.getProgressId()))),"reportId");
+        reports.replaceItems(report,leader.getUserId(),Map.of("progressIds",List.of(pb.getProgressId())));
+        assertEquals(2,projects.tasks(projectId,leader.getUserId()).size());
+        assertEquals(pb.getProgressId(),list(list(reports.getJson(report,leader.getUserId()).get("sections")).get(0).get("items")).get(0).get("progressId"));
+        assertEquals("A",progressRepository.findById(pa.getProgressId()).orElseThrow().getMainComment());
+        assertStatus(HttpStatus.CONFLICT,()->reports.replaceItems(report,leader.getUserId(),Map.of("progressIds",List.of(pa.getProgressId()),"expectedUpdatedAt","stale")));
+        reports.finalizeReport(report,leader.getUserId());
+        assertStatus(HttpStatus.CONFLICT,()->reports.replaceItems(report,leader.getUserId(),Map.of("progressIds",List.of(pa.getProgressId()))));
+    }
+
+    @Test @org.springframework.transaction.annotation.Transactional(propagation=org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void failedSelectionDoesNotLeaveEmptyDraftOrPartiallyLinkTasks() {
+        Task a=task(group,"하단동",LocalDateTime.now());TaskProgress pa=progress(a,"complete","A");
+        WorkGroup other=group(false,outsider);Task forbidden=task(other,"당리동",LocalDateTime.now());TaskProgress pb=progress(forbidden,"complete","B");
+        assertStatus(HttpStatus.FORBIDDEN,()->reports.create(projectId,leader.getUserId(),Map.of("title","실패","progressIds",List.of(pa.getProgressId(),pb.getProgressId()))));
+        assertEquals(0,reports.list(projectId,leader.getUserId()).size());assertEquals(0,projects.tasks(projectId,leader.getUserId()).size());
+    }
+
+    @Test void sourceEditsRefreshDraftOverridesAndKeepFinalSnapshot() {
+        Task t=task(group,"하단동",LocalDateTime.now());TaskProgress p=progress(t,"complete","원본");link(t);
+        Long fixed=newReport("adminDong"),draft=newReport("adminDong");for(Long report:List.of(fixed,draft)){reports.addItems(report,leader.getUserId(),List.of(p.getProgressId()));reports.updateItem(report,p.getProgressId(),leader.getUserId(),Map.of("overrideComment","기존 수정"));}
+        reports.finalizeReport(fixed,leader.getUserId());p.setMainComment("새 원본");progressRepository.saveAndFlush(p);reports.sourceEdited(p.getProgressId(),Map.of("mainComment","새 원본"));
+        assertEquals("새 원본",list(list(reports.getJson(draft,leader.getUserId()).get("sections")).get(0).get("items")).get(0).get("comment"));
+        assertEquals("기존 수정",list(list(reports.getJson(fixed,leader.getUserId()).get("sections")).get(0).get("items")).get(0).get("comment"));
+    }
+    @Test void editingOneSourcePhotoDoesNotDiscardOtherLegacyDraftCaptions() {
+        Task t=task(group,"하단동",LocalDateTime.now());TaskProgress p=progress(t,"complete","본문");
+        p.setFieldPhotos(List.of(Map.of("path","/one.jpg","type","before","comment","작업 전|새 원본"),Map.of("path","/two.jpg","type","after","comment","작업 후|두 번째")));progressRepository.saveAndFlush(p);link(t);
+        Long report=newReport("adminDong");reports.addItems(report,leader.getUserId(),List.of(p.getProgressId()));
+        reports.updateItem(report,p.getProgressId(),leader.getUserId(),Map.of("overridePhotoComments",Map.of("0","기존 첫 번째","1","기존 두 번째")));
+        reports.sourceEdited(p.getProgressId(),Map.of("photoComments",Map.of("0","새 원본")));
+        var photos=list(list(list(reports.getJson(report,leader.getUserId()).get("sections")).get(0).get("items")).get(0).get("photos"));
+        assertEquals("새 원본",photos.get(0).get("comment"));assertEquals("기존 두 번째",photos.get(1).get("comment"));
+    }
 }

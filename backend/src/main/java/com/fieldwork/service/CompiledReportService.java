@@ -74,7 +74,40 @@ public class CompiledReportService {
         report.setCreatedBy(users.findById(userId).orElse(null));
         report = reports.saveAndFlush(report);
         report.setRootReportId(report.getReportId());
-        return summaryMap(reports.saveAndFlush(report));
+        reports.saveAndFlush(report);
+        if (body.containsKey("progressIds")) replaceItems(report.getReportId(), userId, body);
+        return summaryMap(report);
+    }
+
+    /** One selection both links outside tasks and populates the draft, in one transaction. */
+    @Transactional
+    public Map<String, Object> replaceItems(Long reportId, Long userId, Map<String, Object> body) {
+        CompiledReport loaded = loadReport(reportId);
+        Project project = loaded.getProject();
+        projectService.requireMember(project.getGroup(), userId);
+        projectService.lockProject(project.getProjectId());
+        CompiledReport report = lockReport(reportId);
+        requireDraft(report);
+        if (body.get("expectedUpdatedAt") != null && !Objects.equals(iso(report.getUpdatedAt()), body.get("expectedUpdatedAt")))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "다른 곳에서 보고서가 변경되었습니다. 새로 불러온 뒤 다시 선택해 주세요.");
+        List<Long> ids = ProjectService.parseIds(body.get("progressIds"), "progressIds");
+        if (ids.isEmpty() || ids.size() > 1000) throw new IllegalArgumentException("완료 기록을 1~1000개 선택해 주세요.");
+        List<TaskProgress> selected = progressRepository.findAllById(ids);
+        if (selected.size() != ids.size()) throw new IllegalArgumentException("선택한 기록을 찾을 수 없습니다.");
+        for (TaskProgress progress : selected) {
+            Task task = progress.getTask();
+            if (task.getGroup() == null || !project.getGroup().getGroupId().equals(task.getGroup().getGroupId()))
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "같은 그룹의 기록만 담을 수 있습니다.");
+            if (!ReportRetentionService.available(progress) || !projectService.isCompleted(progress))
+                throw new IllegalArgumentException("완료되지 않았거나 보존기간이 지난 기록이 있습니다. 목록을 새로 불러와 주세요.");
+        }
+        projectService.linkTasks(project.getProjectId(), userId, selected.stream().map(p -> p.getTask().getTaskId()).distinct().toList());
+        List<CompiledReportItem> current = items.findWithProgress(report);
+        items.deleteAll(current.stream().filter(i -> !ids.contains(i.getProgress().getProgressId())).toList());
+        items.flush();
+        addItems(reportId, userId, ids);
+        touch(report);
+        return summaryMap(report);
     }
 
     @Transactional
@@ -458,6 +491,7 @@ public class CompiledReportService {
         Task task = progress.getTask();
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("progressId", progress.getProgressId());
+        row.put("sourceRevision", ProgressReportEditService.revisionOf(progress));
         row.put("taskId", task.getTaskId());
         row.put("sortOrder", item.getSortOrder() == null ? 0 : item.getSortOrder());
         row.put("address", projectService.addressOf(task));
@@ -545,6 +579,26 @@ public class CompiledReportService {
     }
 
     // ---------- helpers ----------
+
+    /** Explicit edits to source fields refresh draft views; FINAL snapshots are never rewritten. */
+    @Transactional
+    public void sourceEdited(Long progressId, Map<String, Object> fields) {
+        for (CompiledReportItem item : items.findDraftItemsForProgress(progressId)) {
+            if (fields.containsKey("reportName")) item.setOverrideTitle(null);
+            if (fields.containsKey("mainComment")) item.setOverrideComment(null);
+            if (fields.get("photoComments") instanceof Map<?, ?> changes && item.getOverridePhotoComments() != null) {
+                Map<String, Object> remaining = new LinkedHashMap<>(item.getOverridePhotoComments());
+                List<Map<String, Object>> photos = item.getProgress().getFieldPhotos();
+                for (Object key : changes.keySet()) {
+                    int index = Integer.parseInt(key.toString());
+                    remaining.remove(Objects.toString(photos.get(index).get("path"), ""));
+                }
+                item.setOverridePhotoComments(remaining.isEmpty() ? null : remaining);
+            }
+            touch(item.getReport());
+        }
+        items.flush();
+    }
 
     private CompiledReport loadReport(Long reportId) {
         return reports.findById(reportId)

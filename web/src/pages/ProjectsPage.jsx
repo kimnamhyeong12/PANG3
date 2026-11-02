@@ -5,7 +5,6 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useGroup } from '../context/GroupContext.jsx';
 import { createProject, fetchProjects } from '../api/projects.js';
 import { errorMessage } from '../api/client.js';
-import { formatDate } from '../utils/format.js';
 import { IconPlus } from '../components/Icons.jsx';
 import ErrorBlock from '../components/ErrorBlock.jsx';
 import { LoadingBlock } from '../components/Loading.jsx';
@@ -14,8 +13,6 @@ import '../styles/projects.css';
 
 export function ProjectsFormModal({ title, initial, submitLabel, onClose, onSubmit }) {
   const [name, setName] = useState(initial?.name ?? '');
-  const [startDate, setStartDate] = useState(initial?.startDate ?? '');
-  const [endDate, setEndDate] = useState(initial?.endDate ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -25,14 +22,10 @@ export function ProjectsFormModal({ title, initial, submitLabel, onClose, onSubm
       setError('프로젝트 이름을 입력해 주세요.');
       return;
     }
-    if (startDate && endDate && startDate > endDate) {
-      setError('종료일은 시작일 이후여야 합니다.');
-      return;
-    }
     setSaving(true);
     setError(null);
     try {
-      await onSubmit({ name: name.trim(), startDate: startDate || null, endDate: endDate || null });
+      await onSubmit({ name: name.trim() });
     } catch (err) {
       setError(errorMessage(err, '저장하지 못했습니다.'));
       setSaving(false);
@@ -67,23 +60,10 @@ export function ProjectsFormModal({ title, initial, submitLabel, onClose, onSubm
             onChange={(e) => setName(e.target.value)}
           />
         </div>
-        <div className="field">
-          <label>기간 (선택)</label>
-          <div className="filter-period">
-            <input type="date" className="input" aria-label="시작일" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <span className="filter-tilde">~</span>
-            <input type="date" className="input" aria-label="종료일" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          </div>
-        </div>
         {error && <p className="form-error">{error}</p>}
       </form>
     </Modal>
   );
-}
-
-export function projectPeriod(project) {
-  if (!project?.startDate && !project?.endDate) return '기간 미정';
-  return `${project.startDate ? formatDate(project.startDate) : ''} ~ ${project.endDate ? formatDate(project.endDate) : ''}`;
 }
 
 export default function ProjectsPage() {
@@ -148,7 +128,7 @@ export default function ProjectsPage() {
                 {p.status === 'ARCHIVED' ? '보관' : '진행'}
               </span>
             </div>
-            <div className="pj-card-meta">{projectPeriod(p)}</div>
+
             <div className="pj-card-stats">
               <span>
                 완료 기록 <b>{p.completedCount ?? 0}</b>건
