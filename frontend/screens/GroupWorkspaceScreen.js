@@ -24,7 +24,7 @@ import { buildMemberColors, softMemberColor } from '../utils/memberColors';
 import { GroupProjectList } from './ProjectScreen';
 import GroupReportsScreen from './GroupReportsScreen';
 
-let lastProjectView = 'projects';
+let lastProjectView = 'reports';
 
 const shortDong = (value) => {
   const text = String(value || '').trim();
@@ -234,7 +234,7 @@ export default function GroupWorkspaceScreen({
       ) : tab === 'projects' ? (
         <View style={{ flex: 1 }}>
           <View style={styles.segment} accessibilityRole="tablist">
-            {[['projects', '프로젝트'], ['reports', '건별 보고서']].map(([key, label]) => (
+            {[['reports', '건별 보고서'], ['projects', '프로젝트']].map(([key, label]) => (
               <TouchableOpacity key={key} style={[styles.segmentItem, projectView === key && styles.segmentActive]}
                 onPress={() => setProjectView(key)} accessibilityRole="tab" accessibilityState={{ selected: projectView === key }}>
                 <Text style={[styles.segmentText, projectView === key && styles.segmentTextActive]}>{label}</Text>

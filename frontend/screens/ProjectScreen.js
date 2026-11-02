@@ -1,443 +1,99 @@
-import useLiveRevision from '../utils/useLiveRevision';
-import ReportFilters from '../components/ReportFilters';
-import { currentMonthRange } from '../utils/calendar';
-import ProjectBrowser from '../components/ProjectBrowser';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { EmptyState, PrimaryButton, ScreenHeader } from '../components/ui';
+import useLiveRevision from '../utils/useLiveRevision';
+import { useScreenBackHandler } from '../utils/screenBack';
+import { createProject, fetchProject, fetchProjectReports, fetchProjects, fetchProjectTasks, updateProject } from '../utils/projectApi';
+import { recordDay } from '../utils/projectWorkflow';
+import { colors } from '../constants/design';
+import { EmptyState, ScreenHeader } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
-import { colors, radius, shadow, spacing } from '../constants/design';
-import {
-  addReportItems,
-  addedCount,
-  addedIds,
-  fetchProject,
-  fetchProjectItems,
-  fetchProjectReports,
-  fetchProjects,
-  removeReportItem,
-  skippedMessage,
-} from '../utils/projectApi';
+import ProjectVisits from '../components/ProjectVisits';
+import ProjectReportWorkspace from '../components/ProjectReportWorkspace';
+import { ProjectModal, ProjectError, ProjectLoading, PrimaryButton, SecondaryButton, projectStyles as s } from '../components/ProjectNativeUI';
 
-const sameId = (a, b) => a != null && b != null && String(a) === String(b);
-const dateText = (value) => (value ? String(value).slice(0, 10) : '');
+function ProjectNameForm({ project, groupId, userId, onClose, onSaved }) {
+  const [name, setName] = useState(project?.name || ''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  const lock = useRef(false), mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const save = async () => {
+    if (lock.current || !name.trim()) return;
+    lock.current = true; setBusy(true); setError('');
+    try {
+      const value = project ? await updateProject(project.projectId, userId, { name: name.trim() }) : await createProject(groupId, userId, name.trim());
+      if (mounted.current) onSaved(value);
+    } catch (e) { if (mounted.current) setError(e.message); }
+    finally { lock.current = false; if (mounted.current) setBusy(false); }
+  };
+  return <ProjectModal title={project ? '프로젝트 이름 변경' : '프로젝트 만들기'} onClose={onClose} busy={busy} action={<PrimaryButton title={busy ? '저장 중…' : project ? '저장' : '프로젝트 만들기'} onPress={save} disabled={busy || !name.trim()}/>}>
+    <ProjectError message={error}/><Text style={s.label}>프로젝트 이름</Text><TextInput accessibilityLabel="프로젝트 이름" style={s.input} value={name} onChangeText={setName} placeholder="프로젝트 이름을 입력해 주세요." autoFocus maxLength={100} editable={!busy}/>
+  </ProjectModal>;
+}
 
-// ---------- 그룹 작업공간 "프로젝트" 탭 내용 (B①) ----------
 export function GroupProjectList({ user, group, onOpenProject, onChanged }) {
-  const liveRevision = useLiveRevision(['projects', 'reports', 'tasks']);
-  const [manage,setManage]=useState(false);
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const load = useCallback(async () => {
+  const [creating, setCreating] = useState(false), [projects, setProjects] = useState(null), [error, setError] = useState('');
+  const [revision, setRevision] = useState(0), [refreshing, setRefreshing] = useState(false);
+  const liveRevision = useLiveRevision(['projects', 'reports', 'tasks'], { dirty: creating });
+  useEffect(() => {
     if (!group?.groupId || !user?.userId) return;
-    try {
-      const data = await fetchProjects(group.groupId, user.userId);
-      setProjects(Array.isArray(data) ? data : []);
-    } catch (error) {
-      showAlert('프로젝트 조회 실패', error.message);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [group?.groupId, user?.userId, liveRevision]);
+    let active = true; setError('');
+    fetchProjects(group.groupId, user.userId).then(value => active && setProjects(value)).catch(e => active && setError(e.message)).finally(() => active && setRefreshing(false));
+    return () => { active = false; };
+  }, [group?.groupId, user?.userId, revision, liveRevision]);
+  return <ScrollView contentContainerStyle={s.body} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setRevision(n => n + 1); }}/>}>
+    <View style={s.heading}><Text style={s.headingText}>프로젝트</Text><SecondaryButton title="프로젝트 만들기" icon="add" onPress={() => setCreating(true)}/></View>
+    <ProjectError message={error} onRetry={() => setRevision(n => n + 1)}/>
+    {!projects ? !error && <ProjectLoading/> : <>{projects.map(project => <TouchableOpacity key={project.projectId} style={s.row} onPress={() => onOpenProject?.(project)}>
+      <Ionicons name="folder-outline" size={24} color={colors.primary}/><View style={s.grow}><Text style={s.name}>{project.name}</Text><Text style={s.meta}>완료 {project.completedCount || 0}건 · 보고서 {(project.draftReportCount || 0) + (project.finalReportCount || 0)}개</Text></View><Ionicons name="chevron-forward" size={18} color={colors.textSoft}/>
+    </TouchableOpacity>)}{!projects.length && <EmptyState icon="folder-open-outline" title="프로젝트가 없어요"/>}</>}
+    {creating && <ProjectNameForm groupId={group.groupId} userId={user.userId} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); setRevision(n => n + 1); onChanged?.(); }}/ >}
+  </ScrollView>;
+}
 
-  useEffect(() => { setLoading(true); load(); }, [load]);
-
-  if (loading) {
-    return <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>;
-  }
-
-  return (
-    <ScrollView
-      contentContainerStyle={styles.listBody}
-      showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
-    >
-      <TouchableOpacity onPress={()=>setManage(true)} style={{padding:14,alignItems:'center'}}><Text style={{color:colors.primary,fontWeight:'700'}}>프로젝트 만들기</Text></TouchableOpacity>
-      <ProjectBrowser visible={manage} userId={user.userId} groupId={group.groupId} onRegistered={onChanged} onClose={()=>{setManage(false);load();}}/>
-      {projects.length === 0 ? (
-        <EmptyState icon="folder-open-outline" title="프로젝트가 없어요" />
-      ) : projects.map((project) => (
-        <TouchableOpacity
-          key={project.projectId}
-          style={styles.projectCard}
-          activeOpacity={0.8}
-          onPress={() => onOpenProject?.(project)}
-        >
-          <View style={styles.projectIcon}><Ionicons name="folder-outline" size={20} color={colors.primary} /></View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.projectName} numberOfLines={1}>{project.name}</Text>
-            <Text style={styles.projectMeta}>완료 {project.completedCount ?? 0}건</Text>
-            <Text style={styles.projectDraft} numberOfLines={1}>
-              {[project.finalReportCount ? `✅ 확정 보고서 ${project.finalReportCount}개` : null,
-                project.latestDraft ? `📄 ${project.latestDraft.title} · 작성 중` : null].filter(Boolean).join('  ') || '보고서 없음'}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
-        </TouchableOpacity>
-      ))}
+export default function ProjectScreen({ user, projectId, initialProject, onBack }) {
+  const [project, setProject] = useState(initialProject), [tasks, setTasks] = useState([]), [reports, setReports] = useState(null);
+  const [view, setView] = useState(null), [collapsed, setCollapsed] = useState(true), [renaming, setRenaming] = useState(false);
+  const [visitDirty, setVisitDirty] = useState(false), [reportDirty, setReportDirty] = useState(false);
+  const [error, setError] = useState(''), [revision, setRevision] = useState(0), [refreshing, setRefreshing] = useState(false);
+  const dirty = visitDirty || reportDirty || renaming;
+  const liveRevision = useLiveRevision(['projects', 'reports', 'tasks'], { dirty });
+  const changed = useCallback(() => setRevision(n => n + 1), []);
+  const close = useCallback(() => { setView(null); setReportDirty(false); }, []);
+  const open = useCallback(id => { setView(String(id)); setCollapsed(true); setReportDirty(false); }, []);
+  const requestView = id => {
+    const next = String(id) === view ? null : String(id);
+    const switchView = () => { if (next) open(next); else close(); };
+    if (reportDirty) showAlert('보고서 전환', '저장하지 않은 변경을 취소하고 이동할까요?', [{ text: '계속 작성', style: 'cancel' }, { text: '이동', onPress: switchView }]);
+    else switchView();
+  };
+  const back = () => {
+    if (dirty) showAlert('프로젝트 나가기', '저장하지 않은 변경을 취소하고 나갈까요?', [{ text: '계속 작성', style: 'cancel' }, { text: '나가기', onPress: onBack }]);
+    else onBack();
+  };
+  useScreenBackHandler(() => { if (view) { requestView(view); return true; } return false; });
+  useEffect(() => {
+    let active = true; setError('');
+    Promise.all([fetchProject(projectId, user.userId), fetchProjectTasks(projectId, user.userId), fetchProjectReports(projectId, user.userId)]).then(([p, t, r]) => {
+      if (active) { setProject(p); setTasks(t); setReports(r); }
+    }).catch(e => active && setError(e.message)).finally(() => active && setRefreshing(false));
+    return () => { active = false; };
+  }, [projectId, user.userId, revision, liveRevision]);
+  return <View style={s.root}>
+    <ScreenHeader title={project?.name || '프로젝트'} onBack={back} right={<TouchableOpacity style={s.icon} disabled={dirty} accessibilityLabel="프로젝트 이름 변경" onPress={() => setRenaming(true)}><Ionicons name="create-outline" size={22} color={colors.primary}/></TouchableOpacity>}/>
+    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.body} refreshControl={<RefreshControl refreshing={refreshing} enabled={!dirty} onRefresh={() => { if (!dirty) { setRefreshing(true); changed(); } }}/>}>
+      <ProjectError message={error} onRetry={!dirty ? changed : undefined}/>
+      {!reports ? !error && <ProjectLoading/> : <>
+        <ProjectVisits project={project} userId={user.userId} rows={tasks} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} onChanged={changed} onDirtyChange={setVisitDirty} disabled={reportDirty}/>
+        <View style={s.panel}><View style={s.heading}><Text style={s.headingText}>통합 보고서 <Text style={s.meta}>{reports.length}건</Text></Text><SecondaryButton title="새 보고서" icon="add" disabled={visitDirty || project.status === 'ARCHIVED'} onPress={() => requestView('new')}/></View>
+          {reports.map(report => <TouchableOpacity style={[s.row, view === String(report.reportId) && { backgroundColor: colors.primarySoft }]} key={report.reportId} disabled={visitDirty} onPress={() => requestView(report.reportId)} accessibilityRole="button" accessibilityState={{ expanded: view === String(report.reportId) }}>
+            <View style={s.grow}><Text style={s.name}>{report.title}</Text><Text style={s.meta}>{report.itemCount || 0}건 · {recordDay(report.updatedAt || report.createdAt)}</Text></View>
+            <View style={[s.badge, { backgroundColor: report.status === 'FINAL' ? colors.successSoft : colors.warningSoft }]}><Text style={{ fontSize: 11, color: report.status === 'FINAL' ? colors.successInk : colors.warningInk }}>{report.status === 'FINAL' ? '확정' : '작성 중'} v{report.version || 1}</Text></View>
+            <Ionicons name={view === String(report.reportId) ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSoft}/>
+          </TouchableOpacity>)}{!reports.length && <Text style={s.meta}>아직 보고서가 없습니다.</Text>}
+        </View>
+        {view && <ProjectReportWorkspace key={`${projectId}:${view}`} project={project} tasks={tasks} userId={user.userId} reportId={view === 'new' ? null : view} onClose={close} onOpenReport={open} onChanged={changed} onDirtyChange={setReportDirty}/ >}
+      </>}
     </ScrollView>
-  );
+    {renaming && <ProjectNameForm project={project} userId={user.userId} onClose={() => setRenaming(false)} onSaved={() => { setRenaming(false); changed(); }}/ >}
+  </View>;
 }
-
-// ---------- 프로젝트 항목 + 담기 (B③) ----------
-export default function ProjectScreen({ user, projectId, initialProject, onBack, onOpenReport }) {
-  const liveRevision = useLiveRevision(['projects', 'reports', 'tasks']);
-  const [project, setProject] = useState(initialProject || null);
-  const [data, setData] = useState(null);
-  const [reportCounts, setReportCounts] = useState({});
-  const [finals, setFinals] = useState([]); // 앱에서는 확정 보고서만 보고 받는다 (D30)
-  const [search,setSearch]=useState(''),[worker,setWorker]=useState(''),[dong,setDong]=useState(''),[dateRange,setDateRange]=useState(currentMonthRange);
-  const [targetId, setTargetId] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
-  const [picker, setPicker] = useState(null); // 'report' | filter key
-  const [toast, setToast] = useState(null);
-  const toastTimer = useRef(null);
-  const inFlight = useRef(false);
-  const mounted = useRef(true);
-
-  const userId = user?.userId;
-  const isLeader = Boolean(project?.canManage ?? project?.isLeader);
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => { mounted.current = false; clearTimeout(toastTimer.current); };
-  }, []);
-
-  useEffect(() => {
-    if (!projectId || !userId) return;
-    let alive = true;
-    fetchProject(projectId, userId)
-      .then((value) => {
-        if (!alive) return;
-        setProject(value);
-      })
-      .catch((error) => {
-        if (!alive) return;
-        showAlert('프로젝트 조회 실패', error.message);
-      });
-    return () => { alive = false; };
-  }, [projectId, userId, liveRevision]);
-
-  const loadReports = useCallback(async () => {
-    try {
-      const list = await fetchProjectReports(projectId, userId);
-      if (!mounted.current) return;
-      const counts = {};
-      (Array.isArray(list) ? list : []).forEach((report) => { counts[report.reportId] = report.itemCount ?? 0; });
-      setReportCounts(counts);
-      // 같은 보고서의 여러 확정 버전 중 가장 최신만
-      const latest = new Map();
-      (Array.isArray(list) ? list : []).filter((report) => report.status === 'FINAL').forEach((report) => {
-        const root = String(report.rootReportId ?? report.reportId);
-        if (!latest.has(root) || (report.version ?? 1) > (latest.get(root).version ?? 1)) latest.set(root, report);
-      });
-      setFinals([...latest.values()]);
-    } catch {
-      // 건수 표시는 보조 정보라 실패해도 화면은 그대로 쓴다
-    }
-  }, [projectId, userId, liveRevision]);
-
-  const loadItems = useCallback(async () => {
-    try {
-      setLoading(true);
-      const result = await fetchProjectItems(projectId, userId);
-      if (!mounted.current) return;
-      setData(result);
-      const drafts = result?.draftReports || [];
-      setTargetId((current) => (drafts.some((report) => sameId(report.reportId, current)) ? current : drafts[0]?.reportId ?? null));
-    } catch (error) {
-      if (mounted.current) showAlert('항목 조회 실패', error.message);
-    } finally {
-      if (mounted.current) setLoading(false);
-    }
-  }, [projectId, userId, liveRevision]);
-
-  useEffect(() => { loadItems(); }, [loadItems]);
-  useEffect(() => { if (projectId && userId) loadReports(); }, [loadReports]);
-
-  const items = useMemo(() => (data?.items || []).filter(item => {
-    const day = dateText(item.completedAt);
-    return (!worker || String(item.authorId)===String(worker)) && (!dong || item.adminDong===dong)
-      && (!dateRange.start || day>=dateRange.start) && (!dateRange.end || day<=dateRange.end)
-      && (!search.trim() || [item.address,item.authorName].some(value=>String(value||'').toLowerCase().includes(search.trim().toLowerCase())));
-  }), [data,worker,dong,dateRange,search]);
-  const drafts = data?.draftReports || [];
-  const target = drafts.find((report) => sameId(report.reportId, targetId)) || null;
-  const inTarget = (item) => Boolean(target) && (item.inReportIds || []).some((id) => sameId(id, target.reportId));
-  const addable = items.filter((item) => !inTarget(item));
-
-  const markItems = (ids, reportId, added) => {
-    const set = new Set(ids.map(String));
-    setData((current) => current && ({
-      ...current,
-      items: current.items.map((item) => {
-        if (!set.has(String(item.progressId))) return item;
-        const others = (item.inReportIds || []).filter((id) => !sameId(id, reportId));
-        return { ...item, inReportIds: added ? [...others, reportId] : others };
-      }),
-    }));
-    setReportCounts((current) => ({ ...current, [reportId]: Math.max(0, (current[reportId] ?? 0) + (added ? ids.length : -ids.length)) }));
-  };
-
-  const showToast = (value) => {
-    clearTimeout(toastTimer.current);
-    setToast(value);
-    toastTimer.current = setTimeout(() => setToast(null), value.undoIds ? 4000 : 2500);
-  };
-
-  const addItems = async (progressIds) => {
-    if (!target || inFlight.current || progressIds.length === 0) return;
-    inFlight.current = true; // 연속 탭 무시 (setState 반영 전 두 번째 탭 방지)
-    const report = target;
-    try {
-      setAdding(true);
-      const result = await addReportItems(report.reportId, userId, progressIds);
-      if (!mounted.current) return;
-      const skipped = Array.isArray(result?.skipped) ? result.skipped : [];
-      const skippedSet = new Set(skipped.map((row) => String(row.progressId)));
-      const ids = addedIds(result).length ? addedIds(result) : progressIds.filter((id) => !skippedSet.has(String(id)));
-      // 이미 담김으로 건너뛴 것도 화면에는 담김으로 표시
-      const already = skipped.filter((row) => row.reason === 'ALREADY_IN_REPORT').map((row) => row.progressId);
-      if (ids.length) markItems(ids, report.reportId, true);
-      if (already.length) {
-        const set = new Set(already.map(String));
-        setData((current) => current && ({
-          ...current,
-          items: current.items.map((item) => (set.has(String(item.progressId)) && !(item.inReportIds || []).some((id) => sameId(id, report.reportId))
-            ? { ...item, inReportIds: [...(item.inReportIds || []), report.reportId] } : item)),
-        }));
-      }
-      if (addedCount(result) > 0 || ids.length > 0) {
-        showToast({ text: `${report.title}에 담았어요`, reportId: report.reportId, undoIds: isLeader ? ids : null });
-      }
-      if (skipped.length) showAlert('일부 항목을 담지 못했어요', skippedMessage(skipped));
-    } catch (error) {
-      if (mounted.current) showAlert('담기 실패', error.message);
-    } finally {
-      inFlight.current = false;
-      if (mounted.current) setAdding(false);
-    }
-  };
-
-  const undo = async () => {
-    const current = toast;
-    if (!current?.undoIds?.length || inFlight.current) return;
-    inFlight.current = true;
-    clearTimeout(toastTimer.current);
-    setToast(null);
-    const removed = [];
-    try {
-      for (const id of current.undoIds) {
-        await removeReportItem(current.reportId, id, userId);
-        removed.push(id);
-      }
-    } catch (error) {
-      if (mounted.current) showAlert('되돌리기 실패', error.message);
-    } finally {
-      inFlight.current = false;
-      if (mounted.current && removed.length) markItems(removed, current.reportId, false);
-    }
-  };
-
-  const addAll = () => {
-    if (!target || addable.length === 0) return;
-    showAlert('모두 담기', `보이는 ${addable.length}건을 "${target.title}"에 담을까요?`, [
-      { text: '취소', style: 'cancel' },
-      { text: '담기', onPress: () => addItems(addable.map((item) => item.progressId)) },
-    ]);
-  };
-
-  const choose = (key,value) => { setPicker(null); if(key==='report')setTargetId(value); };
-  const pickerOptions = picker==='report' ? drafts.map(report=>({value:report.reportId,label:report.title})) : [];
-  const pickerSelected = targetId;
-  const workers=(data?.filters?.authors||[]).map(author=>({value:String(author.userId),label:author.name||`사용자 ${author.userId}`}));
-
-  const renderItem = ({ item }) => {
-    const done = inTarget(item);
-    const mine = sameId(item.authorId, userId);
-    return (
-      <View style={styles.itemCard}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <View style={styles.itemTitleRow}>
-            <Text style={styles.itemAddress} numberOfLines={2}>{item.address || '주소 없음'}</Text>
-            {mine ? <View style={styles.mineBadge}><Text style={styles.mineBadgeText}>내 기록</Text></View> : null}
-          </View>
-          <Text style={styles.itemMeta} numberOfLines={1}>
-            {[dateText(item.completedAt), item.authorName].filter(Boolean).join(' · ')}
-          </Text>
-          {item.category || item.adminDong ? (
-            <Text style={styles.itemSub} numberOfLines={1}>{[item.adminDong, item.category].filter(Boolean).join(' · ')}</Text>
-          ) : null}
-        </View>
-        <TouchableOpacity
-          style={[styles.addButton, done && styles.addedButton, (!target || adding) && !done && styles.disabled]}
-          disabled={done || !target || adding}
-          onPress={() => addItems([item.progressId])}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.addButtonText, done && styles.addedButtonText]}>{done ? '담김 ✓' : '+ 담기'}</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
-  const header = (
-    <View style={styles.headerBlock}>
-      {target ? (
-        <View style={styles.banner}>
-          <Ionicons name="document-text-outline" size={20} color={colors.primary} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.bannerText} numberOfLines={1}>
-              {`담는 중: ${target.title} · ${reportCounts[target.reportId] ?? 0}건`}
-            </Text>
-          </View>
-        </View>
-      ) : null}
-      {finals.length > 0 ? (
-        <View style={styles.finals}>
-          <Text style={styles.finalsTitle}>확정 보고서</Text>
-          {finals.map((report) => (
-            <TouchableOpacity key={report.reportId} style={styles.finalRow} activeOpacity={0.8} onPress={() => onOpenReport?.(report)}>
-              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-              <Text style={styles.finalText} numberOfLines={1}>
-                {`${report.title}${(report.version ?? 1) > 1 ? ` (v${report.version})` : ''} · ${report.itemCount ?? 0}건`}
-              </Text>
-              <Text style={styles.bannerLink}>보기 · 받기 ›</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      ) : null}
-      {drafts.length > 1 ? (
-        <TouchableOpacity style={styles.reportSelect} onPress={() => setPicker('report')} activeOpacity={0.8}>
-          <Text style={styles.reportSelectText}>담을 보고서 바꾸기 ({drafts.length}개)</Text>
-          <Ionicons name="chevron-down" size={16} color={colors.primary} />
-        </TouchableOpacity>
-      ) : null}
-
-      <ReportFilters key={projectId} search={search} onSearchChange={setSearch} worker={worker} onWorkerChange={setWorker} workers={workers} dong={dong} onDongChange={setDong} dongs={data?.filters?.adminDongs||[]} startDate={dateRange.start} endDate={dateRange.end} onDateChange={setDateRange}/>
-
-      {target && addable.length > 0 ? (
-        <PrimaryButton title={`보이는 ${addable.length}건 모두 담기`} icon="add-circle-outline" onPress={addAll} disabled={adding} />
-      ) : null}
-    </View>
-  );
-
-  return (
-    <View style={styles.root}>
-      <ScreenHeader
-        title={project?.name || '프로젝트'}
-        onBack={onBack}
-      />
-      <FlatList
-        data={items}
-        keyExtractor={(item) => String(item.progressId)}
-        renderItem={renderItem}
-        ListHeaderComponent={header}
-        ListEmptyComponent={loading
-          ? <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>
-          : <EmptyState icon="checkmark-done-outline" title="완료된 기록이 없어요"  />}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={() => { loadItems(); loadReports(); }} />}
-        contentContainerStyle={styles.listBody}
-      />
-
-      {toast ? (
-        <View style={styles.toast} pointerEvents="box-none">
-          <Text style={styles.toastText} numberOfLines={2}>{toast.text}</Text>
-          {toast.undoIds?.length ? (
-            <TouchableOpacity onPress={undo} style={styles.toastAction}><Text style={styles.toastActionText}>되돌리기</Text></TouchableOpacity>
-          ) : null}
-        </View>
-      ) : null}
-
-      <Modal visible={Boolean(picker)} transparent animationType="fade" onRequestClose={() => setPicker(null)}>
-        <Pressable style={styles.backdrop} onPress={() => setPicker(null)}>
-          <Pressable style={styles.sheet}>
-            <Text style={styles.sheetTitle}>
-              담을 보고서
-            </Text>
-            <ScrollView style={{ maxHeight: 360 }}>
-              {pickerOptions.map((option) => {
-                const selected = option.value == null ? pickerSelected == null : sameId(option.value, pickerSelected);
-                return (
-                  <TouchableOpacity key={String(option.value)} style={styles.option} onPress={() => choose(picker, option.value)}>
-                    <Text style={[styles.optionText, selected && styles.optionSelected]} numberOfLines={1}>{option.label}</Text>
-                    {selected ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
-                  </TouchableOpacity>
-                );
-              })}
-              {pickerOptions.length === 0 ? <Text style={styles.optionEmpty}>선택할 항목이 없어요</Text> : null}
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
-  center: { paddingVertical: 32, alignItems: 'center', justifyContent: 'center' },
-  listBody: { gap: 10, padding: spacing.page, paddingTop: 4, paddingBottom: 96 },
-  projectCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.card, borderRadius: radius.medium, backgroundColor: colors.surfaceMuted },
-  projectIcon: { width: 40, height: 40, borderRadius: radius.small, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primarySoft },
-  projectName: { color: colors.text, fontSize: 15, fontWeight: '900' },
-  projectMeta: { color: colors.textSoft, fontSize: 12, fontWeight: '700', marginTop: 2 },
-  projectDraft: { color: colors.primaryDark, fontSize: 12, fontWeight: '700', marginTop: 4 },
-  headerBlock: { gap: 10, marginBottom: 2 },
-  banner: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, borderRadius: radius.medium, backgroundColor: colors.primarySoft },
-  bannerText: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '800' },
-  bannerLink: { color: colors.primary, fontSize: 13, fontWeight: '900' },
-  bannerHint: { color: colors.textSoft, fontSize: 11, fontWeight: '700', marginTop: 2, lineHeight: 15 },
-  finals: { gap: 6 },
-  finalsTitle: { color: colors.text, fontSize: 13, fontWeight: '900', marginTop: 4 },
-  finalRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderRadius: radius.medium, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
-  finalText: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '800' },
-  bannerEmpty: { backgroundColor: colors.surfaceMuted },
-  bannerEmptyText: { flex: 1, color: colors.textSoft, fontSize: 12, fontWeight: '700', lineHeight: 17 },
-  reportSelect: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, minHeight: 32 },
-  reportSelectText: { color: colors.primary, fontSize: 12, fontWeight: '800' },
-  chips: { gap: 6, paddingVertical: 2 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 36, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface },
-  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { color: colors.textSoft, fontSize: 12.5, fontWeight: '800' },
-  chipTextActive: { color: '#FFFFFF' },
-  itemCard: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: radius.medium, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
-  itemTitleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
-  itemAddress: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '800' },
-  mineBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.tealSoft },
-  mineBadgeText: { color: colors.tealDark, fontSize: 10.5, fontWeight: '900' },
-  itemMeta: { color: colors.textSoft, fontSize: 12, fontWeight: '600', marginTop: 4 },
-  itemSub: { color: colors.textFaint, fontSize: 11.5, fontWeight: '600', marginTop: 2 },
-  addButton: { minWidth: 72, minHeight: 38, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center', borderRadius: radius.small, backgroundColor: colors.primary },
-  addButtonText: { color: '#FFFFFF', fontSize: 12.5, fontWeight: '900' },
-  addedButton: { backgroundColor: colors.successSoft },
-  addedButtonText: { color: colors.successInk },
-  disabled: { opacity: 0.45 },
-  toast: { position: 'absolute', left: 16, right: 16, bottom: 24, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 16, borderRadius: radius.medium, backgroundColor: colors.text, ...shadow },
-  toastText: { flex: 1, color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
-  toastAction: { minHeight: 32, justifyContent: 'center', paddingHorizontal: 4 },
-  toastActionText: { color: '#86B9FF', fontSize: 13, fontWeight: '900' },
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(16,40,91,0.35)' },
-  sheet: { padding: 20, paddingBottom: 32, borderTopLeftRadius: radius.large, borderTopRightRadius: radius.large, backgroundColor: colors.surface },
-  sheetTitle: { color: colors.text, fontSize: 16, fontWeight: '900', marginBottom: 8 },
-  option: { flexDirection: 'row', alignItems: 'center', minHeight: 46, borderBottomWidth: 1, borderBottomColor: colors.line },
-  optionText: { flex: 1, color: colors.text, fontSize: 14, fontWeight: '700' },
-  optionSelected: { color: colors.primary, fontWeight: '900' },
-  optionEmpty: { color: colors.textSoft, fontSize: 13, paddingVertical: 16, textAlign: 'center' },
-});

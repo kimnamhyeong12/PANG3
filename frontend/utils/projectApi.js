@@ -123,3 +123,18 @@ export const updateProject = (projectId, userId, patch) => groupApi(`/api/projec
 export const fetchProjectPlaces = projectId => groupApi(`/api/projects/${projectId}/places`);
 export const registerProjectPlaces = (projectId, userId, placeIds, allowActive = false) => groupApi(`/api/projects/${projectId}/places/register`, { method: 'POST', body: JSON.stringify({ userId, placeIds, allowActive }) });
 export const linkReportsToProject = (projectId, userId, progressIds) => groupApi(`/api/projects/${projectId}/link-reports`, { method: 'POST', body: JSON.stringify({ userId, progressIds }) });
+
+export const fetchProjectTasks = (projectId, userId) => groupApi(`/api/projects/${projectId}/tasks${buildQuery({ userId })}`);
+export const fetchProjectGroupTasks = (groupId, userId) => groupApi(`/api/locations/group/${groupId}${buildQuery({ userId })}`);
+export const fetchProjectGroupReports = (groupId, userId) => groupApi(`/api/groups/${groupId}/reports${buildQuery({ userId })}`);
+export const linkProjectTasks = (projectId, userId, taskIds) => groupApi(`/api/projects/${projectId}/tasks`, { method: 'POST', body: JSON.stringify({ userId, taskIds }) });
+export const unlinkProjectTask = (projectId, userId, taskId) => groupApi(`/api/projects/${projectId}/tasks/${taskId}${buildQuery({ userId })}`, { method: 'DELETE' });
+export const createProjectReport = (projectId, userId, title, progressIds) => groupApi(`/api/projects/${projectId}/reports`, { method: 'POST', body: JSON.stringify({ userId, title, groupBy: 'adminDong', progressIds }) });
+export const replaceReportItems = (reportId, userId, progressIds, expectedUpdatedAt) => groupApi(projectPaths.reportItems(reportId), { method: 'PUT', body: JSON.stringify({ userId, progressIds, expectedUpdatedAt }) });
+export const updateCompiledReport = (reportId, userId, patch) => groupApi(projectPaths.report(reportId, userId), { method: 'PATCH', body: JSON.stringify({ userId, ...patch }) });
+export const updateReportItem = (reportId, userId, progressId, patch) => groupApi(`${projectPaths.reportItems(reportId)}/${progressId}`, { method: 'PATCH', body: JSON.stringify({ userId, ...patch }) });
+export const finalizeCompiledReport = (reportId, userId) => groupApi(`/api/compiled-reports/${reportId}/finalize`, { method: 'POST', body: JSON.stringify({ userId }) });
+export const reviseCompiledReport = (reportId, userId) => groupApi(`/api/compiled-reports/${reportId}/revise`, { method: 'POST', body: JSON.stringify({ userId }) });
+export const fetchReportVersions = (reportId, userId) => groupApi(`/api/compiled-reports/${reportId}/versions${buildQuery({ userId })}`);
+export const fetchProjectSourceReport = progressId => groupApi(`/api/progress-reports/${progressId}`);
+export const updateProjectSourceReport = (progressId, patch) => groupApi(`/api/progress-reports/${progressId}`, { method: 'PATCH', body: JSON.stringify(patch) });
