@@ -200,7 +200,7 @@ function ItemCard({ item, n, color, active, canEdit, canEditSource, busy, isFirs
   );
 }
 
-export default function ReportEditorPage({ embedded = false, reportId: providedReportId, onNavigateReport, onReportChange, onDirtyChange } = {}) {
+export default function ReportEditorPage({ embedded = false, reportId: providedReportId, onNavigateReport, onReportChange, onDirtyChange, refreshKey } = {}) {
   const { reportId: routeReportId } = useParams();
   const reportId = providedReportId || routeReportId;
   const { user } = useAuth();
@@ -220,7 +220,7 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
   const operationLock = useRef(false);
   const currentReport = useRef(null);
   currentReport.current = report;
-  const [selecting, setSelecting] = useState(false), [downloadMenu, setDownloadMenu] = useState(false), [exportProgress, setExportProgress] = useState('');
+  const [downloadMenu, setDownloadMenu] = useState(false), [exportProgress, setExportProgress] = useState('');
 
   const projectId = report?.project?.projectId;
   const status = report?.report?.status;
@@ -229,8 +229,8 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
 
   const [editingInput,setEditingInput]=useState(false);
   const dirtyRef = useRef(false);
-  dirtyRef.current = busy || editingInput || selecting || Boolean(report && titleDraft !== (report.report?.title ?? ''));
-  useEffect(()=>{onDirtyChange?.(busy||editingInput||selecting);return()=>onDirtyChange?.(false);},[busy,editingInput,selecting,onDirtyChange]);
+  dirtyRef.current = busy || editingInput || Boolean(report && titleDraft !== (report.report?.title ?? ''));
+  useEffect(()=>{onDirtyChange?.(busy||editingInput);return()=>onDirtyChange?.(false);},[busy,editingInput,onDirtyChange]);
   const liveRevision = useLiveRevision(['reports', 'projects', 'tasks'], {
     scope: reportId,
     dirty: dirtyRef.current,
@@ -277,7 +277,7 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
     setActiveN(null);
     setMessage(null);
     loadReport().catch((e) => setLoadError(errorMessage(e, '보고서를 불러오지 못했습니다.')));
-  }, [loadReport]);
+  }, [loadReport, refreshKey]);
   useEffect(()=>{if(liveRevision)loadReport({ preserveDraft: true }).catch(e=>setLoadError(errorMessage(e)));},[liveRevision,loadReport]);
 
   useEffect(() => {
@@ -445,7 +445,7 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
               value={titleDraft}
               maxLength={200}
               aria-label="보고서 제목"
-              disabled={busy || selecting}
+              disabled={busy}
               onChange={(e) => setTitleDraft(e.target.value)}
               onBlur={saveTitle}
               onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
@@ -459,7 +459,6 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
           <button type="button" className="btn-secondary" onClick={() => setShowVersions(true)}>
             이전 버전
           </button>
-          {isDraft&&<button type="button" className="btn-secondary" disabled={busy} onClick={()=>setSelecting(v=>!v)}>건별보고서 필터링</button>}
           <div className="project-download" ref={downloadRef}><button type="button" className="btn-secondary" disabled={busy} aria-expanded={downloadMenu} onClick={()=>setDownloadMenu(v=>!v)}><IconDownload size={16}/>다운로드</button>{downloadMenu&&<div className="project-download-menu" aria-label="다운로드 형식"><button type="button" disabled={busy} onClick={()=>{setDownloadMenu(false);downloadHtml();}}>HTML</button><button type="button" disabled={busy} onClick={()=>{setDownloadMenu(false);downloadHwpx();}}>HWPX</button></div>}</div>
           {isLeader && isDraft && (
             <button type="button" className="btn-primary btn-inline" disabled={busy || allItems.length === 0} onClick={finalize}>
@@ -476,8 +475,8 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
       {exportProgress&&<p role="status" className="panel-notice">{exportProgress}</p>}
       {message && <p className={message.type === 'error' ? 'form-error' : 'form-success'}>{message.text}</p>}
 
-      {selecting&&<ReportRecordSelection project={report.project} user={user} reportId={reportId} onDirtyChange={onDirtyChange} onCancel={()=>setSelecting(false)} onSaved={async()=>{await loadReport();setSelecting(false);onReportChange?.();}}/>}
-      <div className="re-layout project-report-only" hidden={selecting}>
+      {!embedded&&isDraft&&<ReportRecordSelection project={report.project} user={user} reportId={reportId} onDirtyChange={onDirtyChange} onSaved={async()=>{await loadReport();onReportChange?.();}}/>}
+      <div className="re-layout project-report-only">
         {/* 오른쪽: 보고서 (지도 + 카드) */}
         <div className="re-main">
           <section className="panel re-summary">
@@ -504,7 +503,7 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
 
           {numbered.length === 0 ? (
             <section className="panel">
-              <div className="table-empty">&lsquo;건별보고서 필터링&rsquo;에서 완료 기록을 선택해 주세요.</div>
+              <div className="table-empty">위 목록에서 완료 기록을 선택해 주세요.</div>
             </section>
           ) : (
             numbered.map((section, si) => (

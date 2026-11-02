@@ -19,7 +19,7 @@ export function filterReportRecords(rows, filters) {
   });
 }
 
-export default function ReportRecordFilters({ rows, value, onChange, disabled = false, count }) {
+export default function ReportRecordFilters({ rows, value, onChange, disabled = false }) {
   const assignees = [...new Map(rows.map(row => [assigneeKey(row), row.assigneeName || '담당자 확인 불가'])).entries()]
     .sort((a, b) => a[1].localeCompare(b[1], 'ko'));
   const dongs = [...new Set(rows.map(row => row.adminDong).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko'));
@@ -36,6 +36,5 @@ export default function ReportRecordFilters({ rows, value, onChange, disabled = 
       <select className="input" aria-label="행정동" disabled={disabled} value={value.dong} onChange={e => onChange({ ...value, dong: e.target.value })}><option value="">전체 행정동</option>{dongs.map(dong => <option key={dong}>{dong}</option>)}</select>
     </div>
     {hasFilter && <button className="btn-secondary" type="button" disabled={disabled} onClick={() => onChange(defaultRecordFilters())}>초기화</button>}
-    {count != null && <span className="report-filter-count">{count} / {rows.length}건</span>}
   </div>;
 }

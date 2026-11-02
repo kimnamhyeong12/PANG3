@@ -182,7 +182,7 @@ export default function ReportsPage() {
   return (
     <>
 
-      <ReportRecordFilters rows={reports} value={filters} onChange={setFilters} count={!loading && !error ? filtered.length : undefined}/>
+      <ReportRecordFilters rows={reports} value={filters} onChange={setFilters}/>
 
       {exportProgress && <p role="status" className="panel-notice">{exportProgress}</p>}
       {downloadError && <p className="form-error">{downloadError}</p>}

@@ -23,7 +23,7 @@
 .project-selection-scroll .table th:nth-child(2){width:50%}.project-selection-scroll .table th:last-child{width:115px}
 .project-selection-scroll input[type=checkbox]{width:17px;height:17px;accent-color:var(--navy)}
 .project-selection-footer{display:flex;justify-content:space-between;align-items:center;gap:15px;padding-top:18px;border-top:1px solid var(--border)}
-.project-candidate-row{display:flex;gap:12px;align-items:center;padding:15px 4px;border-bottom:1px solid var(--border)}.project-candidate-row>span{flex:1;min-width:0}
+.project-candidate-row{display:flex;gap:12px;align-items:center;padding:15px 4px;border-bottom:1px solid var(--border)}.project-candidate-row>span:not(.pill){flex:1;min-width:0}
 .project-download{position:relative}.project-download-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:150px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-sm);z-index:20;padding:6px;display:grid;gap:4px}
 .project-download-menu>button{border:0;background:transparent;padding:12px;text-align:left;color:var(--text);border-radius:6px}.project-download-menu>button:hover{background:var(--navy-soft)}
 .re-page .form-success,.re-page .form-error{overflow-wrap:anywhere}
@@ -886,3 +886,12 @@ li.pj-task-row {
   margin: 2px 0 6px;
   font-size: 12px;
 }
+
+.project-collapse>span{display:flex;transition:transform .15s}.project-collapse>span.is-open{transform:rotate(180deg)}
+.project-candidate-row>.pill{flex:none;white-space:nowrap;justify-self:end}
+.project-visits-dialog{height:min(780px,calc(100dvh - 32px))}.project-visits-dialog .modal-header,.project-visits-dialog .modal-footer{flex:none}.project-visits-dialog .modal-body{display:flex;flex:1;flex-direction:column;min-height:0;overflow:hidden}.project-visits-dialog .report-record-filters{flex:none;margin:0 0 16px}.project-visits-dialog .project-selection-scroll{flex:1;min-height:0;max-height:none;overflow:auto}
+.project-new-report-name{display:grid;gap:8px;flex:1;max-width:420px;font-size:13px;font-weight:600}.project-selection-footer{align-items:end}.project-selection-footer>.btn-primary{margin-left:auto}.project-visits-dialog .project-candidate-row{gap:16px}
+@media(max-width:760px){.project-new-report-name{flex-basis:100%;max-width:none}.project-candidate-row{flex-wrap:wrap}.project-candidate-row>span:not(.pill){min-width:0}.project-candidate-row>.pill{margin-left:33px}.project-visits-dialog .report-record-filters{padding:10px}}
+
+.project-visits-dialog .report-filter-search{flex-basis:220px;max-width:320px}.project-visits-dialog .report-filter-period,.project-visits-dialog .report-filter-selects{flex-basis:260px;min-width:240px}
+@media(max-width:760px){.project-visits-dialog .report-filter-search,.project-visits-dialog .report-filter-period,.project-visits-dialog .report-filter-selects{flex-basis:100%;max-width:none;min-width:0}}
