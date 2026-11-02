@@ -16,7 +16,7 @@ public CorsConfigurationSource corsConfigurationSource(
     List<String> allowed = Arrays.stream(origins.split(",")).map(String::trim).filter(value -> !value.isEmpty()).toList();
     if (allowed.stream().anyMatch(value -> value.contains("*"))) throw new IllegalArgumentException("CORS requires explicit origins");
     config.setAllowedOrigins(allowed); config.setAllowCredentials(true);
-    config.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
+    config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
     config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Auth-Client", "X-Kakao-Walk-Key"));
     config.setExposedHeaders(List.of("Content-Disposition", "X-Map-Attribution"));
     var source = new UrlBasedCorsConfigurationSource(); source.registerCorsConfiguration("/**", config); return source;
