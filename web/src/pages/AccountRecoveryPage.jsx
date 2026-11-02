@@ -30,7 +30,7 @@ export function EmailEnrollment({ compact = false, initialEmail = '', onVerified
   return <><section className={compact?'email-enrollment':'card email-enrollment'}>{!compact&&<h3>복구 이메일</h3>}<form className="email-enrollment-form" onSubmit={verify}>
     <label>이메일<div className="email-action-row"><input ref={emailField} className="input" type="email" aria-label="복구 이메일" value={email} onChange={e=>{setEmail(e.target.value);setChallengeId(null);setVerified(false);setCode('');setMessage('');}} required disabled={busy}/><button type="button" className="btn-primary btn-inline" disabled={busy||!email.trim()} onClick={requestAuthentication}>{busy&&!challengeId?'발송 중…':'인증 메일 받기'}</button></div></label>
     <label>인증코드<div className="email-action-row"><input className="input" aria-label="이메일 인증코드" value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="6자리 인증코드" disabled={!challengeId||busy||verified}/><button type="submit" className="btn-secondary" disabled={!challengeId||busy||verified||code.length!==6}>{verified?'인증 완료':'인증 확인'}</button></div></label>
-    <p className="field-hint">메일 발송 시 현재 비밀번호 또는 연결된 Google·카카오 계정으로 확인합니다. 받은 인증코드는 10분 동안 사용할 수 있습니다.</p>
+    <p className="field-hint">받은 인증코드는 10분 동안 사용할 수 있습니다.</p>
     {message&&<p role="status" className={`email-notice${verified?' verified':''}`}>{message}</p>}
   </form></section>{authenticating&&<IdentityDialog title="인증 후 메일 발송" busy={busy} error={authError} autoConfirmSocial onClose={()=>setAuthenticating(false)} onConfirm={send}/>}</>;
 }

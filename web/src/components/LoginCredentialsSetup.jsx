@@ -39,12 +39,12 @@ export default function LoginCredentialsSetup({ user, onCompleted }) {
     <section className={setup ? "account-card account-password-card" : "account-login-id"}>{setup&&<header><AppIcon name="lock-closed-outline"/><h3>아이디·비밀번호 설정</h3></header>}
       {setup&&<p className="field-hint">아이디·비밀번호 로그인을 추가합니다. 기존 Google·카카오 로그인도 계속 사용할 수 있습니다.</p>}
       <div className="account-fields">
-        <label>아이디<div className="email-action-row"><input className="input" aria-label={setup ? "설정할 아이디" : "변경할 아이디"} autoComplete="username" maxLength={50} value={loginId} disabled={busy || authenticating} onChange={e => { currentId.current = e.target.value; setLoginId(e.target.value); setCheckedId(''); setIdMessage(''); }}/><button type="button" className="btn-secondary" disabled={checking || busy || authenticating || !loginId.trim()} onClick={check}>{checking ? '확인 중…' : '중복 확인'}</button></div></label>
+        <label>아이디<div className={`email-action-row${setup ? '' : ' login-id-action-row'}`}><input className="input" aria-label={setup ? "설정할 아이디" : "변경할 아이디"} autoComplete="username" maxLength={50} value={loginId} disabled={busy || authenticating} onChange={e => { currentId.current = e.target.value; setLoginId(e.target.value); setCheckedId(''); setIdMessage(''); }}/><button type="button" className="btn-secondary" disabled={checking || busy || authenticating || !loginId.trim()} onClick={check}>{checking ? '확인 중…' : '중복 확인'}</button>{!setup&&<button type="button" className="btn-primary btn-inline" disabled={!valid || checking || busy || authenticating} onClick={() => { setError(''); setAuthenticating(true); }}>{setup ? '아이디·비밀번호 설정' : '아이디 변경'}</button>}</div></label>
         <p className="field-hint" role="status">{idMessage || '영문·숫자 또는 _, ., -를 사용해 3~50자로 입력해 주세요.'}</p>
         {setup&&<><label>비밀번호<input className="input" type="password" autoComplete="new-password" aria-label="설정할 비밀번호" value={password} disabled={busy || authenticating} onChange={e => setPassword(e.target.value)}/></label>
         <label>비밀번호 확인<input className="input" type="password" autoComplete="new-password" aria-label="설정할 비밀번호 확인" value={confirm} disabled={busy || authenticating} onChange={e => setConfirm(e.target.value)}/></label>
         {confirm && password !== confirm && <p className="form-error">비밀번호가 서로 일치하지 않습니다.</p>}</>}
-        <button type="button" className="btn-primary btn-inline" disabled={!valid || checking || busy || authenticating} onClick={() => { setError(''); setAuthenticating(true); }}>{setup ? '아이디·비밀번호 설정' : '아이디 변경'}</button>
+        {setup&&<button type="button" className="btn-primary btn-inline" disabled={!valid || checking || busy || authenticating} onClick={() => { setError(''); setAuthenticating(true); }}>{setup ? '아이디·비밀번호 설정' : '아이디 변경'}</button>}
       </div>
     </section>
     {authenticating && createPortal(setup ? <Modal title="연결된 계정으로 인증" onClose={() => !busy && setAuthenticating(false)}>

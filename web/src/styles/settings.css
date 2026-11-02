@@ -77,3 +77,11 @@
 .account-password-card .account-fields>.field-hint{margin:0;line-height:1.7}.account-password-card .account-fields>.btn-primary{display:flex;align-items:center;justify-content:center;text-align:center}
 @media(max-width:1100px){.account-grid{grid-template-columns:1fr}.account-basic-card,.account-workplace-stack,.account-password-card,.account-email-card{grid-column:1;grid-row:auto}}
 @media(max-width:520px){.account-form-footer{justify-content:stretch;gap:10px}.account-form-footer>button{flex:1;min-width:0;padding:12px}.account-form-footer>.btn-primary{min-width:0}.account-form-footer>.account-delete-button{min-width:0}.email-action-row{gap:8px}.email-action-row>button{padding:0 10px}}
+
+.login-id-action-row{grid-template-columns:minmax(100px,1fr) auto auto}.login-id-action-row>.btn-primary{height:44px;min-width:0;padding:0 14px;font-size:12px}
+.account-workplace-stack{height:100%}.account-workplace-card{flex:1;display:flex;flex-direction:column}.account-workplace-card .account-workplace-actions{margin-top:auto;padding-top:14px}.account-social-card{flex:none}
+@media(max-width:1100px){.account-workplace-stack{height:auto}}
+@media(max-width:520px){.login-id-action-row{grid-template-columns:minmax(0,1fr) auto}.login-id-action-row>.btn-primary{grid-column:1/-1;justify-self:end}}
+
+.account-basic-card .region-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.account-basic-card .region-fields>label:nth-of-type(3){grid-column:1/-1}
+@media(max-width:520px){.account-basic-card .region-fields{grid-template-columns:1fr}}
