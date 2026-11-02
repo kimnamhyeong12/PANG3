@@ -25,7 +25,7 @@ export default function ProjectsDetailPage() {
   const [revision, setRevision] = useState(0), [editing, setEditing] = useState(false), [selection, setSelection] = useState(false), [collapsed, setCollapsed] = useState(false);
   const [dirty, setDirty] = useState(false), [notice, setNotice] = useState('');
   const openReportId = params.get('report');
-  const liveRevision = useLiveRevision(['projects', 'reports', 'tasks'], { dirty, onConflict: () => setNotice('다른 곳에서 변경된 내용이 있습니다. 작성 중인 내용은 유지됩니다.') });
+  const liveRevision = useLiveRevision(['projects', 'reports', 'tasks'], { dirty });
   useEffect(() => {
     if (!project || groupId == null || String(project.groupId) === String(groupId)) return;
     if (dirty) setNotice('다른 그룹을 선택했습니다. 현재 프로젝트의 작성 중인 내용은 유지되며, 편집을 닫으면 선택한 그룹으로 이동합니다.');
@@ -51,7 +51,7 @@ export default function ProjectsDetailPage() {
       {!reports ? <LoadingBlock/> : !reports.length ? <p className="table-empty">아직 보고서가 없습니다.</p> : <div>{reports.map(report => <button type="button" key={report.reportId} className={`project-report-row${String(report.reportId) === String(openReportId) ? ' selected' : ''}`} disabled={dirty} aria-expanded={String(report.reportId) === String(openReportId)} onClick={() => openReport(String(report.reportId) === String(openReportId) ? null : report.reportId)}><div><strong>{report.title}</strong><small>{report.itemCount ?? 0}건 · {formatDateTime(report.finalizedAt || report.updatedAt)}</small></div><ReportStatusBadge report={report}/><span aria-hidden="true">{String(report.reportId) === String(openReportId) ? '⌃' : '⌄'}</span></button>)}</div>}
     </section>
     {selection && <ReportRecordSelection key={projectId} project={project} user={user} onDirtyChange={setDirty} onCancel={() => setSelection(false)} onSaved={result => { changed(); openReport(result.reportId); }}/>}
-    {openReportId && <section className="project-inline-report" aria-label="통합 보고서 편집"><ReportEditorPage key={openReportId} embedded reportId={openReportId} onClose={() => openReport(null)} onNavigateReport={openReport} onReportChange={changed} onDirtyChange={setDirty}/></section>}
+    {openReportId && <section className="project-inline-report" aria-label="통합 보고서 편집"><ReportEditorPage key={openReportId} embedded reportId={openReportId} onNavigateReport={openReport} onReportChange={changed} onDirtyChange={setDirty}/></section>}
     {editing && <ProjectsFormModal title="프로젝트 이름 변경" submitLabel="저장" initial={{ name: project.name }} onClose={() => setEditing(false)} onSubmit={async form => { await updateProject(projectId, user.userId, form); setEditing(false); changed(); }}/ >}
   </div>;
 }

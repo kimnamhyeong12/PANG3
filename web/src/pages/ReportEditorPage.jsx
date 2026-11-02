@@ -200,7 +200,7 @@ function ItemCard({ item, n, color, active, canEdit, canEditSource, busy, isFirs
   );
 }
 
-export default function ReportEditorPage({ embedded = false, reportId: providedReportId, onClose, onNavigateReport, onReportChange, onDirtyChange } = {}) {
+export default function ReportEditorPage({ embedded = false, reportId: providedReportId, onNavigateReport, onReportChange, onDirtyChange } = {}) {
   const { reportId: routeReportId } = useParams();
   const reportId = providedReportId || routeReportId;
   const { user } = useAuth();
@@ -216,6 +216,10 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
   const [titleDraft, setTitleDraft] = useState('');
   const [showVersions, setShowVersions] = useState(false);
   const cardRefs = useRef(new Map());
+  const downloadRef = useRef(null);
+  const operationLock = useRef(false);
+  const currentReport = useRef(null);
+  currentReport.current = report;
   const [selecting, setSelecting] = useState(false), [downloadMenu, setDownloadMenu] = useState(false), [exportProgress, setExportProgress] = useState('');
 
   const projectId = report?.project?.projectId;
@@ -224,10 +228,44 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
   const canEdit = isLeader && isDraft;
 
   const [editingInput,setEditingInput]=useState(false);
+  const dirtyRef = useRef(false);
+  dirtyRef.current = busy || editingInput || selecting || Boolean(report && titleDraft !== (report.report?.title ?? ''));
   useEffect(()=>{onDirtyChange?.(busy||editingInput||selecting);return()=>onDirtyChange?.(false);},[busy,editingInput,selecting,onDirtyChange]);
-  const liveRevision=useLiveRevision(['reports','projects','tasks'],{dirty:busy||editingInput||Boolean(report&&titleDraft!==(report.report?.title??'')),onConflict:()=>setMessage({type:'error',text:'다른 기기에서 보고서가 변경되었습니다. 작성 중인 내용은 유지됩니다.'})});
-  const loadReport = useCallback(async () => {
+  const liveRevision = useLiveRevision(['reports', 'projects', 'tasks'], {
+    scope: reportId,
+    dirty: dirtyRef.current,
+    onConflict: async () => {
+      // The stream also echoes this editor's own saves and unrelated group changes.
+      if (operationLock.current) return;
+      try {
+        const latest = await fetchCompiledReport(reportId, userId);
+        if (operationLock.current || String(currentReport.current?.report?.reportId) !== String(reportId)) return;
+        if (latest.report?.updatedAt !== currentReport.current?.report?.updatedAt)
+          setMessage({ type: 'error', text: '이 보고서에 다른 변경사항이 있습니다. 작성 중인 내용은 유지됩니다.' });
+      } catch { /* Keep the draft; the next load/save reports request failures. */ }
+    },
+  });
+  useEffect(() => {
+    if (!downloadMenu) return;
+    const outside = event => { if (!downloadRef.current?.contains(event.target)) setDownloadMenu(false); };
+    const escape = event => { if (event.key === 'Escape') setDownloadMenu(false); };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('focusin', outside);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('focusin', outside);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [downloadMenu]);
+  const loadReport = useCallback(async ({ preserveDraft = false } = {}) => {
     const json = await fetchCompiledReport(reportId, userId);
+    if (preserveDraft && dirtyRef.current) {
+      if (!operationLock.current && json.report?.updatedAt !== currentReport.current?.report?.updatedAt)
+        setMessage({ type: 'error', text: '이 보고서에 다른 변경사항이 있습니다. 작성 중인 내용은 유지됩니다.' });
+      return json;
+    }
+    currentReport.current = json;
     setReport(json);
     setTitleDraft(json?.report?.title ?? '');
     return json;
@@ -240,7 +278,7 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
     setMessage(null);
     loadReport().catch((e) => setLoadError(errorMessage(e, '보고서를 불러오지 못했습니다.')));
   }, [loadReport]);
-  useEffect(()=>{if(liveRevision)loadReport().catch(e=>setLoadError(errorMessage(e)));},[liveRevision,loadReport]);
+  useEffect(()=>{if(liveRevision)loadReport({ preserveDraft: true }).catch(e=>setLoadError(errorMessage(e)));},[liveRevision,loadReport]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -266,7 +304,6 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
       ),
     [numbered, colors]
   );
-  const operationLock=useRef(false);
   const run = async (fn, errorText, notify = true) => {
     if(operationLock.current)return;operationLock.current=true;
     setBusy(true);
@@ -314,14 +351,6 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
       await updateProgressReport(item.progressId, { expectedRevision: item.sourceRevision, ...patch });
       await loadReport();
     }, '수정한 내용을 저장하지 못했습니다.');
-
-  const changeGroupBy = (groupBy) => {
-    if (!canEdit || groupBy === report.report.groupBy) return;
-    run(async () => {
-      await updateCompiledReport(reportId, userId, { groupBy });
-      await loadReport();
-    }, '목차 구분을 바꾸지 못했습니다.');
-  };
 
   const saveTitle = () => {
     const next = titleDraft.trim();
@@ -416,6 +445,7 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
               value={titleDraft}
               maxLength={200}
               aria-label="보고서 제목"
+              disabled={busy || selecting}
               onChange={(e) => setTitleDraft(e.target.value)}
               onBlur={saveTitle}
               onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
@@ -429,9 +459,8 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
           <button type="button" className="btn-secondary" onClick={() => setShowVersions(true)}>
             이전 버전
           </button>
-          {isDraft&&<button type="button" className="btn-secondary" disabled={busy} onClick={()=>setSelecting(v=>!v)}>대상 기록 변경</button>}
-          <div className="project-download"><button type="button" className="btn-secondary" disabled={busy} aria-expanded={downloadMenu} onClick={()=>setDownloadMenu(v=>!v)}><IconDownload size={16}/>다운로드</button>{downloadMenu&&<div className="project-download-menu" aria-label="다운로드 형식"><button type="button" disabled={busy} onClick={()=>{setDownloadMenu(false);downloadHtml();}}>HTML</button><button type="button" disabled={busy} onClick={()=>{setDownloadMenu(false);downloadHwpx();}}>HWPX</button></div>}</div>
-          {embedded&&<button type="button" className="btn-secondary" disabled={busy} onClick={onClose}>접기</button>}
+          {isDraft&&<button type="button" className="btn-secondary" disabled={busy} onClick={()=>setSelecting(v=>!v)}>건별보고서 필터링</button>}
+          <div className="project-download" ref={downloadRef}><button type="button" className="btn-secondary" disabled={busy} aria-expanded={downloadMenu} onClick={()=>setDownloadMenu(v=>!v)}><IconDownload size={16}/>다운로드</button>{downloadMenu&&<div className="project-download-menu" aria-label="다운로드 형식"><button type="button" disabled={busy} onClick={()=>{setDownloadMenu(false);downloadHtml();}}>HTML</button><button type="button" disabled={busy} onClick={()=>{setDownloadMenu(false);downloadHwpx();}}>HWPX</button></div>}</div>
           {isLeader && isDraft && (
             <button type="button" className="btn-primary btn-inline" disabled={busy || allItems.length === 0} onClick={finalize}>
               확정하기
@@ -444,15 +473,10 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
           )}
         </div>
       </div>
-      {!isDraft && <p className="panel-notice re-notice">확정된 보고서입니다. 내용은 읽기 전용입니다.</p>}
-      {isDraft && !isLeader && (
-        <p className="panel-notice re-notice">항목 담기만 할 수 있습니다. 제목·사진 설명·본문 수정과 확정은 그룹 리더가 합니다.</p>
-      )}
-      {canEdit && <p className="panel-notice re-notice">제목·본문·사진 설명은 원본 기록에 저장됩니다. 확정본은 당시 내용을 유지합니다.</p>}
       {exportProgress&&<p role="status" className="panel-notice">{exportProgress}</p>}
       {message && <p className={message.type === 'error' ? 'form-error' : 'form-success'}>{message.text}</p>}
 
-      {selecting&&<ReportRecordSelection project={report.project} user={user} reportId={reportId} onDirtyChange={onDirtyChange} onCancel={()=>setSelecting(false)} onSaved={async()=>{setSelecting(false);await loadReport();onReportChange?.();}}/>}
+      {selecting&&<ReportRecordSelection project={report.project} user={user} reportId={reportId} onDirtyChange={onDirtyChange} onCancel={()=>setSelecting(false)} onSaved={async()=>{await loadReport();setSelecting(false);onReportChange?.();}}/>}
       <div className="re-layout project-report-only" hidden={selecting}>
         {/* 오른쪽: 보고서 (지도 + 카드) */}
         <div className="re-main">
@@ -460,22 +484,6 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
             <div className="pj-muted">
               기간 {summary.period?.from ?? '-'} ~ {summary.period?.to ?? '-'} · 총 {summary.totalCount ?? allItems.length}건 · 작성자{' '}
               {(summary.authors ?? []).join(', ') || '-'}
-            </div>
-            <div className="re-groupby">
-              <span className="pj-muted" title="보고서 안에서 카드를 나누는 제목이에요. 담을 업무는 왼쪽 필터로 골라요.">목차 구분</span>
-              <div className="pj-chips">
-                {GROUP_BY_OPTIONS.map((o) => (
-                  <button
-                    key={o.value}
-                    type="button"
-                    className={`pj-chip${meta.groupBy === o.value ? ' active' : ''}`}
-                    disabled={!canEdit || busy}
-                    onClick={() => changeGroupBy(o.value)}
-                  >
-                    {o.label}
-                  </button>
-                ))}
-              </div>
             </div>
           </section>
 
@@ -496,7 +504,7 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
 
           {numbered.length === 0 ? (
             <section className="panel">
-              <div className="table-empty">&lsquo;대상 기록 변경&rsquo;에서 완료 기록을 선택해 주세요.</div>
+              <div className="table-empty">&lsquo;건별보고서 필터링&rsquo;에서 완료 기록을 선택해 주세요.</div>
             </section>
           ) : (
             numbered.map((section, si) => (

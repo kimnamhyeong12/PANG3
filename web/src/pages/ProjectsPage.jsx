@@ -56,7 +56,7 @@ export function ProjectsFormModal({ title, initial, submitLabel, onClose, onSubm
             value={name}
             maxLength={100}
             autoFocus
-            placeholder="예: 2026 불법광고물 정비"
+            placeholder="프로젝트 이름을 입력해 주세요."
             onChange={(e) => setName(e.target.value)}
           />
         </div>

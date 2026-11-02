@@ -31,11 +31,11 @@ export default function ReportRecordSelection({ project, user, reportId, onSaved
     setBusy(true); setError('');
     try {
       const result = reportId ? await replaceReportItems(reportId, user.userId, [...selected], revision) : await createProjectReport(project.projectId, user.userId, { title: title.trim(), groupBy: 'adminDong', progressIds: [...selected] });
-      onSaved(result);
+      await onSaved(result);
     } catch (e) { setError(errorMessage(e, '선택한 기록을 저장하지 못했습니다.')); }
     finally { setBusy(false); }
   };
-  return <section className="panel project-report-selection" aria-label={reportId ? '보고서 대상 변경' : '새 보고서'}><header className="panel-header"><h2 className="panel-title">{reportId ? '대상 기록 변경' : '새 보고서'}</h2><button className="btn-secondary" disabled={busy} onClick={onCancel}>닫기</button></header>
+  return <section className="panel project-report-selection" aria-label={reportId ? '건별보고서 필터링' : '새 보고서'}><header className="panel-header"><h2 className="panel-title">{reportId ? '건별보고서 필터링' : '새 보고서'}</h2><button className="btn-secondary" disabled={busy} onClick={onCancel}>닫기</button></header>
     {error && <ErrorBlock message={error} onRetry={!rows ? () => setRetry(n => n + 1) : undefined}/>}
     {!rows ? !error && <LoadingBlock/> : <form onSubmit={save} className="project-selection-body">
       {!reportId && <label>보고서 이름<input className="input" aria-label="보고서 이름" value={title} disabled={busy} maxLength={200} onChange={e => setTitle(e.target.value)}/></label>}
