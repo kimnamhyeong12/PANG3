@@ -23,6 +23,7 @@ export default function ProjectsProgressEditPage() {
   const [body, setBody] = useState('');
   const [captions, setCaptions] = useState({});
   const [busy, setBusy] = useState(false);
+  const [exportProgress, setExportProgress] = useState('');
   const [message, setMessage] = useState(null);
 
   const apply = (json) => {
@@ -87,27 +88,31 @@ export default function ProjectsProgressEditPage() {
 
   // 통합 보고서처럼 HTML로 저장 (한 건). 저장한 내용 기준
   const downloadHtml = async () => {
+    setExportProgress('');
     setBusy(true);
     setMessage(null);
     try {
       const name = data.reportName || data.autoTitle || `report_${progressId}`;
-      saveBlob(new Blob([await fetchProgressReportHtml(progressId)], { type: 'text/html;charset=utf-8' }), `${safeFileName(name)}.html`);
+      saveBlob(new Blob([await fetchProgressReportHtml(progressId, setExportProgress)], { type: 'text/html;charset=utf-8' }), `${safeFileName(name)}.html`);
     } catch (e) {
       setMessage({ type: 'error', text: errorMessage(e, 'HTML 파일을 만들지 못했습니다.') });
     } finally {
+      setExportProgress('');
       setBusy(false);
     }
   };
 
   const downloadHwpx = async () => {
+    setExportProgress('');
     setBusy(true);
     setMessage(null);
     try {
       const name = data.reportName || data.autoTitle || `report_${progressId}`;
-      saveBlob(await downloadProgressHwpx(progressId, user.userId), `${safeFileName(name)}.hwpx`);
+      saveBlob(await downloadProgressHwpx(progressId, user.userId, setExportProgress), `${safeFileName(name)}.hwpx`);
     } catch (e) {
-      setMessage({ type: 'error', text: errorMessage(e, 'HWPX 파일을 만들지 못했습니다. 서버의 보고서 생성 환경(파이썬)을 확인해 주세요.') });
+      setMessage({ type: 'error', text: errorMessage(e, '이 기기에서 HWPX 파일을 만들지 못했습니다. 다시 시도해 주세요.') });
     } finally {
+      setExportProgress('');
       setBusy(false);
     }
   };
@@ -145,6 +150,7 @@ export default function ProjectsProgressEditPage() {
       ) : (
         <p className="panel-notice re-notice">보기 전용입니다. 현재 담당자와 그룹 리더만 고칠 수 있어요.</p>
       )}
+      {exportProgress && <p role="status" className="panel-notice">{exportProgress}</p>}
       {message && <p className={message.type === 'error' ? 'form-error' : 'form-success'}>{message.text}</p>}
 
       <section className="panel pe-panel">

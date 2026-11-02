@@ -5,6 +5,9 @@ project_root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$project_root/web"
 npm ci --no-audit --no-fund
 npm run build
+# Nginx serves non-/api paths from the web root. Publish the runtime from the
+# running API image; otherwise /report-runtime/* silently returns the SPA HTML.
+python3 "$project_root/tools/publish_report_runtime.py" --base-url http://127.0.0.1:8080 --output dist/report-runtime
 
 web_root="$(python3 - <<'PY'
 import os, re, subprocess

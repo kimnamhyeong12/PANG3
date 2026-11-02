@@ -130,8 +130,8 @@ export async function fetchCompiledReportHtml(reportId, userId, onProgress) {
 }
 
 // 건별 보고서 HTML (통합 보고서와 같은 지도+카드 양식, 한 건)
-export async function fetchProgressReportHtml(progressId) {
-  return generateLocalReportHtml('progress', progressId);
+export async function fetchProgressReportHtml(progressId, onProgress) {
+  return generateLocalReportHtml('progress', progressId, onProgress);
 }
 
 export function finalizeCompiledReport(reportId, userId) {
@@ -166,8 +166,8 @@ export function updateProgressReport(progressId, patch) {
 }
 
 // 건별 HWPX도 서버 생성 파일 없이 이 브라우저에서 생성한다.
-export async function downloadProgressHwpx(progressId, userId) {
-  return (await generateLocalReport('progress', progressId)).blob;
+export async function downloadProgressHwpx(progressId, userId, onProgress) {
+  return (await generateLocalReport('progress', progressId, onProgress)).blob;
 }
 
 // 인증이 필요한 /api/files 사진 → Blob

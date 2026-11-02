@@ -100,6 +100,7 @@ export default function ReportsPage() {
 
   const [downloadingId, setDownloadingId] = useState(null);
   const [downloadError, setDownloadError] = useState(null);
+  const [exportProgress, setExportProgress] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -150,10 +151,11 @@ export default function ReportsPage() {
     setDownloadingId(report.progressId);
     setDownloadError(null);
     try {
-      saveBlob(await downloadReport(report.progressId), reportFileName(report));
+      saveBlob(await downloadReport(report.progressId, setExportProgress), reportFileName(report));
     } catch (e) {
       setDownloadError(errorMessage(e, '보고서를 내려받지 못했습니다.'));
     } finally {
+      setExportProgress('');
       setDownloadingId(null);
     }
   };
@@ -257,6 +259,7 @@ export default function ReportsPage() {
         )}
       </div>
 
+      {exportProgress && <p role="status" className="panel-notice">{exportProgress}</p>}
       {downloadError && <p className="form-error">{downloadError}</p>}
       {content}
     </>

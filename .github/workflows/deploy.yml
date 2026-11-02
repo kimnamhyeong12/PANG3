@@ -154,6 +154,7 @@ jobs:
             bash infra/scripts/deploy-web.sh
             curl --fail --silent --show-error --max-time 15 https://pinwork.co.kr/api/auth/social/providers >/dev/null
             curl --fail --silent --show-error --max-time 15 https://pinwork.co.kr/ >/dev/null
+            python3 tools/publish_report_runtime.py --base-url https://pinwork.co.kr
             if [ "$DEPLOY_API" = "true" ]; then docker image prune -f; fi
 
       
