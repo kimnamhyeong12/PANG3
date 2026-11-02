@@ -54,7 +54,8 @@ function saveBlob(blob, fileName) {
 }
 
 function ReportCard({ report, downloading, disabled, onDownload }) {
-  const address = report.roadAddress || report.detailAddress || '주소 정보 없음';
+  const address = report.roadAddress || '';
+  const name = report.reportName?.trim() || report.detailAddress || address || '현장 보고서';
   return (
     <article className="report-card">
       <div className="report-card-top">
@@ -63,14 +64,8 @@ function ReportCard({ report, downloading, disabled, onDownload }) {
         </span>
         <span className={`pill pill-${categoryTone(report.taskCategory)}`}>{report.taskCategory || '업무'}</span>
       </div>
-      <div className="report-address" title={address}>
-        {address}
-      </div>
-      {report.detailAddress && report.roadAddress && report.detailAddress !== report.roadAddress && (
-        <div className="report-detail" title={report.detailAddress}>
-          {report.detailAddress}
-        </div>
-      )}
+      <div className="report-address" title={name}>{name}</div>
+      {address && address !== name && <div className="report-detail" title={address}>{address}</div>}
       <div className="report-meta">
         {report.assigneeName || '담당자 확인 불가'} · {formatDate(report.createdAt)}
       </div>

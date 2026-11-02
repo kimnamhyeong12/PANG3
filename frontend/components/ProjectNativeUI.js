@@ -9,7 +9,7 @@ import { projectFilterOptions, recordDay } from '../utils/projectWorkflow';
 
 export function ProjectFilters({ rows, value, onChange, disabled }) {
   const options = projectFilterOptions(rows);
-  return <View pointerEvents={disabled ? 'none' : 'auto'}><ReportFilters {...options} workerLabel="담당자" showAllDates
+  return <View pointerEvents={disabled ? 'none' : 'auto'}><ReportFilters {...options} workerLabel="담당자"
     search={value.search} onSearchChange={search => onChange({ ...value, search })}
     worker={value.worker} onWorkerChange={worker => onChange({ ...value, worker })}
     dong={value.dong} onDongChange={dong => onChange({ ...value, dong })}

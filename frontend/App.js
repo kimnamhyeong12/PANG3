@@ -116,6 +116,9 @@ function AppContent() {
   // H5: 그룹 '건별 보고서'에서 보고서를 열거나 수정하는 동안 그룹 화면을 숨겨 두고 유지 (거르기·열어 둔 폴더 유지)
   const [groupWorkspaceBehind, setGroupWorkspaceBehind] = useState(false);
   const [openedProject, setOpenedProject] = useState(null);
+  const rememberProjectReportView = useCallback(reportView => {
+    setOpenedProject(current => current && current.reportView !== reportView ? { ...current, reportView } : current);
+  }, []);
   const [openedCompiledReport, setOpenedCompiledReport] = useState(null);
   // 건별 보고서 미리보기 (HTML, 파일 받기 없음): { progressId, title }
   const [previewReport, setPreviewReport] = useState(null);
@@ -1215,6 +1218,13 @@ function AppContent() {
               user={user}
               projectId={openedProject.projectId}
               initialProject={openedProject}
+              onReportViewChange={rememberProjectReportView}
+              onEditReport={(report) => {
+                setSelectedLocation({ id: report.taskId, status: report.taskStatus || report.progressStatus,
+                  lat: report.latitude, lng: report.longitude, detailAddress: report.detailAddress,
+                  roadAddress: report.roadAddress, reportName: report.reportName, reportProgressId: report.progressId });
+                setActionType('report'); go('fieldAction');
+              }}
               onBack={() => goBack('groupWorkspace')}
               onOpenReport={(report) => {
                 setOpenedCompiledReport(report);

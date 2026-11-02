@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import useLiveRevision from '../utils/useLiveRevision';
 import { useScreenBackHandler } from '../utils/screenBack';
@@ -10,7 +10,7 @@ import { EmptyState, ScreenHeader } from '../components/ui';
 import { showAlert } from '../components/CustomAlert';
 import ProjectVisits from '../components/ProjectVisits';
 import ProjectReportWorkspace from '../components/ProjectReportWorkspace';
-import { ProjectModal, ProjectError, ProjectLoading, PrimaryButton, SecondaryButton, projectStyles as s } from '../components/ProjectNativeUI';
+import { ProjectError, ProjectLoading, PrimaryButton, SecondaryButton, projectStyles as s } from '../components/ProjectNativeUI';
 
 function ProjectNameForm({ project, groupId, userId, onClose, onSaved }) {
   const [name, setName] = useState(project?.name || ''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
@@ -25,9 +25,16 @@ function ProjectNameForm({ project, groupId, userId, onClose, onSaved }) {
     } catch (e) { if (mounted.current) setError(e.message); }
     finally { lock.current = false; if (mounted.current) setBusy(false); }
   };
-  return <ProjectModal title={project ? '프로젝트 이름 변경' : '프로젝트 만들기'} onClose={onClose} busy={busy} action={<PrimaryButton title={busy ? '저장 중…' : project ? '저장' : '프로젝트 만들기'} onPress={save} disabled={busy || !name.trim()}/>}>
-    <ProjectError message={error}/><Text style={s.label}>프로젝트 이름</Text><TextInput accessibilityLabel="프로젝트 이름" style={s.input} value={name} onChangeText={setName} placeholder="프로젝트 이름을 입력해 주세요." autoFocus maxLength={100} editable={!busy}/>
-  </ProjectModal>;
+  return <Modal visible transparent animationType="fade" onRequestClose={() => !busy && onClose()}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#10285B55' }}>
+      <Pressable style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }} disabled={busy} onPress={onClose} accessibilityLabel="프로젝트 만들기 닫기"/>
+      <View style={[s.panel, { width: '100%', maxWidth: 440, alignSelf: 'center' }]}>
+        <View style={s.heading}><Text style={s.headingText}>{project ? '프로젝트 이름 변경' : '프로젝트 만들기'}</Text><TouchableOpacity style={s.icon} onPress={onClose} disabled={busy} accessibilityLabel="닫기"><Ionicons name="close" size={22} color={colors.text}/></TouchableOpacity></View>
+        <ProjectError message={error}/>
+        <View style={s.heading}><TextInput accessibilityLabel="프로젝트 이름" style={[s.input, { flex: 1 }]} value={name} onChangeText={setName} placeholder="프로젝트 이름" autoFocus maxLength={100} editable={!busy}/><PrimaryButton title={busy ? '저장 중…' : project ? '저장' : '만들기'} onPress={save} disabled={busy || !name.trim()}/></View>
+      </View>
+    </KeyboardAvoidingView>
+  </Modal>;
 }
 
 export function GroupProjectList({ user, group, onOpenProject, onChanged }) {
@@ -50,9 +57,10 @@ export function GroupProjectList({ user, group, onOpenProject, onChanged }) {
   </ScrollView>;
 }
 
-export default function ProjectScreen({ user, projectId, initialProject, onBack }) {
+export default function ProjectScreen({ user, projectId, initialProject, onBack, onEditReport, onReportViewChange }) {
   const [project, setProject] = useState(initialProject), [tasks, setTasks] = useState([]), [reports, setReports] = useState(null);
-  const [view, setView] = useState(null), [collapsed, setCollapsed] = useState(true), [renaming, setRenaming] = useState(false);
+  const [view, setView] = useState(initialProject?.reportView || null), [collapsed, setCollapsed] = useState(true), [renaming, setRenaming] = useState(false);
+  useEffect(() => { onReportViewChange?.(view); }, [view, onReportViewChange]);
   const [visitDirty, setVisitDirty] = useState(false), [reportDirty, setReportDirty] = useState(false);
   const [error, setError] = useState(''), [revision, setRevision] = useState(0), [refreshing, setRefreshing] = useState(false);
   const dirty = visitDirty || reportDirty || renaming;
@@ -91,7 +99,7 @@ export default function ProjectScreen({ user, projectId, initialProject, onBack 
             <Ionicons name={view === String(report.reportId) ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSoft}/>
           </TouchableOpacity>)}{!reports.length && <Text style={s.meta}>아직 보고서가 없습니다.</Text>}
         </View>
-        {view && <ProjectReportWorkspace key={`${projectId}:${view}`} project={project} tasks={tasks} userId={user.userId} reportId={view === 'new' ? null : view} onClose={close} onOpenReport={open} onChanged={changed} onDirtyChange={setReportDirty}/ >}
+        {view && <ProjectReportWorkspace key={`${projectId}:${view}`} project={project} tasks={tasks} userId={user.userId} reportId={view === 'new' ? null : view} onClose={close} onOpenReport={open} onChanged={changed} onDirtyChange={setReportDirty} onEditReport={onEditReport}/ >}
       </>}
     </ScrollView>
     {renaming && <ProjectNameForm project={project} userId={user.userId} onClose={() => setRenaming(false)} onSaved={() => { setRenaming(false); changed(); }}/ >}

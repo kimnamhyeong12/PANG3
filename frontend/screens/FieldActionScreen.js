@@ -128,6 +128,7 @@ export default function FieldActionScreen({
   const mapRef = useRef(null);
   const mapWrapperRef = useRef(null);
   const lastMapCoordinateRef = useRef('');
+  const locationMapReadyRef = useRef(false);
 
   const [
     mapInteracting,
@@ -242,7 +243,7 @@ export default function FieldActionScreen({
     revision: form.revision, recordedAt: form.recordedAt, mainComment: form.mainComment || '', reportName: form.reportName || defaultReportName });
 
   const [syncNotice,setSyncNotice]=useState('');
-  const liveRevision=useLiveRevision(['reports','tasks'], {dirty:loadingReport||saving||editSnapshot(snapshot)!==initialFormRef.current,onConflict:()=>setSyncNotice('다른 기기에서 업무가 변경되었습니다. 작성 중인 내용은 유지됩니다.')});
+  const liveRevision=useLiveRevision(['reports','tasks'], {dirty:loadingReport||saving||positionSaving||editSnapshot(snapshot)!==initialFormRef.current,onConflict:()=>setSyncNotice('다른 기기에서 업무가 변경되었습니다. 작성 중인 내용은 유지됩니다.')});
   const recoverPhotoPick = async (form) => {
     const pending = await pendingPhotoPick(key);
     if (!pending) return form;
@@ -386,21 +387,11 @@ export default function FieldActionScreen({
           event.nativeEvent.data
         );
 
-      if (
-        data.type ===
-        'LOCATION_SELECTED'
-      ) {
-        if (positionSavingRef.current) return;
-        lastMapCoordinateRef.current = `${Number(data.latitude).toFixed(6)}:${Number(data.longitude).toFixed(6)}`;
-        if (editingLocation) setMarkedMapUri(null);
-        setLatitude(
-          String(data.latitude)
-        );
-
-        setLongitude(
-          String(data.longitude)
-        );
+      if (data.type === 'MAP_READY') {
+        locationMapReadyRef.current = true;
+        applyCoordinateToMap();
       }
+      // This is a read-only location preview. Only ReportLocationPicker changes the form coordinates.
     } catch (error) {
       console.log(
         '지도 메시지 오류:',
@@ -412,40 +403,13 @@ export default function FieldActionScreen({
   /*
    * 위도/경도 직접 수정
    */
-  const applyCoordinateToMap =
-    () => {
-      if (
-        !isValidCoordinate(
-          latitude,
-          longitude
-        )
-      ) {
-        return;
-      }
-
-      if (!mapRef.current) {
-        return;
-      }
-
-      const lat =
-        Number(latitude);
-
-      const lng =
-        Number(longitude);
-
-      mapRef.current.injectJavaScript(`
-        if (
-          window.setExternalPosition
-        ) {
-          window.setExternalPosition(
-            ${lat},
-            ${lng}
-          );
-        }
-
-        true;
-      `);
-    };
+  const applyCoordinateToMap = () => {
+    const latest = currentFormRef.current;
+    if (!locationMapReadyRef.current || !mapRef.current || !isValidCoordinate(latest.latitude, latest.longitude)) return;
+    const lat = Number(latest.latitude), lng = Number(latest.longitude);
+    lastMapCoordinateRef.current = `${lat.toFixed(6)}:${lng.toFixed(6)}`;
+    mapRef.current.injectJavaScript(`window.setSelectionMode?.(false); window.setExternalPosition?.(${lat}, ${lng}); true;`);
+  };
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -458,15 +422,10 @@ export default function FieldActionScreen({
   }, [editingLocation]);
 
   useEffect(() => {
-    if (!isValidCoordinate(latitude, longitude)) return undefined;
+    if (loadingReport || !isValidCoordinate(latitude, longitude)) return;
     const key = `${Number(latitude).toFixed(6)}:${Number(longitude).toFixed(6)}`;
-    if (lastMapCoordinateRef.current === key) return undefined;
-    const timer = setTimeout(() => {
-      lastMapCoordinateRef.current = key;
-      applyCoordinateToMap();
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [latitude, longitude]);
+    if (lastMapCoordinateRef.current !== key) applyCoordinateToMap();
+  }, [latitude, longitude, loadingReport]);
 
   useEffect(() => {
     if (loadingReport || !KAKAO_REST_API_KEY || !isValidCoordinate(latitude, longitude)) return undefined;
@@ -735,6 +694,7 @@ export default function FieldActionScreen({
       setLatitude(selectedLatitude); setLongitude(selectedLongitude); setLocationAddress(selectedAddress);
       setRevision(patch.revision); setMarkedMapUri(null);
       currentFormRef.current = { ...currentFormRef.current, ...patch };
+      applyCoordinateToMap();
       if (initialFormRef.current) initialFormRef.current = editSnapshot({ ...JSON.parse(initialFormRef.current), ...patch });
       try { await writeDraft(key, currentFormRef.current); }
       catch (draftError) { console.log('Position draft backup failed:', draftError?.message); }
@@ -938,14 +898,13 @@ export default function FieldActionScreen({
     }
   };
 
-  const [
-    initialMapHtml,
-  ] = useState(() =>
-    getInteractiveMapHtml(
-      latitude,
-      longitude
-    )
-  );
+  const [initialMapSource, setInitialMapSource] = useState(null);
+  useEffect(() => {
+    if (loadingReport || initialMapSource || !readyRef.current) return;
+    // Mount with the loaded record, not the stale coordinates passed by the previous screen.
+    const latest = currentFormRef.current;
+    setInitialMapSource({ html: getInteractiveMapHtml(latest.latitude, latest.longitude), baseUrl: 'https://localhost/' });
+  }, [loadingReport, initialMapSource, latitude, longitude]);
 
   return (
     <View
@@ -988,13 +947,10 @@ export default function FieldActionScreen({
             pointerEvents="auto"
             style={styles.mapWrapper}
           >
-            <WebView
+            {initialMapSource && <WebView
               ref={mapRef}
               originWhitelist={['*']}
-              source={{
-                html: initialMapHtml,
-                baseUrl: 'https://localhost/',
-              }}
+              source={initialMapSource}
               style={styles.map}
               javaScriptEnabled
               domStorageEnabled
@@ -1005,21 +961,12 @@ export default function FieldActionScreen({
               onTouchEnd={handleMapTouchEnd}
               onTouchCancel={handleMapTouchEnd}
               onMessage={handleMapMessage}
-              onLoadEnd={() => {
-                setTimeout(() => {
-                  applyCoordinateToMap();
-                  mapRef.current?.injectJavaScript(`
-                    if (window.setSelectionMode) {
-                      window.setSelectionMode(false);
-                    }
-                    true;
-                  `);
-                }, 500);
-              }}
+              onLoadStart={() => { locationMapReadyRef.current = false; lastMapCoordinateRef.current = ''; }}
+              onLoadEnd={applyCoordinateToMap}
               overScrollMode="never"
               setBuiltInZoomControls={false}
               setDisplayZoomControls={false}
-            />
+            />}
           </View>
 
 

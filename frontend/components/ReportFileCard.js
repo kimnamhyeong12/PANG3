@@ -9,14 +9,14 @@ import { colors } from '../constants/design';
 export function ReportFileCard({
   title, children, checked, selectable, busy, onToggle, onPress, pressLabel,
   editLabel, onEdit, downloadable, state = 'new', onDownload, onOpenFolder, style,
-  badgeInContent = false, hideSavedFolder = false,
+  badgeInContent = false, hideSavedFolder = false, showSelection = true,
 }) {
   return <View style={[styles.card, { borderColor: checked ? colors.text : colors.line }, style]}>
     {/* 체크박스는 처음부터. 받을 수 있는 것만 누를 수 있음 */}
-    <TouchableOpacity style={styles.check} onPress={onToggle} disabled={!selectable || busy} accessibilityRole="checkbox"
+    {showSelection && <TouchableOpacity style={styles.check} onPress={onToggle} disabled={!selectable || busy} accessibilityRole="checkbox"
       accessibilityState={{ checked: !!checked, disabled: !selectable }} accessibilityLabel={`${title} 받기 선택${selectable ? '' : ', 보고서 저장 후 선택 가능'}`}>
       <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={24} color={colors.text} style={!selectable && styles.disabled} />
-    </TouchableOpacity>
+    </TouchableOpacity>}
     <TouchableOpacity style={styles.body} onPress={onPress} disabled={!onPress} accessibilityRole="button" accessibilityLabel={pressLabel} activeOpacity={0.85}>
       {children}
       {downloadable && state === 'changed' && <Text style={[styles.badge, styles.badgeChanged]}>고쳐짐 · 다시 받기</Text>}
