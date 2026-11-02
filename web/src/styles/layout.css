@@ -1586,3 +1586,6 @@
 .group-card-personal {
   border-style: dashed;
 }
+
+.report-card-actions{display:flex;gap:10px;margin-top:16px;align-items:stretch}.report-card-actions>.btn-secondary,.report-card-download{flex:1;min-width:0}.report-card-actions>.btn-secondary,.report-card-download>.btn-secondary{display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;white-space:nowrap}
+.report-card-download{position:relative}.report-card-download-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:25;display:grid;min-width:140px;padding:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 22px rgba(20,44,71,.14)}.report-card-download-menu>button{border:0;border-radius:6px;background:transparent;text-align:left;padding:10px 14px;color:var(--text);font:inherit}.report-card-download-menu>button:hover{background:var(--navy-soft)}

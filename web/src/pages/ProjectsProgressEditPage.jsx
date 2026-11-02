@@ -1,5 +1,5 @@
 import useLiveRevision from '../components/useLiveRevision.js';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { downloadProgressHwpx, fetchProgressReport, fetchProgressReportHtml, safeFileName, saveBlob, updateProgressReport } from '../api/projects.js';
@@ -21,7 +21,6 @@ export default function ProjectsProgressEditPage() {
   const [loadError, setLoadError] = useState(null);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [captions, setCaptions] = useState({});
   const [busy, setBusy] = useState(false);
   const [exportProgress, setExportProgress] = useState('');
   const [message, setMessage] = useState(null);
@@ -30,7 +29,6 @@ export default function ProjectsProgressEditPage() {
     setData(json);
     setTitle(json.reportName ?? '');
     setBody(json.mainComment ?? '');
-    setCaptions(Object.fromEntries((json.photos ?? []).map((p) => [p.index, p.comment ?? ''])));
   };
 
   const load = useCallback(() => {
@@ -46,13 +44,9 @@ export default function ProjectsProgressEditPage() {
     load();
   }, [load]);
 
-  const changedCaptions = useMemo(() => {
-    if (!data) return {};
-    return Object.fromEntries((data.photos ?? []).filter((p) => (captions[p.index] ?? '') !== (p.comment ?? '')).map((p) => [p.index, captions[p.index]]));
-  }, [data, captions]);
   const dirty =
     data != null &&
-    (title.trim() !== (data.reportName ?? '') || body !== (data.mainComment ?? '') || Object.keys(changedCaptions).length > 0);
+    (title.trim() !== (data.reportName ?? '') || body !== (data.mainComment ?? ''));
 
   const liveRevision=useLiveRevision(['reports'], {dirty:dirty||busy, onConflict:()=>setMessage({type:'error',text:'다른 기기에서 보고서가 변경되었습니다. 작성 중인 내용은 유지됩니다.'})});
   useEffect(()=>{if(liveRevision)load();},[liveRevision,load]);
@@ -75,7 +69,6 @@ export default function ProjectsProgressEditPage() {
         expectedRevision: data.revision,
         reportName: title.trim(),
         mainComment: body,
-        photoComments: changedCaptions,
       });
       apply(next);
       setMessage({ type: 'success', text: '저장했습니다. 앱 기록과 건별 HWPX에도 반영됩니다.' });
@@ -195,18 +188,7 @@ export default function ProjectsProgressEditPage() {
                   <ProtectedPhoto url={p.url} alt={p.slot || '현장 사진'} />
                   {p.slot && <span className={`re-slot re-slot-${SLOT_CLASS[p.slot] ?? 'etc'}`}>{p.slot}</span>}
                 </div>
-                {canEdit ? (
-                  <textarea
-                    className={`input re-caption${p.index in changedCaptions ? ' is-modified' : ''}`}
-                    value={captions[p.index] ?? ''}
-                    maxLength={500}
-                    placeholder="사진 설명"
-                    aria-label={`${p.slot || '사진'} 설명`}
-                    onChange={(e) => setCaptions((c) => ({ ...c, [p.index]: e.target.value }))}
-                  />
-                ) : (
-                  p.comment && <figcaption className="re-caption-text">{p.comment}</figcaption>
-                )}
+
               </figure>
             ))}
           </div>

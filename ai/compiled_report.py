@@ -1,5 +1,5 @@
 """
-통합 보고서 HWPX 생성기 (프로젝트 통합 보고서용). 항목마다 4칸 사진표(작업 전·중·후·위치도)와 메모를 붙인다 (D36).
+통합 보고서 HWPX 생성기 (프로젝트 통합 보고서용). 항목마다 4칸 사진표(위치도·작업 전·중·후)와 메모를 붙인다 (D36).
 - 입력: REPORT_SCHEMA v1 JSON 파일 경로 (sys.argv[1]) + 백엔드가 덧붙인 값
     output_path              : 만들 HWPX 절대 경로
     sections[].items[].photo_files : [{"path": 로컬 파일, "slot": "작업 전", "comment": "...", "caption": "작업 전 ..."}]
@@ -120,7 +120,7 @@ def photo_grid(doc, cells: list[dict]) -> None:
 
 
 def append_item(doc, item: dict, number: int, work_dir: Path) -> None:
-    """항목 하나: 제목 → 4칸(작업 전·중·후·위치도) → 메모(본문, 작업 전·중·후 설명) (D36)."""
+    """항목 하나: 제목 → 4칸(위치도·작업 전·중·후) → 메모(본문, 작업 전·중·후 설명) (D36)."""
     author = (item.get("author") or {}).get("name")
     title = item.get("title") or item.get("address")
     doc.add_paragraph().add_run(f"{number}. {text(title)}", bold=True, size=11, color=INK, font=FONT)
@@ -143,8 +143,8 @@ def append_item(doc, item: dict, number: int, work_dir: Path) -> None:
         map_path = sanitize_image(item["map_file"], target, canvas_size=(1600, 1100), fit_mode="cover") and target
 
     # 단계마다 첫 사진이 4칸에 들어가고, 남는 사진은 아래에 2칸씩 이어 붙인다
-    cells = [{"path": groups[slot][0]["path"] if groups[slot] else None, "label": slot} for slot in SLOTS]
-    cells.append({"path": map_path, "label": "위치도"})
+    cells = [{"path": map_path, "label": "위치도"}]
+    cells.extend({"path": groups[slot][0]["path"] if groups[slot] else None, "label": slot} for slot in SLOTS)
     more = [(slot, entry) for slot in SLOTS for entry in groups[slot][1:]] + [("현장사진", entry) for entry in extra]
     for k, (label, entry) in enumerate(more):
         cells.append({"path": entry["path"], "label": f"{label} ({k + 1})" if label == "현장사진" else label})
@@ -189,15 +189,12 @@ def build(payload: dict) -> str:
         doc.add_paragraph()
 
         # 개요
-        period = summary.get("period") or {}
         group_by = report.get("groupBy") or "adminDong"
         heading(doc, "개요")
         key_value_table(doc, [
             ("프로젝트", text(project.get("name"))),
-            ("사업 기간", f"{text(project.get('startDate'), '')} ~ {text(project.get('endDate'), '')}"),
-            ("기간", f"{text(period.get('from'), '')} ~ {text(period.get('to'), '')}"),
+            ("작성날짜", day(report.get("createdAt") or report.get("updatedAt"))),
             ("총 건수", f"{text(summary.get('totalCount'), '0')}건"),
-            ("목차 구분", GROUP_BY_LABELS.get(group_by, group_by)),
             ("작성자", ", ".join(str(a) for a in (summary.get("authors") or [])) or "-"),
         ])
 

@@ -17,7 +17,7 @@ function staticSpots(markers, width = 960, height = 560) {
 }
 
 export function renderReportHtml(data, images, generatedAt = new Date()) {
-  const report = data.report || {}, project = data.project || {}, summary = data.summary || {}, period = summary.period || {};
+  const report = data.report || {}, project = data.project || {}, summary = data.summary || {};
   const sections = data.sections || [], groupBy = report.groupBy || 'adminDong';
   const authors = new Map(), markers = [], entries = [];
   const authorColor = item => {
@@ -38,8 +38,7 @@ export function renderReportHtml(data, images, generatedAt = new Date()) {
   let html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>${esc(report.title)}</title><style>${CSS}</style></head><body><main class="rp">`;
   const status = report.status === 'DRAFT' ? '<span class="rp-badge">초안</span> '
     : report.status ? `<span class="rp-badge rp-final">확정 v${esc(report.version)}</span> ` : '';
-  const range = period.from || period.to ? `${period.from || ''} ~ ${period.to || ''}` : '-';
-  html += `<header class="rp-head"><div class="rp-kicker">${esc(project.groupName)} · ${esc(project.name)}</div><h1>${esc(report.title)}</h1><div class="rp-sub">${status}기간 ${esc(range)} · 총 ${esc(summary.totalCount ?? entries.length)}건 · ${esc(LABELS[groupBy] || groupBy)}별 · 작성자 ${esc((summary.authors || []).join(', ') || '-')}</div></header>`;
+  html += `<header class="rp-head"><div class="rp-kicker">${esc(project.groupName)} · ${esc(project.name)}</div><h1>${esc(report.title)}</h1><div class="rp-sub">${status}작성날짜 ${esc(date(report.createdAt || report.updatedAt))} · 총 ${esc(summary.totalCount ?? entries.length)}건 · 작성자 ${esc((summary.authors || []).join(', ') || '-')}</div></header>`;
   html += '<section class="rp-sec rp-mapbox">';
   const overview = image(data.overviewMapImage);
   if (overview) {

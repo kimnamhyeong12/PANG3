@@ -109,9 +109,8 @@ public class ReportHtmlRenderer {
                 .append("<div class=\"rp-sub\">");
         if ("DRAFT".equals(report.get("status"))) html.append("<span class=\"rp-badge\">초안</span> ");
         else if (report.get("status") != null) html.append("<span class=\"rp-badge rp-final\">확정 v").append(esc(report.get("version"))).append("</span> ");
-        html.append("기간 ").append(esc(range(period.get("from"), period.get("to"))))
+        html.append("작성날짜 ").append(esc(Objects.toString(report.get("createdAt"), Objects.toString(report.get("updatedAt"), "-")).split("T")[0]))
                 .append(" · 총 ").append(esc(summary.get("totalCount"))).append("건")
-                .append(" · ").append(esc(GROUP_BY_LABELS.getOrDefault(groupBy, groupBy))).append("별")
                 .append(" · 작성자 ").append(esc(authors.isEmpty() ? "-" : String.join(", ", authors.stream().map(String::valueOf).toList())))
                 .append("</div></header>\n");
 

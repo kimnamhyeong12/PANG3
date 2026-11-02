@@ -318,6 +318,30 @@ class ProjectReportServiceTest {
         assertTrue(renderer.render(json).contains("원본 문구"));
     }
 
+    @Test void creationDateRemainsAvailableForOldFinalSnapshotsWithoutRewritingThem() {
+        Long id = newReport("adminDong");
+        var entity = em.find(com.fieldwork.entity.CompiledReport.class, id);
+        entity.setCreatedAt(LocalDateTime.of(2026, 10, 15, 9, 0));
+        em.flush();
+        @SuppressWarnings("unchecked") var draft = (Map<String, Object>) reports.getJson(id, member.getUserId()).get("report");
+        assertEquals("2026-10-15T09:00:00", draft.get("createdAt"));
+        reports.finalizeReport(id, leader.getUserId());
+        var stored = new HashMap<>(entity.getSnapshotJson());
+        @SuppressWarnings("unchecked") var oldMetadata = new HashMap<>((Map<String, Object>) stored.get("report"));
+        oldMetadata.remove("createdAt");
+        stored.put("report", oldMetadata);
+        entity.setSnapshotJson(stored);
+        em.flush();
+        @SuppressWarnings("unchecked") var exported = (Map<String, Object>) reports.getJson(id, member.getUserId()).get("report");
+        assertEquals("2026-10-15T09:00:00", exported.get("createdAt"));
+        assertFalse(oldMetadata.containsKey("createdAt"));
+        assertEquals(stored, entity.getSnapshotJson());
+        String html = renderer.render(reports.getJson(id, member.getUserId()));
+        assertTrue(html.contains("작성날짜 2026-10-15"));
+        assertFalse(html.contains("기간 "));
+        assertFalse(html.contains("행정동별"));
+    }
+
     @Test void reviseCopiesItemsAndOverridesIntoNextVersion() {
         Task t = task(group, "하단동", LocalDateTime.of(2026, 5, 1, 10, 0));
         Task gone = task(group, "괴정동", LocalDateTime.of(2026, 5, 2, 10, 0));

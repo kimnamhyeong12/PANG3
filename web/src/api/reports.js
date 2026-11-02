@@ -1,5 +1,5 @@
 import { api } from './client.js';
-import { generateLocalReport } from './localReports.js';
+import { generateLocalReport, generateLocalReportHtml } from './localReports.js';
 
 // GroupReportController GET /api/groups/{groupId}/reports?userId=
 // 보고서 파일이 있는 TaskProgress만, createdAt 내림차순.
@@ -14,4 +14,8 @@ export function fetchGroupReports(groupId, userId) {
 // CORS에 Content-Disposition이 노출되지 않아 원래 파일명은 읽을 수 없다 → 저장 파일명은 호출 측에서 정한다.
 export function downloadReport(progressId, onProgress) {
   return generateLocalReport('progress', progressId, onProgress).then(result => result.blob);
+}
+
+export function downloadReportHtml(progressId, onProgress) {
+  return generateLocalReportHtml('progress', progressId, onProgress);
 }

@@ -14,6 +14,7 @@ import ReportEditorPage from './ReportEditorPage';
 import { ProjectsFormModal } from './ProjectsPage';
 import { formatDateTime } from '../utils/format';
 import '../styles/projects.css';
+import { IconChevronDown } from '../components/Icons';
 
 export { ReportStatusBadge, MineBadge } from '../components/project/ProjectBadges';
 
@@ -51,7 +52,7 @@ export default function ProjectsDetailPage() {
 
     <ProjectVisitsPanel project={project} user={user} collapsed={collapsed} onToggle={() => setCollapsed(v => !v)} revision={`${revision}:${liveRevision}`} onChanged={changed} onDirtyChange={setVisitsDirty}/>
     <section className="panel project-reports-panel"><header className="panel-header"><div className="project-heading-label"><h2 className="panel-title">통합 보고서</h2><span className="panel-count">{reports?.length ?? 0}건</span></div><button className="btn-primary btn-inline" disabled={dirty || project.status === 'ARCHIVED'} onClick={() => { setCreating(true); setParams({}); }}>새 보고서</button></header>
-      {!reports ? <LoadingBlock/> : !reports.length ? <p className="table-empty">아직 보고서가 없습니다.</p> : <div>{reports.map(report => <button type="button" key={report.reportId} className={`project-report-row${String(report.reportId) === String(openReportId) ? ' selected' : ''}`} disabled={dirty} aria-expanded={String(report.reportId) === String(openReportId)} onClick={() => openReport(String(report.reportId) === String(openReportId) ? null : report.reportId)}><div><strong>{report.title}</strong><small>{report.itemCount ?? 0}건 · {formatDateTime(report.finalizedAt || report.updatedAt)}</small></div><ReportStatusBadge report={report}/><span aria-hidden="true">{String(report.reportId) === String(openReportId) ? '⌃' : '⌄'}</span></button>)}</div>}
+      {!reports ? <LoadingBlock/> : !reports.length ? <p className="table-empty">아직 보고서가 없습니다.</p> : <div>{reports.map(report => <button type="button" key={report.reportId} className={`project-report-row${String(report.reportId) === String(openReportId) ? ' selected' : ''}`} disabled={dirty} aria-expanded={String(report.reportId) === String(openReportId)} onClick={() => openReport(String(report.reportId) === String(openReportId) ? null : report.reportId)}><div><strong>{report.title}</strong><small>{report.itemCount ?? 0}건 · {formatDateTime(report.finalizedAt || report.updatedAt)}</small></div><ReportStatusBadge report={report}/><span className={`project-report-chevron${String(report.reportId) === String(openReportId) ? ' is-open' : ''}`}><IconChevronDown size={18}/></span></button>)}</div>}
     </section>
     {(creating || openReportId) && <ReportRecordSelection key={`${projectId}:${openReportId || 'new'}`} project={project} user={user} reportId={openReportId || undefined} refreshKey={`${revision}:${liveRevision}`} onDirtyChange={setRecordDirty} onSaved={result => { changed(); setSelectionRevision(n => n + 1); if (!openReportId) openReport(result.reportId); }}/>}
     {openReportId && <section className="project-inline-report" aria-label="통합 보고서 편집"><ReportEditorPage key={openReportId} embedded reportId={openReportId} onNavigateReport={openReport} refreshKey={selectionRevision} onReportChange={changed} onDirtyChange={setEditorDirty}/></section>}

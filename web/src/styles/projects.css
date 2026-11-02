@@ -493,6 +493,7 @@ li.pj-task-row {
 .re-photo {
   width: 100%;
   aspect-ratio: 4 / 3;
+  max-height: 360px;
   object-fit: cover;
   border-radius: 8px;
   background: var(--bg);
@@ -747,7 +748,7 @@ li.pj-task-row {
 }
 .re-photo-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   gap: 12px;
 }
 .re-photo-cell {
@@ -757,6 +758,7 @@ li.pj-task-row {
 .re-photo-frame {
   position: relative;
   aspect-ratio: 4 / 3;
+  max-height: 360px;
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--bg);
@@ -895,3 +897,5 @@ li.pj-task-row {
 
 .project-visits-dialog .report-filter-search{flex-basis:220px;max-width:320px}.project-visits-dialog .report-filter-period,.project-visits-dialog .report-filter-selects{flex-basis:260px;min-width:240px}
 @media(max-width:760px){.project-visits-dialog .report-filter-search,.project-visits-dialog .report-filter-period,.project-visits-dialog .report-filter-selects{flex-basis:100%;max-width:none;min-width:0}}
+
+.project-report-chevron{display:flex;flex:none;transition:transform .15s}.project-report-chevron.is-open{transform:rotate(180deg)}

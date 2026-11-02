@@ -80,36 +80,11 @@ function VersionsModal({ reportId, projectId, userId, onClose, onSelect }) {
 }
 
 // 기존 보고서 사진 배치. 편집은 원본 기록의 revision과 권한을 검사한다.
-function PhotoCell({ photo, canEdit, busy, onSave }) {
-  const [text, setText] = useState(photo.comment ?? '');
-  useEffect(() => setText(photo.comment ?? ''), [photo.comment]);
-  const commit = () => {
-    if (text === (photo.comment ?? '')) return;
-    onSave({ photoComments: { [photo.index]: text } });
-  };
-  return (
-    <figure className="re-photo-cell">
-      <div className="re-photo-frame">
-        <ProtectedPhoto url={photo.url} alt={photo.slot || '현장 사진'} />
-        {photo.slot && <span className={`re-slot re-slot-${SLOT_CLASS[photo.slot] ?? 'etc'}`}>{photo.slot}</span>}
-      </div>
-      {canEdit ? (
-        <textarea
-          className={`input re-caption${photo.commentOverridden ? ' is-modified' : ''}`}
-          value={text}
-          disabled={busy}
-          maxLength={500}
-          placeholder="사진 설명"
-          aria-label={`${photo.slot || '사진'} 설명`}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={commit}
-        />
-      ) : (
-        photo.comment && <figcaption className="re-caption-text">{photo.comment}</figcaption>
-      )}
-      {canEdit && photo.commentOverridden && <div className="re-original-hint">원본: {photo.originalComment || '(없음)'}</div>}
-    </figure>
-  );
+function PhotoCell({ photo }) {
+  return <figure className="re-photo-cell"><div className="re-photo-frame">
+    <ProtectedPhoto url={photo.url} alt={photo.slot || '현장 사진'} />
+    {photo.slot && <span className={`re-slot re-slot-${SLOT_CLASS[photo.slot] ?? 'etc'}`}>{photo.slot}</span>}
+  </div></figure>;
 }
 
 function ItemCard({ item, n, color, active, canEdit, canEditSource, busy, isFirst, isLast, userId, onSave, onMove, onRemove, cardRef }) {
@@ -173,7 +148,7 @@ function ItemCard({ item, n, color, active, canEdit, canEditSource, busy, isFirs
       {photos.length > 0 ? (
         <div className="re-photo-grid">
           {photos.map((p) => (
-            <PhotoCell key={`${p.index}-${p.url}`} photo={p} canEdit={canEditSource} busy={busy} onSave={onSave} />
+            <PhotoCell key={`${p.index}-${p.url}`} photo={p} />
           ))}
         </div>
       ) : (

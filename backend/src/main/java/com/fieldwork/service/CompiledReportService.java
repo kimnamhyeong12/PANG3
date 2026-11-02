@@ -125,7 +125,14 @@ public class CompiledReportService {
     public Map<String, Object> getJson(Long reportId, Long userId) {
         CompiledReport report = loadReport(reportId);
         projectService.requireMember(report.getProject().getGroup(), userId);
-        if ("FINAL".equals(report.getStatus()) && report.getSnapshotJson() != null) return report.getSnapshotJson();
+        if ("FINAL".equals(report.getStatus()) && report.getSnapshotJson() != null) {
+            Map<String, Object> snapshot = new LinkedHashMap<>(report.getSnapshotJson());
+            @SuppressWarnings("unchecked")
+            Map<String, Object> metadata = new LinkedHashMap<>((Map<String, Object>) snapshot.get("report"));
+            metadata.putIfAbsent("createdAt", iso(report.getCreatedAt()));
+            snapshot.put("report", metadata);
+            return snapshot;
+        }
         return buildJson(report);
     }
 
@@ -421,6 +428,7 @@ public class CompiledReportService {
         reportMap.put("status", report.getStatus());
         reportMap.put("version", report.getVersion());
         reportMap.put("groupBy", groupBy);
+        reportMap.put("createdAt", iso(report.getCreatedAt()));
         reportMap.put("updatedAt", iso(report.getUpdatedAt()));
 
         Map<String, Object> projectMap = new LinkedHashMap<>();
@@ -465,6 +473,7 @@ public class CompiledReportService {
         section.put("items", List.of(row));
         Map<String, Object> reportMap = new LinkedHashMap<>();
         reportMap.put("title", row.get("title"));
+        reportMap.put("createdAt", iso(progress.getCreatedAt()));
         reportMap.put("groupBy", "adminDong");
         Map<String, Object> projectMap = new LinkedHashMap<>();
         projectMap.put("name", "건별 보고서");

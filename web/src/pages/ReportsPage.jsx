@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useGroup } from '../context/GroupContext.jsx';
-import { downloadReport, fetchGroupReports } from '../api/reports.js';
+import { downloadReport, downloadReportHtml, fetchGroupReports } from '../api/reports.js';
 import { formatDate } from '../utils/format.js';
-import { IconDownload, IconReport } from '../components/Icons.jsx';
+import { IconReport } from '../components/Icons.jsx';
+import ReportDownloadButton from '../components/ReportDownloadButton';
 import ErrorBlock from '../components/ErrorBlock.jsx';
 import { SkeletonLine } from '../components/Loading.jsx';
 import { errorMessage } from '../api/client.js';
@@ -52,7 +53,7 @@ function saveBlob(blob, fileName) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function ReportCard({ report, downloading, onDownload }) {
+function ReportCard({ report, downloading, disabled, onDownload }) {
   const address = report.roadAddress || report.detailAddress || '주소 정보 없음';
   return (
     <article className="report-card">
@@ -71,16 +72,12 @@ function ReportCard({ report, downloading, onDownload }) {
         </div>
       )}
       <div className="report-meta">
-        {report.assigneeName} · {report.performedByName} · {formatDate(report.createdAt)}
+        {report.assigneeName || '담당자 확인 불가'} · {formatDate(report.createdAt)}
       </div>
-      <button type="button" className="btn-secondary report-download" disabled={downloading} onClick={onDownload}>
-        <IconDownload size={16} />
-        {downloading ? '다운로드 중…' : '다운로드'}
-      </button>
-      {/* D26: 건별 보고서 보기·수정 (담당자·리더만 저장 가능) */}
-      <Link className="btn-secondary report-download" to={`/reports/${report.progressId}/edit`}>
-        보기 · 수정
-      </Link>
+      <div className="report-card-actions">
+        <Link className="btn-secondary" to={`/reports/${report.progressId}/edit`}>보기 · 수정</Link>
+        <ReportDownloadButton disabled={disabled} downloading={downloading} onDownload={onDownload}/>
+      </div>
     </article>
   );
 }
@@ -125,11 +122,14 @@ export default function ReportsPage() {
 
   const filtered = useMemo(() => filterReportRecords(reports, filters), [reports, filters]);
 
-  const onDownload = async (report) => {
+  const onDownload = async (report, format) => {
     setDownloadingId(report.progressId);
     setDownloadError(null);
     try {
-      saveBlob(await downloadReport(report.progressId, setExportProgress), reportFileName(report));
+      if (format === 'html') {
+        const html = await downloadReportHtml(report.progressId, setExportProgress);
+        saveBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), reportFileName(report).replace(/\.hwpx$/, '.html'));
+      } else saveBlob(await downloadReport(report.progressId, setExportProgress), reportFileName(report));
     } catch (e) {
       setDownloadError(errorMessage(e, '보고서를 내려받지 못했습니다.'));
     } finally {
@@ -173,7 +173,8 @@ export default function ReportsPage() {
             key={r.progressId}
             report={r}
             downloading={downloadingId === r.progressId}
-            onDownload={() => onDownload(r)}
+            disabled={downloadingId != null}
+            onDownload={format => onDownload(r, format)}
           />
         ))}
       </div>
