@@ -1,3 +1,4 @@
+import ReportRecordFilters, { defaultRecordFilters, filterReportRecords } from '../components/project/ReportRecordFilters';
 import useLiveRevision from '../components/useLiveRevision.js';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -93,10 +94,7 @@ export default function ReportsPage() {
   const [error, setError] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const [keyword, setKeyword] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [assignee, setAssignee] = useState('');
+  const [filters, setFilters] = useState(defaultRecordFilters);
 
   const [downloadingId, setDownloadingId] = useState(null);
   const [downloadError, setDownloadError] = useState(null);
@@ -121,31 +119,11 @@ export default function ReportsPage() {
 
   // 그룹이 바뀌면 이전 그룹 기준 필터(담당자 등)를 비운다
   useEffect(() => {
-    setAssignee('');
+    setFilters(defaultRecordFilters());
     setDownloadError(null);
   }, [groupId]);
 
-  // 담당자 드롭다운: 응답의 assigneeName 기준 (담당자 미확인은 "담당자 확인 불가"로 내려옴)
-  const assigneeOptions = useMemo(
-    () => [...new Set(reports.map((r) => r.assigneeName).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')),
-    [reports]
-  );
-
-  const filtered = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
-    return reports.filter((r) => {
-      if (assignee && r.assigneeName !== assignee) return false;
-      const day = dateKey(r.createdAt);
-      if (fromDate && day < fromDate) return false;
-      if (toDate && day > toDate) return false;
-      if (!q) return true;
-      return [r.roadAddress, r.detailAddress, r.adminDong, r.assigneeName, r.performedByName]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q));
-    });
-  }, [reports, keyword, fromDate, toDate, assignee]);
-
-  const hasFilter = keyword || fromDate || toDate || assignee;
+  const filtered = useMemo(() => filterReportRecords(reports, filters), [reports, filters]);
 
   const onDownload = async (report) => {
     setDownloadingId(report.progressId);
@@ -204,60 +182,7 @@ export default function ReportsPage() {
   return (
     <>
 
-      <div className="filter-bar">
-        <input
-          className="input filter-search"
-          placeholder="주소 또는 담당자 검색"
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-        />
-        <div className="filter-period">
-          <input
-            type="date"
-            className="input"
-            aria-label="시작일"
-            value={fromDate}
-            max={toDate || undefined}
-            onChange={(e) => setFromDate(e.target.value)}
-          />
-          <span className="filter-tilde">~</span>
-          <input
-            type="date"
-            className="input"
-            aria-label="종료일"
-            value={toDate}
-            min={fromDate || undefined}
-            onChange={(e) => setToDate(e.target.value)}
-          />
-        </div>
-        <select className="input filter-select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-          <option value="">전체 담당자</option>
-          {assigneeOptions.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
-        {hasFilter && (
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => {
-              setKeyword('');
-              setFromDate('');
-              setToDate('');
-              setAssignee('');
-            }}
-          >
-            초기화
-          </button>
-        )}
-        {!loading && !error && (
-          <span className="filter-count">
-            {filtered.length} / {reports.length}건
-          </span>
-        )}
-      </div>
+      <ReportRecordFilters rows={reports} value={filters} onChange={setFilters} count={!loading && !error ? filtered.length : undefined}/>
 
       {exportProgress && <p role="status" className="panel-notice">{exportProgress}</p>}
       {downloadError && <p className="form-error">{downloadError}</p>}

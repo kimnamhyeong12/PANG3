@@ -1,0 +1,11 @@
+.report-record-filters{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:24px 0 16px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;min-width:0}
+.report-record-filters .input{height:38px;min-width:0;background-color:var(--surface)}
+.report-record-filters>.report-filter-search{flex:1 1 220px;max-width:420px;width:100%}
+.report-filter-period{display:flex;align-items:center;gap:8px;flex:0 1 300px;min-width:260px}
+.report-filter-period .input{width:0;flex:1}
+.report-filter-period>span{color:var(--text-faint)}
+.report-filter-selects{display:flex;gap:10px;flex:0 1 300px;min-width:260px}
+.report-filter-selects .input{width:0;flex:1}
+.report-filter-count{margin-left:auto;white-space:nowrap;color:var(--text-faint);font-size:13px}
+.project-selection-body>.report-record-filters{margin:0}
+@media(max-width:760px){.report-record-filters{gap:10px}.report-record-filters>.report-filter-search{flex-basis:100%;max-width:none}.report-filter-period,.report-filter-selects{flex-basis:100%;min-width:0;width:100%}.report-record-filters>.btn-secondary{min-height:38px}}
