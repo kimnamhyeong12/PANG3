@@ -1,8 +1,13 @@
 import http.server
+import hashlib
+import json
+import os
+import stat
 import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from publish_report_runtime import fetch, publish
 
 
@@ -47,6 +52,20 @@ class RuntimePublicationTest(unittest.TestCase):
                 publish(self.base, output)
             self.assertEqual('existing engine', entry.read_text())
             self.assertEqual([entry], list(output.iterdir()))
+
+    def test_publication_is_readable_by_the_web_server_user(self):
+        content = b'public engine'
+        packages = {name: {'depends': [], 'file_name': name + '.whl',
+                          'sha256': hashlib.sha256(content).hexdigest()} for name in ('pillow', 'lxml')}
+        def source(base, name):
+            return json.dumps({'packages': packages}).encode() if name.endswith('pyodide-lock.json') else content
+        with tempfile.TemporaryDirectory() as directory, patch('publish_report_runtime.fetch', side_effect=source):
+            output = Path(directory) / 'report-runtime'
+            publish(self.base, output)
+            self.assertTrue((output / 'host.js').is_file())
+            self.assertTrue(os.access(output, os.R_OK | os.X_OK))
+            if os.name != 'nt':
+                self.assertEqual(0o755, stat.S_IMODE(output.stat().st_mode))
 
 
 if __name__ == '__main__':

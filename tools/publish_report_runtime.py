@@ -77,6 +77,9 @@ def publish(base, output):
             done.add(name)
         for name in ("pillow", "lxml"):
             package(name)
+        # TemporaryDirectory is private (0700). Nginx runs as another user and
+        # must be able to traverse the copied public runtime directory.
+        staged.chmod(0o755)
         shutil.copytree(staged, output, dirs_exist_ok=True)
     print(f"Published report runtime: {output}")
 
