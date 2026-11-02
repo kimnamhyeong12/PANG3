@@ -7,8 +7,9 @@ import ErrorBlock from '../ErrorBlock';
 import { LoadingBlock } from '../Loading';
 import { errorMessage } from '../../api/client';
 import useLiveRevision from '../useLiveRevision';
+import { IconChevronDown } from '../Icons';
 
-export default function ReportRecordSelection({ project, user, reportId, onSaved, onDirtyChange, refreshKey }) {
+export default function ReportRecordSelection({ project, user, reportId, onSaved, onDirtyChange, refreshKey, onClose }) {
   const [rows, setRows] = useState(null), [linked, setLinked] = useState(new Set()), [selected, setSelected] = useState(new Set());
   const [filters, setFilters] = useState(defaultRecordFilters), [outside, setOutside] = useState(false);
   const [initialSelection, setInitialSelection] = useState(new Set()), [readOnly, setReadOnly] = useState(false);
@@ -48,14 +49,14 @@ export default function ReportRecordSelection({ project, user, reportId, onSaved
     } catch (e) { setError(errorMessage(e, '선택한 기록을 저장하지 못했습니다.')); }
     finally { setBusy(false); }
   };
-  return <section className="panel project-report-selection" aria-label="건별 보고서 선택"><header className="panel-header"><h2 className="panel-title">건별 보고서</h2></header>
+  return <section className="panel project-report-selection" aria-label="건별 보고서 선택"><header className="panel-header"><h2 className="panel-title">건별 보고서</h2>{onClose && <button className="icon-button project-collapse" type="button" disabled={busy} aria-label="보고서 접기" onClick={onClose}><span className="is-open"><IconChevronDown size={18}/></span></button>}</header>
     {error && <ErrorBlock message={error} onRetry={!rows ? () => setRetry(n => n + 1) : undefined}/>}
     {!rows ? !error && <LoadingBlock/> : <form onSubmit={save} className="project-selection-body">
+{!reportId && <label className="project-new-report-name">보고서 이름<input className="input" aria-label="보고서 이름" value={title} disabled={busy} maxLength={200} placeholder="보고서 이름을 입력해 주세요." onChange={e => setTitle(e.target.value)}/></label>}
       <ReportRecordFilters rows={pool} value={filters} onChange={changeFilters} userId={user.userId} disabled={busy}/>
       <div className="action-row"><button className="btn-secondary" type="button" disabled={busy} onClick={() => setOutside(v => !v)}>{outside ? '프로젝트 내 업무 추가' : '프로젝트 외 업무 추가'}</button></div>
       <div className="project-selection-scroll"><table className="table"><thead><tr><th><input type="checkbox" aria-label="검색 결과 전체 선택" disabled={readOnly || busy || !visible.length} checked={Boolean(visible.length) && visible.every(r => selected.has(r.progressId))} onChange={e => { const next = new Set(selected); visible.forEach(r => e.target.checked ? next.add(r.progressId) : next.delete(r.progressId)); setSelected(next); }}/></th><th>방문지</th><th>작업자</th><th>작성일</th></tr></thead><tbody>{visible.map(r => <tr key={r.progressId}><td><input type="checkbox" aria-label={`${r.detailAddress || r.roadAddress} 선택`} disabled={readOnly || busy} checked={selected.has(r.progressId)} onChange={e => { const next = new Set(selected); e.target.checked ? next.add(r.progressId) : next.delete(r.progressId); setSelected(next); }}/></td><td><strong>{r.detailAddress || r.roadAddress}</strong><small>{r.roadAddress}</small>{!linked.has(Number(r.taskId)) && <span className="pill pill-navy">프로젝트 외 업무</span>}</td><td>{r.performedByDeparted ? '탈퇴한 사용자' : r.performedByName || '-'}</td><td>{String(r.createdAt || '').slice(0, 10)}</td></tr>)}</tbody></table>{!visible.length && <p className="table-empty">조건에 맞는 완료 기록이 없습니다.</p>}</div>
       {!readOnly && <footer className="project-selection-footer">
-        {!reportId && <label className="project-new-report-name">보고서 이름<input className="input" aria-label="보고서 이름" value={title} disabled={busy} maxLength={200} placeholder="보고서 이름을 입력해 주세요." onChange={e => setTitle(e.target.value)}/></label>}
         <button className="btn-primary btn-inline" disabled={busy || !selected.size || (reportId ? !selectionChanged : !title.trim())}>{busy ? '저장 중…' : reportId ? `${selected.size}건 선택 적용` : `${selected.size}건으로 보고서 만들기`}</button>
       </footer>}
 

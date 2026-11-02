@@ -899,3 +899,5 @@ li.pj-task-row {
 @media(max-width:760px){.project-visits-dialog .report-filter-search,.project-visits-dialog .report-filter-period,.project-visits-dialog .report-filter-selects{flex-basis:100%;max-width:none;min-width:0}}
 
 .project-report-chevron{display:flex;flex:none;transition:transform .15s}.project-report-chevron.is-open{transform:rotate(180deg)}
+
+.project-selection-body>.project-new-report-name{max-width:none}
