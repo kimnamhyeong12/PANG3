@@ -482,7 +482,7 @@ export default function ReportEditorPage({ embedded = false, reportId: providedR
         <div className="re-main">
           <section className="panel re-summary">
             <div className="pj-muted">
-              기간 {summary.period?.from ?? '-'} ~ {summary.period?.to ?? '-'} · 총 {summary.totalCount ?? allItems.length}건 · 작성자{' '}
+              총 {summary.totalCount ?? allItems.length}건 · 작성자{' '}
               {(summary.authors ?? []).join(', ') || '-'}
             </div>
           </section>
