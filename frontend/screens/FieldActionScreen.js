@@ -230,8 +230,16 @@ export default function FieldActionScreen({
   const readyRef = useRef(false);
   const savedRef = useRef(false);
   const savingRef = useRef(false);
+  const [photoPicking, setPhotoPicking] = useState(false);
+  const photoWorkRef = useRef(null);
+  const photoEditEpochRef = useRef(0);
+  const readyKeyRef = useRef(null);
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   const key = draftKey(user?.userId, workspaceKey, taskId,
     location?.reportProgressId || 'latest');
+  const activeDraftKeyRef = useRef(key);
+  activeDraftKeyRef.current = key;
   const snapshot = { status, latitude, longitude, locationAddress, photos, fieldMemo,
     markedMapUri, progressId, revision, recordedAt, photoEditor, mainComment, reportName, completedAt };
   const currentFormRef = useRef(snapshot);
@@ -243,10 +251,13 @@ export default function FieldActionScreen({
     revision: form.revision, recordedAt: form.recordedAt, mainComment: form.mainComment || '', reportName: form.reportName || defaultReportName });
 
   const [syncNotice,setSyncNotice]=useState('');
-  const liveRevision=useLiveRevision(['reports','tasks'], {dirty:loadingReport||saving||positionSaving||editSnapshot(snapshot)!==initialFormRef.current,onConflict:()=>setSyncNotice('다른 기기에서 업무가 변경되었습니다. 작성 중인 내용은 유지됩니다.')});
+  const hasLocalEdits = () => photoWorkRef.current?.key === key || currentFormRef.current.photoEditor?.visible ||
+    mapEditor.visible || editSnapshot(currentFormRef.current) !== initialFormRef.current;
+  const liveRevision=useLiveRevision(['reports','tasks'], {dirty:()=>photoPicking||loadingReport||savingRef.current||positionSavingRef.current||hasLocalEdits(),onConflict:()=>setSyncNotice('다른 기기에서 업무가 변경되었습니다. 작성 중인 내용은 유지됩니다.')});
   const recoverPhotoPick = async (form) => {
+    if (photoWorkRef.current?.key === key) return form;
     const pending = await pendingPhotoPick(key);
-    if (!pending) return form;
+    if (!pending || photoWorkRef.current?.key === key) return form;
     const result = await ImagePicker.getPendingResultAsync();
     if (result?.assets?.[0]?.uri && !result.canceled) {
       const recovered = { ...form, photoEditor: { visible: true, isNew: true, index: pending.index,
@@ -270,6 +281,10 @@ export default function FieldActionScreen({
   };
 
   const leaveGuard = async () => {
+    if (photoWorkRef.current?.key === key) {
+      showAlert('사진 처리 중', '사진 처리가 끝난 뒤 이동해 주세요.');
+      return false;
+    }
     if (savingRef.current || positionSavingRef.current) {
       showAlert('저장 중', '보고서 저장이 끝난 뒤 이동해 주세요.');
       return false;
@@ -306,6 +321,9 @@ export default function FieldActionScreen({
 
   useEffect(() => {
     let active = true;
+    const epoch = photoEditEpochRef.current;
+    const canApply = () => active && mountedRef.current && activeDraftKeyRef.current === key &&
+      epoch === photoEditEpochRef.current && (readyKeyRef.current !== key || !hasLocalEdits());
     (async () => {
       try {
         const endpoint = location?.reportProgressId
@@ -316,7 +334,7 @@ export default function FieldActionScreen({
         const text = await response.text();
         const data = text.trim() ? JSON.parse(text) : null;
         const local = liveRevision ? null : await readDraft(key);
-        if (!active) return;
+        if (!canApply()) return;
         const base = normalizeComments({ status: location?.reportProgressId ? data?.progressStatus || 'pending' : location?.status || data?.progressStatus || 'pending',
           latitude: String(data?.latitude ?? location?.latitude ?? location?.lat ?? ''),
           longitude: String(data?.longitude ?? location?.longitude ?? location?.lng ?? ''),
@@ -326,9 +344,10 @@ export default function FieldActionScreen({
           reportName: data?.reportName || defaultReportName, completedAt: data?.completedAt || location?.completedAt || '',
           markedMapUri: null, progressId: data?.progressId || null, revision: data?.revision ?? null, recordedAt: data?.createdAt || '',
           photoEditor: { visible: false, uri: null, index: null } });
-        initialFormRef.current = editSnapshot(base);
         const form = normalizeComments(await recoverPhotoPick(local || base));
-        if (!active) return;
+        if (!canApply()) return;
+        initialFormRef.current = editSnapshot(base);
+        currentFormRef.current = form;
         setStatus(form.status);
         setLatitude(form.latitude); setLongitude(form.longitude); setLocationAddress(form.locationAddress);
         setPhotos(form.photos); setFieldMemo(form.fieldMemo); setMarkedMapUri(form.markedMapUri);
@@ -337,14 +356,16 @@ export default function FieldActionScreen({
         setProgressId(form.progressId); setRevision(form.revision); setRecordedAt(form.recordedAt || '');
         setPhotoEditor(form.photoEditor || base.photoEditor);
         readyRef.current = true;
+        readyKeyRef.current = key;
       } catch {
         // An offline draft is still recoverable; never silently replace saved data with an empty form.
         try {
           let local = await readDraft(key);
-          if (!active) return;
+          if (!canApply()) return;
           if (!local) throw new Error();
           local = normalizeComments(await recoverPhotoPick(local));
-          if (!active) return;
+          if (!canApply()) return;
+          currentFormRef.current = local;
           setStatus(local.status);
           setLatitude(local.latitude); setLongitude(local.longitude); setLocationAddress(local.locationAddress);
           setPhotos(local.photos); setFieldMemo(local.fieldMemo); setMarkedMapUri(local.markedMapUri);
@@ -353,7 +374,8 @@ export default function FieldActionScreen({
           setProgressId(local.progressId); setRevision(local.revision); setRecordedAt(local.recordedAt || '');
           setPhotoEditor(local.photoEditor || { visible: false, uri: null, index: null });
           readyRef.current = true;
-        } catch { if (active) setLoadError('저장된 내용을 불러오지 못했습니다. 돌아가서 다시 시도해 주세요.'); }
+          readyKeyRef.current = key;
+        } catch { if (canApply()) setLoadError('저장된 내용을 불러오지 못했습니다. 돌아가서 다시 시도해 주세요.'); }
       } finally { if (active) setLoadingReport(false); }
     })();
     return () => { active = false; };
@@ -462,9 +484,7 @@ export default function FieldActionScreen({
   /*
    * 카메라 촬영
    */
-  const takePhoto = async (
-    index
-  ) => {
+  const takePhoto = index => launchPhotoPick(index, async () => {
     const permission =
       await ImagePicker
         .requestCameraPermissionsAsync();
@@ -473,30 +493,44 @@ export default function FieldActionScreen({
       showAlert(
         '카메라 권한이 필요합니다.'
       );
-      return;
+      return { canceled: true };
     }
 
-    await launchPhotoPick(index, () => ImagePicker.launchCameraAsync({ quality: 0.7 }));
-  };
+    return ImagePicker.launchCameraAsync({ quality: 0.7 });
+  });
 
   const pickPhotoFromLibrary = index => launchPhotoPick(index, () => ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'], allowsMultipleSelection: false, allowsEditing: false, quality: 0.7,
   }));
 
   const launchPhotoPick = async (index, launch) => {
+    if (photoWorkRef.current || !readyRef.current) return;
+    const work = { key };
+    photoWorkRef.current = work;
+    photoEditEpochRef.current++;
+    setPhotoPicking(true);
+    const isCurrent = () => mountedRef.current && activeDraftKeyRef.current === key && photoWorkRef.current === work;
+    const beforePick = currentFormRef.current;
     try {
-      await beginPhotoPick(key, index, currentFormRef.current);
+      await beginPhotoPick(key, index, beforePick);
       const result = await launch();
       if (!result.canceled && result.assets?.[0]?.uri) {
-        const rawEditor = { visible: true, uri: result.assets[0].uri, isNew: true, index };
-        setPhotoEditor(rawEditor);
-        const editor = { ...rawEditor, uri: preservePhoto(key, rawEditor.uri) };
-        setPhotoEditor(editor);
-        await writeDraft(key, { ...currentFormRef.current, photoEditor: editor });
+        const editor = { visible: true, uri: preservePhoto(key, result.assets[0].uri), isNew: true, index };
+        const form = { ...(isCurrent() ? currentFormRef.current : await readDraft(key) || beforePick), photoEditor: editor };
+        if (isCurrent()) {
+          currentFormRef.current = form;
+          setPhotoEditor(editor);
+        }
+        await writeDraft(key, form);
       }
       await endPhotoPick(key);
     } catch {
-      showAlert('사진 보관 실패', '사진을 안전하게 보관하지 못했습니다. 저장 공간과 사진 접근 권한을 확인해 주세요.');
+      if (isCurrent()) showAlert('사진 보관 실패', '사진을 안전하게 보관하지 못했습니다. 저장 공간과 사진 접근 권한을 확인해 주세요.');
+    } finally {
+      if (photoWorkRef.current === work) {
+        photoWorkRef.current = null;
+        if (mountedRef.current && activeDraftKeyRef.current === key) setPhotoPicking(false);
+      }
     }
   };
 
@@ -508,6 +542,7 @@ export default function FieldActionScreen({
   const selectPhoto = (
     index
   ) => {
+    if (photoWorkRef.current || savingRef.current) return;
     setPhotoPickerIndex(index);
   };
 
@@ -562,6 +597,7 @@ export default function FieldActionScreen({
   const editExistingPhoto = (
     index
   ) => {
+    if (photoWorkRef.current || savingRef.current) return;
     const photo =
       photos[index];
 
@@ -569,11 +605,14 @@ export default function FieldActionScreen({
       return;
     }
 
-    setPhotoEditor({
+    photoEditEpochRef.current++;
+    const editor = {
       visible: true,
       uri: photo.uri,
       index,
-    });
+    };
+    currentFormRef.current = { ...currentFormRef.current, photoEditor: editor };
+    setPhotoEditor(editor);
   };
 
   /*
@@ -618,31 +657,52 @@ export default function FieldActionScreen({
     closeMapEditor();
   };
 
-  const closePhotoEditor =
-    () => {
-      setPhotoEditor({
-        visible: false,
-        uri: null,
-        index: null,
-      });
+  const finishPhotoEditor = async (patch = {}) => {
+    if (photoWorkRef.current) return;
+    const work = { key };
+    photoWorkRef.current = work;
+    photoEditEpochRef.current++;
+    setPhotoPicking(true);
+    const previous = currentFormRef.current;
+    const next = { ...previous, ...patch, photoEditor: { visible: false, uri: null, index: null } };
+    const apply = form => {
+      currentFormRef.current = form;
+      setPhotos(form.photos); setStatus(form.status); setPhotoEditor(form.photoEditor);
     };
+    apply(next);
+    try {
+      await writeDraft(key, next);
+      await endPhotoPick(key);
+    } catch {
+      if (mountedRef.current && activeDraftKeyRef.current === key) {
+        apply(previous);
+        showAlert('사진 보관 실패', '사진 편집 상태를 보관하지 못했습니다. 다시 시도해 주세요.');
+      }
+    } finally {
+      if (photoWorkRef.current === work) {
+        photoWorkRef.current = null;
+        if (mountedRef.current && activeDraftKeyRef.current === key) setPhotoPicking(false);
+      }
+    }
+  };
+  const closePhotoEditor = () => finishPhotoEditor();
 
   const completePhotoEdit = (
     editedUri
   ) => {
+    const form = currentFormRef.current;
+    const editor = form.photoEditor;
     if (
       !editedUri ||
-      photoEditor.index ===
-        null
+      editor.index == null
     ) {
-      closePhotoEditor();
-      return;
+      return closePhotoEditor();
     }
 
-    const nextPhotos = photos.map(
+    const nextPhotos = form.photos.map(
         (photo, index) =>
           index ===
-          photoEditor.index
+          editor.index
             ? {
                 ...photo,
                 uri: preservePhoto(key, editedUri),
@@ -650,10 +710,7 @@ export default function FieldActionScreen({
               }
             : photo
       );
-    setPhotos(nextPhotos);
-    setStatus(previous => statusFromRecords(previous, nextPhotos));
-
-    closePhotoEditor();
+    return finishPhotoEditor({ photos: nextPhotos, status: statusFromRecords(form.status, nextPhotos) });
   };
 
   /*
@@ -708,7 +765,7 @@ export default function FieldActionScreen({
   };
 
   const handleSave = async () => {
-    if (savingRef.current || positionSavingRef.current || loadingReport || loadError) return;
+    if (photoWorkRef.current || savingRef.current || positionSavingRef.current || loadingReport || loadError) return;
     try {
       if (!taskId) {
         showAlert(
@@ -1100,7 +1157,7 @@ export default function FieldActionScreen({
       </ScrollView>
 
       {!loadingReport && !loadError && <View style={styles.saveBar}>
-        <PrimaryButton title={saving ? '저장 중...' : '보고서 저장'} onPress={handleSave} disabled={saving} />
+        <PrimaryButton title={saving ? '저장 중...' : '보고서 저장'} onPress={handleSave} disabled={saving || photoPicking} />
       </View>}
 
       {editingLocation && <ReportLocationPicker latitude={latitude} longitude={longitude} address={locationAddress}
