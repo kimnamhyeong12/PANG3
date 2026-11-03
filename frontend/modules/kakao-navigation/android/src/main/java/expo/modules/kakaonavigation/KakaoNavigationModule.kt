@@ -31,6 +31,9 @@ class KakaoNavigationModule : Module() {
     }
     Function("isPreviewAvailable") { id: String -> KakaoRouteEngine.get(id) != null }
     Function("discardPreview") { id: String -> KakaoRouteEngine.discard(id) }
+    AsyncFunction("refreshGuidanceOverlay") { reason: String ->
+      GuidanceOverlayDrawing.refresh(appContext.currentActivity, reason)
+    }.runOnQueue(expo.modules.kotlin.functions.Queues.MAIN)
 
     Function("beginRouteSession") { RouteGuidanceService.beginSession(requireNotNull(appContext.reactContext)) }
     Function("wasRouteTaskRemoved") { RouteGuidanceService.wasTaskRemoved(requireNotNull(appContext.reactContext)) }

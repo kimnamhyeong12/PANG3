@@ -39,7 +39,7 @@ import SearchResultSheet from '../components/SearchResultSheet';
 import RegistrationFab from '../components/RegistrationFab';
 import WorkplaceField from '../components/WorkplaceField';
 import { regionBoundariesPath } from '../utils/workRegion';
-import { KakaoNavigationView, KakaoWalkingMapView, isWalkingMapAvailable, beginRouteSession, discardSdkPreview, endRouteSession, isKakaoNavigationAvailable, isSdkPreviewAvailable, previewSdkRoute, wasRouteTaskRemoved } from '../modules/kakao-navigation';
+import { KakaoNavigationView, KakaoWalkingMapView, isWalkingMapAvailable, beginRouteSession, discardSdkPreview, endRouteSession, isKakaoNavigationAvailable, isSdkPreviewAvailable, previewSdkRoute, refreshGuidanceOverlay, wasRouteTaskRemoved } from '../modules/kakao-navigation';
 import {
   stopRouteNotification,
   updateRouteNotification,
@@ -1726,7 +1726,7 @@ function NormalMapScreen({
       )}
 
       {isGuiding && kakaoDestination && !preview && <>
-        <View pointerEvents="none" style={{ position: 'absolute', top: screenInsets.top + 8, left: 12, width: 200, maxWidth: '70%', zIndex: 19 }}>
+        <View pointerEvents="none" onLayout={() => refreshGuidanceOverlay('maneuver-layout')} style={{ position: 'absolute', top: screenInsets.top + 8, left: 12, width: 200, maxWidth: '70%', zIndex: 19 }}>
           <ManeuverGuideCard guide={nativeManeuver?.destinationKey === activeSegment?.destinationKey ? nativeManeuver : null} />
         </View>
         <View onLayout={event => setGuideControlsHeight(event.nativeEvent.layout.height)} style={[styles.guideNearbyControls, { bottom: bottomOverlayHeight + 28 }]}>
@@ -1748,6 +1748,7 @@ function NormalMapScreen({
       </>}
 
       {isGuiding && !preview && routeCompletionRatio != null && <View pointerEvents="none" style={[styles.routeProgressRail, { bottom: bottomOverlayHeight + 28 + guideControlsHeight + 24 }]}
+        onLayout={() => refreshGuidanceOverlay('progress-rail-layout')}
         accessible accessibilityRole="progressbar" accessibilityLabel="목적지까지 이동 진행률"
         accessibilityValue={{ min: 0, max: 100, now: Math.round(routeCompletionRatio * 100) }}>
         <View style={[styles.routeProgressTrack, { height: Math.max(0, Math.min(320, mapHeight * 0.36, mapHeight - bottomOverlayHeight - 28 - guideControlsHeight - 24 - screenInsets.top - 20)) }]}>

@@ -71,6 +71,7 @@ function createScreen({ nativeNavigation = false, nativeWalking = false, taskRem
       if (name.includes('FacilityApplicationScreen')) return { __esModule: true, default: 'FacilityApplication' };
       if (name.includes('kakao-navigation')) return { KakaoNavigationView: 'Navigation', KakaoWalkingMapView: 'WalkingMap', isWalkingMapAvailable: () => nativeWalking, isKakaoNavigationAvailable: () => nativeNavigation,
         beginRouteSession() { taskRemoved = false; calls.push(['begin-route']); },
+        refreshGuidanceOverlay(reason) { calls.push(['overlay-refresh', reason]); },
         endRouteSession() { calls.push(['end-route']); }, wasRouteTaskRemoved: () => taskRemoved,
         isSdkPreviewAvailable: id => sdkPreviews.has(id), discardSdkPreview: id => sdkPreviews.delete(id),
         previewSdkRoute: body => nativeNavigation ? new Promise((resolve, reject) => requests.push({ url: 'sdk:preview', sdk: true, options: { body: JSON.stringify(body) }, resolve, reject })) : Promise.reject(new Error('No native SDK')) };

@@ -68,6 +68,10 @@ export function wasRouteTaskRemoved() { return nativeModule?.wasRouteTaskRemoved
 export function wasRouteSessionEnded() { return nativeModule?.wasRouteSessionEnded?.() || false; }
 export function endRouteSession() { nativeModule?.endRouteSession?.(); }
 export function beginRouteSession() { nativeModule?.beginRouteSession?.(); }
+export function refreshGuidanceOverlay(reason) {
+  // Older APKs can still render the JS bundle; the native refresh needs an updated APK.
+  nativeModule?.refreshGuidanceOverlay?.(reason)?.catch?.(() => {});
+}
 export function showNativeRouteNotification(title, body) {
   if (!nativeModule?.showRouteNotification) return false;
   nativeModule.showRouteNotification(title, body);

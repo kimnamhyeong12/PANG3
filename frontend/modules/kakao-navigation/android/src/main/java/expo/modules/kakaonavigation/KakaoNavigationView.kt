@@ -149,6 +149,7 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
     if (shouldResume && !rendererResumed) {
       map.onResume()
       rendererResumed = true
+      GuidanceOverlayDrawing.refresh(appContext.currentActivity, "map-resumed")
     } else if (!shouldResume) pauseMapRendering()
   }
 

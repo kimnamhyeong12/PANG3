@@ -28,6 +28,12 @@ async function stop(app) {
   const controls = app.nodes().find(node => node.props.onLayout && Array.isArray(node.props.style) && node.props.style[0]?.zIndex === 18);
   assert(controls); controls.props.onLayout({ nativeEvent: { layout: { height: 260 } } }); app.render();
   const rail = app.find('View', '목적지까지 이동 진행률');
+  const orderRequestsBeforeLayout = app.orderRequests.length;
+  const routeRequestsBeforeLayout = app.requests.length;
+  rail.props.onLayout();
+  assert(app.calls.some(call => call[0] === 'overlay-refresh' && call[1] === 'progress-rail-layout'), 'first rail layout refreshes the native transparency region');
+  assert.equal(app.orderRequests.length, orderRequestsBeforeLayout);
+  assert.equal(app.requests.length, routeRequestsBeforeLayout, 'drawing refresh never requests a route');
   assert(rail.props.style[1].bottom >= controls.props.style[1].bottom + 260 + 24, 'rail clears measured controls and its position indicator');
   await stop(app);
   assert.deepEqual(ids(app), [6, 5, 4, 3, 2, 1], 'ending guidance preserves the new order');
