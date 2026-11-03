@@ -71,6 +71,15 @@ export function promoteVisit(rows, key) {
   return numberVisitOrder([target, ...rows.filter((row) => row !== target && !isVisitComplete(row)), ...rows.filter(isVisitComplete)]);
 }
 
+// Explicitly choosing a new first stop recalculates locally; ordinary starts preserve order.
+export function selectFirstVisitOrder(rows, key, returnLocation = null) {
+  const sorted = [...rows].sort((a, b) =>
+    (Number(a.markerNumber) || Infinity) - (Number(b.markerNumber) || Infinity));
+  const target = sorted.find(row => locationKey(row) === key && !isVisitComplete(row));
+  if (!target || sorted.find(row => !isVisitComplete(row)) === target) return rows;
+  return recommendVisitOrder(sorted, target, key, returnLocation);
+}
+
 export const visitSetKey = (rows) => JSON.stringify(rows.map((row) => [
   locationKey(row), Number(row.lat), Number(row.lng), isVisitComplete(row),
 ]).sort((a, b) => a[0].localeCompare(b[0])));

@@ -47,7 +47,7 @@ import {
 import { isRegisteredPlace, placeLocation, searchViewportPlaces } from '../utils/placeSearch';
 import { remainingRouteProgress, routeCompletion, routeTrafficRail } from '../utils/routeProgress';
 import { locationKey } from '../utils/routeSession';
-import { hasVisitCoordinates, visitDistance, numberVisitOrder, promoteVisit, recommendVisitOrder, visitSetKey } from '../utils/visitOrder';
+import { hasVisitCoordinates, visitDistance, numberVisitOrder, selectFirstVisitOrder, recommendVisitOrder, visitSetKey } from '../utils/visitOrder';
 import { onlyRemovedVisits, pendingCoordinates, stableVisitOrder } from '../utils/recommendationReuse';
 // 엑셀,csv 데이터 업로드
 import BulkUploadModal from '../components/BulkUploadModal';
@@ -182,6 +182,7 @@ function NormalMapScreen({
   const [publicCategoryAnchor, setPublicCategoryAnchor] = useState({ x: 85, y: 0, width: 0, height: 52 });
   const [visitStripHeight, setVisitStripHeight] = useState(52);
   const [bottomOverlayHeight, setBottomOverlayHeight] = useState(0);
+  const [guideControlsHeight, setGuideControlsHeight] = useState(176);
   const [pendingOverlayHeight, setPendingOverlayHeight] = useState(0);
   const [focusRequest, setFocusRequest] = useState({ coordinates: [], token: 0 });
   const [workplaceOpen, setWorkplaceOpen] = useState(false);
@@ -1464,9 +1465,8 @@ function NormalMapScreen({
       if (request !== guideRequestRef.current || scope !== workspaceScopeRef.current || !liveTarget || isCompleted(liveTarget)) return;
       // A user-picked first stop is a manual order; transport switches preserve it.
       manualOrderMembership.current = membershipKey;
-      setLocations?.((previous) => promoteVisit(
-        [...(Array.isArray(previous) ? previous : locations || [])].sort((a, b) =>
-          (a.markerNumber || Infinity) - (b.markerNumber || Infinity)), targetKey
+      setLocations?.((previous) => selectFirstVisitOrder(
+        Array.isArray(previous) ? previous : locations || [], targetKey, recommendationReturn
       ));
       setRouteSegments([{ ...result.segment, destinationKey: targetKey }]);
       setRoadPath(result.segment.path || []);
@@ -1665,7 +1665,7 @@ function NormalMapScreen({
         onReady={event => { setWalkingMapReady(true); if (!event.nativeEvent?.headingAvailable) { setWalkHeadingFollow(false); showAlert('방향 센서', '이 기기에서는 북쪽 고정 지도를 사용합니다.'); } }}
         onError={event => { setWalkingMapError(event.nativeEvent?.message || '도보 지도 오류'); showAlert('도보 지도', '네이티브 지도를 불러오지 못해 기본 지도로 안내합니다.'); }} />}
       {walkingNative && !walkingMapReady && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator color={colors.primary} /><Text style={{ color: colors.textSoft, marginTop: 12 }}>도보 지도 준비 중</Text></View>}
-      {walkingNative && !preview && <View style={[styles.guideNearbyControls, { bottom: bottomOverlayHeight + 28 }]}>
+      {walkingNative && !preview && <View onLayout={event => setGuideControlsHeight(event.nativeEvent.layout.height)} style={[styles.guideNearbyControls, { bottom: bottomOverlayHeight + 28 }]}>
         <TouchableOpacity accessibilityLabel="내 위치로 돌아가기" onPress={() => { setWalkHeadingFollow(true); setGuideRecenterRequest(value => value + 1); }} style={styles.guideNearbyButton}><Ionicons name="locate" size={24} color={colors.primary} /></TouchableOpacity>
       </View>}
       {kakaoDestination && (
@@ -1729,7 +1729,7 @@ function NormalMapScreen({
         <View pointerEvents="none" style={{ position: 'absolute', top: screenInsets.top + 8, left: 12, width: 200, maxWidth: '70%', zIndex: 19 }}>
           <ManeuverGuideCard guide={nativeManeuver?.destinationKey === activeSegment?.destinationKey ? nativeManeuver : null} />
         </View>
-        <View style={[styles.guideNearbyControls, { bottom: bottomOverlayHeight + 28 }]}>
+        <View onLayout={event => setGuideControlsHeight(event.nativeEvent.layout.height)} style={[styles.guideNearbyControls, { bottom: bottomOverlayHeight + 28 }]}>
           {[['gas', '주유소'], ['parking', '주차장']].map(([category, label]) => <TouchableOpacity
             key={category} accessibilityRole="button" accessibilityLabel={`주변 ${label}`} accessibilityState={{ selected: nearbyCategory === category }}
             onPress={() => setNearbyCategory(previous => previous === category ? null : category)}
@@ -1747,10 +1747,10 @@ function NormalMapScreen({
         </View>
       </>}
 
-      {isGuiding && !preview && routeCompletionRatio != null && <View pointerEvents="none" style={[styles.routeProgressRail, { bottom: bottomOverlayHeight + 228 }]}
+      {isGuiding && !preview && routeCompletionRatio != null && <View pointerEvents="none" style={[styles.routeProgressRail, { bottom: bottomOverlayHeight + 28 + guideControlsHeight + 24 }]}
         accessible accessibilityRole="progressbar" accessibilityLabel="목적지까지 이동 진행률"
         accessibilityValue={{ min: 0, max: 100, now: Math.round(routeCompletionRatio * 100) }}>
-        <View style={[styles.routeProgressTrack, { height: Math.max(72, Math.min(320, mapHeight * 0.36, mapHeight - bottomOverlayHeight - 228 - screenInsets.top - 20)) }]}>
+        <View style={[styles.routeProgressTrack, { height: Math.max(0, Math.min(320, mapHeight * 0.36, mapHeight - bottomOverlayHeight - 28 - guideControlsHeight - 24 - screenInsets.top - 20)) }]}>
           <View style={styles.routeTrafficClip}>
             {trafficRail.map((section, index) => <View key={index} style={{ position: 'absolute', left: 0, right: 0,
               bottom: `${section.start * 100}%`, height: `${section.fraction * 100}%`, backgroundColor: section.color }} />)}
