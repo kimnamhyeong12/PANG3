@@ -5,7 +5,7 @@ import { ActivityIndicator, Keyboard, Modal, Pressable, ScrollView, Text, TextIn
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/design';
 import { showAlert } from './CustomAlert';
-import { createProject, fetchProjects, fetchProjectPlaces, registerProjectPlaces, updateProject } from '../utils/projectApi';
+import { createProject, deleteProject, fetchProjects, fetchProjectPlaces, registerProjectPlaces, updateProject } from '../utils/projectApi';
 
 function ProjectManager({ visible, userId, groupId, personal, selectOnly = false, onSelect, onClose, onRegistered, onShowPlaces }) {
  const liveRevision=useLiveRevision(['projects','tasks']);
@@ -21,6 +21,9 @@ function ProjectManager({ visible, userId, groupId, personal, selectOnly = false
  useEffect(()=>{if(!liveRevision||!visible||!groupId||personal)return;let active=true;fetchProjects(groupId,userId).then(rows=>{if(active)setProjects(rows||[]);}).catch(err=>{if(active)setError(err.message);});if(project)fetchProjectPlaces(project.projectId).then(rows=>{if(active){setPlaces(rows);setSelected(old=>old.filter(id=>rows.some(row=>row.placeId===id)));}}).catch(err=>{if(active)setError(err.message);});return()=>{active=false;};},[liveRevision,visible,groupId,personal,project?.projectId]);
  const open=async p=>{ if(selectOnly){onSelect?.(p);return;} setProject(p);setSelected([]);setName(p.name);setBusy(true);setError('');try{setPlaces(await fetchProjectPlaces(p.projectId));}catch(err){setError(err.message);}finally{setBusy(false);} };
  const run=async action=>{if(lock.current)return;lock.current=true;setBusy(true);setError('');try{await action();}catch(err){setError(err.message);}finally{lock.current=false;setBusy(false);} };
+ const removeProject=()=>{if(!project?.canDelete||busy||lock.current)return;const target=project;showAlert('프로젝트 삭제',`"${target.name}" 프로젝트와 통합보고서를 삭제할까요? 원본 방문지와 건별 보고서는 유지됩니다.`,[
+  {text:'취소',style:'cancel'},{text:'삭제',style:'destructive',onPress:()=>run(async()=>{await deleteProject(target.projectId,userId);setProjects(old=>old.filter(p=>p.projectId!==target.projectId));setProject(null);setPlaces([]);setSelected([]);setName('');})},
+ ]);};
  const confirmRegistration=(ids,count)=>showAlert('새 업무로 등록',`선택한 방문지 중 ${count}곳에 진행 중인 업무가 있습니다. 기존 업무를 유지하고 새 업무로 추가할까요?`,[
   {text:'취소',style:'cancel'}, {text:'새 업무로 등록',onPress:()=>register(ids,true)},
  ]);
@@ -45,7 +48,7 @@ function ProjectManager({ visible, userId, groupId, personal, selectOnly = false
  <Pressable accessibilityLabel="프로젝트 닫기" disabled={busy} onPress={close} style={{position:'absolute',top:0,bottom:0,left:0,right:0}}/>
  <View style={{backgroundColor:colors.surface,borderRadius:24,padding:20,maxHeight:layoutHeight*0.85,width:'100%',maxWidth:440,gap:12}}>
  <View style={{flexDirection:'row',alignItems:'center',gap:12}}>{project&&<TouchableOpacity onPress={()=>{setProject(null);setName('');setPlaces([]);}} disabled={busy}><Ionicons name="arrow-back" size={24} color={colors.text}/></TouchableOpacity>}
- <Text style={{flex:1,fontSize:20,fontWeight:'800',color:colors.text}}>{project?.name || '프로젝트'}</Text><TouchableOpacity accessibilityLabel="닫기" onPress={close} disabled={busy}><Ionicons name="close" size={24} color={colors.text}/></TouchableOpacity></View>
+ <Text style={{flex:1,fontSize:20,fontWeight:'800',color:colors.text}}>{project?.name || '프로젝트'}</Text>{project?.canDelete&&<TouchableOpacity accessibilityLabel="프로젝트 삭제" onPress={removeProject} disabled={busy} style={{padding:8}}><Ionicons name="trash-outline" size={22} color={colors.danger}/></TouchableOpacity>}<TouchableOpacity accessibilityLabel="닫기" onPress={close} disabled={busy}><Ionicons name="close" size={24} color={colors.text}/></TouchableOpacity></View>
  {personal ? <Text style={{color:colors.textSoft}}>팀 그룹을 선택하면 프로젝트를 사용할 수 있습니다.</Text> : <>
  <View style={{flexDirection:'row',gap:8}}><TextInput value={name} onChangeText={setName} placeholder={project?'프로젝트 이름':'새 프로젝트 이름'} placeholderTextColor={colors.textSoft} accessibilityLabel={project?'프로젝트 이름':'새 프로젝트 이름'} maxLength={100} editable={!busy} style={{flex:1,padding:12,borderRadius:12,backgroundColor:colors.surfaceMuted,color:colors.text}}/>
  {button(project?'수정':'만들기',()=>run(async()=>{if(project){const saved=await updateProject(project.projectId,userId,{name:name.trim()});setProject({...project,...saved});}else{const p=await createProject(groupId,userId,name.trim());await open(p);}}),!name.trim())}</View>

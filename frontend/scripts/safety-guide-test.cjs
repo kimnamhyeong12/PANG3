@@ -14,10 +14,10 @@ const path = require('node:path');
   assert.equal(safetyGuideNotice({ ...base, kind: 'unknown' }, 'visit-1'), null);
   assert.equal(safetyGuideNotice({ ...base, speedLimit: 0 }, 'visit-1').speedLimit, null, 'missing speed limits must not be invented');
   assert.equal(safetyGuideNotice({ ...base, speedLimit: 300 }, 'visit-1').speedLimit, null);
-  assert.equal(safetyGuideNotice({ ...base, kind: 'hump' }, 'visit-1'), null, 'speed bumps are disabled even for stale native events');
-  for (const kind of ['camera', 'section', 'school', 'caution']) {
+  assert.equal(safetyGuideNotice({ ...base, kind: 'caution' }, 'visit-1'), null, 'unsupported caution information stays hidden, including stale native events');
+  for (const kind of ['camera', 'section', 'school', 'hump']) {
     const notice = safetyGuideNotice({ ...base, kind, distance: 0, overSpeed: true }, 'visit-1');
     assert.equal(notice.kind, kind); assert.equal(notice.distance, 0); assert.equal(notice.overSpeed, true);
   }
-  console.log('Safety guide checks passed: destination isolation, distance validation, camera/caution types and unknown limits');
+  console.log('Safety guide checks passed: destination isolation, allowed camera/school/hump types, hidden caution data and unknown limits');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,4 +1,4 @@
-const KINDS = new Set(['camera', 'section', 'school', 'caution']);
+const KINDS = new Set(['camera', 'section', 'school', 'hump']);
 
 export function safetyGuideNotice(data, destinationKey) {
   if (!data || !destinationKey || data.destinationKey !== destinationKey || data.visible !== true || !KINDS.has(data.kind)) return null;

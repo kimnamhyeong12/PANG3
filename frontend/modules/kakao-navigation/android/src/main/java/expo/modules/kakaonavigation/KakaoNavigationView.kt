@@ -2,6 +2,9 @@ package expo.modules.kakaonavigation
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.os.SystemClock
 import android.util.Log
 import android.view.View
@@ -24,12 +27,15 @@ import com.kakaomobility.knsdk.guidance.knguidance.common.KNLocation
 import com.kakaomobility.knsdk.guidance.knguidance.locationguide.KNGuide_Location
 import com.kakaomobility.knsdk.guidance.knguidance.routeguide.KNGuide_Route
 import com.kakaomobility.knsdk.guidance.knguidance.routeguide.objects.KNDirection
+import com.kakaomobility.knsdk.guidance.knguidance.routeguide.objects.KNLane
+import com.kakaomobility.knsdk.guidance.knguidance.routeguide.objects.KNSafetyZone
 import com.kakaomobility.knsdk.guidance.knguidance.routeguide.objects.KNMultiRouteInfo
 import com.kakaomobility.knsdk.guidance.knguidance.safetyguide.KNGuide_Safety
 import com.kakaomobility.knsdk.guidance.knguidance.safetyguide.objects.*
 import com.kakaomobility.knsdk.guidance.knguidance.voiceguide.KNGuide_Voice
 import com.kakaomobility.knsdk.trip.kntrip.KNTrip
 import com.kakaomobility.knsdk.trip.kntrip.knroute.KNRoute
+import com.kakaomobility.knsdk.ui.component.KNDriveLaneView
 import com.kakaomobility.knsdk.map.knmapview.KNMapView
 import com.kakaomobility.knsdk.map.knmapview.idl.KNMapRouteProperties
 import com.kakaomobility.knsdk.map.knmapview.idl.KNMarkerEventListener
@@ -59,6 +65,12 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
   private val onNearbyError by EventDispatcher<Map<String, String>>()
   private var currentDirection: KNDirection? = null
   private var nextDirection: KNDirection? = null
+  private var currentLane: KNLane? = null
+  private var laneView: KNDriveLaneView? = null
+  private var laneMarker: KNMapMarker? = null
+  private var laneDisplayKey: String? = null
+  private var schoolZones: List<KNSafetyZone> = emptyList()
+  private val schoolZoneMarkers = mutableMapOf<String, KNMapMarker>()
   private var safetiesOnGuide: List<KNSafety> = emptyList()
   private var routeSafeties: List<KNSafety> = emptyList()
   private var aroundSafeties: List<KNSafety> = emptyList()
@@ -200,6 +212,8 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
     nearbyRequestId++; nearbyLoading = false; nearbyOrigin = null
     clearNearbyMarkers()
     safetyMarkers.clear()
+    schoolZoneMarkers.clear()
+    laneMarker = null
     destinationMarker = null
     val map = KNMapView(activity)
     mapView = map
@@ -207,6 +221,9 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
     lifecycleOwner = activity
     removeAllViews()
     addView(map, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+    // The SDK renders the arrows offscreen; the bitmap is anchored to the route, not the screen.
+    laneView = KNDriveLaneView(activity)
+    laneDisplayKey = null
     // React Native cards sit above this surface; the SDK creates no navigation UI.
     map.setZOrderMediaOverlay(true)
     var touchX = 0f; var touchY = 0f; var dragged = false
@@ -262,7 +279,7 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
         guidance.safetyGuideDelegate = this
         guidance.voiceGuideDelegate = this
         guidance.citsGuideDelegate = this
-        guidance.excludedSafeties = guidance.excludedSafeties.orEmpty() + KNSafetyCode.KNSafetyCode_Hump.value
+        guidance.excludedSafeties = guidance.excludedSafeties.orEmpty().filterNot { it == KNSafetyCode.KNSafetyCode_Hump.value }.toSet()
         KakaoRouteEngine.get(destination["previewId"] as? String ?: "")?.let {
           onRouteChanged(it.result + mapOf("destinationKey" to destination["destinationKey"].toString()))
         }
@@ -403,19 +420,44 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
     if (!map.isInitialize()) return
     val origin = lastGps?.pos?.let { FloatPoint(it.x.toFloat(), it.y.toFloat()) } ?: initialPosition ?: return
     val entries = (routeSafeties + aroundSafeties + safetiesOnGuide).distinctBy { it.safetyId }
-      .filter { it.code != KNSafetyCode.KNSafetyCode_Hump && !it.passed && hypot(it.location.pos.x - origin.x, it.location.pos.y - origin.y) < 5000.0 }
+      .filter { signs.supportsSafety(it.code.name) && !it.passed && hypot(it.location.pos.x - origin.x, it.location.pos.y - origin.y) < 5000.0 }
       .sortedBy { hypot(it.location.pos.x - origin.x, it.location.pos.y - origin.y) }.take(160)
     val keys = entries.map { it.safetyId.toString() }.toSet()
     safetyMarkers.keys.filter { it !in keys }.toList().forEach { key -> safetyMarkers.remove(key)?.let { map.removeMarker(it) } }
     entries.forEach { safety ->
       val key = safety.safetyId.toString()
       if (key !in safetyMarkers) {
+        val sdkIcon = signs.safety(safety.code.name) ?: return@forEach
         val marker = KNMapMarker(FloatPoint(safety.location.pos.x.toFloat(), safety.location.pos.y.toFloat())).apply {
-          icon = signs.safety(safety.code.name, (safety as? KNSafety_Camera)?.speedLimit ?: 0)
+          icon = sdkIcon
           callOutBubbleUpdate = KNMapMarker.KNMapCalloutBubbleUpdate.Builder().setTitle(safetyLabel(safety.code.name.removePrefix("KNSafetyCode_"))).build()
           isVisibleCalloutBubble = false
         }
         map.addMarker(marker); safetyMarkers[key] = marker
+      }
+    }
+    updateSchoolZoneMarkers()
+  }
+
+  private fun updateSchoolZoneMarkers() {
+    val map = mapView ?: return
+    if (!map.isInitialize()) return
+    val location = currentGuideLocation ?: return
+    val zones = schoolZones.filter { zone -> zone.toLocation.route == location.route &&
+      location.route != null && location.distToLocation(zone.toLocation) >= 0 &&
+      location.distToLocation(zone.fromLocation) <= 1500 }
+    fun key(zone: KNSafetyZone) = "${zone.fromLocation.pos.x}:${zone.fromLocation.pos.y}"
+    val keys = zones.map(::key).toSet()
+    schoolZoneMarkers.keys.filter { it !in keys }.toList().forEach { id -> schoolZoneMarkers.remove(id)?.let(map::removeMarker) }
+    val icon = signs.safety("KNSafetyCode_ChildrenProtectionZone") ?: return
+    zones.forEach { zone ->
+      if (key(zone) !in schoolZoneMarkers) {
+        val marker = KNMapMarker(FloatPoint(zone.fromLocation.pos.x.toFloat(), zone.fromLocation.pos.y.toFloat())).apply {
+          this.icon = icon
+          callOutBubbleUpdate = KNMapMarker.KNMapCalloutBubbleUpdate.Builder().setTitle("어린이 보호구역").build()
+        }
+        map.addMarker(marker)
+        schoolZoneMarkers[key(zone)] = marker
       }
     }
   }
@@ -512,6 +554,8 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
     val gps = location.gpsMatched
     val map = mapView ?: return
     currentGuideLocation = location.location
+    updateLaneGuide()
+    updateSchoolZoneMarkers()
     if (gps.valid) lastGps = gps
     updateVehicle(map, gps)
     location.location?.let { map.cullPassedRoute(it, false) }
@@ -531,7 +575,70 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
     if (!owns(guidance)) return
     currentDirection = route.curDirection
     nextDirection = route.nextDirection
+    currentLane = route.lane
+    schoolZones = route.safetyZones.orEmpty().filter { it.safetyZoneType == KNSafetyZoneType.KNSafetyZoneType_SchoolZone }
+    updateSchoolZoneMarkers()
+    updateLaneGuide()
+    emitSafety()
     emitManeuver()
+  }
+  private fun updateLaneGuide() {
+    val map = mapView ?: return
+    if (!map.isInitialize()) return
+    val view = laneView ?: return
+    val lane = currentLane
+    val location = currentGuideLocation
+    val visible = lane != null && !lane.laneInfos.isNullOrEmpty() && location?.route != null &&
+      lane.location.route == location.route && location.distToLocation(lane.location) >= 0
+    val key = if (visible) lane!!.laneInfos!!.joinToString(";") {
+      "${it.turnType}:${it.highlightType}:${it.pocketType}:${it.busType}:${it.facilityType}:${it.suggest}:${it.colorType}"
+    } else null
+    if (!visible) {
+      laneMarker?.let(map::removeMarker)
+      laneMarker = null
+      laneDisplayKey = null
+      return
+    }
+    // locationAfterDist follows the SDK route geometry; never interpolate a straight line off-road.
+    val ahead = minOf(60, location!!.distToLocation(lane!!.location))
+    val anchorLocation = if (ahead == 0) location else location.locationAfterDist(ahead)
+    if (anchorLocation == null) {
+      laneMarker?.let(map::removeMarker)
+      laneMarker = null
+      laneDisplayKey = null
+      return
+    }
+    val anchor = anchorLocation.pos
+    if (key != laneDisplayKey || laneMarker == null) {
+      view.lane = null
+      view.lane = lane
+      val arrows = view.findViewById<View>(com.kakaomobility.knsdk.R.id.lane_code) ?: return
+      val density = resources.displayMetrics.density
+      val width = (lane.laneInfos!!.size * 30 * density).toInt().coerceAtLeast(1)
+      val height = (46 * density).toInt().coerceAtLeast(1)
+      arrows.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+      arrows.layout(0, 0, width, height)
+      val scale = minOf(1f, 180 * density / width)
+      val outputWidth = (width * scale).toInt().coerceAtLeast(1)
+      val arrowHeight = (height * scale).toInt().coerceAtLeast(1)
+      val stem = (10 * density).toInt()
+      val bitmap = Bitmap.createBitmap(outputWidth, arrowHeight + stem, Bitmap.Config.ARGB_8888)
+      val canvas = Canvas(bitmap)
+      val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.DKGRAY; strokeWidth = 2 * density }
+      canvas.drawLine(outputWidth / 2f, arrowHeight.toFloat(), outputWidth / 2f, bitmap.height.toFloat(), paint)
+      canvas.save()
+      canvas.scale(scale, scale)
+      arrows.draw(canvas)
+      canvas.restore()
+      laneMarker?.let(map::removeMarker)
+      laneMarker = KNMapMarker(FloatPoint(anchor.x.toFloat(), anchor.y.toFloat())).apply {
+        icon = bitmap
+        priority = 9000
+        useSingleTapped = false
+        setVisibleRange(0.1f, 9999f)
+      }.also(map::addMarker)
+      laneDisplayKey = key
+    } else laneMarker?.coordinate = FloatPoint(anchor.x.toFloat(), anchor.y.toFloat())
   }
   private fun emitManeuver() {
     val origin = currentGuideLocation
@@ -562,13 +669,18 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
     currentGuideLocation = null
     currentDirection = null
     nextDirection = null
+    currentLane = null
+    schoolZones = emptyList()
+    schoolZoneMarkers.values.forEach { mapView?.removeMarker(it) }
+    schoolZoneMarkers.clear()
+    updateLaneGuide()
     onManeuverUpdate(mapOf("destinationKey" to lastDestination?.get("destinationKey").toString(), "visible" to false))
     onSafetyUpdate(mapOf("destinationKey" to lastDestination?.get("destinationKey").toString(), "visible" to false))
   }
   private fun emitSafety() {
     val location = currentGuideLocation
-    val entries = if (location?.route == null) emptyList() else safetiesOnGuide.mapNotNull { safety ->
-      if (safety.code == KNSafetyCode.KNSafetyCode_Hump) return@mapNotNull null
+    val entries = (if (location?.route == null) emptyList() else safetiesOnGuide.mapNotNull { safety ->
+      if (!signs.supportsSafety(safety.code.name)) return@mapNotNull null
       if (safety.passed || safety.location.route != location.route) return@mapNotNull null
       val distance = location.distToLocation(safety.location)
       if (distance !in 0..1500) return@mapNotNull null
@@ -582,12 +694,18 @@ class KakaoNavigationView(context: Context, appContext: AppContext) : ExpoView(c
         safety is KNSafety_Camera && code.contains("Speed") -> { kind = "camera"; label = "과속 단속" }
         safety is KNSafety_Camera && code == "SignalViolationCamera" -> { kind = "camera"; label = "신호 단속" }
         code == "ChildrenProtectionZone" -> { kind = "school"; label = "어린이 보호구역" }
-        code == "SharpTurnSection" -> { kind = "caution"; label = "급커브" }
-        else -> { kind = "caution"; label = safetyLabel(code) }
+        code == "Hump" -> { kind = "hump"; label = "과속방지턱" }
+        else -> { kind = "camera"; label = safetyLabel(code) }
       }
       mapOf<String, Any>("id" to safety.safetyId, "kind" to kind, "label" to label,
         "distance" to distance, "speedLimit" to ((safety as? KNSafety_Camera)?.speedLimit ?: 0),
         "overSpeed" to ((safety as? KNSafety_Camera)?.onViolation ?: false))
+    }).toMutableList()
+    if (location?.route != null) schoolZones.forEach { zone ->
+      if (zone.toLocation.route == location.route && location.distToLocation(zone.toLocation) >= 0) {
+        val distance = location.distToLocation(zone.fromLocation).coerceAtLeast(0)
+        if (distance <= 1500) entries.add(mapOf("kind" to "school", "label" to "어린이 보호구역", "distance" to distance, "speedLimit" to 0, "overSpeed" to false))
+      }
     }
     val notice = entries.sortedWith(compareBy<Map<String, Any>>(
       { if (it["kind"] == "camera" || it["kind"] == "section") 0 else 1 },

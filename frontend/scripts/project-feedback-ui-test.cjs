@@ -23,10 +23,12 @@ console.log('PASS: centered project selection, no creation in picker, scrollable
 
 (async()=>{
  const alerts=[],calls=[],registered=[];
+ const deleted=[];let deleteFailure=false;
  const places=[{placeId:1,name:'동아대',activeTaskCount:1},{placeId:2,name:'공원',activeTaskCount:0}];
  let response=ids=>({created:ids.map(id=>({id})),skipped:[]});
  const RegisterBrowser=load('ProjectBrowser.js',{'./ProjectPicker':Picker,'./CustomAlert':{showAlert:(...args)=>alerts.push(args)},'../utils/projectApi':{
   registerProjectPlaces:async(projectId,userId,ids,allowActive)=>{calls.push({ids,allowActive});return response(ids);},fetchProjectPlaces:async()=>places,
+  deleteProject:async(projectId,userId)=>{if(deleteFailure)throw new Error('삭제 실패');deleted.push({projectId,userId});},
  }});
  const RegisterManager=RegisterBrowser({}).type;
  const props={visible:true,userId:7,onClose(){},onRegistered:async rows=>registered.push(...rows)};
@@ -62,5 +64,16 @@ console.log('PASS: centered project selection, no creation in picker, scrollable
  assert.equal(frame.props.onLayout,undefined,'keyboard resize must not change the fixed viewport');
  const list=rows.find(n=>n.type==='ScrollView');assert.equal(list.props.style.maxHeight,350);assert.equal(list.props.style.flexShrink,undefined,'list does not shrink for the keyboard');
  console.log('PASS: centered fixed-height card and unchanged list size');
+ seed();rows=render();assert(!rows.some(n=>n.props.accessibilityLabel==='프로젝트 삭제'),'delete hidden without server permission');
+ slots[1]={projectId:9,name:'공원',canDelete:true};slots[0]=[slots[1],{projectId:10,name:'유지할 프로젝트'}];rows=render();
+ rows.find(n=>n.props.accessibilityLabel==='프로젝트 삭제').props.onPress();assert.equal(deleted.length,0,'delete waits for confirmation');
+ assert(alerts.at(-1)[1].includes('원본 방문지와 건별 보고서는 유지'));
+ await alerts.at(-1)[2].find(button=>button.text==='삭제').onPress();
+ assert.equal(deleted.length,1);assert.equal(deleted[0].projectId,9);assert.equal(deleted[0].userId,7);
+ assert.equal(slots[1],null);assert.deepEqual(Array.from(slots[0],p=>p.projectId),[10]);
+ seed();slots[1]={projectId:9,name:'공원',canDelete:true};deleteFailure=true;rows=render();
+ rows.find(n=>n.props.accessibilityLabel==='프로젝트 삭제').props.onPress();await alerts.at(-1)[2].find(button=>button.text==='삭제').onPress();
+ assert.equal(slots[1].projectId,9,'failed deletion retains the project');assert.equal(slots[6],'삭제 실패');
+ console.log('PASS: map project deletion permissions, confirmation, list retention and failure recovery');
  console.log('PASS: active selection, deferred confirmation, cancel, selected/all registration, concurrent duplicate retry and centered creation');
 })().catch(error=>{console.error(error);process.exitCode=1;});

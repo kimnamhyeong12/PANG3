@@ -3,7 +3,7 @@ package expo.modules.kakaonavigation
 import android.content.Context
 import android.graphics.*
 
-/** PANG3 artwork drawn from SDK data; no SDK UI assets are extracted or copied. */
+/** Safety markers reference the installed SDK's drawable resources directly. */
 internal class NavigationMapSigns(context: Context) {
   private val density = context.resources.displayMetrics.density
   private val cache = mutableMapOf<String, Bitmap>()
@@ -12,18 +12,28 @@ internal class NavigationMapSigns(context: Context) {
 
   fun place(category: String): Bitmap = image("place:$category", if (category == "parking") "P" else "", blue, false)
 
-  fun safety(code: String, limit: Int): Bitmap {
-    val speed = limit.takeIf { it in 1..200 }
-    val text = when {
-      speed != null -> speed.toString()
-      code.contains("Hump") -> "턱"
-      code.contains("Children") -> "어린이"
-      code.contains("Camera") || code.contains("ViolationSection") -> "단속"
-      code.contains("RestArea") -> "쉼터"
-      else -> "!"
-    }
-    return image("safety:$text", text, if (speed != null) Color.parseColor("#C75B66") else navy, true)
+  private fun safetyResource(code: String): Int? = when {
+    code == "KNSafetyCode_ChildrenProtectionZone" -> com.kakaomobility.knsdk.R.drawable.map_schoolzone
+    code == "KNSafetyCode_Hump" -> com.kakaomobility.knsdk.R.drawable.map_hump
+    code.contains("ViolationSection") && code.contains("SectionIn") -> com.kakaomobility.knsdk.R.drawable.map_camera_start
+    code.contains("ViolationSection") && (code.contains("End") || code.contains("Out")) -> com.kakaomobility.knsdk.R.drawable.map_camera_end
+    code.contains("MovableSpeed") -> com.kakaomobility.knsdk.R.drawable.map_camera_move
+    code == "KNSafetyCode_TrafficCollectionCamera" -> com.kakaomobility.knsdk.R.drawable.map_camera_info
+    code.contains("Camera") && code.contains("Back") -> com.kakaomobility.knsdk.R.drawable.map_camera_back
+    code.contains("Camera") || code.contains("ViolationSection") -> com.kakaomobility.knsdk.R.drawable.map_camera
+    else -> null
   }
+
+  fun supportsSafety(code: String): Boolean = safetyResource(code) != null
+
+  fun safety(code: String): Bitmap? {
+    val resource = safetyResource(code) ?: return null
+    return cache.getOrPut("sdk:$resource") {
+      BitmapFactory.decodeResource(contextResources, resource)
+    }
+  }
+
+  private val contextResources = context.resources
 
   private fun image(key: String, text: String, color: Int, outlined: Boolean): Bitmap = cache.getOrPut(key) {
     val size = (34 * density).toInt().coerceAtLeast(34)
